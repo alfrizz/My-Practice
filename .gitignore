@@ -1,4 +1,5 @@
 my models/NLP & more/z_more/CNN/Handwriting recognition/A_Z Handwritten Data.csv
 my models/NLP/LLM/2.Intermediate Deep Learning Pytorch/omniglot-py
 my models/NLP & more/LLM/5.Intro to LLM/smaller_bert_finetuned
+my models/NLP & more/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.safetensors
 *.ini
