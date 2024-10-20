@@ -4,3 +4,4 @@ my models/NLP & more/LLM/5.Intro to LLM/smaller_bert_finetuned
 my models/NLP & more/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.safetensors
 *.ini
 my models/NLP & more/BERT/3. BERT classificat/bert_model
+my models/NLP & more/BERT/4. BERT Fine Tuning - Disaster/bert_model
