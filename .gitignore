@@ -5,3 +5,5 @@ my models/NLP & more/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.
 *.ini
 my models/NLP & more/BERT/3. BERT classificat/bert_model
 my models/NLP & more/BERT/4. BERT Fine Tuning - Disaster/bert_model
+my models/NLP & more/more/CNN/Handwriting recognition/A_Z Handwritten Data.csv
+my models/NLP & more/BERT/5. BERT Spam OK\!/saved_weights.pt
