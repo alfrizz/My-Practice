@@ -14,3 +14,12 @@ my models/z_more/CNN/Handwriting recognition/A_Z Handwritten Data.csv
 desktop.ini
 *.ini
 *.ini
+/my models/BERT/1.BERT IMDB fine-tuning - evaluation/output
+my models/BERT/4. BERT Fine Tuning - Disaster/bert_model
+my models/BERT/5. BERT Spam transfer-learning/saved_weights.pt
+my models/Computer Vision/Handwriting recognition/A_Z Handwritten Data.csv
+my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-1000/model.safetensors
+my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-1000/optimizer.pt
+my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-500/model.safetensors
+my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-500/optimizer.pt
+my models/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.safetensors
