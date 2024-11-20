@@ -1,0 +1,151 @@
+﻿,antecedents,consequents,antecedent support,consequent support,support,confidence,lift,leverage,conviction
+0,(Potter),(Hunger),0.478,0.319,0.124,0.259,0.813,-2.85E-02,0.919
+1,(Hunger),(Potter),0.319,0.478,0.124,0.388,0.813,-2.85E-02,0.854
+2,(Twilight),(Hunger),0.257,0.319,0.089,0.347,1.088,7.25E-03,1.043
+3,(Hunger),(Twilight),0.319,0.257,0.089,0.279,1.088,7.25E-03,1.032
+4,(Mockingbird),(Hunger),0.477,0.319,0.096,0.202,0.633,-5.58E-02,0.853
+5,(Hunger),(Mockingbird),0.319,0.477,0.096,0.302,0.633,-5.58E-02,0.75
+6,(Gatsby),(Hunger),0.295,0.319,0.051,0.171,0.537,-4.36E-02,0.822
+7,(Hunger),(Gatsby),0.319,0.295,0.051,0.158,0.537,-4.36E-02,0.838
+8,(Potter),(Twilight),0.478,0.257,0.141,0.294,1.147,1.80E-02,1.053
+9,(Twilight),(Potter),0.257,0.478,0.141,0.548,1.147,1.80E-02,1.155
+10,(Potter),(Mockingbird),0.478,0.477,0.22,0.46,0.965,-8.04E-03,0.969
+11,(Mockingbird),(Potter),0.477,0.478,0.22,0.461,0.965,-8.04E-03,0.969
+12,(Potter),(Gatsby),0.478,0.295,0.128,0.267,0.906,-1.32E-02,0.962
+13,(Gatsby),(Potter),0.295,0.478,0.128,0.433,0.906,-1.32E-02,0.921
+14,(Twilight),(Mockingbird),0.257,0.477,0.098,0.383,0.803,-2.41E-02,0.848
+15,(Mockingbird),(Twilight),0.477,0.257,0.098,0.206,0.803,-2.41E-02,0.936
+16,(Twilight),(Gatsby),0.257,0.295,0.054,0.209,0.706,-2.23E-02,0.891
+17,(Gatsby),(Twilight),0.295,0.257,0.054,0.181,0.706,-2.23E-02,0.908
+18,(Gatsby),(Mockingbird),0.295,0.477,0.186,0.63,1.323,4.54E-02,1.417
+19,(Mockingbird),(Gatsby),0.477,0.295,0.186,0.391,1.323,4.54E-02,1.156
+20,"(Potter, Twilight)",(Hunger),0.141,0.319,0.051,0.36,1.129,5.81E-03,1.065
+21,"(Potter, Hunger)",(Twilight),0.124,0.257,0.051,0.409,1.594,1.89E-02,1.258
+22,"(Twilight, Hunger)",(Potter),0.089,0.478,0.051,0.568,1.19,8.09E-03,1.21
+23,(Potter),"(Twilight, Hunger)",0.478,0.089,0.051,0.106,1.19,8.09E-03,1.019
+24,(Twilight),"(Potter, Hunger)",0.257,0.124,0.051,0.197,1.594,1.89E-02,1.092
+25,(Hunger),"(Potter, Twilight)",0.319,0.141,0.051,0.159,1.129,5.81E-03,1.022
+26,"(Potter, Mockingbird)",(Hunger),0.22,0.319,0.057,0.259,0.81,-1.33E-02,0.918
+27,"(Potter, Hunger)",(Mockingbird),0.124,0.477,0.057,0.458,0.962,-2.25E-03,0.966
+28,"(Mockingbird, Hunger)",(Potter),0.096,0.478,0.057,0.59,1.235,1.08E-02,1.273
+29,(Potter),"(Mockingbird, Hunger)",0.478,0.096,0.057,0.119,1.235,1.08E-02,1.026
+30,(Mockingbird),"(Potter, Hunger)",0.477,0.124,0.057,0.119,0.962,-2.25E-03,0.995
+31,(Hunger),"(Potter, Mockingbird)",0.319,0.22,0.057,0.178,0.81,-1.33E-02,0.949
+32,"(Potter, Gatsby)",(Hunger),0.128,0.319,0.031,0.243,0.762,-9.70E-03,0.9
+33,"(Potter, Hunger)",(Gatsby),0.124,0.295,0.031,0.251,0.85,-5.50E-03,0.941
+34,"(Gatsby, Hunger)",(Potter),0.051,0.478,0.031,0.614,1.286,6.91E-03,1.354
+35,(Potter),"(Gatsby, Hunger)",0.478,0.051,0.031,0.065,1.286,6.91E-03,1.015
+36,(Gatsby),"(Potter, Hunger)",0.295,0.124,0.031,0.105,0.85,-5.50E-03,0.979
+37,(Hunger),"(Potter, Gatsby)",0.319,0.128,0.031,0.097,0.762,-9.70E-03,0.966
+38,"(Twilight, Mockingbird)",(Hunger),0.098,0.319,0.035,0.354,1.109,3.43E-03,1.054
+39,"(Twilight, Hunger)",(Mockingbird),0.089,0.477,0.035,0.39,0.818,-7.72E-03,0.858
+40,"(Mockingbird, Hunger)",(Twilight),0.096,0.257,0.035,0.361,1.407,1.01E-02,1.164
+41,(Twilight),"(Mockingbird, Hunger)",0.257,0.096,0.035,0.135,1.407,1.01E-02,1.045
+42,(Mockingbird),"(Twilight, Hunger)",0.477,0.089,0.035,0.073,0.818,-7.72E-03,0.983
+43,(Hunger),"(Twilight, Mockingbird)",0.319,0.098,0.035,0.109,1.109,3.43E-03,1.012
+44,"(Twilight, Gatsby)",(Hunger),0.054,0.319,0.018,0.343,1.076,1.30E-03,1.037
+45,"(Twilight, Hunger)",(Gatsby),0.089,0.295,0.018,0.206,0.698,-7.94E-03,0.888
+46,"(Gatsby, Hunger)",(Twilight),0.051,0.257,0.018,0.364,1.416,5.40E-03,1.168
+47,(Twilight),"(Gatsby, Hunger)",0.257,0.051,0.018,0.072,1.416,5.40E-03,1.023
+48,(Gatsby),"(Twilight, Hunger)",0.295,0.089,0.018,0.062,0.698,-7.94E-03,0.971
+49,(Hunger),"(Twilight, Gatsby)",0.319,0.054,0.018,0.058,1.076,1.30E-03,1.004
+50,"(Gatsby, Mockingbird)",(Hunger),0.186,0.319,0.033,0.178,0.559,-2.62E-02,0.829
+51,"(Gatsby, Hunger)",(Mockingbird),0.051,0.477,0.033,0.656,1.377,9.08E-03,1.522
+52,"(Mockingbird, Hunger)",(Gatsby),0.096,0.295,0.033,0.345,1.167,4.75E-03,1.075
+53,(Gatsby),"(Mockingbird, Hunger)",0.295,0.096,0.033,0.112,1.167,4.75E-03,1.018
+54,(Mockingbird),"(Gatsby, Hunger)",0.477,0.051,0.033,0.07,1.377,9.08E-03,1.02
+55,(Hunger),"(Gatsby, Mockingbird)",0.319,0.186,0.033,0.104,0.559,-2.62E-02,0.908
+56,"(Potter, Twilight)",(Mockingbird),0.141,0.477,0.063,0.448,0.94,-4.03E-03,0.948
+57,"(Potter, Mockingbird)",(Twilight),0.22,0.257,0.063,0.287,1.117,6.62E-03,1.042
+58,"(Twilight, Mockingbird)",(Potter),0.098,0.478,0.063,0.641,1.342,1.61E-02,1.455
+59,(Potter),"(Twilight, Mockingbird)",0.478,0.098,0.063,0.132,1.342,1.61E-02,1.039
+60,(Twilight),"(Potter, Mockingbird)",0.257,0.22,0.063,0.245,1.117,6.62E-03,1.034
+61,(Mockingbird),"(Potter, Twilight)",0.477,0.141,0.063,0.132,0.94,-4.03E-03,0.99
+62,"(Potter, Twilight)",(Gatsby),0.141,0.295,0.034,0.243,0.823,-7.34E-03,0.931
+63,"(Potter, Gatsby)",(Twilight),0.128,0.257,0.034,0.268,1.042,1.37E-03,1.015
+64,"(Twilight, Gatsby)",(Potter),0.054,0.478,0.034,0.638,1.336,8.60E-03,1.444
+65,(Potter),"(Twilight, Gatsby)",0.478,0.054,0.034,0.072,1.336,8.60E-03,1.019
+66,(Twilight),"(Potter, Gatsby)",0.257,0.128,0.034,0.133,1.042,1.37E-03,1.006
+67,(Gatsby),"(Potter, Twilight)",0.295,0.141,0.034,0.116,0.823,-7.34E-03,0.972
+68,"(Potter, Gatsby)",(Mockingbird),0.128,0.477,0.09,0.703,1.476,2.90E-02,1.764
+69,"(Potter, Mockingbird)",(Gatsby),0.22,0.295,0.09,0.409,1.386,2.50E-02,1.193
+70,"(Gatsby, Mockingbird)",(Potter),0.186,0.478,0.09,0.483,1.011,9.54E-04,1.01
+71,(Potter),"(Gatsby, Mockingbird)",0.478,0.186,0.09,0.188,1.011,9.54E-04,1.002
+72,(Gatsby),"(Potter, Mockingbird)",0.295,0.22,0.09,0.304,1.386,2.50E-02,1.122
+73,(Mockingbird),"(Potter, Gatsby)",0.477,0.128,0.09,0.188,1.476,2.90E-02,1.075
+74,"(Twilight, Gatsby)",(Mockingbird),0.054,0.477,0.036,0.677,1.422,1.08E-02,1.623
+75,"(Twilight, Mockingbird)",(Gatsby),0.098,0.295,0.036,0.369,1.251,7.27E-03,1.117
+76,"(Gatsby, Mockingbird)",(Twilight),0.186,0.257,0.036,0.195,0.759,-1.15E-02,0.923
+77,(Twilight),"(Gatsby, Mockingbird)",0.257,0.186,0.036,0.141,0.759,-1.15E-02,0.948
+78,(Gatsby),"(Twilight, Mockingbird)",0.295,0.098,0.036,0.123,1.251,7.27E-03,1.028
+79,(Mockingbird),"(Twilight, Gatsby)",0.477,0.054,0.036,0.076,1.422,1.08E-02,1.024
+80,"(Potter, Twilight, Mockingbird)",(Hunger),0.063,0.319,0.024,0.385,1.205,4.12E-03,1.106
+81,"(Potter, Twilight, Hunger)",(Mockingbird),0.051,0.477,0.024,0.478,1.003,7.19E-05,1.003
+82,"(Potter, Mockingbird, Hunger)",(Twilight),0.057,0.257,0.024,0.427,1.662,9.65E-03,1.296
+83,"(Twilight, Mockingbird, Hunger)",(Potter),0.035,0.478,0.024,0.696,1.458,7.61E-03,1.721
+84,"(Potter, Twilight)","(Mockingbird, Hunger)",0.141,0.096,0.024,0.172,1.789,1.07E-02,1.092
+85,"(Potter, Mockingbird)","(Twilight, Hunger)",0.22,0.089,0.024,0.11,1.237,4.65E-03,1.024
+86,"(Potter, Hunger)","(Twilight, Mockingbird)",0.124,0.098,0.024,0.196,1.99,1.21E-02,1.121
+87,"(Twilight, Mockingbird)","(Potter, Hunger)",0.098,0.124,0.024,0.247,1.99,1.21E-02,1.163
+88,"(Twilight, Hunger)","(Potter, Mockingbird)",0.089,0.22,0.024,0.272,1.237,4.65E-03,1.072
+89,"(Mockingbird, Hunger)","(Potter, Twilight)",0.096,0.141,0.024,0.252,1.789,1.07E-02,1.148
+90,(Potter),"(Twilight, Mockingbird, Hunger)",0.478,0.035,0.024,0.051,1.458,7.61E-03,1.017
+91,(Twilight),"(Potter, Mockingbird, Hunger)",0.257,0.057,0.024,0.094,1.662,9.65E-03,1.041
+92,(Mockingbird),"(Potter, Twilight, Hunger)",0.477,0.051,0.024,0.051,1.003,7.19E-05,1
+93,(Hunger),"(Potter, Twilight, Mockingbird)",0.319,0.063,0.024,0.076,1.205,4.12E-03,1.014
+94,"(Potter, Twilight, Gatsby)",(Hunger),0.034,0.319,0.013,0.375,1.174,1.89E-03,1.089
+95,"(Potter, Twilight, Hunger)",(Gatsby),0.051,0.295,0.013,0.252,0.855,-2.16E-03,0.943
+96,"(Potter, Gatsby, Hunger)",(Twilight),0.031,0.257,0.013,0.412,1.605,4.82E-03,1.264
+97,"(Twilight, Gatsby, Hunger)",(Potter),0.018,0.478,0.013,0.696,1.457,4.02E-03,1.718
+98,"(Potter, Twilight)","(Gatsby, Hunger)",0.141,0.051,0.013,0.091,1.8,5.69E-03,1.044
+99,"(Potter, Gatsby)","(Twilight, Hunger)",0.128,0.089,0.013,0.1,1.123,1.41E-03,1.012
+100,"(Potter, Hunger)","(Twilight, Gatsby)",0.124,0.054,0.013,0.103,1.93,6.16E-03,1.056
+101,"(Twilight, Gatsby)","(Potter, Hunger)",0.054,0.124,0.013,0.239,1.93,6.16E-03,1.151
+102,"(Twilight, Hunger)","(Potter, Gatsby)",0.089,0.128,0.013,0.143,1.123,1.41E-03,1.018
+103,"(Gatsby, Hunger)","(Potter, Twilight)",0.051,0.141,0.013,0.253,1.8,5.69E-03,1.151
+104,(Potter),"(Twilight, Gatsby, Hunger)",0.478,0.018,0.013,0.027,1.457,4.02E-03,1.009
+105,(Twilight),"(Potter, Gatsby, Hunger)",0.257,0.031,0.013,0.05,1.605,4.82E-03,1.02
+106,(Gatsby),"(Potter, Twilight, Hunger)",0.295,0.051,0.013,0.043,0.855,-2.16E-03,0.992
+107,(Hunger),"(Potter, Twilight, Gatsby)",0.319,0.034,0.013,0.04,1.174,1.89E-03,1.006
+108,"(Potter, Gatsby, Mockingbird)",(Hunger),0.09,0.319,0.023,0.252,0.789,-6.05E-03,0.91
+109,"(Potter, Gatsby, Hunger)",(Mockingbird),0.031,0.477,0.023,0.728,1.528,7.81E-03,1.925
+110,"(Potter, Mockingbird, Hunger)",(Gatsby),0.057,0.295,0.023,0.398,1.349,5.85E-03,1.171
+111,"(Gatsby, Mockingbird, Hunger)",(Potter),0.033,0.478,0.023,0.682,1.427,6.77E-03,1.641
+112,"(Potter, Gatsby)","(Mockingbird, Hunger)",0.128,0.096,0.023,0.177,1.839,1.03E-02,1.098
+113,"(Potter, Mockingbird)","(Gatsby, Hunger)",0.22,0.051,0.023,0.103,2.037,1.15E-02,1.058
+114,"(Potter, Hunger)","(Gatsby, Mockingbird)",0.124,0.186,0.023,0.183,0.981,-4.38E-04,0.996
+115,"(Gatsby, Mockingbird)","(Potter, Hunger)",0.186,0.124,0.023,0.121,0.981,-4.38E-04,0.997
+116,"(Gatsby, Hunger)","(Potter, Mockingbird)",0.051,0.22,0.023,0.447,2.037,1.15E-02,1.412
+117,"(Mockingbird, Hunger)","(Potter, Gatsby)",0.096,0.128,0.023,0.235,1.839,1.03E-02,1.14
+118,(Potter),"(Gatsby, Mockingbird, Hunger)",0.478,0.033,0.023,0.047,1.427,6.77E-03,1.015
+119,(Gatsby),"(Potter, Mockingbird, Hunger)",0.295,0.057,0.023,0.077,1.349,5.85E-03,1.021
+120,(Mockingbird),"(Potter, Gatsby, Hunger)",0.477,0.031,0.023,0.047,1.528,7.81E-03,1.017
+121,(Hunger),"(Potter, Gatsby, Mockingbird)",0.319,0.09,0.023,0.071,0.789,-6.05E-03,0.98
+122,"(Twilight, Gatsby, Mockingbird)",(Hunger),0.036,0.319,0.013,0.349,1.095,1.10E-03,1.046
+123,"(Twilight, Gatsby, Hunger)",(Mockingbird),0.018,0.477,0.013,0.689,1.446,3.91E-03,1.684
+124,"(Twilight, Mockingbird, Hunger)",(Gatsby),0.035,0.295,0.013,0.364,1.234,2.41E-03,1.109
+125,"(Gatsby, Mockingbird, Hunger)",(Twilight),0.033,0.257,0.013,0.382,1.488,4.15E-03,1.203
+126,"(Twilight, Gatsby)","(Mockingbird, Hunger)",0.054,0.096,0.013,0.237,2.458,7.52E-03,1.184
+127,"(Twilight, Mockingbird)","(Gatsby, Hunger)",0.098,0.051,0.013,0.129,2.55,7.70E-03,1.09
+128,"(Twilight, Hunger)","(Gatsby, Mockingbird)",0.089,0.186,0.013,0.142,0.763,-3.93E-03,0.949
+129,"(Gatsby, Mockingbird)","(Twilight, Hunger)",0.186,0.089,0.013,0.068,0.763,-3.93E-03,0.977
+130,"(Gatsby, Hunger)","(Twilight, Mockingbird)",0.051,0.098,0.013,0.251,2.55,7.70E-03,1.203
+131,"(Mockingbird, Hunger)","(Twilight, Gatsby)",0.096,0.054,0.013,0.132,2.458,7.52E-03,1.09
+132,(Twilight),"(Gatsby, Mockingbird, Hunger)",0.257,0.033,0.013,0.049,1.488,4.15E-03,1.017
+133,(Gatsby),"(Twilight, Mockingbird, Hunger)",0.295,0.035,0.013,0.043,1.234,2.41E-03,1.009
+134,(Mockingbird),"(Twilight, Gatsby, Hunger)",0.477,0.018,0.013,0.027,1.446,3.91E-03,1.008
+135,(Hunger),"(Twilight, Gatsby, Mockingbird)",0.319,0.036,0.013,0.04,1.095,1.10E-03,1.004
+136,"(Potter, Twilight, Gatsby)",(Mockingbird),0.034,0.477,0.024,0.713,1.496,8.07E-03,1.822
+137,"(Potter, Twilight, Mockingbird)",(Gatsby),0.063,0.295,0.024,0.387,1.31,5.76E-03,1.149
+138,"(Potter, Gatsby, Mockingbird)",(Twilight),0.09,0.257,0.024,0.271,1.056,1.29E-03,1.02
+139,"(Twilight, Gatsby, Mockingbird)",(Potter),0.036,0.478,0.024,0.671,1.406,7.03E-03,1.589
+140,"(Potter, Twilight)","(Gatsby, Mockingbird)",0.141,0.186,0.024,0.173,0.93,-1.82E-03,0.984
+141,"(Potter, Gatsby)","(Twilight, Mockingbird)",0.128,0.098,0.024,0.191,1.94,1.18E-02,1.114
+142,"(Potter, Mockingbird)","(Twilight, Gatsby)",0.22,0.054,0.024,0.111,2.072,1.26E-02,1.065
+143,"(Twilight, Gatsby)","(Potter, Mockingbird)",0.054,0.22,0.024,0.455,2.072,1.26E-02,1.431
+144,"(Twilight, Mockingbird)","(Potter, Gatsby)",0.098,0.128,0.024,0.248,1.94,1.18E-02,1.16
+145,"(Gatsby, Mockingbird)","(Potter, Twilight)",0.186,0.141,0.024,0.131,0.93,-1.82E-03,0.989
+146,(Potter),"(Twilight, Gatsby, Mockingbird)",0.478,0.036,0.024,0.051,1.406,7.03E-03,1.016
+147,(Twilight),"(Potter, Gatsby, Mockingbird)",0.257,0.09,0.024,0.095,1.056,1.29E-03,1.006
+148,(Gatsby),"(Potter, Twilight, Mockingbird)",0.295,0.063,0.024,0.082,1.31,5.76E-03,1.021
+149,(Mockingbird),"(Potter, Twilight, Gatsby)",0.477,0.034,0.024,0.051,1.496,8.07E-03,1.018
