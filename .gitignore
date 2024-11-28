@@ -13,7 +13,7 @@ my models/z_more/CNN/Handwriting recognition/A_Z Handwritten Data.csv
 # Ignore all desktop.ini files
 desktop.ini
 *.ini
-*.ini
+*.env
 /my models/BERT/1.BERT IMDB fine-tuning - evaluation/output
 my models/BERT/4. BERT Fine Tuning - Disaster/bert_model
 my models/BERT/5. BERT Spam transfer-learning/saved_weights.pt
