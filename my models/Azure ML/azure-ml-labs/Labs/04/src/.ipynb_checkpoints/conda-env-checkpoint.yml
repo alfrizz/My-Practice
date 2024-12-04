@@ -1,0 +1,9 @@
+name: basic-env-cpu
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - scikit-learn
+  - pandas
+  - numpy
+  - matplotlib
