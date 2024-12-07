@@ -1,4 +1,5 @@
 # import libraries
+import mlflow
 import argparse
 import pandas as pd
 import numpy as np
@@ -40,6 +41,7 @@ def split_data(df):
 
 # function that trains the model
 def train_model(reg_rate, X_train, X_test, y_train, y_test):
+    mlflow.log_param("Regularization rate", reg_rate)
     print("Training model...")
     model = LogisticRegression(C=1/reg_rate, solver="liblinear").fit(X_train, y_train)
 
@@ -51,11 +53,13 @@ def eval_model(model, X_test, y_test):
     y_hat = model.predict(X_test)
     acc = np.average(y_hat == y_test)
     print('Accuracy:', acc)
+    mlflow.log_metric("Accuracy", acc)
 
     # calculate AUC
     y_scores = model.predict_proba(X_test)
     auc = roc_auc_score(y_test,y_scores[:,1])
     print('AUC: ' + str(auc))
+    mlflow.log_metric("AUC", auc)
 
     # plot ROC curve
     fpr, tpr, thresholds = roc_curve(y_test, y_scores[:,1])
@@ -67,6 +71,8 @@ def eval_model(model, X_test, y_test):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('ROC Curve')
+    plt.savefig("ROC-Curve.png")
+    mlflow.log_artifact("ROC-Curve.png")    
 
 def parse_args():
     # setup arg parser
@@ -85,7 +91,7 @@ def parse_args():
     return args
 
 # run script
-if __name__ == "__main__": # The line if __name__ == "__main__": is a standard way in Python to ensure that some code runs only when the script is executed directly, and not when it is imported as a module in another script.
+if __name__ == "__main__":
     # add space in logs
     print("\n\n")
     print("*" * 60)

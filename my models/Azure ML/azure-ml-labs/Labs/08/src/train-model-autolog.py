@@ -1,4 +1,5 @@
 # import libraries
+import mlflow
 import argparse
 import pandas as pd
 import numpy as np
@@ -9,6 +10,9 @@ from sklearn.metrics import roc_curve
 import matplotlib.pyplot as plt
 
 def main(args):
+    # enable autologging
+    mlflow.autolog()
+
     # read data
     df = get_data(args.training_data)
 
@@ -18,7 +22,6 @@ def main(args):
     # train model
     model = train_model(args.reg_rate, X_train, X_test, y_train, y_test)
 
-    # evaluate model
     eval_model(model, X_test, y_test)
 
 # function that reads the data
@@ -67,6 +70,7 @@ def eval_model(model, X_test, y_test):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('ROC Curve')
+    plt.savefig("ROC-Curve.png") 
 
 def parse_args():
     # setup arg parser
@@ -85,7 +89,7 @@ def parse_args():
     return args
 
 # run script
-if __name__ == "__main__": # The line if __name__ == "__main__": is a standard way in Python to ensure that some code runs only when the script is executed directly, and not when it is imported as a module in another script.
+if __name__ == "__main__":
     # add space in logs
     print("\n\n")
     print("*" * 60)

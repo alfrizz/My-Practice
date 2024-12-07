@@ -85,7 +85,7 @@ def parse_args():
     return args
 
 # run script
-if __name__ == "__main__": # The line if __name__ == "__main__": is a standard way in Python to ensure that some code runs only when the script is executed directly, and not when it is imported as a module in another script.
+if __name__ == "__main__":
     # add space in logs
     print("\n\n")
     print("*" * 60)
