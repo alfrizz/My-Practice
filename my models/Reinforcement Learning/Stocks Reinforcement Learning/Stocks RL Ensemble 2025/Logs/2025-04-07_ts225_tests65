@@ -1,0 +1,2860 @@
+2025-04-07 19:29:21,835 - 
+Agent: PPO
+Step: 1
+Balance: 48970.44
+Net worth: 101648.91
+Profit: 1648.91
+Shares Held:
+  NVDA: 289283.2028892846
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:21,840 - 
+Agent: PPO
+Step: 2
+Balance: 2921.01
+Net worth: 105660.92
+Profit: 5660.92
+Shares Held:
+  NVDA: 542163.1298671244
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:21,843 - 
+Agent: PPO
+Step: 3
+Balance: 2361.28
+Net worth: 106585.79
+Profit: 6585.79
+Shares Held:
+  NVDA: 544487.5213135371
+  BABA: 0.0
+  KO: 8.960583145935358
+
+2025-04-07 19:29:21,845 - 
+Agent: PPO
+Step: 4
+Balance: 981.57
+Net worth: 106973.53
+Profit: 6973.53
+Shares Held:
+  NVDA: 548604.1162079283
+  BABA: 1.0240014775433304
+  KO: 46.88590673317929
+
+2025-04-07 19:29:21,847 - 
+Agent: PPO
+Step: 5
+Balance: 32472.73
+Net worth: 108861.69
+Profit: 8861.69
+Shares Held:
+  NVDA: 121283.4388857286
+  BABA: 567.061991786844
+  KO: 28.86916217329344
+
+2025-04-07 19:29:21,849 - 
+Agent: PPO
+Step: 6
+Balance: 84821.34
+Net worth: 109072.43
+Profit: 9072.43
+Shares Held:
+  NVDA: 12778.983533637205
+  BABA: 0.0
+  KO: 1639.377795939171
+
+2025-04-07 19:29:21,852 - 
+Agent: PPO
+Step: 7
+Balance: 11252.77
+Net worth: 109557.43
+Profit: 9557.43
+Shares Held:
+  NVDA: 9971.612120529042
+  BABA: 455.56326537011734
+  KO: 4010.1914349177305
+
+2025-04-07 19:29:21,853 - 
+Agent: PPO
+Step: 8
+Balance: 3897.27
+Net worth: 110748.26
+Profit: 10748.26
+Shares Held:
+  NVDA: 130721.62543135433
+  BABA: 731.8920499143029
+  KO: 851.4401402904659
+
+2025-04-07 19:29:21,856 - 
+Agent: PPO
+Step: 9
+Balance: 3333.24
+Net worth: 109899.05
+Profit: 9899.05
+Shares Held:
+  NVDA: 149042.91328482318
+  BABA: 649.5856604096265
+  KO: 1245.0613938655083
+
+2025-04-07 19:29:21,857 - 
+Agent: PPO
+Step: 10
+Balance: 14368.79
+Net worth: 110267.12
+Profit: 10267.12
+Shares Held:
+  NVDA: 0.0
+  BABA: 661.3221795724315
+  KO: 2420.517490860896
+
+2025-04-07 19:29:21,859 - 
+Agent: PPO
+Step: 11
+Balance: 22922.65
+Net worth: 110251.08
+Profit: 10251.08
+Shares Held:
+  NVDA: 9998.073483928862
+  BABA: 690.7739405633627
+  KO: 1416.0966747814714
+
+2025-04-07 19:29:21,861 - 
+Agent: PPO
+Step: 12
+Balance: 10778.90
+Net worth: 112040.58
+Profit: 12040.58
+Shares Held:
+  NVDA: 49445.07369957944
+  BABA: 730.6757878808294
+  KO: 1465.435299253992
+
+2025-04-07 19:29:21,863 - 
+Agent: PPO
+Step: 13
+Balance: 32061.50
+Net worth: 114523.13
+Profit: 14523.13
+Shares Held:
+  NVDA: 20661.60336882186
+  BABA: 641.8615733684918
+  KO: 926.2169059063077
+
+2025-04-07 19:29:21,865 - 
+Agent: PPO
+Step: 14
+Balance: 0.00
+Net worth: 116929.79
+Profit: 16929.79
+Shares Held:
+  NVDA: 12716.713858553572
+  BABA: 803.2240204626639
+  KO: 2206.774776565382
+
+2025-04-07 19:29:21,868 - 
+Agent: PPO
+Step: 15
+Balance: 8528.99
+Net worth: 119643.73
+Profit: 19643.73
+Shares Held:
+  NVDA: 37547.10268816941
+  BABA: 851.9742979382493
+  KO: 842.9936847997271
+
+2025-04-07 19:29:21,870 - 
+Agent: PPO
+Step: 16
+Balance: 4296.23
+Net worth: 121663.05
+Profit: 21663.05
+Shares Held:
+  NVDA: 46417.39946436959
+  BABA: 872.5472247969391
+  KO: 870.0460371865437
+
+2025-04-07 19:29:21,872 - 
+Agent: PPO
+Step: 17
+Balance: 2297.01
+Net worth: 125425.52
+Profit: 25425.52
+Shares Held:
+  NVDA: 54700.07740957549
+  BABA: 874.3667634155299
+  KO: 897.448287152546
+
+2025-04-07 19:29:21,874 - 
+Agent: PPO
+Step: 18
+Balance: 2016.46
+Net worth: 121091.18
+Profit: 21091.18
+Shares Held:
+  NVDA: 0.0
+  BABA: 970.1058451066632
+  KO: 787.0364886418134
+
+2025-04-07 19:29:21,876 - 
+Agent: PPO
+Step: 19
+Balance: 73619.88
+Net worth: 121828.49
+Profit: 21828.49
+Shares Held:
+  NVDA: 283580.02062931075
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:21,877 - 
+Agent: PPO
+Step: 20
+Balance: 10354.61
+Net worth: 122011.86
+Profit: 22011.86
+Shares Held:
+  NVDA: 439199.58921487065
+  BABA: 318.26266520781587
+  KO: 0.0
+
+2025-04-07 19:29:21,880 - 
+Agent: PPO
+Step: 21
+Balance: 35881.13
+Net worth: 121922.82
+Profit: 21922.82
+Shares Held:
+  NVDA: 288483.25457449554
+  BABA: 315.04301702398936
+  KO: 66.83540325163186
+
+2025-04-07 19:29:21,882 - 
+Agent: PPO
+Step: 22
+Balance: 27258.79
+Net worth: 121630.97
+Profit: 21630.97
+Shares Held:
+  NVDA: 3054.2859471025295
+  BABA: 194.21053429222178
+  KO: 5470.0623904839085
+
+2025-04-07 19:29:21,883 - 
+Agent: PPO
+Step: 23
+Balance: 0.00
+Net worth: 123171.90
+Profit: 23171.90
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 9221.593176807157
+
+2025-04-07 19:29:21,885 - 
+Agent: PPO
+Step: 24
+Balance: 4522.89
+Net worth: 125645.98
+Profit: 25645.98
+Shares Held:
+  NVDA: 563371.9010773556
+  BABA: 0.0
+  KO: 1712.6570647461704
+
+2025-04-07 19:29:21,887 - 
+Agent: PPO
+Step: 25
+Balance: 12562.25
+Net worth: 126790.90
+Profit: 26790.90
+Shares Held:
+  NVDA: 287916.52445769095
+  BABA: 128.19276235371743
+  KO: 3651.636528825166
+
+2025-04-07 19:29:21,889 - 
+Agent: PPO
+Step: 26
+Balance: 4900.82
+Net worth: 128823.32
+Profit: 28823.32
+Shares Held:
+  NVDA: 363772.96505176247
+  BABA: 0.0
+  KO: 4251.712763925652
+
+2025-04-07 19:29:21,891 - 
+Agent: PPO
+Step: 27
+Balance: 1839.46
+Net worth: 130779.91
+Profit: 30779.91
+Shares Held:
+  NVDA: 377462.40086728
+  BABA: 0.0
+  KO: 4295.883981437329
+
+2025-04-07 19:29:21,892 - 
+Agent: PPO
+Step: 28
+Balance: -0.00
+Net worth: 128346.10
+Profit: 28346.10
+Shares Held:
+  NVDA: 380771.37592230184
+  BABA: 5.5005613809470235
+  KO: 4340.531158568502
+
+2025-04-07 19:29:21,895 - 
+Agent: PPO
+Step: 29
+Balance: 1100.99
+Net worth: 127240.36
+Profit: 27240.36
+Shares Held:
+  NVDA: 390759.0447709202
+  BABA: 11.749267835597706
+  KO: 4077.8362591076093
+
+2025-04-07 19:29:21,896 - 
+Agent: PPO
+Step: 30
+Balance: 0.00
+Net worth: 127433.93
+Profit: 27433.93
+Shares Held:
+  NVDA: 96783.08704042475
+  BABA: 0.0
+  KO: 8114.008552430029
+
+2025-04-07 19:29:21,899 - 
+Agent: PPO
+Step: 31
+Balance: 14026.27
+Net worth: 127655.59
+Profit: 27655.59
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 8364.38374986632
+
+2025-04-07 19:29:21,900 - 
+Agent: PPO
+Step: 32
+Balance: 7345.16
+Net worth: 127111.12
+Profit: 27111.12
+Shares Held:
+  NVDA: 23313.92061019609
+  BABA: 0.0
+  KO: 8547.278347726753
+
+2025-04-07 19:29:21,902 - 
+Agent: PPO
+Step: 33
+Balance: 5191.78
+Net worth: 127013.93
+Profit: 27013.93
+Shares Held:
+  NVDA: 0.0
+  BABA: 53.668378015886425
+  KO: 8590.103867354788
+
+2025-04-07 19:29:21,904 - 
+Agent: PPO
+Step: 34
+Balance: 2648.00
+Net worth: 125501.63
+Profit: 25501.63
+Shares Held:
+  NVDA: 8968.71315846882
+  BABA: 56.793354728237276
+  KO: 8630.883411086095
+
+2025-04-07 19:29:21,906 - 
+Agent: PPO
+Step: 35
+Balance: 68624.80
+Net worth: 124868.78
+Profit: 24868.78
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 4261.617828699101
+
+2025-04-07 19:29:21,907 - 
+Agent: PPO
+Step: 36
+Balance: 0.00
+Net worth: 124832.83
+Profit: 24832.83
+Shares Held:
+  NVDA: 200774.72102925487
+  BABA: 0.0
+  KO: 6861.475367372186
+
+2025-04-07 19:29:21,910 - 
+Agent: PPO
+Step: 37
+Balance: 30336.25
+Net worth: 125260.23
+Profit: 25260.23
+Shares Held:
+  NVDA: 147237.93399443466
+  BABA: 0.0
+  KO: 5256.0057873100195
+
+2025-04-07 19:29:21,911 - 
+Agent: PPO
+Step: 38
+Balance: 34703.34
+Net worth: 125440.69
+Profit: 25440.69
+Shares Held:
+  NVDA: 15772.571752135875
+  BABA: 0.0
+  KO: 6647.994589488309
+
+2025-04-07 19:29:21,913 - 
+Agent: PPO
+Step: 39
+Balance: 0.00
+Net worth: 124587.40
+Profit: 24587.40
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 9470.43834404235
+
+2025-04-07 19:29:21,915 - 
+Agent: PPO
+Step: 40
+Balance: 37338.83
+Net worth: 123989.18
+Profit: 23989.18
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 6632.149459856122
+
+2025-04-07 19:29:21,917 - 
+Agent: PPO
+Step: 41
+Balance: 29292.61
+Net worth: 123680.24
+Profit: 23680.24
+Shares Held:
+  NVDA: 20778.984726910487
+  BABA: 39.57421830396818
+  KO: 6667.2130446679475
+
+2025-04-07 19:29:21,918 - 
+Agent: PPO
+Step: 42
+Balance: 49737.24
+Net worth: 123303.89
+Profit: 23303.89
+Shares Held:
+  NVDA: 18969.5999301728
+  BABA: 0.0
+  KO: 5432.348185492326
+
+2025-04-07 19:29:21,921 - 
+Agent: PPO
+Step: 43
+Balance: 57470.02
+Net worth: 124992.42
+Profit: 24992.42
+Shares Held:
+  NVDA: 4199.591705122335
+  BABA: 0.0
+  KO: 5029.899647058425
+
+2025-04-07 19:29:21,922 - 
+Agent: PPO
+Step: 44
+Balance: 40463.47
+Net worth: 124912.70
+Profit: 24912.70
+Shares Held:
+  NVDA: 66.58859168320487
+  BABA: 442.1445635491554
+  KO: 2812.0475129429997
+
+2025-04-07 19:29:21,924 - 
+Agent: PPO
+Step: 45
+Balance: 23975.15
+Net worth: 125459.47
+Profit: 25459.47
+Shares Held:
+  NVDA: 207668.62139403692
+  BABA: 535.7757251934988
+  KO: 731.2977586962952
+
+2025-04-07 19:29:21,926 - 
+Agent: PPO
+Step: 46
+Balance: 56773.24
+Net worth: 124703.78
+Profit: 24703.78
+Shares Held:
+  NVDA: 243051.58904660773
+  BABA: 27.407112729712708
+  KO: 1971.0869090527024
+
+2025-04-07 19:29:21,928 - 
+Agent: PPO
+Step: 47
+Balance: 19951.13
+Net worth: 121602.09
+Profit: 21602.09
+Shares Held:
+  NVDA: 0.0
+  BABA: 6.5373167736264115
+  KO: 7865.459316838026
+
+2025-04-07 19:29:21,929 - 
+Agent: PPO
+Step: 48
+Balance: 0.00
+Net worth: 122283.81
+Profit: 22283.81
+Shares Held:
+  NVDA: 0.0
+  BABA: 1.7141573097100506
+  KO: 9458.330741925338
+
+2025-04-07 19:29:21,932 - 
+Agent: PPO
+Step: 49
+Balance: 0.00
+Net worth: 121196.18
+Profit: 21196.18
+Shares Held:
+  NVDA: 0.0
+  BABA: 492.71468243763684
+  KO: 5515.375820413942
+
+2025-04-07 19:29:21,933 - 
+Agent: PPO
+Step: 50
+Balance: 41261.90
+Net worth: 121550.04
+Profit: 21550.04
+Shares Held:
+  NVDA: 18279.796952870336
+  BABA: 524.0525286088584
+  KO: 1786.0389389704424
+
+2025-04-07 19:29:21,935 - 
+Agent: PPO
+Step: 51
+Balance: 20107.79
+Net worth: 121337.61
+Profit: 21337.61
+Shares Held:
+  NVDA: 0.0
+  BABA: 973.8339119287183
+  KO: 35.380191276796495
+
+2025-04-07 19:29:21,937 - 
+Agent: PPO
+Step: 52
+Balance: 3329.24
+Net worth: 119323.91
+Profit: 19323.91
+Shares Held:
+  NVDA: 0.0
+  BABA: 1137.5350807874274
+  KO: 23.04219959368407
+
+2025-04-07 19:29:21,939 - 
+Agent: PPO
+Step: 53
+Balance: 112474.45
+Net worth: 119287.58
+Profit: 19287.58
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 524.1761936151086
+
+2025-04-07 19:29:21,940 - 
+Agent: PPO
+Step: 54
+Balance: 44385.20
+Net worth: 118705.45
+Profit: 18705.45
+Shares Held:
+  NVDA: 428605.68490802543
+  BABA: 0.0
+  KO: 176.68965598027012
+
+2025-04-07 19:29:21,943 - 
+Agent: PPO
+Step: 55
+Balance: 51527.96
+Net worth: 120212.55
+Profit: 20212.55
+Shares Held:
+  NVDA: 0.0
+  BABA: 665.4156904700002
+  KO: 110.08542195864753
+
+2025-04-07 19:29:21,944 - 
+Agent: PPO
+Step: 56
+Balance: 111844.97
+Net worth: 120135.55
+Profit: 20135.55
+Shares Held:
+  NVDA: 0.0
+  BABA: 72.68068648051019
+  KO: 79.50667467451416
+
+2025-04-07 19:29:21,946 - 
+Agent: PPO
+Step: 57
+Balance: 52543.42
+Net worth: 123681.20
+Profit: 23681.20
+Shares Held:
+  NVDA: 317332.68361218
+  BABA: 107.04386514792921
+  KO: 70.99329502653585
+
+2025-04-07 19:29:21,949 - 
+Agent: PPO
+Step: 58
+Balance: 53039.76
+Net worth: 123120.65
+Profit: 23120.65
+Shares Held:
+  NVDA: 257681.56507784518
+  BABA: 219.49590907965865
+  KO: 0.0
+
+2025-04-07 19:29:21,951 - 
+Agent: PPO
+Step: 59
+Balance: 96135.22
+Net worth: 123476.85
+Profit: 23476.85
+Shares Held:
+  NVDA: 68658.88127760371
+  BABA: 140.94511467646072
+  KO: 0.0
+
+2025-04-07 19:29:21,952 - 
+Agent: PPO
+Step: 60
+Balance: 0.00
+Net worth: 127166.52
+Profit: 27166.52
+Shares Held:
+  NVDA: 636150.67116328
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:21,955 - 
+Agent: PPO
+Step: 61
+Balance: 2127.58
+Net worth: 128251.86
+Profit: 28251.86
+Shares Held:
+  NVDA: 606285.5078772386
+  BABA: 8.695874722575553
+  KO: 223.02588652589245
+
+2025-04-07 19:29:21,956 - 
+Agent: PPO
+Step: 62
+Balance: 0.00
+Net worth: 128936.87
+Profit: 28936.87
+Shares Held:
+  NVDA: 0.0
+  BABA: 7.706274489671083
+  KO: 9513.009363177824
+
+2025-04-07 19:29:21,958 - 
+Agent: PPO
+Step: 63
+Balance: 236.50
+Net worth: 129828.67
+Profit: 29828.67
+Shares Held:
+  NVDA: 712.5084486195315
+  BABA: 2.7912692852820404
+  KO: 9519.3561255874
+
+2025-04-07 19:29:21,960 - 
+Agent: PPO
+Step: 64
+Balance: 0.00
+Net worth: 128937.65
+Profit: 28937.65
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.418956522426015
+  KO: 9563.91010118196
+
+2025-04-07 19:29:21,963 - 
+Agent: PPO
+Step: 65
+Balance: 128931.24
+Net worth: 128937.86
+Profit: 28937.86
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0655098274828162
+  KO: 0.0
+
+2025-04-07 19:29:21,967 - 
+Agent: A2C
+Step: 1
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:21,970 - 
+Agent: A2C
+Step: 2
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:21,973 - 
+Agent: A2C
+Step: 3
+Balance: 0.00
+Net worth: 99362.84
+Profit: -637.16
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 7513.656069907056
+
+2025-04-07 19:29:21,977 - 
+Agent: A2C
+Step: 4
+Balance: 0.00
+Net worth: 99840.71
+Profit: -159.29
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 7513.656069907056
+
+2025-04-07 19:29:21,980 - 
+Agent: A2C
+Step: 5
+Balance: 0.00
+Net worth: 98785.04
+Profit: -1214.96
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 7513.656069907056
+
+2025-04-07 19:29:21,982 - 
+Agent: A2C
+Step: 6
+Balance: 13671.91
+Net worth: 99506.22
+Profit: -493.78
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 6473.761342519116
+
+2025-04-07 19:29:21,984 - 
+Agent: A2C
+Step: 7
+Balance: 9332.70
+Net worth: 98998.78
+Profit: -1001.22
+Shares Held:
+  NVDA: 0.0
+  BABA: 13.30742041116233
+  KO: 6706.986488667857
+
+2025-04-07 19:29:21,986 - 
+Agent: A2C
+Step: 8
+Balance: 94874.52
+Net worth: 99018.64
+Profit: -981.36
+Shares Held:
+  NVDA: 0.0
+  BABA: 7.387557758419734
+  KO: 259.2992252833956
+
+2025-04-07 19:29:21,988 - 
+Agent: A2C
+Step: 9
+Balance: 99018.64
+Net worth: 99018.64
+Profit: -981.36
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:21,989 - 
+Agent: A2C
+Step: 10
+Balance: 6561.63
+Net worth: 99895.19
+Profit: -104.81
+Shares Held:
+  NVDA: 266752.789936709
+  BABA: 0.0
+  KO: 3257.4381135743006
+
+2025-04-07 19:29:21,992 - 
+Agent: A2C
+Step: 11
+Balance: 836.38
+Net worth: 101447.06
+Profit: 1447.06
+Shares Held:
+  NVDA: 284166.86903392983
+  BABA: 0.0
+  KO: 3442.2824871439207
+
+2025-04-07 19:29:21,993 - 
+Agent: A2C
+Step: 12
+Balance: 8009.22
+Net worth: 99297.21
+Profit: -702.79
+Shares Held:
+  NVDA: 224693.8820435572
+  BABA: 0.0
+  KO: 3770.670618502851
+
+2025-04-07 19:29:21,995 - 
+Agent: A2C
+Step: 13
+Balance: 2277.02
+Net worth: 97779.92
+Profit: -2220.08
+Shares Held:
+  NVDA: 243498.7639584195
+  BABA: 0.0
+  KO: 3941.6886851607023
+
+2025-04-07 19:29:21,997 - 
+Agent: A2C
+Step: 14
+Balance: 0.00
+Net worth: 98610.72
+Profit: -1389.28
+Shares Held:
+  NVDA: 86042.31618579695
+  BABA: 0.0
+  KO: 6288.892593088423
+
+2025-04-07 19:29:21,999 - 
+Agent: A2C
+Step: 15
+Balance: 8743.62
+Net worth: 102176.87
+Profit: 2176.87
+Shares Held:
+  NVDA: 509450.64363987267
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,001 - 
+Agent: A2C
+Step: 16
+Balance: 7703.26
+Net worth: 96806.09
+Profit: -3193.91
+Shares Held:
+  NVDA: 512375.36216489517
+  BABA: 3.3239689065309013
+  KO: 10.60306303613325
+
+2025-04-07 19:29:22,002 - 
+Agent: A2C
+Step: 17
+Balance: 0.00
+Net worth: 96581.01
+Profit: -3418.99
+Shares Held:
+  NVDA: 559224.6331984334
+  BABA: 0.0
+  KO: 8.763951871450452
+
+2025-04-07 19:29:22,005 - 
+Agent: A2C
+Step: 18
+Balance: 0.00
+Net worth: 93729.43
+Profit: -6270.57
+Shares Held:
+  NVDA: 559224.6331984334
+  BABA: 0.0
+  KO: 8.763951871450452
+
+2025-04-07 19:29:22,006 - 
+Agent: A2C
+Step: 19
+Balance: 0.00
+Net worth: 95182.60
+Profit: -4817.40
+Shares Held:
+  NVDA: 559224.6331984334
+  BABA: 0.0
+  KO: 8.763951871450452
+
+2025-04-07 19:29:22,008 - 
+Agent: A2C
+Step: 20
+Balance: 14.61
+Net worth: 96749.64
+Profit: -3250.36
+Shares Held:
+  NVDA: 559530.5851548834
+  BABA: 0.0
+  KO: 3.6603996564504806
+
+2025-04-07 19:29:22,010 - 
+Agent: A2C
+Step: 21
+Balance: 28732.34
+Net worth: 96592.25
+Profit: -3407.75
+Shares Held:
+  NVDA: 335943.43110418774
+  BABA: 0.0
+  KO: 757.7361082858226
+
+2025-04-07 19:29:22,012 - 
+Agent: A2C
+Step: 22
+Balance: 58496.84
+Net worth: 95698.86
+Profit: -4301.14
+Shares Held:
+  NVDA: 188136.8323295688
+  BABA: 0.0
+  KO: 431.32600461551954
+
+2025-04-07 19:29:22,013 - 
+Agent: A2C
+Step: 23
+Balance: 92961.96
+Net worth: 95733.54
+Profit: -4266.46
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 207.5016439816107
+
+2025-04-07 19:29:22,016 - 
+Agent: A2C
+Step: 24
+Balance: 30658.22
+Net worth: 96340.37
+Profit: -3659.63
+Shares Held:
+  NVDA: 109385.46403136541
+  BABA: 117.3211977721826
+  KO: 2527.450130104633
+
+2025-04-07 19:29:22,017 - 
+Agent: A2C
+Step: 25
+Balance: 0.00
+Net worth: 98390.87
+Profit: -1609.13
+Shares Held:
+  NVDA: 90454.86844865442
+  BABA: 35.55399801747144
+  KO: 5682.870879692131
+
+2025-04-07 19:29:22,019 - 
+Agent: A2C
+Step: 26
+Balance: 14712.39
+Net worth: 98696.41
+Profit: -1303.59
+Shares Held:
+  NVDA: 90720.38819109966
+  BABA: 23.948684174039307
+  KO: 4710.314009744764
+
+2025-04-07 19:29:22,020 - 
+Agent: A2C
+Step: 27
+Balance: 29203.30
+Net worth: 99470.98
+Profit: -529.02
+Shares Held:
+  NVDA: 160182.03757860113
+  BABA: 14.124765490984295
+  KO: 2840.646078923095
+
+2025-04-07 19:29:22,023 - 
+Agent: A2C
+Step: 28
+Balance: 99470.98
+Net worth: 99470.98
+Profit: -529.02
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,024 - 
+Agent: A2C
+Step: 29
+Balance: 43308.35
+Net worth: 98939.67
+Profit: -1060.33
+Shares Held:
+  NVDA: 312535.4942251572
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,027 - 
+Agent: A2C
+Step: 30
+Balance: 0.00
+Net worth: 100051.35
+Profit: 51.35
+Shares Held:
+  NVDA: 555840.817820039
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,029 - 
+Agent: A2C
+Step: 31
+Balance: 0.00
+Net worth: 100051.35
+Profit: 51.35
+Shares Held:
+  NVDA: 555840.817820039
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,032 - 
+Agent: A2C
+Step: 32
+Balance: 0.00
+Net worth: 100051.35
+Profit: 51.35
+Shares Held:
+  NVDA: 555840.817820039
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,034 - 
+Agent: A2C
+Step: 33
+Balance: 0.00
+Net worth: 102552.63
+Profit: 2552.63
+Shares Held:
+  NVDA: 555840.817820039
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,036 - 
+Agent: A2C
+Step: 34
+Balance: 25982.92
+Net worth: 101057.49
+Profit: 1057.49
+Shares Held:
+  NVDA: 137175.45394241187
+  BABA: 0.0
+  KO: 3795.6087525893977
+
+2025-04-07 19:29:22,038 - 
+Agent: A2C
+Step: 35
+Balance: 19265.12
+Net worth: 99253.00
+Profit: -747.00
+Shares Held:
+  NVDA: 174707.6621043475
+  BABA: 0.0
+  KO: 3798.3865441561406
+
+2025-04-07 19:29:22,040 - 
+Agent: A2C
+Step: 36
+Balance: 0.00
+Net worth: 99049.21
+Profit: -950.79
+Shares Held:
+  NVDA: 38470.429724215355
+  BABA: 0.0
+  KO: 7022.261846890644
+
+2025-04-07 19:29:22,043 - 
+Agent: A2C
+Step: 37
+Balance: 707.98
+Net worth: 99436.08
+Profit: -563.92
+Shares Held:
+  NVDA: 52877.236558776196
+  BABA: 0.0
+  KO: 6780.33837212697
+
+2025-04-07 19:29:22,045 - 
+Agent: A2C
+Step: 38
+Balance: 425.43
+Net worth: 99503.63
+Profit: -496.37
+Shares Held:
+  NVDA: 53638.18680640087
+  BABA: 0.12753921686955583
+  KO: 6790.739757827642
+
+2025-04-07 19:29:22,047 - 
+Agent: A2C
+Step: 39
+Balance: 1160.04
+Net worth: 98909.80
+Profit: -1090.20
+Shares Held:
+  NVDA: 20547.758466729865
+  BABA: 0.0
+  KO: 7160.95872472777
+
+2025-04-07 19:29:22,048 - 
+Agent: A2C
+Step: 40
+Balance: 0.00
+Net worth: 98209.26
+Profit: -1790.74
+Shares Held:
+  NVDA: 11088.668751487276
+  BABA: 0.0
+  KO: 7373.170378044482
+
+2025-04-07 19:29:22,051 - 
+Agent: A2C
+Step: 41
+Balance: 0.00
+Net worth: 97911.32
+Profit: -2088.68
+Shares Held:
+  NVDA: 11088.668751487276
+  BABA: 0.0
+  KO: 7373.170378044482
+
+2025-04-07 19:29:22,052 - 
+Agent: A2C
+Step: 42
+Balance: 0.00
+Net worth: 97346.27
+Profit: -2653.73
+Shares Held:
+  NVDA: 11088.668751487276
+  BABA: 0.0
+  KO: 7373.170378044482
+
+2025-04-07 19:29:22,054 - 
+Agent: A2C
+Step: 43
+Balance: 0.00
+Net worth: 99815.51
+Profit: -184.49
+Shares Held:
+  NVDA: 11088.668751487276
+  BABA: 0.0
+  KO: 7373.170378044482
+
+2025-04-07 19:29:22,056 - 
+Agent: A2C
+Step: 44
+Balance: 101.05
+Net worth: 99338.06
+Profit: -661.94
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 7507.14941367681
+
+2025-04-07 19:29:22,059 - 
+Agent: A2C
+Step: 45
+Balance: 55814.06
+Net worth: 99617.26
+Profit: -382.74
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 3292.5332921971494
+
+2025-04-07 19:29:22,060 - 
+Agent: A2C
+Step: 46
+Balance: 82303.14
+Net worth: 99520.70
+Profit: -479.30
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 1301.4415638766934
+
+2025-04-07 19:29:22,063 - 
+Agent: A2C
+Step: 47
+Balance: 0.00
+Net worth: 96574.10
+Profit: -3425.90
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 7522.577873865777
+
+2025-04-07 19:29:22,065 - 
+Agent: A2C
+Step: 48
+Balance: 79526.32
+Net worth: 96669.71
+Profit: -3330.29
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 1327.926173456326
+
+2025-04-07 19:29:22,066 - 
+Agent: A2C
+Step: 49
+Balance: 78985.66
+Net worth: 96399.59
+Profit: -3600.41
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 1369.80558034824
+
+2025-04-07 19:29:22,069 - 
+Agent: A2C
+Step: 50
+Balance: 23561.66
+Net worth: 98407.34
+Profit: -1592.66
+Shares Held:
+  NVDA: 249009.0167391317
+  BABA: 0.0
+  KO: 2622.975249180957
+
+2025-04-07 19:29:22,070 - 
+Agent: A2C
+Step: 51
+Balance: 34830.09
+Net worth: 99888.92
+Profit: -111.08
+Shares Held:
+  NVDA: 326396.2674017927
+  BABA: 0.0
+  KO: 747.4173133061631
+
+2025-04-07 19:29:22,072 - 
+Agent: A2C
+Step: 52
+Balance: 67442.51
+Net worth: 100252.63
+Profit: 252.63
+Shares Held:
+  NVDA: 191424.2576368918
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,074 - 
+Agent: A2C
+Step: 53
+Balance: 68350.90
+Net worth: 99880.38
+Profit: -119.62
+Shares Held:
+  NVDA: 186124.43289457567
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,076 - 
+Agent: A2C
+Step: 54
+Balance: 75215.50
+Net worth: 99691.10
+Profit: -308.90
+Shares Held:
+  NVDA: 145601.4348717903
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,077 - 
+Agent: A2C
+Step: 55
+Balance: 45414.65
+Net worth: 99891.53
+Profit: -108.47
+Shares Held:
+  NVDA: 300000.62765186164
+  BABA: 0.0
+  KO: 299.1724320000631
+
+2025-04-07 19:29:22,080 - 
+Agent: A2C
+Step: 56
+Balance: 97318.97
+Net worth: 99910.76
+Profit: -89.24
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 200.5954129522556
+
+2025-04-07 19:29:22,081 - 
+Agent: A2C
+Step: 57
+Balance: 15270.36
+Net worth: 100382.42
+Profit: 382.42
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 6550.861188712869
+
+2025-04-07 19:29:22,084 - 
+Agent: A2C
+Step: 58
+Balance: 4039.11
+Net worth: 100410.62
+Profit: 410.62
+Shares Held:
+  NVDA: 19271.518200218085
+  BABA: 0.0
+  KO: 7138.521773105613
+
+2025-04-07 19:29:22,085 - 
+Agent: A2C
+Step: 59
+Balance: 34269.26
+Net worth: 101272.64
+Profit: 1272.64
+Shares Held:
+  NVDA: 3792.5243843157314
+  BABA: 0.0
+  KO: 5034.3579851643335
+
+2025-04-07 19:29:22,087 - 
+Agent: A2C
+Step: 60
+Balance: 15750.19
+Net worth: 102718.79
+Profit: 2718.79
+Shares Held:
+  NVDA: 3534.917961621261
+  BABA: 0.0
+  KO: 6445.059858391874
+
+2025-04-07 19:29:22,088 - 
+Agent: A2C
+Step: 61
+Balance: 64110.92
+Net worth: 102774.74
+Profit: 2774.74
+Shares Held:
+  NVDA: 1507.1632529743251
+  BABA: 0.0
+  KO: 2862.0748995635836
+
+2025-04-07 19:29:22,091 - 
+Agent: A2C
+Step: 62
+Balance: 54249.96
+Net worth: 102921.68
+Profit: 2921.68
+Shares Held:
+  NVDA: 26075.3064696506
+  BABA: 0.0
+  KO: 3228.085723708831
+
+2025-04-07 19:29:22,092 - 
+Agent: A2C
+Step: 63
+Balance: 19473.93
+Net worth: 103674.89
+Profit: 3674.89
+Shares Held:
+  NVDA: 114827.96623233808
+  BABA: 0.0
+  KO: 4503.860229050832
+
+2025-04-07 19:29:22,095 - 
+Agent: A2C
+Step: 64
+Balance: 0.00
+Net worth: 103385.76
+Profit: 3385.76
+Shares Held:
+  NVDA: 49364.616886229676
+  BABA: 0.0
+  KO: 6908.457443696298
+
+2025-04-07 19:29:22,096 - 
+Agent: A2C
+Step: 65
+Balance: 0.00
+Net worth: 103043.45
+Profit: 3043.45
+Shares Held:
+  NVDA: 96479.28558784616
+  BABA: 0.0
+  KO: 6180.626109486691
+
+2025-04-07 19:29:22,098 - 
+Agent: DDPG
+Step: 1
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,100 - 
+Agent: DDPG
+Step: 2
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,102 - 
+Agent: DDPG
+Step: 3
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,104 - 
+Agent: DDPG
+Step: 4
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,105 - 
+Agent: DDPG
+Step: 5
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,106 - 
+Agent: DDPG
+Step: 6
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,108 - 
+Agent: DDPG
+Step: 7
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,109 - 
+Agent: DDPG
+Step: 8
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,111 - 
+Agent: DDPG
+Step: 9
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,112 - 
+Agent: DDPG
+Step: 10
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,114 - 
+Agent: DDPG
+Step: 11
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,115 - 
+Agent: DDPG
+Step: 12
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,118 - 
+Agent: DDPG
+Step: 13
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,119 - 
+Agent: DDPG
+Step: 14
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,121 - 
+Agent: DDPG
+Step: 15
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,122 - 
+Agent: DDPG
+Step: 16
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,124 - 
+Agent: DDPG
+Step: 17
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,125 - 
+Agent: DDPG
+Step: 18
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,127 - 
+Agent: DDPG
+Step: 19
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,128 - 
+Agent: DDPG
+Step: 20
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,130 - 
+Agent: DDPG
+Step: 21
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,131 - 
+Agent: DDPG
+Step: 22
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,133 - 
+Agent: DDPG
+Step: 23
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,134 - 
+Agent: DDPG
+Step: 24
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,136 - 
+Agent: DDPG
+Step: 25
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,138 - 
+Agent: DDPG
+Step: 26
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,139 - 
+Agent: DDPG
+Step: 27
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,141 - 
+Agent: DDPG
+Step: 28
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,142 - 
+Agent: DDPG
+Step: 29
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,144 - 
+Agent: DDPG
+Step: 30
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,145 - 
+Agent: DDPG
+Step: 31
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,147 - 
+Agent: DDPG
+Step: 32
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,148 - 
+Agent: DDPG
+Step: 33
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,150 - 
+Agent: DDPG
+Step: 34
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,151 - 
+Agent: DDPG
+Step: 35
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,154 - 
+Agent: DDPG
+Step: 36
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,155 - 
+Agent: DDPG
+Step: 37
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,157 - 
+Agent: DDPG
+Step: 38
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,158 - 
+Agent: DDPG
+Step: 39
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,160 - 
+Agent: DDPG
+Step: 40
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,161 - 
+Agent: DDPG
+Step: 41
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,163 - 
+Agent: DDPG
+Step: 42
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,164 - 
+Agent: DDPG
+Step: 43
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,166 - 
+Agent: DDPG
+Step: 44
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,168 - 
+Agent: DDPG
+Step: 45
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,170 - 
+Agent: DDPG
+Step: 46
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,172 - 
+Agent: DDPG
+Step: 47
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,173 - 
+Agent: DDPG
+Step: 48
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,175 - 
+Agent: DDPG
+Step: 49
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,176 - 
+Agent: DDPG
+Step: 50
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,178 - 
+Agent: DDPG
+Step: 51
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,179 - 
+Agent: DDPG
+Step: 52
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,181 - 
+Agent: DDPG
+Step: 53
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,182 - 
+Agent: DDPG
+Step: 54
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,184 - 
+Agent: DDPG
+Step: 55
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,186 - 
+Agent: DDPG
+Step: 56
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,187 - 
+Agent: DDPG
+Step: 57
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,189 - 
+Agent: DDPG
+Step: 58
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,190 - 
+Agent: DDPG
+Step: 59
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,192 - 
+Agent: DDPG
+Step: 60
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,193 - 
+Agent: DDPG
+Step: 61
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,195 - 
+Agent: DDPG
+Step: 62
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,196 - 
+Agent: DDPG
+Step: 63
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,197 - 
+Agent: DDPG
+Step: 64
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,198 - 
+Agent: DDPG
+Step: 65
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,203 - 
+Agent: Ensemble
+Step: 1
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,205 - 
+Agent: Ensemble
+Step: 2
+Balance: 100000.00
+Net worth: 100000.00
+Profit: 0.00
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,208 - 
+Agent: Ensemble
+Step: 3
+Balance: 76540.84
+Net worth: 100210.45
+Profit: 210.45
+Shares Held:
+  NVDA: 123795.01771801065
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,212 - 
+Agent: Ensemble
+Step: 4
+Balance: 78846.07
+Net worth: 100288.67
+Profit: 288.67
+Shares Held:
+  NVDA: 111738.3926897228
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,216 - 
+Agent: Ensemble
+Step: 5
+Balance: 100098.87
+Net worth: 100291.34
+Profit: 291.34
+Shares Held:
+  NVDA: 989.055530309357
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,218 - 
+Agent: Ensemble
+Step: 6
+Balance: 100255.95
+Net worth: 100291.74
+Profit: 291.74
+Shares Held:
+  NVDA: 181.872749484383
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,221 - 
+Agent: Ensemble
+Step: 7
+Balance: 100284.52
+Net worth: 100291.37
+Profit: 291.37
+Shares Held:
+  NVDA: 36.68620013135987
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,224 - 
+Agent: Ensemble
+Step: 8
+Balance: 100289.40
+Net worth: 100291.35
+Profit: 291.35
+Shares Held:
+  NVDA: 10.54256458304669
+  BABA: 0.0
+  KO: 0.0
+
+2025-04-07 19:29:22,227 - 
+Agent: Ensemble
+Step: 9
+Balance: 79338.38
+Net worth: 100261.84
+Profit: 261.84
+Shares Held:
+  NVDA: 8.595773165976121
+  BABA: 0.0
+  KO: 1586.8532273679389
+
+2025-04-07 19:29:22,232 - 
+Agent: Ensemble
+Step: 10
+Balance: 83676.06
+Net worth: 100311.93
+Profit: 311.93
+Shares Held:
+  NVDA: 8.091018509538348
+  BABA: 0.0
+  KO: 1257.8616539908962
+
+2025-04-07 19:29:22,234 - 
+Agent: Ensemble
+Step: 11
+Balance: 94274.03
+Net worth: 100318.02
+Profit: 318.02
+Shares Held:
+  NVDA: 4.261067715825712
+  BABA: 0.0
+  KO: 456.5149801230191
+
+2025-04-07 19:29:22,237 - 
+Agent: Ensemble
+Step: 12
+Balance: 96984.44
+Net worth: 100307.98
+Profit: 307.98
+Shares Held:
+  NVDA: 1.7482696754631837
+  BABA: 0.0
+  KO: 251.80144976160716
+
+2025-04-07 19:29:22,240 - 
+Agent: Ensemble
+Step: 13
+Balance: 99416.09
+Net worth: 100299.92
+Profit: 299.92
+Shares Held:
+  NVDA: 0.9645116718335492
+  BABA: 0.0
+  KO: 67.56550225878073
+
+2025-04-07 19:29:22,243 - 
+Agent: Ensemble
+Step: 14
+Balance: 66745.74
+Net worth: 99544.47
+Profit: -455.53
+Shares Held:
+  NVDA: 184892.220872028
+  BABA: 0.0
+  KO: 13.849613962438923
+
+2025-04-07 19:29:22,247 - 
+Agent: Ensemble
+Step: 15
+Balance: 78240.25
+Net worth: 100384.71
+Profit: 384.71
+Shares Held:
+  NVDA: 119974.20967532348
+  BABA: 0.0
+  KO: 10.61074962541205
+
+2025-04-07 19:29:22,251 - 
+Agent: Ensemble
+Step: 16
+Balance: 85802.20
+Net worth: 99861.75
+Profit: -138.25
+Shares Held:
+  NVDA: 59268.94933706714
+  BABA: 33.96886635005774
+  KO: 0.31213176495613837
+
+2025-04-07 19:29:22,253 - 
+Agent: Ensemble
+Step: 17
+Balance: 92813.83
+Net worth: 99987.30
+Profit: -12.70
+Shares Held:
+  NVDA: 21375.806005242703
+  BABA: 29.86680144578434
+  KO: 0.30631187933622156
+
+2025-04-07 19:29:22,257 - 
+Agent: Ensemble
+Step: 18
+Balance: 81077.93
+Net worth: 99577.85
+Profit: -422.15
+Shares Held:
+  NVDA: 81399.7621279023
+  BABA: 2.8110569969053145
+  KO: 346.72618574205165
+
+2025-04-07 19:29:22,259 - 
+Agent: Ensemble
+Step: 19
+Balance: 93721.40
+Net worth: 99580.09
+Profit: -419.91
+Shares Held:
+  NVDA: 9466.243010355305
+  BABA: 1.77877356902257
+  KO: 309.7528488590356
+
+2025-04-07 19:29:22,264 - 
+Agent: Ensemble
+Step: 20
+Balance: 63651.01
+Net worth: 100145.34
+Profit: 145.34
+Shares Held:
+  NVDA: 196675.09776492906
+  BABA: 1.0060959731905967
+  KO: 182.15433776598977
+
+2025-04-07 19:29:22,266 - 
+Agent: Ensemble
+Step: 21
+Balance: 87400.48
+Net worth: 100112.16
+Profit: 112.16
+Shares Held:
+  NVDA: 65509.290585329174
+  BABA: 0.7746216637113207
+  KO: 101.71377255513627
+
+2025-04-07 19:29:22,269 - 
+Agent: Ensemble
+Step: 22
+Balance: 96445.40
+Net worth: 100044.95
+Profit: 44.95
+Shares Held:
+  NVDA: 13805.601655857783
+  BABA: 0.3902381687107515
+  KO: 94.27642912500217
+
+2025-04-07 19:29:22,273 - 
+Agent: Ensemble
+Step: 23
+Balance: 97669.72
+Net worth: 100078.19
+Profit: 78.19
+Shares Held:
+  NVDA: 11944.80730755636
+  BABA: 0.28753275694067704
+  KO: 25.95446634371713
+
+2025-04-07 19:29:22,275 - 
+Agent: Ensemble
+Step: 24
+Balance: 99609.82
+Net worth: 100085.48
+Profit: 85.48
+Shares Held:
+  NVDA: 1040.3588884205892
+  BABA: 0.0908795245499438
+  KO: 21.086266615693564
+
+2025-04-07 19:29:22,281 - 
+Agent: Ensemble
+Step: 25
+Balance: 99802.06
+Net worth: 100090.47
+Profit: 90.47
+Shares Held:
+  NVDA: 452.8465748231347
+  BABA: 0.060586348797155576
+  KO: 14.662170033841488
+
+2025-04-07 19:29:22,284 - 
+Agent: Ensemble
+Step: 26
+Balance: 100008.80
+Net worth: 100090.43
+Profit: 90.43
+Shares Held:
+  NVDA: 42.369936166797174
+  BABA: 0.010948231540638953
+  KO: 5.267592713653325
+
+2025-04-07 19:29:22,287 - 
+Agent: Ensemble
+Step: 27
+Balance: 100035.99
+Net worth: 100090.22
+Profit: 90.22
+Shares Held:
+  NVDA: 21.223202057890973
+  BABA: 0.003600803305774388
+  KO: 3.6326548075356526
+
+2025-04-07 19:29:22,289 - 
+Agent: Ensemble
+Step: 28
+Balance: 100046.74
+Net worth: 100089.93
+Profit: 89.93
+Shares Held:
+  NVDA: 14.148801161093745
+  BABA: 0.0
+  KO: 2.975070690304123
+
+2025-04-07 19:29:22,293 - 
+Agent: Ensemble
+Step: 29
+Balance: 80037.81
+Net worth: 99900.29
+Profit: -99.71
+Shares Held:
+  NVDA: 111406.44718106861
+  BABA: 0.0
+  KO: 2.3700052358853667
+
+2025-04-07 19:29:22,297 - 
+Agent: Ensemble
+Step: 30
+Balance: 53358.54
+Net worth: 100272.99
+Profit: 272.99
+Shares Held:
+  NVDA: 186348.21757401674
+  BABA: 0.0
+  KO: 986.2349988888805
+
+2025-04-07 19:29:22,299 - 
+Agent: Ensemble
+Step: 31
+Balance: 67154.50
+Net worth: 100276.46
+Profit: 276.46
+Shares Held:
+  NVDA: 174117.57383600075
+  BABA: 0.0
+  KO: 131.08644392235556
+
+2025-04-07 19:29:22,303 - 
+Agent: Ensemble
+Step: 32
+Balance: 75879.93
+Net worth: 100220.65
+Profit: 220.65
+Shares Held:
+  NVDA: 69418.9537052729
+  BABA: 0.0
+  KO: 876.0550713201043
+
+2025-04-07 19:29:22,305 - 
+Agent: Ensemble
+Step: 33
+Balance: 82639.76
+Net worth: 100318.53
+Profit: 318.53
+Shares Held:
+  NVDA: 25160.50694130059
+  BABA: 0.0
+  KO: 965.299341680992
+
+2025-04-07 19:29:22,309 - 
+Agent: Ensemble
+Step: 34
+Balance: 73005.81
+Net worth: 99441.36
+Profit: -558.64
+Shares Held:
+  NVDA: 128380.39878492651
+  BABA: 0.0
+  KO: 268.527146534121
+
+2025-04-07 19:29:22,313 - 
+Agent: Ensemble
+Step: 35
+Balance: 68247.19
+Net worth: 98441.13
+Profit: -1558.87
+Shares Held:
+  NVDA: 127580.7219823373
+  BABA: 0.0
+  KO: 635.7418141608018
+
+2025-04-07 19:29:22,317 - 
+Agent: Ensemble
+Step: 36
+Balance: 74592.39
+Net worth: 98520.42
+Profit: -1479.58
+Shares Held:
+  NVDA: 97897.38113511588
+  BABA: 0.0
+  KO: 539.3380120185411
+
+2025-04-07 19:29:22,319 - 
+Agent: Ensemble
+Step: 37
+Balance: 72432.80
+Net worth: 98686.47
+Profit: -1313.53
+Shares Held:
+  NVDA: 123923.6054987675
+  BABA: 0.0
+  KO: 363.52193453042605
+
+2025-04-07 19:29:22,322 - 
+Agent: Ensemble
+Step: 38
+Balance: 74605.12
+Net worth: 98429.17
+Profit: -1570.83
+Shares Held:
+  NVDA: 90140.82725567049
+  BABA: 0.0
+  KO: 641.7361179807713
+
+2025-04-07 19:29:22,326 - 
+Agent: Ensemble
+Step: 39
+Balance: 87801.35
+Net worth: 98502.70
+Profit: -1497.30
+Shares Held:
+  NVDA: 39882.232950668265
+  BABA: 0.0
+  KO: 290.50213333755306
+
+2025-04-07 19:29:22,330 - 
+Agent: Ensemble
+Step: 40
+Balance: 71843.67
+Net worth: 98014.42
+Profit: -1985.58
+Shares Held:
+  NVDA: 151440.90437531788
+  BABA: 0.0
+  KO: 40.70405930069603
+
+2025-04-07 19:29:22,333 - 
+Agent: Ensemble
+Step: 41
+Balance: 79191.94
+Net worth: 97851.27
+Profit: -2148.73
+Shares Held:
+  NVDA: 63806.096011868794
+  BABA: 0.0
+  KO: 613.8529180347351
+
+2025-04-07 19:29:22,336 - 
+Agent: Ensemble
+Step: 42
+Balance: 84534.96
+Net worth: 97969.49
+Profit: -2030.51
+Shares Held:
+  NVDA: 42537.39670738925
+  BABA: 0.0
+  KO: 476.5323360731238
+
+2025-04-07 19:29:22,339 - 
+Agent: Ensemble
+Step: 43
+Balance: 91186.59
+Net worth: 97956.70
+Profit: -2043.30
+Shares Held:
+  NVDA: 33533.899725239025
+  BABA: 0.0
+  KO: 81.5171106358427
+
+2025-04-07 19:29:22,343 - 
+Agent: Ensemble
+Step: 44
+Balance: 79230.37
+Net worth: 97796.22
+Profit: -2203.78
+Shares Held:
+  NVDA: 13916.637063923776
+  BABA: 0.0
+  KO: 1232.1428760607066
+
+2025-04-07 19:29:22,346 - 
+Agent: Ensemble
+Step: 45
+Balance: 80838.15
+Net worth: 97883.70
+Profit: -2116.30
+Shares Held:
+  NVDA: 9471.254070213246
+  BABA: 0.0
+  KO: 1165.5667432859632
+
+2025-04-07 19:29:22,349 - 
+Agent: Ensemble
+Step: 46
+Balance: 57239.55
+Net worth: 97651.57
+Profit: -2348.43
+Shares Held:
+  NVDA: 3906.7017183870194
+  BABA: 0.0
+  KO: 3007.359878870108
+
+2025-04-07 19:29:22,352 - 
+Agent: Ensemble
+Step: 47
+Balance: 64405.77
+Net worth: 96796.09
+Profit: -3203.91
+Shares Held:
+  NVDA: 37424.40770722271
+  BABA: 0.0
+  KO: 2059.8060758833158
+
+2025-04-07 19:29:22,356 - 
+Agent: Ensemble
+Step: 48
+Balance: 80111.86
+Net worth: 97036.45
+Profit: -2963.55
+Shares Held:
+  NVDA: 58509.084466810375
+  BABA: 0.0
+  KO: 575.4162453413794
+
+2025-04-07 19:29:22,359 - 
+Agent: Ensemble
+Step: 49
+Balance: 65022.45
+Net worth: 96353.83
+Profit: -3646.17
+Shares Held:
+  NVDA: 158577.23745786288
+  BABA: 0.0
+  KO: 486.2096722051377
+
+2025-04-07 19:29:22,362 - 
+Agent: Ensemble
+Step: 50
+Balance: 63600.45
+Net worth: 97043.27
+Profit: -2956.73
+Shares Held:
+  NVDA: 71739.47719951988
+  BABA: 0.0
+  KO: 1681.4288131594603
+
+2025-04-07 19:29:22,365 - 
+Agent: Ensemble
+Step: 51
+Balance: 65501.41
+Net worth: 97642.30
+Profit: -2357.70
+Shares Held:
+  NVDA: 78383.09179116342
+  BABA: 0.0
+  KO: 1447.6639836145127
+
+2025-04-07 19:29:22,369 - 
+Agent: Ensemble
+Step: 52
+Balance: 70037.98
+Net worth: 97810.52
+Profit: -2189.48
+Shares Held:
+  NVDA: 57814.828788669445
+  BABA: 0.0
+  KO: 1367.0268503156697
+
+2025-04-07 19:29:22,373 - 
+Agent: Ensemble
+Step: 53
+Balance: 81096.42
+Net worth: 97679.83
+Profit: -2320.17
+Shares Held:
+  NVDA: 38543.218618107574
+  BABA: 0.0
+  KO: 773.5300105960989
+
+2025-04-07 19:29:22,376 - 
+Agent: Ensemble
+Step: 54
+Balance: 71274.75
+Net worth: 97406.86
+Profit: -2593.14
+Shares Held:
+  NVDA: 25695.478695845908
+  BABA: 0.0
+  KO: 1696.6150658162073
+
+2025-04-07 19:29:22,378 - 
+Agent: Ensemble
+Step: 55
+Balance: 95290.58
+Net worth: 97409.08
+Profit: -2590.92
+Shares Held:
+  NVDA: 6696.864347221992
+  BABA: 0.0
+  KO: 77.04507212689282
+
+2025-04-07 19:29:22,381 - 
+Agent: Ensemble
+Step: 56
+Balance: 95781.92
+Net worth: 97463.46
+Profit: -2536.54
+Shares Held:
+  NVDA: 6660.09653254098
+  BABA: 0.0
+  KO: 39.21652288863983
+
+2025-04-07 19:29:22,385 - 
+Agent: Ensemble
+Step: 57
+Balance: 82306.21
+Net worth: 97582.22
+Profit: -2417.78
+Shares Held:
+  NVDA: 3720.873633702507
+  BABA: 0.0
+  KO: 1122.3161736855127
+
+2025-04-07 19:29:22,388 - 
+Agent: Ensemble
+Step: 58
+Balance: 69367.60
+Net worth: 97593.73
+Profit: -2406.27
+Shares Held:
+  NVDA: 0.0
+  BABA: 0.0
+  KO: 2171.6082270713414
+
+2025-04-07 19:29:22,392 - 
+Agent: Ensemble
+Step: 59
+Balance: 84235.85
+Net worth: 97781.88
+Profit: -2218.12
+Shares Held:
+  NVDA: 3261.4781823987946
+  BABA: 0.0
+  KO: 981.0058528126599
+
+2025-04-07 19:29:22,395 - 
+Agent: Ensemble
+Step: 60
+Balance: 95894.03
+Net worth: 97821.83
+Profit: -2178.17
+Shares Held:
+  NVDA: 3238.7226492718414
+  BABA: 0.0
+  KO: 95.66365006356762
+
+2025-04-07 19:29:22,398 - 
+Agent: Ensemble
+Step: 61
+Balance: 82830.47
+Net worth: 97846.85
+Profit: -2153.15
+Shares Held:
+  NVDA: 2751.368586232824
+  BABA: 0.0
+  KO: 1078.9859475677026
+
+2025-04-07 19:29:22,402 - 
+Agent: Ensemble
+Step: 62
+Balance: 70433.58
+Net worth: 97993.47
+Profit: -2006.53
+Shares Held:
+  NVDA: 1263.1000418174804
+  BABA: 0.0
+  KO: 2026.330420117356
+
+2025-04-07 19:29:22,407 - 
+Agent: Ensemble
+Step: 63
+Balance: 72744.14
+Net worth: 98169.17
+Profit: -1830.83
+Shares Held:
+  NVDA: 595.5734016542116
+  BABA: 0.0
+  KO: 1864.702590846788
+
+2025-04-07 19:29:22,410 - 
+Agent: Ensemble
+Step: 64
+Balance: 74779.61
+Net worth: 98013.11
+Profit: -1986.89
+Shares Held:
+  NVDA: 552.6771424653007
+  BABA: 0.0
+  KO: 1715.348402192244
+
+2025-04-07 19:29:22,412 - 
+Agent: Ensemble
+Step: 65
+Balance: 82501.68
+Net worth: 98097.46
+Profit: -1902.54
+Shares Held:
+  NVDA: 476.14774417378226
+  BABA: 0.0
+  KO: 1143.5655844210405
+
