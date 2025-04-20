@@ -642,6 +642,175 @@ class IBKRClient:
     
 
     
+    def order_bracket(self,
+                      ticker,
+                      conid,
+                      quantity,
+                      primary_side="BUY",
+                      primary_order_type="MKT",
+                      profit_target_price=None,       # e.g. 157.00 for profit target
+                      profit_order_type="LMT",
+                      stop_loss_price=None,           # e.g. 157.30 for stop loss
+                      stop_order_type="STP",
+                      tif="GTC",
+                      listing_exchange="SMART",
+                      outside_rth=True,
+                      referrer="QuickTrade",
+                      is_single_group=False):         # Optional flag for OCA groups
+        """
+        Creates and sends a bracket order matching Interactive Brokers' documentation.
+        
+        The payload consists of a parent (primary) order and two child orders (profit taker and stop loss),
+        where the parent order includes a 'cOID' field and the children include a 'parentId' field.
+        
+        Parameters:
+          ticker (str): Ticker symbol.
+          conid (int): The contract id of the underlying instrument.
+          quantity (int): Number of shares/contracts.
+          primary_side (str): "BUY" or "SELL" for the parent order.
+          primary_order_type (str): Order type for the parent order (e.g., "MKT").
+          profit_target_price (float or None): Price for the profit taker order (child).
+          profit_order_type (str): Order type for the profit order (default "LMT").
+          stop_loss_price (float or None): Price for the stop loss order (child).
+          stop_order_type (str): Order type for stop loss (default "STP").
+          tif (str): Time in force (default "GTC").
+          listing_exchange (str): Listing exchange (default "SMART").
+          outside_rth (bool): Whether orders are allowed outside regular trading hours.
+          referrer (str): Referrer for the parent order.
+          is_single_group (bool): If True, adds "isSingleGroup": true to every order.
+        
+        Example payload (bracket order):
+        {
+          "orders": [
+            {
+              "acctId": "U1234567",
+              "conid": 265598,
+              "cOID": "AAPL_BRACKET_MMDD",
+              "orderType": "MKT",
+              "listingExchange": "SMART",
+              "outsideRTH": true,
+              "side": "Buy",
+              "referrer": "QuickTrade",
+              "tif": "GTC",
+              "quantity": 50
+            },
+            {
+              "acctId": "U1234567",
+              "conid": 265598,
+              "orderType": "STP",
+              "listingExchange": "SMART",
+              "outsideRTH": false,
+              "price": 157.30,
+              "side": "Sell",
+              "tif": "GTC",
+              "quantity": 50,
+              "parentId": "AAPL_BRACKET_MMDD"
+            },
+            {
+              "acctId": "U1234567",
+              "conid": 265598,
+              "orderType": "LMT",
+              "listingExchange": "SMART",
+              "outsideRTH": false,
+              "price": 157.00,
+              "side": "Sell",
+              "tif": "GTC",
+              "quantity": 50,
+              "parentId": "AAPL_BRACKET_MMDD"
+            }
+          ]
+        }
+        """
+        base_url = "https://localhost:5000/v1/api/"
+        endpoint = f"iserver/account/{self.account_id}/orders"
+        
+        # Build order identifier exactly as before.
+        c_oid_prefix = ticker.upper() + "_BRACKET_MMDD"
+        
+        orders = []
+        
+        # Parent (primary) order
+        parent_order = {
+            "acctId": self.account_id,
+            "conid": int(conid),
+            "cOID": c_oid_prefix,
+            "orderType": primary_order_type,
+            "listingExchange": listing_exchange,
+            "outsideRTH": outside_rth,
+            "side": "Buy" if primary_side.upper() == "BUY" else "Sell",
+            "referrer": referrer,
+            "tif": tif,
+            "quantity": quantity
+        }
+        if is_single_group:
+            parent_order["isSingleGroup"] = True
+        orders.append(parent_order)
+        
+        # Profit taker order (child order)
+        if profit_target_price is not None:
+            profit_order = {
+                "acctId": self.account_id,
+                "conid": int(conid),
+                "orderType": profit_order_type,
+                "listingExchange": listing_exchange,
+                # Setting outsideRTH to false for child orders per sample documentation.
+                "outsideRTH": False,
+                "price": profit_target_price,
+                "side": "Sell" if primary_side.upper() == "BUY" else "Buy",
+                "tif": tif,
+                "quantity": quantity,
+                "parentId": c_oid_prefix
+            }
+            if is_single_group:
+                profit_order["isSingleGroup"] = True
+            orders.append(profit_order)
+        
+        # Stop loss order (child order)
+        if stop_loss_price is not None:
+            stop_order = {
+                "acctId": self.account_id,
+                "conid": int(conid),
+                "orderType": stop_order_type,
+                "listingExchange": listing_exchange,
+                "outsideRTH": False,
+                "price": stop_loss_price,
+                "side": "Sell" if primary_side.upper() == "BUY" else "Buy",
+                "tif": tif,
+                "quantity": quantity,
+                "parentId": c_oid_prefix
+            }
+            if is_single_group:
+                stop_order["isSingleGroup"] = True
+            orders.append(stop_order)
+        
+        json_body = {"orders": orders}
+        
+        # Debug print of the JSON payload
+        print("Sending JSON payload:")
+        print(json.dumps(json_body, indent=2))
+        
+        try:
+            order_req = requests.post(url=base_url + endpoint, verify=False, json=json_body)
+            order_req.raise_for_status()  # Raise exception for 4XX/5XX errors
+        except requests.RequestException as e:
+            if hasattr(e, 'response') and e.response is not None:
+                print("Response Content:", e.response.text)
+            print(f"An error occurred: {e}")
+            return None
+    
+        order_data = order_req.json()
+        print("Status code:", order_req.status_code)
+        print("Response Data:", json.dumps(order_data, indent=2))
+        
+        # Extract and return the order ID from the first element if available.
+        if isinstance(order_data, list) and order_data and "id" in order_data[0]:
+            return order_data[0]["id"]
+        else:
+            print("Unexpected response format")
+            return None
+
+    
+    
     def get_portfolio_summary(self):
         """
         Retrieves the portfolio summary for this account.
