@@ -5,9 +5,105 @@ import time
 import os
 import subprocess
 import webbrowser
+import websocket
+import ssl
+from datetime import datetime
 
 
 class IBKRClient:
+
+    # def __init__(self, 
+    #              account_id,
+    #              base_url="https://localhost:5000/v1/api",  
+    #              dir_path=r"C:\IBKR Client Portal", 
+    #              verify_ssl=False):
+    #     """
+    #     Initializes the IBKR API client with configuration parameters.
+    #     Runs the IBKR client login command only if authentication is not already established.
+        
+    #     Parameters:
+    #         account_id (str): Your account identifier.
+    #         base_url (str): Base URL for the API, e.g., "https://localhost:5000/v1/api".
+    #         dir_path (str): Directory containing the IBKR Client Portal.
+    #         verify_ssl (bool): Whether to verify SSL certificates (False for testing).
+    #     """
+    #     # Store configuration parameters and initialize a persistent session.
+    #     self.base_url = base_url.rstrip("/")
+    #     self.account_id = account_id
+    #     self.verify_ssl = verify_ssl
+    #     self.session = requests.Session()
+    #     self.session.verify = verify_ssl
+
+    #     # Construct the authentication status URL.
+    #     auth_endpoint = "iserver/auth/status"
+    #     auth_url = f"{self.base_url}/{auth_endpoint}"
+    #     print("Checking authentication status at:", auth_url)
+        
+    #     # Check if already logged in.
+    #     try:
+    #         auth_req = self.session.get(url=auth_url, verify=self.verify_ssl, timeout=3)
+    #     except Exception as e:
+    #         print("Error checking authentication:", e)
+    #         auth_req = None
+
+    #     if auth_req is not None and auth_req.status_code == 200:
+    #         print("Already logged in:", auth_req.text)
+    #     else:
+    #         # Not authenticated – perform login.
+    #         print("Not logged in. Initiating login process.")
+    #         # Change directory to the IBKR Client Portal.
+    #         os.chdir(dir_path)
+    #         print(f"Changed directory to: {dir_path}")
+            
+    #         # Define the login command.
+    #         login_command = r"bin\run.bat root\conf.yaml"
+    
+    #         # Launch the batch file asynchronously.
+    #         process = subprocess.Popen(
+    #             login_command,
+    #             shell=True,
+    #             stdout=subprocess.PIPE,
+    #             stderr=subprocess.PIPE,
+    #             text=True
+    #         )
+    
+    #         # Wait a little to allow the batch file to initialize.
+    #         time.sleep(2)
+            
+    #         # Attempt to read initial output without blocking indefinitely.
+    #         try:
+    #             stdout, stderr = process.communicate(timeout=1)
+    #             if stdout:
+    #                 print("Command Output:", stdout)
+    #             if stderr:
+    #                 print("Error Output:", stderr)
+    #         except subprocess.TimeoutExpired:
+    #             print("The process is running... (output not complete yet).")
+    
+    #         # Open the IBKR Client in the default web browser.
+    #         url = "https://localhost:5000"
+    #         print(f"Opening IBKR Client at: {url}")
+    #         webbrowser.open(url)
+    
+    #         # Poll the authentication status endpoint until a 200 response and authentication=True is received.
+    #         print("Polling authentication status at:", auth_url)
+    #         while True:
+    #             try:
+    #                 auth_req = self.session.get(url=auth_url, verify=self.verify_ssl)
+    #                 if auth_req.status_code == 200:
+    #                     data = auth_req.json()
+    #                     # Check that the response indicates authentication.
+    #                     if data.get("authenticated") == True:
+    #                         print("Authentication successful:", data)
+    #                         break
+    #                     else:
+    #                         print("Received 200 but not authenticated yet:", data)
+    #                 else:
+    #                     print("Received status code:", auth_req.status_code)
+    #             except Exception as exc:
+    #                 print("Error during auth status polling:", exc)
+    #             time.sleep(5)
+
 
     def __init__(self, 
                  account_id,
@@ -17,92 +113,79 @@ class IBKRClient:
         """
         Initializes the IBKR API client with configuration parameters.
         Runs the IBKR client login command only if authentication is not already established.
-        
-        Parameters:
-            account_id (str): Your account identifier.
-            base_url (str): Base URL for the API, e.g., "https://localhost:5000/v1/api".
-            dir_path (str): Directory containing the IBKR Client Portal.
-            verify_ssl (bool): Whether to verify SSL certificates (False for testing).
         """
-        # Store configuration parameters and initialize a persistent session.
         self.base_url = base_url.rstrip("/")
         self.account_id = account_id
         self.verify_ssl = verify_ssl
         self.session = requests.Session()
         self.session.verify = verify_ssl
-
-        # Construct the authentication status URL.
+        
+        # Check authentication status and perform login if needed...
         auth_endpoint = "iserver/auth/status"
         auth_url = f"{self.base_url}/{auth_endpoint}"
         print("Checking authentication status at:", auth_url)
-        
-        # Check if already logged in.
         try:
             auth_req = self.session.get(url=auth_url, verify=self.verify_ssl, timeout=3)
         except Exception as e:
             print("Error checking authentication:", e)
             auth_req = None
-
         if auth_req is not None and auth_req.status_code == 200:
-            print("Already logged in:", auth_req.text)
-        else:
-            # Not authenticated – perform login.
-            print("Not logged in. Initiating login process.")
-            # Change directory to the IBKR Client Portal.
-            os.chdir(dir_path)
-            print(f"Changed directory to: {dir_path}")
-            
-            # Define the login command.
-            login_command = r"bin\run.bat root\conf.yaml"
-    
-            # Launch the batch file asynchronously.
-            process = subprocess.Popen(
-                login_command,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-    
-            # Wait a little to allow the batch file to initialize.
-            time.sleep(2)
-            
-            # Attempt to read initial output without blocking indefinitely.
             try:
-                stdout, stderr = process.communicate(timeout=1)
-                if stdout:
-                    print("Command Output:", stdout)
-                if stderr:
-                    print("Error Output:", stderr)
-            except subprocess.TimeoutExpired:
-                print("The process is running... (output not complete yet).")
-    
-            # Open the IBKR Client in the default web browser.
-            url = "https://localhost:5000"
-            print(f"Opening IBKR Client at: {url}")
-            webbrowser.open(url)
-    
-            # Poll the authentication status endpoint until a 200 response and authentication=True is received.
-            print("Polling authentication status at:", auth_url)
-            while True:
-                try:
-                    auth_req = self.session.get(url=auth_url, verify=self.verify_ssl)
-                    if auth_req.status_code == 200:
-                        data = auth_req.json()
-                        # Check that the response indicates authentication.
-                        if data.get("authenticated") == True:
-                            print("Authentication successful:", data)
-                            break
-                        else:
-                            print("Received 200 but not authenticated yet:", data)
+                data = auth_req.json()
+                if data.get("authenticated") == True:
+                    print("Already logged in:", data)
+                else:
+                    print("Received 200 but not authenticated:", data)
+                    self.login(dir_path, auth_url)
+            except Exception as e:
+                print("Error parsing auth response:", e)
+        else:
+            self.login(dir_path, auth_url)
+
+            
+
+    def login(self, dir_path, auth_url):
+        print("Not logged in. Initiating login process.")
+        os.chdir(dir_path)
+        print(f"Changed directory to: {dir_path}")
+        login_command = r"bin\run.bat root\conf.yaml"
+        process = subprocess.Popen(
+            login_command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        time.sleep(2)
+        try:
+            stdout, stderr = process.communicate(timeout=1)
+            if stdout:
+                print("Command Output:", stdout)
+            if stderr:
+                print("Error Output:", stderr)
+        except subprocess.TimeoutExpired:
+            print("The process is running... (output not complete yet).")
+        url = "https://localhost:5000"
+        print(f"Opening IBKR Client at: {url}")
+        webbrowser.open(url)
+        print("Polling authentication status at:", auth_url)
+        while True:
+            try:
+                auth_req = self.session.get(url=auth_url, verify=self.verify_ssl)
+                if auth_req.status_code == 200:
+                    data = auth_req.json()
+                    if data.get("authenticated") == True:
+                        print("Authentication successful:", data)
+                        break
                     else:
-                        print("Received status code:", auth_req.status_code)
-                except Exception as exc:
-                    print("Error during auth status polling:", exc)
-                time.sleep(5)
+                        print("Received 200 but not authenticated yet:", data)
+                else:
+                    print("Received status code:", auth_req.status_code)
+            except Exception as exc:
+                print("Error during auth status polling:", exc)
+            time.sleep(5)
 
-
-    
+        
 
     def contract_search(self, symbol, secType=False):
         """
@@ -654,7 +737,7 @@ class IBKRClient:
                       stop_order_type="STP",
                       tif="GTC",
                       listing_exchange="SMART",
-                      outside_rth=True,
+                      outside_rth=False,
                       referrer="QuickTrade",
                       is_single_group=False):         # Optional flag for OCA groups
         """
@@ -678,54 +761,13 @@ class IBKRClient:
           outside_rth (bool): Whether orders are allowed outside regular trading hours.
           referrer (str): Referrer for the parent order.
           is_single_group (bool): If True, adds "isSingleGroup": true to every order.
-        
-        Example payload (bracket order):
-        {
-          "orders": [
-            {
-              "acctId": "U1234567",
-              "conid": 265598,
-              "cOID": "AAPL_BRACKET_MMDD",
-              "orderType": "MKT",
-              "listingExchange": "SMART",
-              "outsideRTH": true,
-              "side": "Buy",
-              "referrer": "QuickTrade",
-              "tif": "GTC",
-              "quantity": 50
-            },
-            {
-              "acctId": "U1234567",
-              "conid": 265598,
-              "orderType": "STP",
-              "listingExchange": "SMART",
-              "outsideRTH": false,
-              "price": 157.30,
-              "side": "Sell",
-              "tif": "GTC",
-              "quantity": 50,
-              "parentId": "AAPL_BRACKET_MMDD"
-            },
-            {
-              "acctId": "U1234567",
-              "conid": 265598,
-              "orderType": "LMT",
-              "listingExchange": "SMART",
-              "outsideRTH": false,
-              "price": 157.00,
-              "side": "Sell",
-              "tif": "GTC",
-              "quantity": 50,
-              "parentId": "AAPL_BRACKET_MMDD"
-            }
-          ]
-        }
         """
         base_url = "https://localhost:5000/v1/api/"
         endpoint = f"iserver/account/{self.account_id}/orders"
         
         # Build order identifier exactly as before.
-        c_oid_prefix = ticker.upper() + "_BRACKET_MMDD"
+        now = datetime.now()
+        c_oid_prefix = ticker.upper() + "_BRACKET_" + now.strftime("%y%m%d%H")
         
         orders = []
         
@@ -754,7 +796,7 @@ class IBKRClient:
                 "orderType": profit_order_type,
                 "listingExchange": listing_exchange,
                 # Setting outsideRTH to false for child orders per sample documentation.
-                "outsideRTH": False,
+                "outsideRTH": outside_rth,
                 "price": profit_target_price,
                 "side": "Sell" if primary_side.upper() == "BUY" else "Buy",
                 "tif": tif,
@@ -772,7 +814,7 @@ class IBKRClient:
                 "conid": int(conid),
                 "orderType": stop_order_type,
                 "listingExchange": listing_exchange,
-                "outsideRTH": False,
+                "outsideRTH": outside_rth,
                 "price": stop_loss_price,
                 "side": "Sell" if primary_side.upper() == "BUY" else "Buy",
                 "tif": tif,
@@ -866,7 +908,7 @@ class IBKRClient:
         except Exception as e:
             print("Error retrieving account details:", e)
             return None
-
+    
     
 
     def get_portfolio_accounts(self):
@@ -965,3 +1007,68 @@ class IBKRClient:
         except Exception as e:
             print("Error fetching positions:", e)
             return None
+
+
+    
+    def receive_market_updates(self, conid):
+        ws_url = self.base_url.replace("https://", "wss://") + "/ws"
+        
+        def on_message(ws, message):
+            # Adding an identifier for market updates:
+            print("[Market] Received update:")
+            print(message)
+        
+        def on_error(ws, error):
+            print("[Market] Error:", error)
+        
+        def on_close(ws):
+            print("[Market] Websocket CLOSED")
+        
+        def on_open(ws):
+            print("[Market] Opened connection")
+            time.sleep(3)
+            request_message = 'smd+' + conid + '+{"fields":["31","84","86"]}'
+            print("[Market] Sending market data request for conid:", conid)
+            ws.send(request_message)
+        
+        ws = websocket.WebSocketApp(
+            url=ws_url,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+        
+        ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
+    
+    
+    
+    def receive_order_updates(self):
+        ws_url = self.base_url.replace("https://", "wss://") + "/ws"
+        
+        def on_message(ws, message):
+            # Adding an identifier for order updates:
+            print("[Order] Received update:")
+            print(message)
+        
+        def on_error(ws, error):
+            print("[Order] Error:", error)
+        
+        def on_close(ws):
+            print("[Order] Websocket CLOSED")
+        
+        def on_open(ws):
+            print("[Order] Opened connection")
+            time.sleep(3)
+            ws.send('sor+{}')
+        
+        ws = websocket.WebSocketApp(
+            url=ws_url,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+        
+        ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
+
