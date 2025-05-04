@@ -398,7 +398,12 @@ class EClient(object):
         pass
 
     def run(self):
-        """This is the function that has the message loop."""
+        """This is the function that has the message loop.
+        Core Purpose: The run() method is the heartbeat of the client—it continuously waits for incoming messages, 
+        decodes them based on the version and protocol, and calls the appropriate handling routines.
+        Message Handling: It uses a blocking queue with a timeout to retrieve messages. 
+        If a message is too long or malformed, it reports an error. 
+        Otherwise, it decodes the message ID and then processes the message data either with a Protobuf handler or through a field-based interpreter."""
 
         try:
             while self.isConnected() or not self.msg_queue.empty():
