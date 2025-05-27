@@ -1,0 +1,54 @@
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:10.158165+00:00", "exchange": "V", "price": 134.155, "size": 50.0, "id": 2975, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:14.237850+00:00", "exchange": "V", "price": 134.14, "size": 100.0, "id": 2976, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:14.238192+00:00", "exchange": "V", "price": 134.14, "size": 9.0, "id": 2977, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:18.897050+00:00", "exchange": "V", "price": 134.17, "size": 100.0, "id": 2978, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:18.900195+00:00", "exchange": "V", "price": 134.175, "size": 40.0, "id": 2979, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:19.131469+00:00", "exchange": "V", "price": 134.195, "size": 20.0, "id": 2980, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:19.132527+00:00", "exchange": "V", "price": 134.19, "size": 100.0, "id": 2981, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:19.132542+00:00", "exchange": "V", "price": 134.19, "size": 100.0, "id": 2982, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:19.132542+00:00", "exchange": "V", "price": 134.19, "size": 100.0, "id": 2983, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:21.029610+00:00", "exchange": "V", "price": 134.23, "size": 10.0, "id": 2984, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:21.054250+00:00", "exchange": "V", "price": 134.245, "size": 100.0, "id": 2985, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:21.817132+00:00", "exchange": "V", "price": 134.245, "size": 100.0, "id": 2986, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:21.817157+00:00", "exchange": "V", "price": 134.24, "size": 6.0, "id": 2987, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:22.414247+00:00", "exchange": "V", "price": 134.25, "size": 10.0, "id": 2988, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:22.565975+00:00", "exchange": "V", "price": 134.24, "size": 148.0, "id": 2989, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:24.632458+00:00", "exchange": "V", "price": 134.235, "size": 700.0, "id": 2990, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:25.925446+00:00", "exchange": "V", "price": 134.235, "size": 79.0, "id": 2991, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:26.894524+00:00", "exchange": "V", "price": 134.27, "size": 189.0, "id": 2992, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:26.906787+00:00", "exchange": "V", "price": 134.275, "size": 189.0, "id": 2993, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:26.908846+00:00", "exchange": "V", "price": 134.28, "size": 100.0, "id": 2994, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:26.955148+00:00", "exchange": "V", "price": 134.285, "size": 100.0, "id": 2995, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:26.983037+00:00", "exchange": "V", "price": 134.28, "size": 58.0, "id": 2996, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:26.986718+00:00", "exchange": "V", "price": 134.28, "size": 26.0, "id": 2997, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:26.986744+00:00", "exchange": "V", "price": 134.29, "size": 74.0, "id": 2998, "conditions": ["@", "F", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:27.004302+00:00", "exchange": "V", "price": 134.28, "size": 26.0, "id": 2999, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:27.632725+00:00", "exchange": "V", "price": 134.315, "size": 40.0, "id": 3000, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:28.140660+00:00", "exchange": "V", "price": 134.32, "size": 100.0, "id": 3001, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:28.141193+00:00", "exchange": "V", "price": 134.32, "size": 13.0, "id": 3002, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:28.250386+00:00", "exchange": "V", "price": 134.315, "size": 100.0, "id": 3003, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:28.432444+00:00", "exchange": "V", "price": 134.325, "size": 500.0, "id": 3004, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:30.268558+00:00", "exchange": "V", "price": 134.34, "size": 79.0, "id": 3005, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:31.098395+00:00", "exchange": "V", "price": 134.35, "size": 40.0, "id": 3006, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:31.098407+00:00", "exchange": "V", "price": 134.35, "size": 40.0, "id": 3007, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:31.194732+00:00", "exchange": "V", "price": 134.355, "size": 147.0, "id": 3008, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:34.582101+00:00", "exchange": "V", "price": 134.38, "size": 100.0, "id": 3009, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:35.492431+00:00", "exchange": "V", "price": 134.39, "size": 200.0, "id": 3010, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:35.492446+00:00", "exchange": "V", "price": 134.39, "size": 100.0, "id": 3011, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:35.492446+00:00", "exchange": "V", "price": 134.39, "size": 100.0, "id": 3012, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:35.518281+00:00", "exchange": "V", "price": 134.395, "size": 60.0, "id": 3013, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:36.200409+00:00", "exchange": "V", "price": 134.39, "size": 100.0, "id": 3014, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:37.705954+00:00", "exchange": "V", "price": 134.4, "size": 130.0, "id": 3015, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:39.567331+00:00", "exchange": "V", "price": 134.405, "size": 20.0, "id": 3016, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:41.232300+00:00", "exchange": "V", "price": 134.34, "size": 1.0, "id": 3017, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:41.370718+00:00", "exchange": "V", "price": 134.335, "size": 700.0, "id": 3018, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:41.449041+00:00", "exchange": "V", "price": 134.335, "size": 800.0, "id": 3019, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:41.899881+00:00", "exchange": "V", "price": 134.3, "size": 100.0, "id": 3020, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:41.899902+00:00", "exchange": "V", "price": 134.3, "size": 20.0, "id": 3021, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:41.947958+00:00", "exchange": "V", "price": 134.305, "size": 500.0, "id": 3022, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:43.419646+00:00", "exchange": "V", "price": 134.32, "size": 2.0, "id": 3023, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:43.595502+00:00", "exchange": "V", "price": 134.31, "size": 15.0, "id": 3024, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:43.596296+00:00", "exchange": "V", "price": 134.31, "size": 85.0, "id": 3025, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:43.596311+00:00", "exchange": "V", "price": 134.31, "size": 100.0, "id": 3026, "conditions": ["@"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:43.596311+00:00", "exchange": "V", "price": 134.31, "size": 90.0, "id": 3027, "conditions": ["@", "I"], "tape": "C"}
+{"symbol": "NVDA", "timestamp": "2025-05-27T13:55:44.081997+00:00", "exchange": "V", "price": 134.295, "size": 21.0, "id": 3028, "conditions": ["@", "I"], "tape": "C"}
