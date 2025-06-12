@@ -1,113 +1,1313 @@
 {
     "best_params": {
-        "min_prof_thr": 0.10010504180423611,
-        "max_down_prop": 0.4172950669295756,
-        "smooth_win_sig": 4,
-        "pre_entry_decay": 0.9010054786497805,
-        "buy_threshold": 0.07948356136760391,
-        "trailing_stop_thresh": 0.10359850349338022
+        "min_prof_thr": 0.4589668187489585,
+        "max_down_prop": 0.4914658392508532,
+        "smooth_win_sig": 3,
+        "pre_entry_decay": 0.9815391064047466,
+        "buy_threshold": 0.06943371391957248,
+        "trailing_stop_thresh": 0.11573466479547453
     },
-    "best_value": 2.770788461538461,
+    "best_value": 2.477634615384616,
     "trials": [
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {},
-        {}
+        {
+            "number": 0,
+            "value": 1.4346893203883495,
+            "params": {
+                "min_prof_thr": 0.493614338319473,
+                "max_down_prop": 0.4934567945021432,
+                "smooth_win_sig": 30,
+                "pre_entry_decay": 0.9153584434761626,
+                "buy_threshold": 0.11208497280898402,
+                "trailing_stop_thresh": 0.2484207717062677
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 1,
+            "value": 1.0434326923076924,
+            "params": {
+                "min_prof_thr": 0.1613627333933464,
+                "max_down_prop": 0.2516259282024633,
+                "smooth_win_sig": 19,
+                "pre_entry_decay": 0.6594980171380317,
+                "buy_threshold": 0.21703684245441812,
+                "trailing_stop_thresh": 0.3021882420513182
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 2,
+            "value": 1.5731960784313732,
+            "params": {
+                "min_prof_thr": 0.465490710564339,
+                "max_down_prop": 0.400113931305218,
+                "smooth_win_sig": 13,
+                "pre_entry_decay": 0.5686387415832959,
+                "buy_threshold": 0.07579566037436807,
+                "trailing_stop_thresh": 0.34439794677625424
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 3,
+            "value": 1.2353076923076922,
+            "params": {
+                "min_prof_thr": 0.34880886530121896,
+                "max_down_prop": 0.37663462099441913,
+                "smooth_win_sig": 8,
+                "pre_entry_decay": 0.9385954466857998,
+                "buy_threshold": 0.41352123391084494,
+                "trailing_stop_thresh": 0.1970232452878428
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 4,
+            "value": 0.9587692307692307,
+            "params": {
+                "min_prof_thr": 0.31401524987096296,
+                "max_down_prop": 0.17554255160418927,
+                "smooth_win_sig": 27,
+                "pre_entry_decay": 0.8827244875231122,
+                "buy_threshold": 0.2514502736513593,
+                "trailing_stop_thresh": 0.10912555489800346
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 5,
+            "value": 1.6540865384615389,
+            "params": {
+                "min_prof_thr": 0.30657822697349024,
+                "max_down_prop": 0.153270623414334,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.5781643637658781,
+                "buy_threshold": 0.12367403326309252,
+                "trailing_stop_thresh": 0.33996193862216917
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 6,
+            "value": 1.0890582524271848,
+            "params": {
+                "min_prof_thr": 0.39360678300686935,
+                "max_down_prop": 0.40872323617058093,
+                "smooth_win_sig": 11,
+                "pre_entry_decay": 0.8923304681220061,
+                "buy_threshold": 0.45558604700363353,
+                "trailing_stop_thresh": 0.30971321927365125
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 7,
+            "value": 1.2496826923076925,
+            "params": {
+                "min_prof_thr": 0.3102066265619534,
+                "max_down_prop": 0.31957447303842984,
+                "smooth_win_sig": 29,
+                "pre_entry_decay": 0.9364350265725075,
+                "buy_threshold": 0.11072490530759876,
+                "trailing_stop_thresh": 0.15470009799547194
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 8,
+            "value": 0.8414687500000001,
+            "params": {
+                "min_prof_thr": 0.49377098145889764,
+                "max_down_prop": 0.19398091461516667,
+                "smooth_win_sig": 15,
+                "pre_entry_decay": 0.565865274706576,
+                "buy_threshold": 0.27434851306390884,
+                "trailing_stop_thresh": 0.3247807907908038
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 9,
+            "value": 1.0442884615384618,
+            "params": {
+                "min_prof_thr": 0.22957892148808928,
+                "max_down_prop": 0.39819827263649554,
+                "smooth_win_sig": 25,
+                "pre_entry_decay": 0.8484494193336946,
+                "buy_threshold": 0.26822430302241246,
+                "trailing_stop_thresh": 0.2697618471891382
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 10,
+            "value": 1.1853557692307692,
+            "params": {
+                "min_prof_thr": 0.11839876022293663,
+                "max_down_prop": 0.132456876719807,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.6944314662631582,
+                "buy_threshold": 0.17283547918396897,
+                "trailing_stop_thresh": 0.48716607535539047
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 11,
+            "value": 1.3848877551020407,
+            "params": {
+                "min_prof_thr": 0.4216994162185878,
+                "max_down_prop": 0.10528124010364294,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.5065800726743707,
+                "buy_threshold": 0.06477509546475888,
+                "trailing_stop_thresh": 0.39739909249345656
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 12,
+            "value": 1.1155384615384611,
+            "params": {
+                "min_prof_thr": 0.23789959034143482,
+                "max_down_prop": 0.3039870449398453,
+                "smooth_win_sig": 20,
+                "pre_entry_decay": 0.5960361654672208,
+                "buy_threshold": 0.15661801928150043,
+                "trailing_stop_thresh": 0.39316981505152687
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 13,
+            "value": 1.367298076923076,
+            "params": {
+                "min_prof_thr": 0.41889476805103726,
+                "max_down_prop": 0.4888429034680369,
+                "smooth_win_sig": 8,
+                "pre_entry_decay": 0.7685591994358714,
+                "buy_threshold": 0.3460987946715791,
+                "trailing_stop_thresh": 0.38034080596411524
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 14,
+            "value": 1.1832788461538462,
+            "params": {
+                "min_prof_thr": 0.24973441240800043,
+                "max_down_prop": 0.2499341238583672,
+                "smooth_win_sig": 12,
+                "pre_entry_decay": 0.502756258113322,
+                "buy_threshold": 0.07013639238072572,
+                "trailing_stop_thresh": 0.46870350075915035
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 15,
+            "value": 1.5590576923076918,
+            "params": {
+                "min_prof_thr": 0.37003310392319355,
+                "max_down_prop": 0.36076324928030706,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.6168379353453344,
+                "buy_threshold": 0.17966200428238943,
+                "trailing_stop_thresh": 0.3569780560611191
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 16,
+            "value": 1.6721650485436894,
+            "params": {
+                "min_prof_thr": 0.44962832899380156,
+                "max_down_prop": 0.4358684846743943,
+                "smooth_win_sig": 15,
+                "pre_entry_decay": 0.7659964229314898,
+                "buy_threshold": 0.12167452473612286,
+                "trailing_stop_thresh": 0.2377008347204856
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 17,
+            "value": 1.1542884615384619,
+            "params": {
+                "min_prof_thr": 0.19160451009792612,
+                "max_down_prop": 0.45351360761047577,
+                "smooth_win_sig": 22,
+                "pre_entry_decay": 0.7847029057461915,
+                "buy_threshold": 0.3287692782275573,
+                "trailing_stop_thresh": 0.2156076633718343
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 18,
+            "value": 1.1260899999999996,
+            "params": {
+                "min_prof_thr": 0.4363847776319358,
+                "max_down_prop": 0.2493075814581488,
+                "smooth_win_sig": 16,
+                "pre_entry_decay": 0.6915837223050479,
+                "buy_threshold": 0.12402916659241581,
+                "trailing_stop_thresh": 0.4398691761551908
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 19,
+            "value": 0.9227115384615383,
+            "params": {
+                "min_prof_thr": 0.2740119964282664,
+                "max_down_prop": 0.19808795303820637,
+                "smooth_win_sig": 23,
+                "pre_entry_decay": 0.809365464613608,
+                "buy_threshold": 0.22049375779175806,
+                "trailing_stop_thresh": 0.25954701244336653
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 20,
+            "value": 1.325317307692307,
+            "params": {
+                "min_prof_thr": 0.36038774389968475,
+                "max_down_prop": 0.3315668608102331,
+                "smooth_win_sig": 9,
+                "pre_entry_decay": 0.7250328891201251,
+                "buy_threshold": 0.3213850078161238,
+                "trailing_stop_thresh": 0.1981536910998347
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 21,
+            "value": 1.634833333333332,
+            "params": {
+                "min_prof_thr": 0.46230728418310035,
+                "max_down_prop": 0.4201268784445352,
+                "smooth_win_sig": 12,
+                "pre_entry_decay": 0.9869703555172303,
+                "buy_threshold": 0.08700762829758005,
+                "trailing_stop_thresh": 0.34459971118751237
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 22,
+            "value": 1.3283689320388352,
+            "params": {
+                "min_prof_thr": 0.46138200614683944,
+                "max_down_prop": 0.42998319137511937,
+                "smooth_win_sig": 18,
+                "pre_entry_decay": 0.638338761131053,
+                "buy_threshold": 0.13241277071619564,
+                "trailing_stop_thresh": 0.4274782678719695
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 23,
+            "value": 1.4935384615384615,
+            "params": {
+                "min_prof_thr": 0.3368245499391353,
+                "max_down_prop": 0.44885373778638393,
+                "smooth_win_sig": 14,
+                "pre_entry_decay": 0.9794652057641918,
+                "buy_threshold": 0.18337675272339826,
+                "trailing_stop_thresh": 0.2786658643627696
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 24,
+            "value": 2.0126796116504853,
+            "params": {
+                "min_prof_thr": 0.39661482683126403,
+                "max_down_prop": 0.3532590050388561,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.7291577821415048,
+                "buy_threshold": 0.08906849731080196,
+                "trailing_stop_thresh": 0.22720482900120545
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 25,
+            "value": 2.0430865384615378,
+            "params": {
+                "min_prof_thr": 0.39091615589423867,
+                "max_down_prop": 0.3433125070625847,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.7406245047439882,
+                "buy_threshold": 0.14421534010120673,
+                "trailing_stop_thresh": 0.15712777682770704
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 26,
+            "value": 1.8633749999999998,
+            "params": {
+                "min_prof_thr": 0.3886814361525751,
+                "max_down_prop": 0.3428911928609647,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.7416459128962435,
+                "buy_threshold": 0.2162889045863925,
+                "trailing_stop_thresh": 0.148180974560357
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 27,
+            "value": 1.853932038834951,
+            "params": {
+                "min_prof_thr": 0.39461146672310127,
+                "max_down_prop": 0.3492528302835115,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.7305277070475209,
+                "buy_threshold": 0.2219803891191744,
+                "trailing_stop_thresh": 0.14704689688615016
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 28,
+            "value": 2.2768173076923075,
+            "params": {
+                "min_prof_thr": 0.383403920409091,
+                "max_down_prop": 0.2833002533691105,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.8084880758543702,
+                "buy_threshold": 0.05301066089583119,
+                "trailing_stop_thresh": 0.10032155395584602
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 29,
+            "value": 2.0504038461538463,
+            "params": {
+                "min_prof_thr": 0.3334808576706062,
+                "max_down_prop": 0.2871625453846487,
+                "smooth_win_sig": 10,
+                "pre_entry_decay": 0.8245257306059675,
+                "buy_threshold": 0.05792231264648047,
+                "trailing_stop_thresh": 0.1033979630898322
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 30,
+            "value": 1.9725192307692316,
+            "params": {
+                "min_prof_thr": 0.33531877197471616,
+                "max_down_prop": 0.27388131271040383,
+                "smooth_win_sig": 10,
+                "pre_entry_decay": 0.8261462940823301,
+                "buy_threshold": 0.061690620886942146,
+                "trailing_stop_thresh": 0.10132815415141769
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 31,
+            "value": 2.058278846153846,
+            "params": {
+                "min_prof_thr": 0.3888290604823542,
+                "max_down_prop": 0.2760819122203824,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.8437933288816478,
+                "buy_threshold": 0.09892676027500565,
+                "trailing_stop_thresh": 0.17443093555706596
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 32,
+            "value": 2.0629423076923072,
+            "params": {
+                "min_prof_thr": 0.36894922507141936,
+                "max_down_prop": 0.2750754679990636,
+                "smooth_win_sig": 8,
+                "pre_entry_decay": 0.8453308327000679,
+                "buy_threshold": 0.05717598466308782,
+                "trailing_stop_thresh": 0.12447311180738382
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 33,
+            "value": 2.0922596153846156,
+            "params": {
+                "min_prof_thr": 0.35905113386206966,
+                "max_down_prop": 0.2785152083582059,
+                "smooth_win_sig": 8,
+                "pre_entry_decay": 0.8591390400882075,
+                "buy_threshold": 0.05161652828598302,
+                "trailing_stop_thresh": 0.1271371092957791
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 34,
+            "value": 2.0056057692307694,
+            "params": {
+                "min_prof_thr": 0.2777265851990596,
+                "max_down_prop": 0.23094734870610178,
+                "smooth_win_sig": 8,
+                "pre_entry_decay": 0.8645496551509453,
+                "buy_threshold": 0.09556164063623489,
+                "trailing_stop_thresh": 0.1263855064774746
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 35,
+            "value": 2.056097087378642,
+            "params": {
+                "min_prof_thr": 0.3624832450422689,
+                "max_down_prop": 0.22561095921483898,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.9164505862267041,
+                "buy_threshold": 0.09764980427905011,
+                "trailing_stop_thresh": 0.17849642532986673
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 36,
+            "value": 2.1133461538461535,
+            "params": {
+                "min_prof_thr": 0.37543428601677603,
+                "max_down_prop": 0.2745897449179077,
+                "smooth_win_sig": 7,
+                "pre_entry_decay": 0.7984315401015272,
+                "buy_threshold": 0.052302319959199595,
+                "trailing_stop_thresh": 0.12706107714793277
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 37,
+            "value": 2.1068155339805816,
+            "params": {
+                "min_prof_thr": 0.41939368180602427,
+                "max_down_prop": 0.3077725281342178,
+                "smooth_win_sig": 7,
+                "pre_entry_decay": 0.7905670635434563,
+                "buy_threshold": 0.050286355584681496,
+                "trailing_stop_thresh": 0.12683921735182863
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 38,
+            "value": 1.9221941747572808,
+            "params": {
+                "min_prof_thr": 0.4284630603631479,
+                "max_down_prop": 0.30600378318663674,
+                "smooth_win_sig": 10,
+                "pre_entry_decay": 0.7902985669012659,
+                "buy_threshold": 0.05184317850284475,
+                "trailing_stop_thresh": 0.12877102024190465
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 39,
+            "value": 1.2321800000000005,
+            "params": {
+                "min_prof_thr": 0.4751278880480436,
+                "max_down_prop": 0.3789360794932239,
+                "smooth_win_sig": 7,
+                "pre_entry_decay": 0.8959255624763242,
+                "buy_threshold": 0.42819035383437476,
+                "trailing_stop_thresh": 0.17609490770886316
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 40,
+            "value": 0.6962307692307694,
+            "params": {
+                "min_prof_thr": 0.28993116577334077,
+                "max_down_prop": 0.2261597106508686,
+                "smooth_win_sig": 12,
+                "pre_entry_decay": 0.8025943376338719,
+                "buy_threshold": 0.4963117241759486,
+                "trailing_stop_thresh": 0.2005272227656847
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 41,
+            "value": 1.9318750000000005,
+            "params": {
+                "min_prof_thr": 0.36586871160576506,
+                "max_down_prop": 0.26421962671415944,
+                "smooth_win_sig": 9,
+                "pre_entry_decay": 0.8568147186288735,
+                "buy_threshold": 0.07656557649160513,
+                "trailing_stop_thresh": 0.12591490872369904
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 42,
+            "value": 2.065514563106796,
+            "params": {
+                "min_prof_thr": 0.41698995411024625,
+                "max_down_prop": 0.31667634303322023,
+                "smooth_win_sig": 8,
+                "pre_entry_decay": 0.8761983135796336,
+                "buy_threshold": 0.05651908623906972,
+                "trailing_stop_thresh": 0.12161177250579555
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 43,
+            "value": 2.185262135922331,
+            "params": {
+                "min_prof_thr": 0.40953305944695345,
+                "max_down_prop": 0.31868692685044625,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.875701186474928,
+                "buy_threshold": 0.10945440434166548,
+                "trailing_stop_thresh": 0.14110324412056402
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 44,
+            "value": 2.046611650485436,
+            "params": {
+                "min_prof_thr": 0.40832811531113455,
+                "max_down_prop": 0.30063319004111755,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.9134159366251788,
+                "buy_threshold": 0.15214883250760974,
+                "trailing_stop_thresh": 0.14342819759030734
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 45,
+            "value": 2.150686274509803,
+            "params": {
+                "min_prof_thr": 0.4388738226188824,
+                "max_down_prop": 0.3249781979692225,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.9439668436622091,
+                "buy_threshold": 0.08175801113560241,
+                "trailing_stop_thresh": 0.16625502677423692
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 46,
+            "value": 2.2662352941176467,
+            "params": {
+                "min_prof_thr": 0.4444838727473792,
+                "max_down_prop": 0.3729119324548998,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.9569720473178536,
+                "buy_threshold": 0.11188609775083057,
+                "trailing_stop_thresh": 0.16255291119193585
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 47,
+            "value": 2.1465299999999994,
+            "params": {
+                "min_prof_thr": 0.48823538020725477,
+                "max_down_prop": 0.37905024631580436,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.9446496040173025,
+                "buy_threshold": 0.10301365170694755,
+                "trailing_stop_thresh": 0.16707413455789819
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 48,
+            "value": 2.136861386138613,
+            "params": {
+                "min_prof_thr": 0.4882241128956264,
+                "max_down_prop": 0.3844810831790869,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.9570580757951003,
+                "buy_threshold": 0.10693623053111401,
+                "trailing_stop_thresh": 0.16829580845231693
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 49,
+            "value": 1.917647058823529,
+            "params": {
+                "min_prof_thr": 0.4423362414601876,
+                "max_down_prop": 0.3658449583371094,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.9613728504209313,
+                "buy_threshold": 0.19482947057104977,
+                "trailing_stop_thresh": 0.21238655810164042
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 50,
+            "value": 2.0961176470588225,
+            "params": {
+                "min_prof_thr": 0.45124719293953,
+                "max_down_prop": 0.4004761949892236,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.9278282545354448,
+                "buy_threshold": 0.13170128767795275,
+                "trailing_stop_thresh": 0.190859120186437
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 51,
+            "value": 2.104789999999999,
+            "params": {
+                "min_prof_thr": 0.49952092937215,
+                "max_down_prop": 0.3829907599935749,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.9574056371540771,
+                "buy_threshold": 0.11565036098086894,
+                "trailing_stop_thresh": 0.16234309373708333
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 52,
+            "value": 1.9406199999999993,
+            "params": {
+                "min_prof_thr": 0.48053920865724853,
+                "max_down_prop": 0.3260048203001077,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.9999694053041189,
+                "buy_threshold": 0.15549253276116337,
+                "trailing_stop_thresh": 0.1671918575113924
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 53,
+            "value": 1.9989801980198028,
+            "params": {
+                "min_prof_thr": 0.48730219824793025,
+                "max_down_prop": 0.3880792410090026,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9509745892248088,
+                "buy_threshold": 0.10780726237904928,
+                "trailing_stop_thresh": 0.18615353818161523
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 54,
+            "value": 2.0906470588235293,
+            "params": {
+                "min_prof_thr": 0.4695613367814998,
+                "max_down_prop": 0.4098482382358348,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.8968748817589731,
+                "buy_threshold": 0.07971468144449106,
+                "trailing_stop_thresh": 0.246473830824931
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 55,
+            "value": 2.1902647058823526,
+            "params": {
+                "min_prof_thr": 0.4470027840643571,
+                "max_down_prop": 0.37083243925428877,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9392271837188737,
+                "buy_threshold": 0.11056911557177314,
+                "trailing_stop_thresh": 0.14303068685984932
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 56,
+            "value": 1.149372549019608,
+            "params": {
+                "min_prof_thr": 0.4513172459131042,
+                "max_down_prop": 0.33621954636638923,
+                "smooth_win_sig": 30,
+                "pre_entry_decay": 0.9402278545260386,
+                "buy_threshold": 0.1670675126182443,
+                "trailing_stop_thresh": 0.14118619944910143
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 57,
+            "value": 2.3840097087378633,
+            "params": {
+                "min_prof_thr": 0.4322237000941679,
+                "max_down_prop": 0.3669247979166235,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9781054662396219,
+                "buy_threshold": 0.07849866886917453,
+                "trailing_stop_thresh": 0.11057331825522836
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 58,
+            "value": 2.236460784313725,
+            "params": {
+                "min_prof_thr": 0.4338169880276831,
+                "max_down_prop": 0.36938872261276334,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9768065676256882,
+                "buy_threshold": 0.1411516529068435,
+                "trailing_stop_thresh": 0.1119316441266016
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 59,
+            "value": 2.2838543689320385,
+            "params": {
+                "min_prof_thr": 0.4059004590216519,
+                "max_down_prop": 0.36773053390125826,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9761548289668243,
+                "buy_threshold": 0.1381816126044277,
+                "trailing_stop_thresh": 0.11044436907013402
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 60,
+            "value": 1.9711067961165043,
+            "params": {
+                "min_prof_thr": 0.4318786235712448,
+                "max_down_prop": 0.36961460985139727,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.9814916864818476,
+                "buy_threshold": 0.19821038904021498,
+                "trailing_stop_thresh": 0.11285469745248117
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 61,
+            "value": 2.255708737864078,
+            "params": {
+                "min_prof_thr": 0.4034992718279804,
+                "max_down_prop": 0.35832060477551514,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9736381011903711,
+                "buy_threshold": 0.13969832288508838,
+                "trailing_stop_thresh": 0.10650334294758176
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 62,
+            "value": 2.3632524271844644,
+            "params": {
+                "min_prof_thr": 0.402308149385749,
+                "max_down_prop": 0.40356497462346935,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9703376663081869,
+                "buy_threshold": 0.13372089302966006,
+                "trailing_stop_thresh": 0.10138522572349294
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 63,
+            "value": 2.200605769230769,
+            "params": {
+                "min_prof_thr": 0.4081822501492892,
+                "max_down_prop": 0.46589256634258097,
+                "smooth_win_sig": 7,
+                "pre_entry_decay": 0.9726874871834188,
+                "buy_threshold": 0.14185096124072488,
+                "trailing_stop_thresh": 0.10615476340997566
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 64,
+            "value": 2.2418461538461543,
+            "params": {
+                "min_prof_thr": 0.37844412503680797,
+                "max_down_prop": 0.4176841177407259,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9925976556072306,
+                "buy_threshold": 0.16584855477225424,
+                "trailing_stop_thresh": 0.10000936556645251
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 65,
+            "value": 2.221711538461538,
+            "params": {
+                "min_prof_thr": 0.31907456599075795,
+                "max_down_prop": 0.4205307593399468,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.9915899272022816,
+                "buy_threshold": 0.16144298795440395,
+                "trailing_stop_thresh": 0.11225945040956632
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 66,
+            "value": 1.6430961538461533,
+            "params": {
+                "min_prof_thr": 0.3810444348234885,
+                "max_down_prop": 0.3968886032874955,
+                "smooth_win_sig": 9,
+                "pre_entry_decay": 0.9990873519646408,
+                "buy_threshold": 0.2622412982588693,
+                "trailing_stop_thresh": 0.10879770702221624
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 67,
+            "value": 1.9880096153846158,
+            "params": {
+                "min_prof_thr": 0.12242722528701838,
+                "max_down_prop": 0.4350211002451834,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9191637746570677,
+                "buy_threshold": 0.29515311330558813,
+                "trailing_stop_thresh": 0.1009522514734684
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 68,
+            "value": 1.2898349514563112,
+            "params": {
+                "min_prof_thr": 0.4002841553383655,
+                "max_down_prop": 0.35704881240480135,
+                "smooth_win_sig": 25,
+                "pre_entry_decay": 0.9687637155361309,
+                "buy_threshold": 0.1869508439580236,
+                "trailing_stop_thresh": 0.13474975132774758
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 69,
+            "value": 1.644826923076923,
+            "params": {
+                "min_prof_thr": 0.35396862343953617,
+                "max_down_prop": 0.45060552262945286,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.6710544325240868,
+                "buy_threshold": 0.370258866618714,
+                "trailing_stop_thresh": 0.15586039288128178
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 70,
+            "value": 1.6015480769230768,
+            "params": {
+                "min_prof_thr": 0.3441002764965685,
+                "max_down_prop": 0.4140834609962894,
+                "smooth_win_sig": 7,
+                "pre_entry_decay": 0.9264858029630539,
+                "buy_threshold": 0.23533529486642113,
+                "trailing_stop_thresh": 0.3002241547301231
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 71,
+            "value": 2.2950097087378643,
+            "params": {
+                "min_prof_thr": 0.4242195010398825,
+                "max_down_prop": 0.4034409562573968,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9768557162579189,
+                "buy_threshold": 0.13460084321470087,
+                "trailing_stop_thresh": 0.11733518136152744
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 72,
+            "value": 2.3404038461538454,
+            "params": {
+                "min_prof_thr": 0.4253965103853575,
+                "max_down_prop": 0.47622566366629143,
+                "smooth_win_sig": 5,
+                "pre_entry_decay": 0.9832201561894268,
+                "buy_threshold": 0.12323879650391525,
+                "trailing_stop_thresh": 0.11875252984760906
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 73,
+            "value": 2.27535922330097,
+            "params": {
+                "min_prof_thr": 0.4247961917827837,
+                "max_down_prop": 0.3397990825204661,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.9691959067259132,
+                "buy_threshold": 0.13298718551768796,
+                "trailing_stop_thresh": 0.11344245846009995
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 74,
+            "value": 2.477634615384616,
+            "params": {
+                "min_prof_thr": 0.4589668187489585,
+                "max_down_prop": 0.4914658392508532,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.9815391064047466,
+                "buy_threshold": 0.06943371391957248,
+                "trailing_stop_thresh": 0.11573466479547453
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 75,
+            "value": 2.2798269230769237,
+            "params": {
+                "min_prof_thr": 0.459729041609442,
+                "max_down_prop": 0.48224234238337976,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.9104288163701739,
+                "buy_threshold": 0.12497813683674916,
+                "trailing_stop_thresh": 0.11738696968680527
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 76,
+            "value": 1.7829807692307702,
+            "params": {
+                "min_prof_thr": 0.46141012532510417,
+                "max_down_prop": 0.4984526256299652,
+                "smooth_win_sig": 19,
+                "pre_entry_decay": 0.9038911015112038,
+                "buy_threshold": 0.07207487495397266,
+                "trailing_stop_thresh": 0.13656368883001596
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 77,
+            "value": 2.2705096153846154,
+            "params": {
+                "min_prof_thr": 0.45631310695569177,
+                "max_down_prop": 0.481495817172638,
+                "smooth_win_sig": 7,
+                "pre_entry_decay": 0.9855399340886168,
+                "buy_threshold": 0.08919055953453364,
+                "trailing_stop_thresh": 0.12061561829438933
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 78,
+            "value": 2.234346153846153,
+            "params": {
+                "min_prof_thr": 0.42101157531305017,
+                "max_down_prop": 0.4754492317098599,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.9333779609590978,
+                "buy_threshold": 0.12397711333204672,
+                "trailing_stop_thresh": 0.15157922842969979
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 79,
+            "value": 2.3939320388349516,
+            "params": {
+                "min_prof_thr": 0.4694803058431985,
+                "max_down_prop": 0.45859078782304263,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.763250374490123,
+                "buy_threshold": 0.07583088289501586,
+                "trailing_stop_thresh": 0.1174276242168706
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 80,
+            "value": 2.345669902912621,
+            "params": {
+                "min_prof_thr": 0.4719216699999208,
+                "max_down_prop": 0.4665968493333125,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.7115876845420684,
+                "buy_threshold": 0.09145884988109038,
+                "trailing_stop_thresh": 0.11895746772454409
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 81,
+            "value": 2.3596568627450973,
+            "params": {
+                "min_prof_thr": 0.47499105481567083,
+                "max_down_prop": 0.4659493210553155,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.7037120235708818,
+                "buy_threshold": 0.06860015873083905,
+                "trailing_stop_thresh": 0.1330153489955843
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 82,
+            "value": 2.356333333333333,
+            "params": {
+                "min_prof_thr": 0.4748764425168489,
+                "max_down_prop": 0.4676520300186702,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.7062081847202506,
+                "buy_threshold": 0.06825177316916349,
+                "trailing_stop_thresh": 0.1350229705314283
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 83,
+            "value": 2.3800194174757285,
+            "params": {
+                "min_prof_thr": 0.47296079979231787,
+                "max_down_prop": 0.4623773814229214,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.7125944767810724,
+                "buy_threshold": 0.06923342849179441,
+                "trailing_stop_thresh": 0.129982388684989
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 84,
+            "value": 2.370627450980392,
+            "params": {
+                "min_prof_thr": 0.4743118781243337,
+                "max_down_prop": 0.46308096556352796,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.7067999984274878,
+                "buy_threshold": 0.07077325853757305,
+                "trailing_stop_thresh": 0.13480134419619347
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 85,
+            "value": 2.365333333333332,
+            "params": {
+                "min_prof_thr": 0.47570070447793444,
+                "max_down_prop": 0.4636542659176069,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.7063639352238207,
+                "buy_threshold": 0.06782343315868201,
+                "trailing_stop_thresh": 0.13353294236840074
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 86,
+            "value": 2.3802376237623752,
+            "params": {
+                "min_prof_thr": 0.4790125562447725,
+                "max_down_prop": 0.44229123958697114,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.6944723897087629,
+                "buy_threshold": 0.07107652045462998,
+                "trailing_stop_thresh": 0.1349636040752953
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 87,
+            "value": 1.913415841584158,
+            "params": {
+                "min_prof_thr": 0.4953951401777862,
+                "max_down_prop": 0.4422396175527055,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.6656364323052762,
+                "buy_threshold": 0.06786882429656176,
+                "trailing_stop_thresh": 0.31865851384342614
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 88,
+            "value": 2.3057941176470593,
+            "params": {
+                "min_prof_thr": 0.48025158302941495,
+                "max_down_prop": 0.45942780315536813,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.6474658810244145,
+                "buy_threshold": 0.08436218740727565,
+                "trailing_stop_thresh": 0.15046458077663497
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 89,
+            "value": 2.430098039215686,
+            "params": {
+                "min_prof_thr": 0.4679057474853867,
+                "max_down_prop": 0.4449359857222798,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.6819286999245341,
+                "buy_threshold": 0.06580399016990636,
+                "trailing_stop_thresh": 0.13098493224347715
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 90,
+            "value": 2.292774509803921,
+            "params": {
+                "min_prof_thr": 0.4649291692107115,
+                "max_down_prop": 0.42778379284166823,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.5380570131769249,
+                "buy_threshold": 0.07650800648846563,
+                "trailing_stop_thresh": 0.15312482453377735
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 91,
+            "value": 2.3391553398058247,
+            "params": {
+                "min_prof_thr": 0.48304277102051363,
+                "max_down_prop": 0.49320220170608997,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.683582470318014,
+                "buy_threshold": 0.06613662992861952,
+                "trailing_stop_thresh": 0.13543700055630695
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 92,
+            "value": 2.3843921568627446,
+            "params": {
+                "min_prof_thr": 0.4682428805752508,
+                "max_down_prop": 0.4445895337069721,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.7687411732483703,
+                "buy_threshold": 0.09200021684519585,
+                "trailing_stop_thresh": 0.12887610433264252
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 93,
+            "value": 2.2922772277227725,
+            "params": {
+                "min_prof_thr": 0.4997869116431521,
+                "max_down_prop": 0.4554764806158276,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.7546585159112835,
+                "buy_threshold": 0.09164448028952596,
+                "trailing_stop_thresh": 0.14312182125941408
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 94,
+            "value": 1.7442352941176478,
+            "params": {
+                "min_prof_thr": 0.4668553474404356,
+                "max_down_prop": 0.44434325094994,
+                "smooth_win_sig": 17,
+                "pre_entry_decay": 0.7162020042735775,
+                "buy_threshold": 0.08081012155514081,
+                "trailing_stop_thresh": 0.18229855016830654
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 95,
+            "value": 1.579834951456311,
+            "params": {
+                "min_prof_thr": 0.45544705487153136,
+                "max_down_prop": 0.4275437082529454,
+                "smooth_win_sig": 3,
+                "pre_entry_decay": 0.6194402236527483,
+                "buy_threshold": 0.09589086794966699,
+                "trailing_stop_thresh": 0.49983766490709375
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 96,
+            "value": 2.238584158415842,
+            "params": {
+                "min_prof_thr": 0.4898309729644823,
+                "max_down_prop": 0.4413147534160823,
+                "smooth_win_sig": 6,
+                "pre_entry_decay": 0.6822785211001486,
+                "buy_threshold": 0.060569429222147746,
+                "trailing_stop_thresh": 0.12638269347687486
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 97,
+            "value": 2.4570096153846155,
+            "params": {
+                "min_prof_thr": 0.19914039647086448,
+                "max_down_prop": 0.4910157506563349,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.741396368472465,
+                "buy_threshold": 0.10059367342289176,
+                "trailing_stop_thresh": 0.15568190327838277
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 98,
+            "value": 2.4454903846153835,
+            "params": {
+                "min_prof_thr": 0.19880060513070766,
+                "max_down_prop": 0.4896429089594442,
+                "smooth_win_sig": 4,
+                "pre_entry_decay": 0.7699318733530234,
+                "buy_threshold": 0.10066235028830357,
+                "trailing_stop_thresh": 0.1597342369883732
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 99,
+            "value": 1.5583942307692311,
+            "params": {
+                "min_prof_thr": 0.18283150399927786,
+                "max_down_prop": 0.49114603962738823,
+                "smooth_win_sig": 13,
+                "pre_entry_decay": 0.7670042487462306,
+                "buy_threshold": 0.09983950438550569,
+                "trailing_stop_thresh": 0.28589102011249845
+            },
+            "state": "COMPLETE"
+        }
     ]
 }

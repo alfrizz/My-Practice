@@ -49,12 +49,12 @@ def signal_parameters(ticker):
     trailing_stop_thresh ==> # percent of the trailing stop loss of the final trade
     '''
     if ticker == 'AAPL':
-        min_prof_thr=0.3 
-        max_down_prop=0.4 
+        min_prof_thr=0.2 
+        max_down_prop=0.5 
         smooth_win_sig=4  
-        pre_entry_decay=0.8
-        buy_threshold=0.08 
-        trailing_stop_thresh=0.13 
+        pre_entry_decay=0.77
+        buy_threshold=0.1
+        trailing_stop_thresh=0.16
 
     if ticker == 'TSLA':
         min_prof_thr=0.45 
