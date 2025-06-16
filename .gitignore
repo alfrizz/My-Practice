@@ -19,7 +19,7 @@ my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-1000/optimizer.pt
 my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-500/model.safetensors
 my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-500/optimizer.pt
 my models/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.safetensors
-my models/Trading/Stock Analysis/daily_archives
+my models/Trading/0.Stock Analysis/daily_archives
 
 # Ignore all desktop.ini files
 desktop.ini
