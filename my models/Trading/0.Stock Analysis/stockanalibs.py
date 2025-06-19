@@ -50,25 +50,29 @@ def signal_parameters(ticker):
     '''
     if ticker == 'AAPL':
         min_prof_thr=0.2 
-        max_down_prop=0.5 
-        smooth_win_sig=4  
+        max_down_prop=0.4
+        gain_tightening_factor=0.1
+        smooth_win_sig=5
         pre_entry_decay=0.77
         buy_threshold=0.1
         trailing_stop_thresh=0.16
+        reduce_win=3
 
     if ticker == 'TSLA':
         min_prof_thr=0.45 
         max_down_prop=0.3
+        gain_tightening_factor=0.02
         smooth_win_sig=3  
         pre_entry_decay=0.6
         buy_threshold=0.1 
         trailing_stop_thresh=0.1 
+        reduce_win=3
 
-    return min_prof_thr, max_down_prop, smooth_win_sig, pre_entry_decay, buy_threshold, trailing_stop_thresh
+    return min_prof_thr, max_down_prop, gain_tightening_factor, smooth_win_sig, pre_entry_decay, buy_threshold, trailing_stop_thresh, reduce_win
     
 #########################################################################################################
 
-def smooth_prepost_trading_data(df, regular_start, regular_end):
+def smooth_prepost_trading_data(df, regular_start, regular_end, reduce_win):
     """
     Modifies the input DataFrame in place by shifting entire days that begin in the 8:00 hour
     by +1 hour so that the trading times become aligned (solar times), and then smoothing
@@ -92,6 +96,7 @@ def smooth_prepost_trading_data(df, regular_start, regular_end):
           DataFrame with columns: open, high, low, close, volume, ask, bid and a DatetimeIndex.
       regular_start : The start time of the regular session.
       regular_end :  The end time of the regular session.
+      reduce_win : factor to reduce the pretrade smoothing window
     
     Returns:
       df : pd.DataFrame
@@ -127,8 +132,8 @@ def smooth_prepost_trading_data(df, regular_start, regular_end):
     # Compute the smoothing window size based on the ratio of average volumes.
     avg_vol_regular = df.loc[regular_mask, "volume_orig"].mean()
     avg_vol_nonregular = df.loc[nonregular_mask, "volume_orig"].mean()
-    ratio = avg_vol_regular / (avg_vol_nonregular if avg_vol_nonregular != 0 else 1)
-    window_nonregular = max(int(round(ratio)), 1)
+    ratio = avg_vol_regular / (avg_vol_nonregular if avg_vol_nonregular != 0 else reduce_win)
+    window_nonregular = int(ratio / reduce_win)
     
     # Loop only through the working columns
     for col in working_cols:
@@ -147,7 +152,7 @@ def smooth_prepost_trading_data(df, regular_start, regular_end):
 
 #########################################################################################################
 
-def identify_trades(df, min_prof_thr, max_down_prop):
+def identify_trades(df, min_prof_thr, max_down_prop, gain_tightening_factor):
     """
     Identifies trades from a one-minute bars DataFrame with an added retracement rule.
     
@@ -167,6 +172,8 @@ def identify_trades(df, min_prof_thr, max_down_prop):
       max_down_prop : float
          Maximum allowed retracement (as a fraction of the gain). For example, 0.5 means that if
          the price falls more than 50% of (max_so_far - buy_price) after the buy, then the trade is closed.
+      gain_tightening_factor: float
+         “as gain grows, tighten the stop 'max_down_prop' by this factor.”
     
     Returns:
       trades : list
@@ -200,10 +207,13 @@ def identify_trades(df, min_prof_thr, max_down_prop):
                 else:
                     # Only check retracement if we've seen an increase.
                     if max_so_far > buy_price:
+                        gain_pc  = 100 * (max_so_far - buy_price) / buy_price                              
+                        dyn_prop = max_down_prop / (1 + gain_tightening_factor  * gain_pc)
+                    
                         retracement = (max_so_far - current_price) / (max_so_far - buy_price)
-                        # Instead of invalidating the trade, break out to "close" it.
-                        if retracement > max_down_prop:
+                        if retracement > dyn_prop:
                             break
+                    
                 j += 1
 
             # If we found any candidate sell, record the trade.
@@ -225,7 +235,7 @@ def identify_trades(df, min_prof_thr, max_down_prop):
 
 #########################################################################################################
 
-def identify_trades_daily(df, min_prof_thr, max_down_prop, regular_start_shifted, regular_end, day_to_check=None):
+def identify_trades_daily(df, min_prof_thr, max_down_prop, gain_tightening_factor, regular_start_shifted, regular_end, day_to_check=None):
     """
     Identifies all trades for each trading day in a multi-day DataFrame and returns,
     for each day, a DataFrame reindexed to exactly cover the trading hours (at one-minute intervals)
@@ -238,7 +248,7 @@ def identify_trades_daily(df, min_prof_thr, max_down_prop, regular_start_shifted
            a. Build a fixed date_range from regular_start_shifted to regular_end.
            b. Filter the day’s data to these trading hours using between_time().
            c. Reindex the filtered data to the fixed minute index and forward-fill missing values.
-           d. Identify trades using identify_trades(day_df, min_prof_thr, max_down_prop).
+           d. Identify trades using identify_trades(day_df, min_prof_thr, max_down_prop, gain_tightening_factor).
       4. Only store days where at least one trade is found.
 
     Parameters:
@@ -290,7 +300,7 @@ def identify_trades_daily(df, min_prof_thr, max_down_prop, regular_start_shifted
             continue # If no valid data is present, skip this day.
 
         # Call the helper function using the day's filtered data.
-        trades = identify_trades(day_df, min_prof_thr, max_down_prop)
+        trades = identify_trades(day_df, min_prof_thr, max_down_prop, gain_tightening_factor)
 
         # Only store days that contain at least one identified trade.
         if trades:
@@ -368,12 +378,15 @@ def compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_
             df.at[t, "signal"] = max(df.at[t, "signal"], signal_value)
     
     # Smooth the continuous signal with a rolling window.
-    df["signal_smooth"] = (
-    df["signal"]
-      .rolling(window=smooth_win_sig,
-               center=False,        # ← causal: uses current & past rows only
-               min_periods=1)       # first few rows won’t be NaN
-      .mean())
+    
+    # df["signal_smooth"] = (
+    # df["signal"]
+    #   .rolling(window=smooth_win_sig,
+    #            center=False,        # ← causal: uses current & past rows only
+    #            min_periods=1)       # first few rows won’t be NaN
+    #   .mean())
+
+    df['signal_smooth'] = df['signal'].ewm(span=smooth_win_sig, adjust=False).mean()
     
     return df
 
@@ -464,7 +477,7 @@ def generate_trade_actions(df, smooth_win_sig, buy_threshold, trailing_stop_thre
                 pending_buy_signal = smooth_signal[i]
             
             # If we have a pending buy and the current time is at/after regular_start, trigger the buy.
-            if pending_buy and current_time >= regular_start:
+            if pending_buy and current_time >= regular_start and smooth_signal[i] >= buy_threshold:
                 df.iloc[i, df.columns.get_loc("trade_action")] = 1  # Trigger buy signal.
                 trade_buy_price = df["close"].iloc[i]
                 trade_max_price = trade_buy_price
