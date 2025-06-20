@@ -12,26 +12,22 @@ from IPython.display import display, HTML
 
 #########################################################################################################
 ticker = 'GOOGL'
+look_back = 90
 
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
 # Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
 # Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
 # After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
 
-PREMARKET_START = '09:00' 
-premarket_start  = datetime.datetime.strptime(PREMARKET_START, '%H:%M').time()   
+premarket_start  = datetime.datetime.strptime('09:00', '%H:%M').time()   
 
-REGULAR_START = '14:30'
-regular_start  = datetime.datetime.strptime(REGULAR_START, '%H:%M').time()   
+regular_start  = datetime.datetime.strptime('14:30', '%H:%M').time()   
 
-REGULAR_START_SHIFTED = '13:30' # adding some extra minutes of pretrade data
-regular_start_shifted = datetime.datetime.strptime(REGULAR_START_SHIFTED, '%H:%M').time()   
+regular_start_shifted = datetime.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back, 60))
 
-REGULAR_END     = '21:00'   
-regular_end = datetime.datetime.strptime(REGULAR_END, '%H:%M').time()   
+regular_end = datetime.datetime.strptime('21:00' , '%H:%M').time()   
 
-AFTERHOURS_END   = '00:00' 
-afterhours_end = datetime.datetime.strptime(AFTERHOURS_END, '%H:%M').time()  
+afterhours_end = datetime.datetime.strptime('00:00' , '%H:%M').time()  
 
 #########################################################################################################
 
