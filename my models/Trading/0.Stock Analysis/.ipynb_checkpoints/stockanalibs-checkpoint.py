@@ -58,6 +58,16 @@ def signal_parameters(ticker):
         trailing_stop_thresh=0.16
         reduce_win=3
 
+    if ticker == 'GOOGL':
+        min_prof_thr=0.2 
+        max_down_prop=0.4
+        gain_tightening_factor=0.1
+        smooth_win_sig=5
+        pre_entry_decay=0.77
+        buy_threshold=0.1
+        trailing_stop_thresh=0.16
+        reduce_win=3
+
     if ticker == 'TSLA':
         min_prof_thr=0.45 
         max_down_prop=0.3

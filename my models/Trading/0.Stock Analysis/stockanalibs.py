@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from IPython.display import display, HTML
 
 #########################################################################################################
+ticker = 'GOOGL'
 
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
 # Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
@@ -49,6 +50,16 @@ def signal_parameters(ticker):
     trailing_stop_thresh ==> # percent of the trailing stop loss of the final trade
     '''
     if ticker == 'AAPL':
+        min_prof_thr=0.2 
+        max_down_prop=0.4
+        gain_tightening_factor=0.1
+        smooth_win_sig=5
+        pre_entry_decay=0.77
+        buy_threshold=0.1
+        trailing_stop_thresh=0.16
+        reduce_win=3
+
+    if ticker == 'GOOGL':
         min_prof_thr=0.2 
         max_down_prop=0.4
         gain_tightening_factor=0.1
