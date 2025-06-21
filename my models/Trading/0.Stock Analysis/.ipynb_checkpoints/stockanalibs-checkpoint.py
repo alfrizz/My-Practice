@@ -4,7 +4,8 @@ from pandas import Timestamp
 import numpy as np
 import glob
 import os
-import datetime
+from datetime import datetime
+import datetime as dt
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
@@ -19,67 +20,87 @@ look_back = 90
 # Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
 # After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
 
-premarket_start  = datetime.datetime.strptime('09:00', '%H:%M').time()   
+premarket_start  = datetime.strptime('09:00', '%H:%M').time()   
 
-regular_start  = datetime.datetime.strptime('14:30', '%H:%M').time()   
+regular_start  = datetime.strptime('14:30', '%H:%M').time()   
 
-regular_start_shifted = datetime.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back, 60))
+regular_start_shifted = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back, 60))
 
-regular_end = datetime.datetime.strptime('21:00' , '%H:%M').time()   
+regular_end = datetime.strptime('21:00' , '%H:%M').time()   
 
-afterhours_end = datetime.datetime.strptime('00:00' , '%H:%M').time()  
+afterhours_end = datetime.strptime('00:00' , '%H:%M').time()  
 
 #########################################################################################################
 
 def signal_parameters(ticker):
     '''
+    # at pretrade
+    red_pretr_win ==> # factor to reduce the pretrade smoothing window
+    
     # to define the trades
     min_prof_thr ==> # percent of minimum profit to define a potential trade
     max_down_prop ==> # float (percent/100) of maximum allowed drop of a potential trade
+    gain_tightening_factor ==> # as gain grows, tighten the stop 'max_down_prop' by this factor.
     
     # to define the smoothed signal
     smooth_win_sig ==> # smoothing window of the signal used for the identification of the final trades 
+    center_ema ==> full adjusted weights (True) or a recursive, more recent-data-focused calculation (False)
     pre_entry_decay ==> # pre-trade decay of the final trades' smoothed signal
     
-    # to define the final buy and sell signals
+    # to define the final buy and sell triggers
     buy_threshold ==> # float (percent/100) threshold of the smoothed signal to trigger the final trade
     trailing_stop_thresh ==> # percent of the trailing stop loss of the final trade
     '''
     if ticker == 'AAPL':
+        # at pretrade:
+        red_pretr_win=3
+        # to define the trades:
         min_prof_thr=0.2 
         max_down_prop=0.4
         gain_tightening_factor=0.1
+        # to define the smoothed signal:
         smooth_win_sig=5
+        center_ema = False
         pre_entry_decay=0.77
+        # to define the final buy and sell triggers:
         buy_threshold=0.1
         trailing_stop_thresh=0.16
-        reduce_win=3
-
+        
     if ticker == 'GOOGL':
-        min_prof_thr=0.2 
-        max_down_prop=0.4
+        # at pretrade:
+        red_pretr_win=2
+        # to define the trades:
+        min_prof_thr=0.25 
+        max_down_prop=0.5
         gain_tightening_factor=0.1
-        smooth_win_sig=5
-        pre_entry_decay=0.77
-        buy_threshold=0.1
-        trailing_stop_thresh=0.16
-        reduce_win=3
-
+        # to define the smoothed signal:
+        smooth_win_sig=30
+        center_ema = False
+        pre_entry_decay=0.5
+        # to define the final buy and sell triggers:
+        buy_threshold=0.3
+        trailing_stop_thresh=0.1
+        
     if ticker == 'TSLA':
+        # at pretrade:
+        red_pretr_win=3
+        # to define the trades:
         min_prof_thr=0.45 
         max_down_prop=0.3
         gain_tightening_factor=0.02
+        # to define the smoothed signal:
         smooth_win_sig=3  
+        center_ema = False
         pre_entry_decay=0.6
+        # to define the final buy and sell triggers:
         buy_threshold=0.1 
         trailing_stop_thresh=0.1 
-        reduce_win=3
 
-    return min_prof_thr, max_down_prop, gain_tightening_factor, smooth_win_sig, pre_entry_decay, buy_threshold, trailing_stop_thresh, reduce_win
+    return red_pretr_win, min_prof_thr, max_down_prop, gain_tightening_factor, smooth_win_sig, center_ema, pre_entry_decay, buy_threshold, trailing_stop_thresh
     
 #########################################################################################################
 
-def smooth_prepost_trading_data(df, regular_start, regular_end, reduce_win):
+def smooth_prepost_trading_data(df, regular_start, regular_end, red_pretr_win):
     """
     Modifies the input DataFrame in place by shifting entire days that begin in the 8:00 hour
     by +1 hour so that the trading times become aligned (solar times), and then smoothing
@@ -103,19 +124,13 @@ def smooth_prepost_trading_data(df, regular_start, regular_end, reduce_win):
           DataFrame with columns: open, high, low, close, volume, ask, bid and a DatetimeIndex.
       regular_start : The start time of the regular session.
       regular_end :  The end time of the regular session.
-      reduce_win : factor to reduce the pretrade smoothing window
+      red_pretr_win : factor to reduce the pretrade smoothing window
     
     Returns:
       df : pd.DataFrame
           The same DataFrame (modified in place) with updated columns and index.
     """
     
-    # # Create a copy of the original columns by renaming them with an "_orig" suffix,
-    # # and re-create working columns.
-    # for col in list(df.columns):
-    #     df.rename(columns={col: f"{col}_orig"}, inplace=True)
-    #     df[col] = df[f"{col}_orig"]
-
     df = df.copy()
     df_orig = df.add_suffix("_orig")            # every col -> <col>_orig
     df = df.join(df_orig)                       # now both copies coexist
@@ -137,10 +152,25 @@ def smooth_prepost_trading_data(df, regular_start, regular_end, reduce_win):
     nonregular_mask = ~regular_mask
 
     # Compute the smoothing window size based on the ratio of average volumes.
+
     avg_vol_regular = df.loc[regular_mask, "volume_orig"].mean()
     avg_vol_nonregular = df.loc[nonregular_mask, "volume_orig"].mean()
-    ratio = avg_vol_regular / (avg_vol_nonregular if avg_vol_nonregular != 0 else reduce_win)
-    window_nonregular = int(ratio / reduce_win)
+
+    # ratio = avg_vol_regular / (avg_vol_nonregular if avg_vol_nonregular != 0 else red_pretr_win)
+    # window_nonregular = int(ratio / red_pretr_win)
+
+    # If avg_vol_nonregular is NaN or zero, replace it with red_pretr_win.
+    if pd.isna(avg_vol_nonregular) or avg_vol_nonregular == 0:
+        avg_vol_nonregular = red_pretr_win
+    
+    # Calculate the ratio.
+    ratio = avg_vol_regular / avg_vol_nonregular
+    
+    # If ratio is NaN, default the window size to 1; otherwise, compute normally.
+    if pd.isna(ratio):
+        window_nonregular = 1
+    else:
+        window_nonregular = int(ratio / red_pretr_win)
     
     # Loop only through the working columns
     for col in working_cols:
@@ -317,7 +347,7 @@ def identify_trades_daily(df, min_prof_thr, max_down_prop, gain_tightening_facto
 
 #########################################################################################################
 
-def compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_entry_decay):
+def compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_entry_decay, center_ema):
     """
     Computes the continuous trading signal for a single trading day based on the provided trades.
     
@@ -350,6 +380,7 @@ def compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_
           Rolling window size (in minutes) for smoothing the continuous signal.
       pre_entry_decay : float
           Decay rate for applying an exponential penalty to points before the trade entry.
+          Increasing the pre_entry_decay value makes the signal drop off more steeply before trade entry
     
     Returns:
       df : pd.DataFrame
@@ -385,15 +416,7 @@ def compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_
             df.at[t, "signal"] = max(df.at[t, "signal"], signal_value)
     
     # Smooth the continuous signal with a rolling window.
-    
-    # df["signal_smooth"] = (
-    # df["signal"]
-    #   .rolling(window=smooth_win_sig,
-    #            center=False,        # ← causal: uses current & past rows only
-    #            min_periods=1)       # first few rows won’t be NaN
-    #   .mean())
-
-    df['signal_smooth'] = df['signal'].ewm(span=smooth_win_sig, adjust=False).mean()
+    df['signal_smooth'] = df['signal'].ewm(span=smooth_win_sig, adjust=center_ema).mean()
     
     return df
 
@@ -515,8 +538,8 @@ def generate_trade_actions(df, smooth_win_sig, buy_threshold, trailing_stop_thre
 #########################################################################################################
 
 def add_trade_signal_to_results(results_by_day, min_prof_thr, regular_start,
-                                smooth_win_sig=5, pre_entry_decay=0.05,
-                                buy_threshold=0.6, trailing_stop_thresh=0.5):
+                                smooth_win_sig, pre_entry_decay,
+                                buy_threshold, trailing_stop_thresh, center_ema):
     """
     Updates the input dictionary (results_by_day) by applying two steps:
     
@@ -558,7 +581,7 @@ def add_trade_signal_to_results(results_by_day, min_prof_thr, regular_start,
     
     for day, (day_df, trades) in results_by_day.items():
         # Step (A): Compute the continuous trading signal.
-        df = compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_entry_decay)
+        df = compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_entry_decay, center_ema)
         
         # Step (B): Generate discrete trade actions (using trailing stop loss logic).
         df = generate_trade_actions(df, smooth_win_sig, buy_threshold, trailing_stop_thresh, regular_start)
@@ -584,7 +607,7 @@ def simulate_trading(results_by_day, regular_start, regular_end, ticker):
       - "EarningDiff": the difference between StrategyEarning and BuyHoldEarning.
       
     Additionally, it computes two lists:
-      - "Trade Gains ($)": a list of dollar gains for each completed trade.
+      - "Trade Gains ($)": a list of gains for each completed trade.
       - "Trade Gains (%)": a list of percentage gains for each completed trade.
       
     All preexisting columns in the input DataFrame are preserved.
