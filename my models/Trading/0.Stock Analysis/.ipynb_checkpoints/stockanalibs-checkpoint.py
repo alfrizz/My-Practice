@@ -13,7 +13,11 @@ from IPython.display import display, HTML
 
 #########################################################################################################
 ticker = 'GOOGL'
-look_back = 90
+
+label_col      = "signal_smooth_adjusted"
+feature_cols   = ["open", "high", "low", "close", "volume"]
+
+look_back = 60
 red_pretr_win = 3 # factor to reduce the pretrade smoothing window
 is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
 
