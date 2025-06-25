@@ -6,7 +6,7 @@ import glob
 import os
 from datetime import datetime
 import datetime as dt
-
+import pytz
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from IPython.display import display, HTML
@@ -18,7 +18,7 @@ label_col      = "signal_smooth_adjusted"
 feature_cols   = ["open", "high", "low", "close", "volume"]
 
 look_back = 60
-red_pretr_win = 3 # factor to reduce the pretrade smoothing window
+red_pretr_win = 1 # factor to reduce the smoothing of the pretrade smoothing window
 is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
 
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
@@ -77,10 +77,10 @@ def signal_parameters(ticker):
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
         # to define the smoothed signal:
-        smooth_win_sig=15
+        smooth_win_sig=10
         pre_entry_decay=0.1
         # to define the final buy and sell triggers:
-        buy_threshold=0.3
+        buy_threshold=0.2
         trailing_stop_thresh=0.15
         
     if ticker == 'TSLA':
@@ -102,92 +102,231 @@ def signal_parameters(ticker):
     
 #########################################################################################################
 
-def smooth_prepost_trading_data(df, regular_start, regular_end, red_pretr_win):
+def plot_close_volume(df, title="Close Price and Volume"):
     """
-    Modifies the input DataFrame in place by shifting entire days that begin in the 8:00 hour
-    by +1 hour so that the trading times become aligned (solar times), and then smoothing
-    all data outside the regular trading session continuously across day boundaries.
+    Quickly plots the 'close' and 'volume' columns from the DataFrame
+    using a secondary y-axis for volume.
+    """
+    ax = df[['close', 'volume']].plot(secondary_y=['volume'], figsize=(10, 5), title=title, alpha=0.7)
+    ax.set_xlabel("Date")
+    plt.show()
+
+def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1):
+    """
+    Detects forward and reverse splits in the DataFrame and adjusts the price
+    columns (plus volume) accordingly.
     
-    The smoothing window (in minutes) is computed from the ratio of average volumes in the 
-    regular and non-regular sessions.
+    Parameters:
+      df (pd.DataFrame): DataFrame with at least the columns:
+          ['open', 'high', 'low', 'close', 'ask', 'bid', 'volume']
+      forward_threshold (float): Triggers a forward split check if current_close / prev_close < threshold.
+      reverse_threshold (float): Triggers a reverse split check if current_close / prev_close > threshold.
+      tol (float): Tolerance to check the "roundness" of the candidate split factor.
+      
+    Returns:
+      df_adj (pd.DataFrame): The adjusted DataFrame.
+      split_events (list): List of detected split events as (event timestamp, candidate_factor, split_type).
+    """
+    df_adj = df.copy()
+    split_events = []
+    price_columns = ['open', 'high', 'low', 'close', 'ask', 'bid']
     
-    All columns (open, high, low, close, volume, ask, bid) are then smoothed using a moving
-    average over the non-regular rows (i.e. those outside the session defined by regular_start 
-    and regular_end). The original columns are preserved with an "_orig" suffix.
+    for i in range(1, len(df_adj)):
+        prev_close = df_adj.iloc[i-1]['close']
+        curr_close = df_adj.iloc[i]['close']
+        ratio = curr_close / prev_close
+
+        # Detect forward split (price drop)
+        if ratio < forward_threshold:
+            candidate_factor = round(1.0 / ratio)
+            if candidate_factor >= 2:
+                expected_ratio = 1.0 / candidate_factor
+                if abs(ratio - expected_ratio) < tol:
+                    event_time = df_adj.index[i]
+                    print(f"Detected forward split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
+                    split_events.append((event_time, candidate_factor, 'forward'))
+                    df_adj.loc[:df_adj.index[i-1], price_columns] /= candidate_factor
+                    df_adj.loc[:df_adj.index[i-1], 'volume'] *= candidate_factor * vol_fact # additonal manual volume factor necessary in some cases
+        
+        # Detect reverse split (price jump)
+        elif ratio > reverse_threshold:
+            candidate_factor = round(ratio)
+            if candidate_factor >= 2:
+                expected_ratio = candidate_factor
+                if abs(ratio - expected_ratio) < tol:
+                    event_time = df_adj.index[i]
+                    print(f"Detected reverse split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
+                    split_events.append((event_time, candidate_factor, 'reverse'))
+                    df_adj.loc[:df_adj.index[i-1], price_columns] *= candidate_factor
+                    df_adj.loc[:df_adj.index[i-1], 'volume'] /= candidate_factor
+                    
+    return df_adj, split_events
+
+def process_splits(folder, ticker, bidasktoclose_spread, vol_fact):
+    """
+    Processes the intraday CSV file for the given ticker from the specified folder.
+    
+    It looks for the unique CSV file in 'folder' whose name starts with '{ticker}_'.
+    Then, it checks if the processed file already exists in 'dfs training/{ticker}_base.csv'.
+      - If it exists, the function reads it, plots its data, and returns the DataFrame.
+      - Otherwise, it reads the intraday CSV, keeps only necessary columns,
+        creates the 'ask' and 'bid' columns using the provided bidasktoclose_spread (e.g. 0.03 for 3%),
+        plots the original data, detects and adjusts splits (also adjusting volume),
+        plots the adjusted data if splits are detected, saves the resulting DataFrame, and returns it.
+    
+    Parameters:
+      folder (str): The folder where the intraday CSV file is stored (e.g. "Intraday stocks").
+      ticker (str): The ticker symbol used to locate the file and name the output.
+      bidasktoclose_spread (float): The spread fraction; e.g., 0.03 means 3% (do not divide by 100).
+      
+    Returns:
+      pd.DataFrame: The processed DataFrame.
+    """
+    output_file = f"dfs training/{ticker}_base.csv"
+    
+    # Check if the processed file already exists.
+    if os.path.exists(output_file):
+        print(f"{output_file} already exists. Reading and plotting the processed data...")
+        df_existing = pd.read_csv(output_file, index_col=0, parse_dates=True)
+        plot_close_volume(df_existing, title="Processed Data: Close Price and Volume")
+        return df_existing
+
+    # Find the unique intraday CSV file using glob.
+    pattern = os.path.join(folder, f"{ticker}_*.csv")
+    matching_files = glob.glob(pattern)
+    if not matching_files:
+        raise FileNotFoundError(f"No file found matching pattern: {pattern}")
+    if len(matching_files) > 1:
+        print(f"Warning: More than one file found for pattern {pattern}. Using the first one.")
+    intraday_csv = matching_files[0]
+    print(f"Reading data from {intraday_csv}")
+
+    # Read the intraday CSV, using the 'datetime' column for dates.
+    df = pd.read_csv(intraday_csv, index_col=0, parse_dates=["datetime"])
+    df = df[['open', 'high', 'low', 'close', 'volume']]
+    
+    # Create 'ask' and 'bid' columns using the given spread (e.g. 0.03 means 3%).
+    df['ask'] = round(df['close'] * (1 + bidasktoclose_spread/100), 4)
+    df['bid'] = round(df['close'] * (1 - bidasktoclose_spread/100), 4)
+    
+    # Plot the original data.
+    print("Plotting original data...")
+    plot_close_volume(df, title="Before Adjusting Splits: Close Price and Volume")
+    
+    # Detect and adjust splits.
+    df_adjusted, split_events = detect_and_adjust_splits(df=df, vol_fact=vol_fact)
+    
+    if split_events:
+        print("Splits detected. Plotting adjusted data...")
+        plot_close_volume(df_adjusted, title="After Adjusting Splits: Close Price and Volume")
+    else:
+        print("No splits detected.")
+    
+    # Save the resulting DataFrame.
+    os.makedirs("dfs training", exist_ok=True)
+    df_adjusted.to_csv(output_file, index=True)
+    print(f"Processed data saved to {output_file}")
+    
+    return df_adjusted
+
+
+#########################################################################################################
+
+
+def is_dst_for_day(day, tz_str="US/Eastern"):
+    """
+    Given a day (as a Timestamp or string), determine if that day is in DST for the specified timezone.
+    We use noon on that day (to avoid ambiguity) and return True if DST is in effect.
+    """
+    tz = pytz.timezone(tz_str)
+    dt = pd.Timestamp(day).replace(hour=12, minute=0, second=0, microsecond=0)
+    # Localize if naive.
+    if dt.tzinfo is None:
+        dt = tz.localize(dt)
+    else:
+        dt = dt.astimezone(tz)
+    return bool(dt.dst())
+
+def smooth_prepost_trading_data(df, regular_start, regular_end, red_pretr_win, tz_str="US/Eastern"):
+    """
+    Modifies the input DataFrame (using a copy) by first adjusting each day's timestamps based solely
+    on DST detection. For every day, if DST is in effect (as determined by is_dst_for_day), we assume
+    the day’s timestamps are recorded in solar time and add one hour so that they line up with legal time.
+    
+    Then, the function smooths all data outside the regular trading session (defined by regular_start and 
+    regular_end) using a moving average. The smoothing window is computed from the ratio of average volumes 
+    in the regular and non-regular sessions. The original columns are preserved with an "_orig" suffix.
     
     Within the smoothing loop:
       - Price columns (open, high, low, close, ask, bid) are rounded to 4 decimals.
       - The volume column is rounded to the nearest integer.
     
-    Additionally, the DataFrame's index is updated to reflect the shifted (solar) times.
+    Finally, the DataFrame's index is updated to the adjusted timestamps.
     
     Parameters:
       df : pd.DataFrame
           DataFrame with columns: open, high, low, close, volume, ask, bid and a DatetimeIndex.
-      regular_start : The start time of the regular session.
-      regular_end :  The end time of the regular session.
-      red_pretr_win : factor to reduce the pretrade smoothing window
+      regular_start : str or datetime.time
+          The target start time of the regular session (e.g. "13:30" or a time object).
+      regular_end : str or datetime.time
+          The target end time of the regular session (e.g. "20:00" or a time object).
+      red_pretr_win : float
+          Factor used to reduce the pre-trading smoothing window.
+      tz_str : str, default "US/Eastern"
+          The timezone used to detect DST.
     
     Returns:
       df : pd.DataFrame
-          The same DataFrame (modified in place) with updated columns and index.
+          A modified copy of the DataFrame with updated (shifted) columns and index.
     """
-    
+    # Work on a copy.
     df = df.copy()
-    df_orig = df.add_suffix("_orig")            # every col -> <col>_orig
-    df = df.join(df_orig)                       # now both copies coexist
-
+    df_orig = df.add_suffix("_orig")  # preserve actual original columns
+    df = df.join(df_orig)
+    
     # Identify the working columns (those not ending with "_orig") and convert them to float.
     working_cols = [col for col in df.columns if not col.endswith("_orig")]
     df[working_cols] = df[working_cols].astype(np.float64)
-
-    # Compute adjusted times (temporary Series) by shifting days with an 8:00 hour start.
+    
+    # --- DST Adjustment: update timestamps for each day ---
+    # Simply detect if the day is in DST. If yes, assume its timestamps are in solar time and *add* one hour.
     adj_times = df.index.to_series().copy()
     for day, group in df.groupby(df.index.normalize()):
-        if group.index.min().hour == 8:  # if first timestamp is anywhere between 08:00 and 08:59
+        if is_dst_for_day(day, tz_str):
+            # For days in DST, add 1 hour (shifting in the opposite direction than previously)
             adj_times.loc[group.index] = group.index + pd.Timedelta(hours=1)
         else:
             adj_times.loc[group.index] = group.index
 
     # Create masks for regular vs. non-regular rows using the adjusted times.
-    regular_mask = (adj_times.dt.time >= regular_start) & (adj_times.dt.time <= regular_end)
+    target_start = pd.to_datetime(regular_start).time() if isinstance(regular_start, str) else regular_start
+    target_end   = pd.to_datetime(regular_end).time() if isinstance(regular_end, str) else regular_end
+    regular_mask = (adj_times.dt.time >= target_start) & (adj_times.dt.time <= target_end)
     nonregular_mask = ~regular_mask
 
-    # Compute the smoothing window size based on the ratio of average volumes.
-
+    # Compute the smoothing window size based on volume ratios.
     avg_vol_regular = df.loc[regular_mask, "volume_orig"].mean()
     avg_vol_nonregular = df.loc[nonregular_mask, "volume_orig"].mean()
-
-    # ratio = avg_vol_regular / (avg_vol_nonregular if avg_vol_nonregular != 0 else red_pretr_win)
-    # window_nonregular = int(ratio / red_pretr_win)
-
-    # If avg_vol_nonregular is NaN or zero, replace it with red_pretr_win.
     if pd.isna(avg_vol_nonregular) or avg_vol_nonregular == 0:
         avg_vol_nonregular = red_pretr_win
-    
-    # Calculate the ratio.
     ratio = avg_vol_regular / avg_vol_nonregular
+    window_nonregular = 1 if pd.isna(ratio) else max(int(ratio / red_pretr_win), 1)
     
-    # If ratio is NaN, default the window size to 1; otherwise, compute normally.
-    if pd.isna(ratio):
-        window_nonregular = 1
-    else:
-        window_nonregular = max(int(ratio / red_pretr_win), 1)
-    
-    # Loop only through the working columns
+    # Smooth each working column for non-regular rows.
     for col in working_cols:
-        # Extract non‑regular rows (resetting the index to get a continuous Series).
         series_nr = df.loc[nonregular_mask, col].reset_index(drop=True)
         smoothed = series_nr.rolling(window=window_nonregular, min_periods=1).mean().values.astype(np.float64)
         if col != "volume":
             df.loc[nonregular_mask, col] = np.round(smoothed, 4).astype(np.float64)
         else:
             df.loc[nonregular_mask, col] = np.rint(smoothed).astype(np.int64)
-
-    # Update the DataFrame's index to the adjusted times.
+    
+    # Finally, update the DataFrame's index to use the adjusted times.
     df.index = adj_times
 
     return df
+
+
 
 #########################################################################################################
 
