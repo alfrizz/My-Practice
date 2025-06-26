@@ -71,17 +71,17 @@ def signal_parameters(ticker):
         
     if ticker == 'GOOGL':
         # to define the initial trades:
-        min_prof_thr=0.25 
+        min_prof_thr=0.2 
         max_down_prop=0.5
         gain_tightening_factor=0.1
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
         # to define the smoothed signal:
-        smooth_win_sig=10
-        pre_entry_decay=0.1
+        smooth_win_sig=15
+        pre_entry_decay=0.005
         # to define the final buy and sell triggers:
-        buy_threshold=0.2
-        trailing_stop_thresh=0.15
+        buy_threshold=0.25
+        trailing_stop_thresh=0.25
         
     if ticker == 'TSLA':
         # to define the initial trades:
@@ -532,7 +532,7 @@ def identify_trades_daily(df, min_prof_thr, max_down_prop, gain_tightening_facto
           if provided. Default is None (process all days).
 
     Returns:
-      results_by_day : dict
+      results_by_day_trad : dict
           A dictionary mapping each trading day (Timestamp) to a tuple:
               (day_df, trades)
           where day_df is the DataFrame strictly covering the trading hours (with one-minute frequency)
@@ -543,7 +543,7 @@ def identify_trades_daily(df, min_prof_thr, max_down_prop, gain_tightening_facto
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
 
-    results_by_day = {}
+    results_by_day_trad = {}
 
     # Group the DataFrame by day
     for day, group in df.groupby(df.index.normalize()):
@@ -569,229 +569,214 @@ def identify_trades_daily(df, min_prof_thr, max_down_prop, gain_tightening_facto
 
         # Only store days that contain at least one identified trade.
         if trades:
-            results_by_day[day] = (day_df, trades)
-
-    return results_by_day
+            results_by_day_trad[day] = (day_df, trades)
+    
+    return results_by_day_trad
 
 #########################################################################################################
 
-def compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_entry_decay, is_centered):
+def compute_continuous_signal(
+    day_df,
+    trades,
+    smooth_win_sig,
+    decay,
+    is_centered,
+    reference_gain
+):
     """
-    Computes the continuous trading signal for a single trading day based on the provided trades.
-    
-    For each trade, assume:
-      - t_min = buy_date (optimal entry)
-      - P_max = sell_price (assumed maximum price reached during the trade)
-      
-    The raw signal at time t is defined as:
-         raw_value = (P_max - close(t)) - min_prof_thr.
-         
-    For raw_value <= 0, the signal is 0.
-    For t < t_min, an exponential penalty is applied:
-         signal(t) = exp(-pre_entry_decay * delta_minutes) * raw_value,
-    where delta_minutes is the minutes between t and t_min.
-    For t >= t_min (up to sell_date), no penalty is applied.
-    For overlapping trades the maximum signal is used.
-    
-    After calculating the continuous signal (stored in "signal"), a smoothed version is computed,
-    stored in "signal_smooth" using a rolling window.
-    
-    Parameters:
-      day_df : pd.DataFrame
-          DataFrame for the day (must include a "close" column and a datetime index).
-      trades : list
-          List of trades for the day. Each trade is expected to be a tuple:
-          ((buy_date, sell_date), (buy_price, sell_price), profit_pc)
-      min_prof_thr : float
-          Minimum profit threshold above which potential profit is counted.
-      smooth_win_sig : int
-          Rolling window size (in minutes) for smoothing the continuous signal.
-      pre_entry_decay : float
-          Decay rate for applying an exponential penalty to points before the trade entry.
-          Increasing the pre_entry_decay value makes the signal drop off more steeply before trade entry
-    
-    Returns:
-      df : pd.DataFrame
-          The input DataFrame updated with:
-             "signal"         -- raw continuous trading signal.
-             "signal_smooth"  -- smoothed continuous trading signal.
-    """
-    df = day_df.copy()
-    df["signal"] = 0.0  # initialize continuous signal column
+    Build and scale a minute‐by‐minute “convenience‐to‐buy” signal for one calendar day.
 
-    # Process each trade and update the signal accordingly.
-    for trade in trades:
-        (buy_date, sell_date), (buy_price, sell_price), profit_pc = trade
-        P_max = sell_price  # assumed maximum reached in trade
-        t_min = buy_date    # optimal entry time
-        
-        # Only calculate signal for time points up to the sell_date.
-        mask = df.index <= sell_date
+    Steps:
+      1) Raw signal:
+           For each merged trade ((buy_dt, sell_dt), (_, sell_price), _):
+             • P_max = sell_price
+             • For each timestamp t ≤ sell_dt:
+                 raw_diff = P_max − close[t]
+                 if raw_diff > 0:
+                     Δ = minutes from t to sell_dt
+                     signal[t] = max(signal[t], raw_diff * exp(−decay * Δ))
+
+      2) Smoothing:
+           signal_smooth = rolling‐mean(signal, window=smooth_win_sig,
+                                         center=is_centered, min_periods=1)
+
+      3) Normalization:
+           signal_norm        = (signal − min(signal)) / (max(signal) − min(signal))
+           signal_smooth_norm = (signal_smooth − min(signal_smooth)) / (max(signal_smooth) − min(signal_smooth))
+
+      4) Price‐based scaling:
+           daily_price_range = day_df["high"].max() − day_df["low"].min()
+           scale             = daily_price_range / reference_gain
+           signal_smooth_adjusted = signal_smooth_norm * scale
+
+    Parameters:
+      day_df               : pd.DataFrame for one trading day. Must include:
+                               - DatetimeIndex matching minute bars
+                               - columns "close", "high", "low"
+      trades               : list of merged trades for that day,
+                             each ((buy_dt, sell_dt), (buy_p, sell_p), profit_pc)
+      smooth_win_sig       : int     – rolling window size in minutes
+      decay                : float   – exponential‐decay rate per minute
+      is_centered          : bool    – whether to center the rolling window
+      reference_gain       : float   – long‐term avg daily price range
+                               (e.g. mean over days of high.max−low.min)
+
+    Returns:
+      pd.DataFrame : copy of day_df augmented with columns:
+                       • "signal"
+                       • "signal_smooth"
+                       • "signal_norm"
+                       • "signal_smooth_norm"
+                       • "signal_smooth_adjusted"
+    """
+    # 0) work on a copy; initialize raw signal column
+    df = day_df.copy()
+    df["signal"] = 0.0
+
+    # 1) build the raw decayed signal up to the trade peaks
+    for (buy_dt, sell_dt), (_, sell_price), _ in trades:
+        P_max = sell_price
+        # restrict to times up to the sell timestamp
+        mask = df.index <= sell_dt
         for t in df.index[mask]:
-            price = df.at[t, "close"]
-            raw_value = (P_max - price) - min_prof_thr
-            if raw_value <= 0:
-                signal_value = 0.0
-            else:
-                # For times before the trade entry, apply exponential penalty.
-                if t < t_min:
-                    delta_minutes = (t_min - t).total_seconds() / 60.0
-                    penalty = math.exp(-pre_entry_decay * delta_minutes)
-                    signal_value = penalty * raw_value
-                else:
-                    signal_value = raw_value
-            # If there are overlapping trades, store the maximum signal.
-            df.at[t, "signal"] = max(df.at[t, "signal"], signal_value)
-    
-    # Smooth the continuous signal with a rolling window.
-    # df['signal_smooth'] = df['signal'].ewm(span=smooth_win_sig, adjust=is_centered).mean()
-    df['signal_smooth'] = df['signal'].rolling(window=smooth_win_sig, center=is_centered).mean()
+            raw_diff = P_max - df.at[t, "close"]
+            if raw_diff <= 0:
+                continue
+            # apply exponential decay based on distance to the peak
+            delta_min = (sell_dt - t).total_seconds() / 60.0
+            penalized = raw_diff * math.exp(-decay * delta_min)
+            # keep the maximum across overlapping trades
+            df.at[t, "signal"] = max(df.at[t, "signal"], penalized)
+
+    # 2) smooth the raw signal with a rolling average
+    df["signal_smooth"] = (
+        df["signal"]
+          .rolling(window=smooth_win_sig,
+                   center=is_centered,
+                   min_periods=1)
+          .mean()
+    )
+
+    # 3) per‐day min–max normalization to [0,1]
+    lo, hi = df["signal"].min(), df["signal"].max()
+    if hi > lo:
+        df["signal_norm"] = (df["signal"] - lo) / (hi - lo)
+    else:
+        df["signal_norm"] = 0.0
+
+    slo, shi = df["signal_smooth"].min(), df["signal_smooth"].max()
+    if shi > slo:
+        df["signal_smooth_norm"] = (df["signal_smooth"] - slo) / (shi - slo)
+    else:
+        df["signal_smooth_norm"] = 0.0
+
+    # 4) relative price‐range scaling
+    day_hi = day_df["high"].max()
+    day_lo = day_df["low"].min()
+    daily_rel_range = (day_hi - day_lo) / day_lo
+
+    scale = daily_rel_range / reference_gain
+    df["signal_smooth_adjusted"] = df["signal_smooth_norm"] * scale
     
     return df
 
+
+
 #########################################################################################################
 
-def generate_trade_actions(df, smooth_win_sig, buy_threshold, trailing_stop_thresh, regular_start, reference_gain):
-    """
-    Generates discrete trade actions for a single day, incorporating an adjustment that scales the intra-day
-    normalized signal with respect to a reference gain level (e.g. an average daily gain).
 
-    The method works as follows:
-      1. Normalize the pre-computed "signal" column using min–max normalization to produce "signal_norm".
-      2. Normalize the already-smoothed signal ("signal_smooth") via min–max normalization to obtain "signal_smooth_norm".
-      3. Compute the day’s overall gain in the raw signal as: 
-              daily_gain = max(signal) - min(signal)
-         Then, calculate a scaling factor as:
-              scale_factor = daily_gain / reference_gain
-         and create an adjusted smoothed signal:
-              signal_smooth_adjusted = signal_smooth_norm * scale_factor
-      4. Using this adjusted signal, the function iterates over time points:
-         - A buy is triggered the first time when the adjusted smoothed signal crosses above (or equals)
-           the buy_threshold, but only if the current time is at/after the specified regular_start.
-         - Once in a trade, the raw trade entry price is recorded and the maximum close since entry is tracked.
-         - The trailing stop level is computed dynamically as: 
-                 trailing_stop_level = trade_max_price * (1 - (trailing_stop_thresh * (1 + adjusted_signal))/100)
-           A sell is triggered when the current raw close falls below this level (and the adjusted signal is below the buy threshold).
+def generate_trade_actions(
+    df,
+    buy_threshold,
+    trailing_stop_thresh,
+    regular_start
+):
+    """
+    Given a DataFrame for one trading day that already contains:
+        • "signal_smooth"  — your smoothed continuous signal
+        • "close"          — the price series
+    
+    This function strips out any normalization or scaling steps and simply:
+      1) Buys when the smoothed signal ≥ buy_threshold (only at/after regular_start)
+      2) Tracks a simple trailing stop of trailing_stop_thresh% off the highest price since entry
+      3) Sells when price falls below that trailing stop
+      4) Forces a sell at EOD if still in trade
 
     Parameters:
       df : pd.DataFrame
-         DataFrame that already contains columns "signal", "signal_smooth" and "close". It should represent one day.
-      smooth_win_sig : int
-          Rolling window size used for smoothing the signal (assumed already applied to create "signal_smooth").
+          Must have a DatetimeIndex, and columns "signal_smooth" and "close".
       buy_threshold : float
-          The threshold which, when crossed or met by the adjusted smoothed signal, triggers a buy.
+          Cut-off on signal_smooth at which to enter a trade.
       trailing_stop_thresh : float
-          Trailing stop loss percent used in computing a dynamic trailing stop level.
+          Percent trailing stop (e.g. 1.5 means 1.5%).
       regular_start : datetime.time or str
-          The earliest time of day at which a buy signal is allowed (e.g. "13:30" or datetime.time(13,30)).
-      reference_gain : float
-          A reference gain parameter computed externally (e.g. an average daily gain) that is used to adjust the normalized signal.
-    
+          Don’t enter a new trade before this time (e.g. "13:30").
+
     Returns:
-      df : pd.DataFrame
-          The input DataFrame updated with additional columns:
-             "signal_norm"            -- the normalized raw signal.
-             "signal_smooth_norm"     -- the normalized smoothed signal.
-             "signal_smooth_adjusted" -- the adjusted normalized smoothed signal (scaled by daily gain/reference_gain).
-             "trade_action"           -- discrete trade actions:
-                                          +1 for buy, 0 for hold, -1 for sell.
+      pd.DataFrame : original df plus "trade_action" column:
+                     +1 = buy, 0 = hold, -1 = sell
     """
+    # Work on a copy to avoid side-effects
+    df = df.copy()
     n = len(df)
-    
-    # --- Step 1: Normalize the raw "signal" ---
-    sig_min = df["signal"].min()
-    sig_max = df["signal"].max()
-    if sig_max == sig_min:
-        df["signal_norm"] = 0.0
-    else:
-        df["signal_norm"] = (df["signal"] - sig_min) / (sig_max - sig_min)
-    
-    # --- Step 2: Normalize the smoothed signal ---
-    sig_sm_min = df["signal_smooth"].min()
-    sig_sm_max = df["signal_smooth"].max()
-    if sig_sm_max == sig_sm_min:
-        df["signal_smooth_norm"] = 0.0
-    else:
-        df["signal_smooth_norm"] = (df["signal_smooth"] - sig_sm_min) / (sig_sm_max - sig_sm_min)
-    
-    # --- Step 3: Adjust the normalized smoothed signal by the day's gain ---
-    # Compute the day's gain in the raw signal. This represents the overall profit potential for the day.
-    daily_gain = sig_max - sig_min
 
-    # Compute the scale factor based on the reference_gain.
-    scale_factor = daily_gain / reference_gain
-
-    # Adjust the normalized smoothed signal by multiplying by the scale factor.
-    df["signal_smooth_adjusted"] = df["signal_smooth_norm"] * scale_factor
-    
-    # --- Initialize trade action column and trade state variables ---
-    df["trade_action"] = 0  # default: hold/no action
+    # Initialize trade_action and state
+    df["trade_action"] = 0
     in_trade = False
-    trade_buy_price = None   # raw close price at entry
-    trade_max_price = None   # maximum raw close reached since entry
-    entry_signal = 0.0       # capture the entry (adjusted) signal when buy condition is met
+    entry_price = None
+    max_price = None
 
-    pending_buy = False      # flag to indicate a buy condition has been met (even if before regular_start)
-    pending_buy_signal = 0.0 # stores the adjusted signal value when condition was met
-    
-    # Retrieve the adjusted smoothed signal as a NumPy array for faster access.
-    smooth_adj_signal = df["signal_smooth_adjusted"].values
-    
-    # --- Trade Generation Phase: iterate over each time point ---
+    # Convert regular_start to time if needed
+    if isinstance(regular_start, str):
+        regular_start = pd.to_datetime(regular_start).time()
+
+    # Extract series for speed
+    sig = df["signal_smooth_adjusted"].values
+    closes = df["close"].values
+    times = df.index.time
+
     for i in range(n):
-        # Get the current time from the index (assumes df.index is a DatetimeIndex).
-        current_time = df.iloc[i].name.time()
-        
-        if not in_trade:
-            # Check if the adjusted smoothed signal has crossed above or equals the buy threshold.
-            # For the very first buy, we also check that the signal rises from below.
-            if smooth_adj_signal[i] >= buy_threshold and ((df["trade_action"] == 1).any() == False or 
-                                                          (i > 0 and smooth_adj_signal[i-1] < buy_threshold)):
-                # Mark a pending buy condition.
-                pending_buy = True
-                pending_buy_signal = smooth_adj_signal[i]
-            
-            # If a buy condition was met and the current time is allowed (>= regular_start), trigger buy.
-            if pending_buy and current_time >= regular_start and smooth_adj_signal[i] >= buy_threshold:
-                df.iloc[i, df.columns.get_loc("trade_action")] = 1  # Trigger buy.
-                trade_buy_price = df["close"].iloc[i]
-                trade_max_price = trade_buy_price
-                entry_signal = pending_buy_signal  # Store the signal level at buy entry.
-                in_trade = True
-                pending_buy = False
-        else:
-            # We are in a trade. Update the maximum reached price.
-            current_price = df["close"].iloc[i]
-            if current_price > trade_max_price:
-                trade_max_price = current_price
+        t = times[i]
+        price = closes[i]
 
-            # Compute a dynamic trailing stop level.
-            # The trailing stop is adjusted by the current adjusted signal.
-            dynamic_trailing_thresh = trailing_stop_thresh * (1 + smooth_adj_signal[i])
-            trailing_stop_level = trade_max_price * (1 - dynamic_trailing_thresh / 100)
-            
-            # If the current price falls below the trailing stop level—and the signal is not indicating a buy,
-            # we trigger a sell.
-            if current_price < trailing_stop_level and smooth_adj_signal[i] < buy_threshold:
-                df.iloc[i, df.columns.get_loc("trade_action")] = -1  # Trigger sell.
+        if not in_trade:
+            # Check buy condition: signal crosses threshold, and time ≥ regular_start
+            if sig[i] >= buy_threshold and t >= regular_start:
+                df.iat[i, df.columns.get_loc("trade_action")] = 1
+                in_trade = True
+                entry_price = price
+                max_price = price
+            # else: remain flat (0)
+        else:
+            # We’re in a trade: update the highest price seen so far
+            if price > max_price:
+                max_price = price
+
+            # Compute simple trailing-stop level
+            stop_level = max_price * (1 - trailing_stop_thresh / 100.0)
+
+            # Sell if price falls below the stop
+            if price < stop_level and sig[i] < buy_threshold:
+                df.iat[i, df.columns.get_loc("trade_action")] = -1
                 in_trade = False
             else:
-                df.iloc[i, df.columns.get_loc("trade_action")] = 0  # Hold.
-    
-    # Optionally force a sell at the end of the day if still in trade.
+                df.iat[i, df.columns.get_loc("trade_action")] = 0
+
+    # If still in trade at end-of-day, force a sell on last row
     if in_trade:
-        df.iloc[-1, df.columns.get_loc("trade_action")] = -1
-    
+        df.iat[-1, df.columns.get_loc("trade_action")] = -1
+
     return df
 
 
 #########################################################################################################
 
-def add_trade_signal_to_results(results_by_day, min_prof_thr, regular_start, reference_gain,
+
+def add_trade_signal_to_results(results_by_day_trad, min_prof_thr, regular_start, reference_gain,
                                 smooth_win_sig, pre_entry_decay,
                                 buy_threshold, trailing_stop_thresh, is_centered):
     """
-    Updates the input dictionary (results_by_day) by applying two steps:
+    Updates the input dictionary (results_by_day_trad) by applying two steps:
     
        (A) Compute the continuous trading signal for each day (using compute_continuous_signal).
        (B) Generate discrete trade actions based on the continuous signal and a trailing stop loss 
@@ -808,13 +793,13 @@ def add_trade_signal_to_results(results_by_day, min_prof_thr, regular_start, ref
     a sell signal is issued.
     
     Parameters:
-      results_by_day : dict
+      results_by_day_trad : dict
           Dictionary mapping each trading day (Timestamp) to a tuple (day_df, trades).
       min_prof_thr : float
           Minimum profit threshold used in continuous signal calculation.
       smooth_win_sig : int, default 5
           Rolling window size for smoothing signals.
-      pre_entry_decay : float, default 0.05
+      pre_entry_decay : float, default 0.01
           Decay rate applied before the trade entry for signal calculation.
       buy_threshold : float, default 0.6
           Minimum level in the smoothed normalized signal to consider a candidate peak for a trade.
@@ -824,17 +809,18 @@ def add_trade_signal_to_results(results_by_day, min_prof_thr, regular_start, ref
     
     Returns:
       updated_results : dict
-          The results_by_day dictionary updated so that each day's DataFrame now includes:
+          The results_by_day_sign dictionary updated so that each day's DataFrame now includes:
               "signal", "signal_smooth", "signal_norm", "signal_smooth_norm", and "trade_action".
     """
     updated_results = {}
     
-    for day, (day_df, trades) in results_by_day.items():
+    for day, (day_df, trades) in results_by_day_trad.items():
+        
         # Step (A): Compute the continuous trading signal.
-        df = compute_continuous_signal(day_df, trades, min_prof_thr, smooth_win_sig, pre_entry_decay, is_centered)
+        df = compute_continuous_signal(day_df, trades, smooth_win_sig, pre_entry_decay, is_centered, reference_gain)
         
         # Step (B): Generate discrete trade actions (using trailing stop loss logic).
-        df = generate_trade_actions(df, smooth_win_sig, buy_threshold, trailing_stop_thresh, regular_start, reference_gain)
+        df = generate_trade_actions(df, buy_threshold, trailing_stop_thresh, regular_start)
         
         updated_results[day] = (df, trades)
     
@@ -842,9 +828,9 @@ def add_trade_signal_to_results(results_by_day, min_prof_thr, regular_start, ref
 
 #########################################################################################################
 
-def simulate_trading(results_by_day, regular_start, regular_end, ticker):
+def simulate_trading(results_by_day_sign, regular_start, regular_end, ticker):
     """
-    Processes the results_by_day dictionary (produced by identify_trades_daily) by simulating 
+    Processes the results_by_day_sign dictionary by simulating 
     trading for each day's DataFrame. It uses the precomputed "trade_action" column to drive 
     the simulation. The updated DataFrame is augmented with the following new columns:
       - "Position": cumulative number of shares held.
@@ -863,7 +849,7 @@ def simulate_trading(results_by_day, regular_start, regular_end, ticker):
     All preexisting columns in the input DataFrame are preserved.
     
     Parameters:
-      results_by_day : dict
+      results_by_day_sign : dict
           A dictionary mapping each trading day (Timestamp) to a tuple. The tuple can be either:
               (day_df, trades)
           or
@@ -885,7 +871,7 @@ def simulate_trading(results_by_day, regular_start, regular_end, ticker):
     updated_results = {}
     
     # Process each day. Unpack values depending on their length.
-    for day, value in results_by_day.items():
+    for day, value in results_by_day_sign.items():
         if len(value) == 2:
             day_df, trades = value
         elif len(value) == 3:
