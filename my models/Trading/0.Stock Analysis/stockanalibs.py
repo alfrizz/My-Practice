@@ -14,7 +14,7 @@ from IPython.display import display, HTML
 #########################################################################################################
 ticker = 'GOOGL'
 
-label_col      = "signal_smooth_adjusted"
+label_col      = "signal_smooth"
 feature_cols   = ["open", "high", "low", "close", "volume"]
 
 look_back = 60
@@ -77,11 +77,11 @@ def signal_parameters(ticker):
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
         # to define the smoothed signal:
-        smooth_win_sig=15
-        pre_entry_decay=0.005
+        smooth_win_sig=30
+        pre_entry_decay=0.003
         # to define the final buy and sell triggers:
-        buy_threshold=0.25
-        trailing_stop_thresh=0.25
+        buy_threshold=0.15
+        trailing_stop_thresh=0.2
         
     if ticker == 'TSLA':
         # to define the initial trades:
@@ -584,100 +584,57 @@ def compute_continuous_signal(
     reference_gain
 ):
     """
-    Build and scale a minute‐by‐minute “convenience‐to‐buy” signal for one calendar day.
-
-    Steps:
-      1) Raw signal:
-           For each merged trade ((buy_dt, sell_dt), (_, sell_price), _):
-             • P_max = sell_price
-             • For each timestamp t ≤ sell_dt:
-                 raw_diff = P_max − close[t]
-                 if raw_diff > 0:
-                     Δ = minutes from t to sell_dt
-                     signal[t] = max(signal[t], raw_diff * exp(−decay * Δ))
-
-      2) Smoothing:
-           signal_smooth = rolling‐mean(signal, window=smooth_win_sig,
-                                         center=is_centered, min_periods=1)
-
-      3) Normalization:
-           signal_norm        = (signal − min(signal)) / (max(signal) − min(signal))
-           signal_smooth_norm = (signal_smooth − min(signal_smooth)) / (max(signal_smooth) − min(signal_smooth))
-
-      4) Price‐based scaling:
-           daily_price_range = day_df["high"].max() − day_df["low"].min()
-           scale             = daily_price_range / reference_gain
-           signal_smooth_adjusted = signal_smooth_norm * scale
-
-    Parameters:
-      day_df               : pd.DataFrame for one trading day. Must include:
-                               - DatetimeIndex matching minute bars
-                               - columns "close", "high", "low"
-      trades               : list of merged trades for that day,
-                             each ((buy_dt, sell_dt), (buy_p, sell_p), profit_pc)
-      smooth_win_sig       : int     – rolling window size in minutes
-      decay                : float   – exponential‐decay rate per minute
-      is_centered          : bool    – whether to center the rolling window
-      reference_gain       : float   – long‐term avg daily price range
-                               (e.g. mean over days of high.max−low.min)
-
-    Returns:
-      pd.DataFrame : copy of day_df augmented with columns:
-                       • "signal"
-                       • "signal_smooth"
-                       • "signal_norm"
-                       • "signal_smooth_norm"
-                       • "signal_smooth_adjusted"
+    1) Build raw decayed signal         → signal_raw
+    2) Min–max normalize signal_raw     → signal_norm
+    3) Scale that 0–1 curve by today’s relative range vs. reference
+                                           → signal_scaled
+    4) Smooth the scaled curve          → signal_smooth
     """
-    # 0) work on a copy; initialize raw signal column
-    df = day_df.copy()
-    df["signal"] = 0.0
 
-    # 1) build the raw decayed signal up to the trade peaks
-    for (buy_dt, sell_dt), (_, sell_price), _ in trades:
-        P_max = sell_price
-        # restrict to times up to the sell timestamp
+    df = day_df.copy()
+
+    # 1) raw penalized signal
+    df["signal_raw"] = 0.0
+    for (_, sell_dt), (_, sell_price), _ in trades:
         mask = df.index <= sell_dt
         for t in df.index[mask]:
-            raw_diff = P_max - df.at[t, "close"]
-            if raw_diff <= 0:
+            diff = sell_price - df.at[t, "close"]
+            if diff <= 0:
                 continue
-            # apply exponential decay based on distance to the peak
-            delta_min = (sell_dt - t).total_seconds() / 60.0
-            penalized = raw_diff * math.exp(-decay * delta_min)
-            # keep the maximum across overlapping trades
-            df.at[t, "signal"] = max(df.at[t, "signal"], penalized)
+            Δ   = (sell_dt - t).total_seconds()/60.0
+            val = diff * math.exp(-decay * Δ)
+            df.at[t, "signal_raw"] = max(df.at[t, "signal_raw"], val)
 
-    # 2) smooth the raw signal with a rolling average
+    # 2) normalize raw to [0,1]
+    lo, hi = df["signal_raw"].min(), df["signal_raw"].max()
+    if hi > lo:
+        df["signal_norm"] = (df["signal_raw"] - lo) / (hi - lo)
+    else:
+        df["signal_norm"] = 0.0
+
+    # 3) compute today's relative range (14:30–21:00) & scale
+    reg   = df.between_time(regular_start, regular_end)
+    if not reg.empty:
+        day_hi = reg["high"].max()
+        day_lo = reg["low"].min()
+    else:
+        day_hi = day_df["high"].max()
+        day_lo = day_df["low"].min()
+
+    daily_rel_range = (day_hi - day_lo) / day_lo if day_lo else 0
+    scale           = daily_rel_range / reference_gain if reference_gain else 1.0
+
+    df["signal_scaled"] = df["signal_norm"] * scale
+
+    # 4) smooth the scaled curve
     df["signal_smooth"] = (
-        df["signal"]
+        df["signal_scaled"]
           .rolling(window=smooth_win_sig,
                    center=is_centered,
                    min_periods=1)
           .mean()
     )
 
-    # 3) per‐day min–max normalization to [0,1]
-    lo, hi = df["signal"].min(), df["signal"].max()
-    if hi > lo:
-        df["signal_norm"] = (df["signal"] - lo) / (hi - lo)
-    else:
-        df["signal_norm"] = 0.0
-
-    slo, shi = df["signal_smooth"].min(), df["signal_smooth"].max()
-    if shi > slo:
-        df["signal_smooth_norm"] = (df["signal_smooth"] - slo) / (shi - slo)
-    else:
-        df["signal_smooth_norm"] = 0.0
-
-    # 4) relative price‐range scaling
-    day_hi = day_df["high"].max()
-    day_lo = day_df["low"].min()
-    daily_rel_range = (day_hi - day_lo) / day_lo
-
-    scale = daily_rel_range / reference_gain
-    df["signal_smooth_adjusted"] = df["signal_smooth_norm"] * scale
-    
     return df
 
 
@@ -731,7 +688,7 @@ def generate_trade_actions(
         regular_start = pd.to_datetime(regular_start).time()
 
     # Extract series for speed
-    sig = df["signal_smooth_adjusted"].values
+    sig = df["signal_smooth"].values
     closes = df["close"].values
     times = df.index.time
 
@@ -809,8 +766,7 @@ def add_trade_signal_to_results(results_by_day_trad, min_prof_thr, regular_start
     
     Returns:
       updated_results : dict
-          The results_by_day_sign dictionary updated so that each day's DataFrame now includes:
-              "signal", "signal_smooth", "signal_norm", "signal_smooth_norm", and "trade_action".
+          The results_by_day_sign dictionary updated 
     """
     updated_results = {}
     
