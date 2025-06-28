@@ -17,7 +17,7 @@ ticker = 'GOOGL'
 label_col      = "signal_smooth"
 feature_cols   = ["open", "high", "low", "close", "volume"]
 
-look_back = 60
+look_back = 90
 red_pretr_win = 1 # factor to reduce the smoothing of the pretrade smoothing window
 is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
 
@@ -72,13 +72,13 @@ def signal_parameters(ticker):
     if ticker == 'GOOGL':
         # to define the initial trades:
         min_prof_thr=0.2 
-        max_down_prop=0.5
+        max_down_prop=0.4
         gain_tightening_factor=0.1
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
         # to define the smoothed signal:
         smooth_win_sig=30
-        pre_entry_decay=0.003
+        pre_entry_decay=0.005
         # to define the final buy and sell triggers:
         buy_threshold=0.15
         trailing_stop_thresh=0.2
@@ -99,7 +99,33 @@ def signal_parameters(ticker):
 
     return min_prof_thr, max_down_prop, gain_tightening_factor, smooth_win_sig, pre_entry_decay, \
         buy_threshold, trailing_stop_thresh, merging_retracement_thr, merging_time_gap_thr
-    
+
+# run the function to get the parameters ("_man": manually assigned)
+min_prof_thr_man, max_down_prop_man, gain_tightening_factor_man, smooth_win_sig_man, pre_entry_decay_man, \
+buy_threshold_man, trailing_stop_thresh_man, merging_retracement_thr_man, merging_time_gap_thr_man = signal_parameters(ticker)
+
+#########################################################################################################
+
+def compute_reference_gain(df):
+    """
+    Computes the *relative* reference gain (%) as the average daily % range:
+       daily_pct_range = (high.max - low.min) / low.min
+    Returns a float like 0.025 if on average days swing 2.5%.
+    (used afterwards to adjust the smoothed continuous signal , while normalizing it)
+    """
+    # Ensure your index is datetime
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+
+    # For each calendar day compute (high.max - low.min) / low.min
+    daily_pct = (
+        df.groupby(df.index.date)
+          .apply(lambda d: (d["high"].max() - d["low"].min()) / d["low"].min())
+    )
+    # If you want it in percent points, multiply by 100 here.
+    return daily_pct.mean()
+
+
 #########################################################################################################
 
 def plot_close_volume(df, title="Close Price and Volume"):
@@ -247,84 +273,77 @@ def is_dst_for_day(day, tz_str="US/Eastern"):
         dt = dt.astimezone(tz)
     return bool(dt.dst())
 
-def smooth_prepost_trading_data(df, regular_start, regular_end, red_pretr_win, tz_str="US/Eastern"):
+
+
+def prepare_interpolate_data(
+    df,
+    regular_start,
+    regular_end,
+    red_pretr_win=1,
+    tz_str="US/Eastern"
+):
     """
-    Modifies the input DataFrame (using a copy) by first adjusting each day's timestamps based solely
-    on DST detection. For every day, if DST is in effect (as determined by is_dst_for_day), we assume
-    the day’s timestamps are recorded in solar time and add one hour so that they line up with legal time.
-    
-    Then, the function smooths all data outside the regular trading session (defined by regular_start and 
-    regular_end) using a moving average. The smoothing window is computed from the ratio of average volumes 
-    in the regular and non-regular sessions. The original columns are preserved with an "_orig" suffix.
-    
-    Within the smoothing loop:
-      - Price columns (open, high, low, close, ask, bid) are rounded to 4 decimals.
-      - The volume column is rounded to the nearest integer.
-    
-    Finally, the DataFrame's index is updated to the adjusted timestamps.
-    
-    Parameters:
-      df : pd.DataFrame
-          DataFrame with columns: open, high, low, close, volume, ask, bid and a DatetimeIndex.
-      regular_start : str or datetime.time
-          The target start time of the regular session (e.g. "13:30" or a time object).
-      regular_end : str or datetime.time
-          The target end time of the regular session (e.g. "20:00" or a time object).
-      red_pretr_win : float
-          Factor used to reduce the pre-trading smoothing window.
-      tz_str : str, default "US/Eastern"
-          The timezone used to detect DST.
-    
-    Returns:
-      df : pd.DataFrame
-          A modified copy of the DataFrame with updated (shifted) columns and index.
+    1) DST-shift timestamps (add 1h on DST days)
+    2) Smooth pre/post-market bars by volume ratio
+    3) For each calendar day, reindex to full-minute grid and linearly interpolate
     """
-    # Work on a copy.
     df = df.copy()
-    df_orig = df.add_suffix("_orig")  # preserve actual original columns
+    # keep originals
+    df_orig = df.add_suffix("_orig")
     df = df.join(df_orig)
-    
-    # Identify the working columns (those not ending with "_orig") and convert them to float.
-    working_cols = [col for col in df.columns if not col.endswith("_orig")]
-    df[working_cols] = df[working_cols].astype(np.float64)
-    
-    # --- DST Adjustment: update timestamps for each day ---
-    # Simply detect if the day is in DST. If yes, assume its timestamps are in solar time and *add* one hour.
-    adj_times = df.index.to_series().copy()
-    for day, group in df.groupby(df.index.normalize()):
-        if is_dst_for_day(day, tz_str):
-            # For days in DST, add 1 hour (shifting in the opposite direction than previously)
-            adj_times.loc[group.index] = group.index + pd.Timedelta(hours=1)
-        else:
-            adj_times.loc[group.index] = group.index
 
-    # Create masks for regular vs. non-regular rows using the adjusted times.
-    target_start = pd.to_datetime(regular_start).time() if isinstance(regular_start, str) else regular_start
-    target_end   = pd.to_datetime(regular_end).time() if isinstance(regular_end, str) else regular_end
-    regular_mask = (adj_times.dt.time >= target_start) & (adj_times.dt.time <= target_end)
-    nonregular_mask = ~regular_mask
+    # identify working cols and cast to float
+    working = [c for c in df.columns if not c.endswith("_orig")]
+    df[working] = df[working].astype(np.float64)
 
-    # Compute the smoothing window size based on volume ratios.
-    avg_vol_regular = df.loc[regular_mask, "volume_orig"].mean()
-    avg_vol_nonregular = df.loc[nonregular_mask, "volume_orig"].mean()
-    if pd.isna(avg_vol_nonregular) or avg_vol_nonregular == 0:
-        avg_vol_nonregular = red_pretr_win
-    ratio = avg_vol_regular / avg_vol_nonregular
-    window_nonregular = 1 if pd.isna(ratio) else max(int(ratio / red_pretr_win), 1)
-    
-    # Smooth each working column for non-regular rows.
-    for col in working_cols:
-        series_nr = df.loc[nonregular_mask, col].reset_index(drop=True)
-        smoothed = series_nr.rolling(window=window_nonregular, min_periods=1).mean().values.astype(np.float64)
+    # 1) DST adjustment
+    ts = df.index.to_series()
+    for day, grp in df.groupby(df.index.normalize()):
+        shift = pd.Timedelta(hours=1) if is_dst_for_day(day, tz_str) else pd.Timedelta(0)
+        ts.loc[grp.index] = grp.index + shift
+    df.index = ts
+    df = df.sort_index()
+
+    # 2) Build masks
+    start_t = (pd.to_datetime(regular_start).time()
+               if isinstance(regular_start, str) else regular_start)
+    end_t   = (pd.to_datetime(regular_end).time()
+               if isinstance(regular_end, str)   else regular_end)
+    times = df.index.time
+    reg_mask    = (times >= start_t) & (times <= end_t)
+    nonreg_mask = ~reg_mask
+
+    # 3) Compute smoothing window by volume ratio
+    v_reg = df.loc[reg_mask,    "volume_orig"].mean()
+    v_non = df.loc[nonreg_mask, "volume_orig"].mean()
+    if pd.isna(v_non) or v_non == 0:
+        v_non = red_pretr_win
+    ratio = v_reg / v_non if v_non else np.nan
+    w_non  = 1 if pd.isna(ratio) else max(int(ratio / red_pretr_win), 1)
+
+    # 4) Smooth non-regular bars
+    for col in working:
+        vals = df.loc[nonreg_mask, col].reset_index(drop=True)
+        sm   = vals.rolling(window=w_non, min_periods=1).mean()
         if col != "volume":
-            df.loc[nonregular_mask, col] = np.round(smoothed, 4).astype(np.float64)
+            df.loc[nonreg_mask, col] = np.round(sm, 4).values
         else:
-            df.loc[nonregular_mask, col] = np.rint(smoothed).astype(np.int64)
-    
-    # Finally, update the DataFrame's index to use the adjusted times.
-    df.index = adj_times
+            df.loc[nonreg_mask, col] = np.rint(sm).astype(np.int64).values
 
-    return df
+    # 5) Fill every minute within each calendar day
+    filled = []
+    for day, grp in df.groupby(df.index.normalize()):
+        full_idx = pd.date_range(
+            start=grp.index.min(),
+            end=grp.index.max(),
+            freq="1min"
+        )
+        grp_f = grp.reindex(full_idx).interpolate(
+            method="linear", limit_direction="both"
+        )
+        filled.append(grp_f)
+
+    return pd.concat(filled)
 
 
 
@@ -975,4 +994,234 @@ def simulate_trading(results_by_day_sign, regular_start, regular_end, ticker):
         df_sim.to_csv(f'backtest/df_label_{ticker}.csv', index=True)
     
     return updated_results
+
+
+#########################################################################################################
+
+
+def run_trading_pipeline(df_prep, 
+                         reference_gain,
+                         min_prof_thr=min_prof_thr_man, 
+                         max_down_prop=max_down_prop_man, 
+                         gain_tightening_factor=gain_tightening_factor_man, 
+                         smooth_win_sig=smooth_win_sig_man, 
+                         pre_entry_decay=pre_entry_decay_man,
+                         buy_threshold=buy_threshold_man, 
+                         trailing_stop_thresh=trailing_stop_thresh_man, 
+                         merging_retracement_thr=merging_retracement_thr_man, 
+                         merging_time_gap_thr=merging_time_gap_thr_man,
+                         day_to_check=None):
+
+    trades_by_day = identify_trades_daily(
+        df=df_prep,
+        min_prof_thr=min_prof_thr,
+        max_down_prop=max_down_prop,
+        gain_tightening_factor=gain_tightening_factor,
+        regular_start_shifted=regular_start_shifted,
+        regular_end=regular_end,
+        merging_retracement_thr=merging_retracement_thr,
+        merging_time_gap_thr=merging_time_gap_thr,
+        day_to_check=day_to_check
+    )
+
+    signaled = add_trade_signal_to_results(
+        results_by_day_trad=trades_by_day,
+        min_prof_thr=min_prof_thr,
+        regular_start=regular_start,
+        reference_gain=reference_gain,
+        smooth_win_sig=smooth_win_sig,
+        pre_entry_decay=pre_entry_decay,
+        buy_threshold=buy_threshold,
+        trailing_stop_thresh=trailing_stop_thresh,
+        is_centered=is_centered
+    )
+
+    sim_results = simulate_trading(
+        results_by_day_sign=signaled,
+        regular_start=regular_start,
+        regular_end=regular_end,
+        ticker=ticker
+    )
+
+    if day_to_check:
+        target = pd.to_datetime(day_to_check).date()
+        for ts, triple in sim_results.items():
+            if ts.date() == target:
+                return triple
+        return None
+    return sim_results
+
+#########################################################################################################
+
+
+def plot_trades(df, trades, buy_threshold, performance_stats, trade_color="green"):
+    """
+    Plots the overall close-price series plus trade intervals and two continuous signals,
+    with the signals shown on a secondary y-axis.
+
+    • The base trace (grey) plots the close-price series on the primary y-axis.
+    • Trade traces (green by default) indicate the intervals for each trade from the original trade list.
+    • A dotted blue line shows the raw normalized "signal" on a secondary y-axis.
+    • A dashed red line shows the smooth normalized signal on the secondary y-axis.
+    • A horizontal dotted line is drawn at the buy_threshold.
+    • Additionally, areas between each buy and sell event determined by the new 
+      "trade_action" field (buy=+1, sell=-1) are highlighted (in orange).
+    • An update menu is added with two buttons:
+         - "Hide Trades": Hides only the trade-specific traces.
+         - "Show Trades": Makes all traces visible.
+
+    Parameters:
+      df : pd.DataFrame
+          DataFrame with a datetime index and at least the columns "close", "signal_scaled", "signal_smooth", and "trade_action".
+      trades : list
+          A list of tuples, each in the form:
+            ((buy_date, sell_date), (buy_price, sell_price), profit_pc).
+      buy_threshold : float
+          The threshold used for candidate buy detection (shown as a horizontal dotted line on the 
+          secondary y-axis).
+      performance_stats : dict, optional
+          Dictionary containing performance metrics. If provided and if it contains keys
+          "Trade Gains ($)" and "Trade Gains (%)" (each a list), they will be added to the
+          trade annotations. 
+      trade_color : str, optional
+          The color to use for the original trade traces.
+    """
+    fig = go.Figure()
+    
+    # Trace 0: Base close-price trace.
+    fig.add_trace(go.Scatter(
+        x=df.index,
+        y=df['close'],
+        mode='lines',
+        line=dict(color='grey', width=1),
+        name='Close Price',
+        hoverinfo='x+y',
+        hovertemplate="Date: %{x}<br>Close: %{y:.2f}<extra></extra>",
+    ))
+    
+    # Trade traces: one per original trade.
+    for i, trade in enumerate(trades):
+        # Unpack the trade tuple: ((buy_date, sell_date), (buy_price, sell_price), profit_pc)
+        (buy_date, sell_date), (_, _), trade_return = trade
+        trade_df = df.loc[buy_date:sell_date]
+        fig.add_trace(go.Scatter(
+            x=trade_df.index,
+            y=trade_df['close'],
+            mode='lines+markers',
+            line=dict(color=trade_color, width=3),
+            marker=dict(size=4, color=trade_color),
+            name=f"Trade {i+1}",
+            hoveron='points',
+            hovertemplate=f"Trade {i+1}: Return: {trade_return:.2f}%<extra></extra>",
+            visible=True
+        ))
+        
+    # --------------------------------------------------------------------
+    # New Trade Action Highlights: using the 'trade_action' field.
+    # Extract rows where trade_action is not zero.
+    trade_events = df[df["trade_action"] != 0]["trade_action"]
+    pairs = []
+    prev_buy = None
+    for timestamp, action in trade_events.items():
+        if action == 1:   # Buy signal
+            prev_buy = timestamp
+        elif action == -1 and prev_buy is not None:
+            pairs.append((prev_buy, timestamp))
+            prev_buy = None
+    # For each buy-sell pair, add a vertical shaded region with annotation.
+    for j, (buy_ts, sell_ts) in enumerate(pairs):
+        if (performance_stats is not None and 
+            "Trade Gains ($)" in performance_stats and 
+            "Trade Gains (%)" in performance_stats and 
+            len(performance_stats["Trade Gains ($)"]) > j and 
+            len(performance_stats["Trade Gains (%)"]) > j):
+            ann_text = (f"TA Trade {j+1}<br>$: {performance_stats['Trade Gains ($)'][j]}<br>"
+                        f"%: {performance_stats['Trade Gains (%)'][j]}")
+        else:
+            ann_text = f"TA Trade {j+1}"
+            
+        fig.add_vrect(
+            x0=buy_ts, x1=sell_ts,
+            fillcolor="orange", opacity=0.25,
+            line_width=0,
+            annotation_text=ann_text,
+            annotation_position="top left",
+            annotation_font_color="orange"
+        )
+    # --------------------------------------------------------------------
+    
+    # Raw Signal trace: Plot the normalized "signal" on a secondary y-axis.
+    fig.add_trace(go.Scatter(
+        x=df.index,
+        y=df['signal_scaled'],
+        mode='lines',
+        line=dict(color='blue', width=2, dash='dot'),
+        name='Raw Sign.',
+        hovertemplate="Date: %{x}<br>Signal: %{y:.2f}<extra></extra>",
+        visible=True,
+        yaxis="y2"
+    ))
+    
+    # Smooth Signal trace: Plot the smooth normalized signal on a secondary y-axis.
+    fig.add_trace(go.Scatter(
+        x=df.index,
+        y=df['signal_smooth'],
+        mode='lines',
+        line=dict(color='red', width=2, dash='dash'),
+        name='Smooth Sign',
+        hovertemplate="Date: %{x}<br>Smooth Signal: %{y:.2f}<extra></extra>",
+        visible=True,
+        yaxis="y2"
+    ))
+    
+    # Add a horizontal dotted line for the buy_threshold (on secondary y-axis).
+    fig.add_hline(y=buy_threshold, line=dict(color="purple", dash="dot"),
+                  annotation_text="Buy Threshold", annotation_position="top left", yref="y2")
+    
+    # Total traces: 1 Base + n_trades (original trades) + 2 (for the signal traces).
+    n_trades = len(trades)
+    total_traces = 1 + n_trades + 2
+    vis_show = [True] * total_traces  
+    vis_hide = [True] + ["legendonly"] * n_trades + [True, True]
+    
+    fig.update_layout(
+        updatemenus=[
+            {
+                "type": "buttons",
+                "direction": "left",
+                "buttons": [
+                    {
+                        "label": "Hide Trades",
+                        "method": "update",
+                        "args": [{"visible": vis_hide}],
+                    },
+                    {
+                        "label": "Show Trades",
+                        "method": "update",
+                        "args": [{"visible": vis_show}],
+                    },
+                ],
+                "pad": {"r": 10, "t": 10},
+                "showactive": True,
+                "x": 0.9,
+                "xanchor": "left",
+                "y": 1.1,
+                "yanchor": "top",
+            }
+        ],
+        hovermode="x unified",
+        template="plotly_white",
+        title="Close Price, Trade Intervals, and Signals",
+        xaxis_title="Datetime",
+        yaxis_title="Close Price",
+        height=700,
+        yaxis2=dict(
+            title="Signal (Normalized)",
+            overlaying="y",
+            side="right",
+            showgrid=False,
+        )
+    )
+    
+    fig.show()
 
