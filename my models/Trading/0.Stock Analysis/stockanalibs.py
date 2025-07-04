@@ -123,7 +123,7 @@ def compute_reference_gain(df):
           .apply(lambda d: (d["high"].max() - d["low"].min()) / d["low"].min())
     )
     # If you want it in percent points, multiply by 100 here.
-    return daily_pct.mean()
+    return daily_pct.median() # or mean()
 
 
 #########################################################################################################
@@ -594,68 +594,83 @@ def identify_trades_daily(df, min_prof_thr, max_down_prop, gain_tightening_facto
 
 #########################################################################################################
 
+
 def compute_continuous_signal(
     day_df,
     trades,
     smooth_win_sig,
     decay,
     is_centered,
-    reference_gain
+    reference_gain,
+    regular_start=regular_start,
+    regular_end=regular_end,
+    clip_quantiles=(0.01, 0.99),
+    scale_bounds=(0.5, 2.0)
 ):
     """
-    1) Build raw decayed signal         → signal_raw
-    2) Min–max normalize signal_raw     → signal_norm
-    3) Scale that 0–1 curve by today’s relative range vs. reference
-                                           → signal_scaled
-    4) Smooth the scaled curve          → signal_smooth
+    1) Build raw decayed signal → signal_raw
+    2) Robust min–max normalize signal_raw → signal_norm
+    3) Compute today’s intraday range robustly → raw_range
+    4) Compute and clip scale relative to reference_gain → scale
+    5) Apply scale → signal_scaled
+    6) Smooth the scaled curve → signal_smooth
     """
-
+    # Make a working copy
     df = day_df.copy()
 
-    # 1) raw penalized signal
+    # 1) Build raw decayed signal: for each sell event, backfill a decaying value
     df["signal_raw"] = 0.0
     for (_, sell_dt), (_, sell_price), _ in trades:
         mask = df.index <= sell_dt
-        for t in df.index[mask]:
-            diff = sell_price - df.at[t, "close"]
-            if diff <= 0:
-                continue
-            Δ   = (sell_dt - t).total_seconds()/60.0
-            val = diff * math.exp(-decay * Δ)
-            df.at[t, "signal_raw"] = max(df.at[t, "signal_raw"], val)
+        # time difference in minutes
+        delta_mins = (sell_dt - df.index[mask]).total_seconds() / 60.0
+        # positive profit diffs only
+        diffs = (sell_price - df.loc[mask, "close"]).clip(lower=0)
+        # exponential decay
+        vals = diffs * np.exp(-decay * delta_mins)
+        # take the maximum decay-value per timestamp across all sells
+        df.loc[mask, "signal_raw"] = np.maximum(df.loc[mask, "signal_raw"], vals)
 
-    # 2) normalize raw to [0,1]
-    lo, hi = df["signal_raw"].min(), df["signal_raw"].max()
+    # 2) Robust normalize to [0,1] using clipped percentiles
+    lo_q, hi_q = clip_quantiles
+    lo = df["signal_raw"].quantile(lo_q)
+    hi = df["signal_raw"].quantile(hi_q)
     if hi > lo:
-        df["signal_norm"] = (df["signal_raw"] - lo) / (hi - lo)
+        clipped = df["signal_raw"].clip(lower=lo, upper=hi)
+        df["signal_norm"] = (clipped - lo) / (hi - lo)
     else:
         df["signal_norm"] = 0.0
 
-    # 3) compute today's relative range (14:30–21:00) & scale
-    reg   = df.between_time(regular_start, regular_end)
-    if not reg.empty:
-        day_hi = reg["high"].max()
-        day_lo = reg["low"].min()
+    # 3) Compute today's intraday high/low robustly (quantile-based)
+    reg = df.between_time(regular_start, regular_end)
+    highs = reg["high"] if not reg.empty else df["high"]
+    lows  = reg["low"]  if not reg.empty else df["low"]
+    # use 99th/1st percentiles to ignore bar-level spikes
+    day_hi = highs.quantile(0.99)
+    day_lo = lows.quantile(0.01)
+
+    # relative range for the day
+    raw_range = (day_hi - day_lo) / day_lo if day_lo else 0.0
+
+    # 4) Compute scale as ratio to reference_gain, then clip to bounds
+    if reference_gain:
+        raw_scale = raw_range / reference_gain
     else:
-        day_hi = day_df["high"].max()
-        day_lo = day_df["low"].min()
+        raw_scale = 1.0
+    min_s, max_s = scale_bounds
+    scale = np.clip(raw_scale, min_s, max_s)
 
-    daily_rel_range = (day_hi - day_lo) / day_lo if day_lo else 0
-    scale           = daily_rel_range / reference_gain if reference_gain else 1.0
-
+    # 5) Apply scale to normalized signal
     df["signal_scaled"] = df["signal_norm"] * scale
 
-    # 4) smooth the scaled curve
+    # 6) Smooth the scaled signal
     df["signal_smooth"] = (
         df["signal_scaled"]
-          .rolling(window=smooth_win_sig,
-                   center=is_centered,
-                   min_periods=1)
+          .rolling(window=smooth_win_sig, center=is_centered, min_periods=1)
           .mean()
     )
 
     return df
-
 
 
 #########################################################################################################

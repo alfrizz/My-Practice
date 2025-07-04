@@ -22,6 +22,7 @@ my models/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.safetensors
 my models/Trading/0.Stock Analysis/daily_archives
 my models/Trading/0.Stock Analysis/Intraday stocks
 my models/Trading/0.Stock Analysis/dfs training
+docker_files/cudnn-linux-x86_64-8.9.7.29_cuda12-archive
 
 # Ignore all desktop.ini files
 desktop.ini

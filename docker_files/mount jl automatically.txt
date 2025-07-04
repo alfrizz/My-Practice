@@ -1,0 +1,78 @@
+--------------------------------- jl & automount (no docker) -----------------------------------------------------
+
+Full Setup Recap: Your jl Launcher
+Below is every command and script you need to reproduce your working jl shortcut from scratch. Copy & paste each section, or save this as your personal cheat-sheet.
+
+1. Install pipx & JupyterLab
+bash
+sudo apt update
+sudo apt install -y pipx
+pipx ensurepath
+
+# Close and reopen your shell if prompted,
+# then install JupyterLab under pipx:
+pipx install jupyterlab
+2. Update your ~/.bashrc
+Append these lines to the end of ~/.bashrc, then reload with source ~/.bashrc:
+
+bash
+# Ensure pipx and ~/bin are on PATH
+export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+
+# Helper function to inject new packages into JupyterLab
+installjl(){
+  pipx inject jupyterlab "$@"
+}
+export -f installjl
+3. Create the jl Launcher Script
+Save this entire block as ~/bin/jl:
+
+bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 0) Capture your UID/GID
+ME_UID=$(id -u)
+ME_GID=$(id -g)
+
+# 1) Force-remount G: with write perms for you
+sudo umount /mnt/g 2>/dev/null || true
+sudo mount -t drvfs G: /mnt/g \
+  -o metadata,uid=$ME_UID,gid=$ME_GID,umask=000,fmask=111
+
+# 2) Link the full “my models” folder
+rm -rf "$HOME/MyModels"
+ln -s "/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice/my models" \
+      "$HOME/MyModels"
+
+# 3) Choose where to start (default the parent folder)
+TARGET="${1:-$HOME/MyModels}"
+cd "$TARGET" || { echo "ERROR: cannot cd to '$TARGET'" >&2; exit 1; }
+
+# 4) Launch the pipx-managed JupyterLab
+exec jupyter-lab \
+  --no-browser \
+  --ip=0.0.0.0 \
+  --port=8888 \
+  --NotebookApp.notebook_dir="$TARGET"
+4. Make It Executable & Verify
+bash
+chmod +x ~/bin/jl
+
+# Ensure ~/bin is on your PATH (if not already)
+grep -qxF 'export PATH="$HOME/bin:$PATH"' ~/.bashrc \
+  || echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+which jl   # should print /home/you/bin/jl
+5. Usage
+Start JupyterLab in your “my models” folder:
+
+bash
+jl
+Install new libraries into the same environment:
+
+bash
+pipx inject jupyterlab scipy pandas etc
+
+
