@@ -23,7 +23,5 @@ my models/Trading/0.Stock Analysis/daily_archives
 my models/Trading/0.Stock Analysis/Intraday stocks
 my models/Trading/0.Stock Analysis/dfs training
 
-# Ignore all desktop.ini files
-desktop.ini
 *.ini
 *.env
