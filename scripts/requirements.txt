@@ -1,0 +1,7 @@
+Django==5.2.4
+Scrapy==2.13.3
+jupyterlab>=4.0.0
+numpy
+pandas
+plotly
+seaborn

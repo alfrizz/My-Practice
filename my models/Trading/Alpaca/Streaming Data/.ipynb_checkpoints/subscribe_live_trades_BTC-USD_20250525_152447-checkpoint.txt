@@ -1,0 +1,1 @@
+{"symbol": "BTC/USD", "timestamp": "2025-05-25T13:25:55.788694+00:00", "exchange": null, "price": 107492.853, "size": 0.004941048, "id": 1956941460048527609, "conditions": null, "tape": null}
