@@ -1,13 +1,18 @@
-FROM nvcr.io/nvidia/pytorch:24.07-py3
+# ─────────────────────────────────────────────────────
+# 0) Let the builder pick the base image at build time
+# ─────────────────────────────────────────────────────
+ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:25.02-py3
+FROM ${BASE_IMAGE}
 
+# ─────────────────────────────────────────────────────
+# 1) Set up workspace & deps
+# ─────────────────────────────────────────────────────
 WORKDIR /workspace
-
-# Install Python dependencies
-COPY requirements.txt .
+COPY scripts/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all project files
+# ─────────────────────────────────────────────────────
+# 2) Copy your code & launch JupyterLab
+# ─────────────────────────────────────────────────────
 COPY . /workspace
-
-# Launch JupyterLab
 CMD ["jupyter", "lab", "--no-browser", "--ip=0.0.0.0", "--allow-root", "--NotebookApp.token=''"]
