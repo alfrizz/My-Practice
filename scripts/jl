@@ -51,6 +51,8 @@ docker build \
 # ──────────────────────────────────────────────────────────────────────────────
 docker run -d --gpus all \
   --name "$CONTAINER" \
+  --shm-size=16G \
+  --ipc=host \
   -v "$PROJECT:/workspace:rw" \
   -p 8888:8888 \
   gpu-jl:custom \
