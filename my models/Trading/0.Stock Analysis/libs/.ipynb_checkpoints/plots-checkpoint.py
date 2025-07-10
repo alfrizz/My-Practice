@@ -115,7 +115,7 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
-def plot_trades(df, trades, buy_threshold, performance_stats, trade_color="green"):
+def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold, performance_stats, trade_color="green"):
     """
     Plots the overall close-price series plus trade intervals and two continuous signals,
     with the signals shown on a secondary y-axis.
@@ -126,14 +126,14 @@ def plot_trades(df, trades, buy_threshold, performance_stats, trade_color="green
     • A dashed red line shows the smooth normalized signal on the secondary y-axis.
     • A horizontal dotted line is drawn at the buy_threshold.
     • Additionally, areas between each buy and sell event determined by the new 
-      "trade_action" field (buy=+1, sell=-1) are highlighted (in orange).
+      col_action field (buy=+1, sell=-1) are highlighted (in orange).
     • An update menu is added with two buttons:
          - "Hide Trades": Hides only the trade-specific traces.
          - "Show Trades": Makes all traces visible.
 
     Parameters:
       df : pd.DataFrame
-          DataFrame with a datetime index and at least the columns "close", "signal_scaled", "signal_smooth", and "trade_action".
+          DataFrame with a datetime index and at least the columns "close", "signal_scaled", "signal_smooth", and col_action.
       trades : list
           A list of tuples, each in the form:
             ((buy_date, sell_date), (buy_price, sell_price), profit_pc).
@@ -178,9 +178,9 @@ def plot_trades(df, trades, buy_threshold, performance_stats, trade_color="green
         ))
         
     # --------------------------------------------------------------------
-    # New Trade Action Highlights: using the 'trade_action' field.
-    # Extract rows where trade_action is not zero.
-    trade_events = df[df["trade_action"] != 0]["trade_action"]
+    # New Trade Action Highlights: using the col_action field.
+    # Extract rows where col_action is not zero.
+    trade_events = df[df[col_action] != 0][col_action]
     pairs = []
     prev_buy = None
     for timestamp, action in trade_events.items():
@@ -211,25 +211,25 @@ def plot_trades(df, trades, buy_threshold, performance_stats, trade_color="green
         )
     # --------------------------------------------------------------------
     
-    # Raw Signal trace: Plot the normalized "signal" on a secondary y-axis.
+    # Signal1 trace on a secondary y-axis.
     fig.add_trace(go.Scatter(
         x=df.index,
-        y=df['signal_scaled'],
+        y=df[col_signal1],
         mode='lines',
         line=dict(color='blue', width=2, dash='dot'),
-        name='Raw Sign.',
+        name=col_signal1,
         hovertemplate="Date: %{x}<br>Signal: %{y:.2f}<extra></extra>",
         visible=True,
         yaxis="y2"
     ))
     
-    # Smooth Signal trace: Plot the smooth normalized signal on a secondary y-axis.
+    # Signal2 trace on a secondary y-axis.
     fig.add_trace(go.Scatter(
         x=df.index,
-        y=df['signal_smooth'],
+        y=df[col_signal2],
         mode='lines',
         line=dict(color='red', width=2, dash='dash'),
-        name='Smooth Sign',
+        name=col_signal2,
         hovertemplate="Date: %{x}<br>Smooth Signal: %{y:.2f}<extra></extra>",
         visible=True,
         yaxis="y2"

@@ -270,7 +270,7 @@ def prepare_interpolate_data(
 
 #########################################################################################################
 
-
+# B1.1
 def identify_trades(df, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr):
     """
     Identifies trades from a one-minute bars DataFrame using a retracement rule and then iteratively merges
@@ -438,7 +438,7 @@ def identify_trades(df, min_prof_thr, max_down_prop, gain_tightening_factor, mer
 
 
 #########################################################################################################
-
+# B1
 def identify_trades_daily(
     df,                          # pd.DataFrame: minute-indexed, DST-adjusted, interpolated
     min_prof_thr,                # float: minimum profit percentage (%) to retain a trade
@@ -503,7 +503,7 @@ def identify_trades_daily(
 
 #########################################################################################################
 
-
+# B2.1
 def compute_continuous_signal(
     day_df,
     trades,
@@ -584,17 +584,19 @@ def compute_continuous_signal(
 
 #########################################################################################################
 
-
+# B2.2
 def generate_trade_actions(
     df,
+    col_signal,
+    col_action,
     buy_threshold,
     trailing_stop_thresh,
     regular_start
 ):
     """
     Given a DataFrame for one trading day that already contains:
-        • "signal_smooth"  — your smoothed continuous signal
-        • "close"          — the price series
+        • col_signal           — signal to use for trading
+        • "close"              — the price series
     
     This function strips out any normalization or scaling steps and simply:
       1) Buys when the smoothed signal ≥ buy_threshold (only at/after regular_start)
@@ -604,16 +606,16 @@ def generate_trade_actions(
 
     Parameters:
       df : pd.DataFrame
-          Must have a DatetimeIndex, and columns "signal_smooth" and "close".
+          Must have a DatetimeIndex, and column "close".
       buy_threshold : float
-          Cut-off on signal_smooth at which to enter a trade.
+          Cut-off on signal at which to enter a trade.
       trailing_stop_thresh : float
           Percent trailing stop (e.g. 1.5 means 1.5%).
       regular_start : datetime.time or str
           Don’t enter a new trade before this time (e.g. "13:30").
 
     Returns:
-      pd.DataFrame : original df plus "trade_action" column:
+      pd.DataFrame : original df plus col_action column:
                      +1 = buy, 0 = hold, -1 = sell
     """
     # Work on a copy to avoid side-effects
@@ -621,7 +623,7 @@ def generate_trade_actions(
     n = len(df)
 
     # Initialize trade_action and state
-    df["trade_action"] = 0
+    df[col_action] = 0
     in_trade = False
     entry_price = None
     max_price = None
@@ -631,7 +633,7 @@ def generate_trade_actions(
         regular_start = pd.to_datetime(regular_start).time()
 
     # Extract series for speed
-    sig = df["signal_smooth"].values
+    sig = df[col_signal].values
     closes = df["close"].values
     times = df.index.time
 
@@ -642,7 +644,7 @@ def generate_trade_actions(
         if not in_trade:
             # Check buy condition: signal crosses threshold, and time ≥ regular_start
             if sig[i] >= buy_threshold and t >= regular_start:
-                df.iat[i, df.columns.get_loc("trade_action")] = 1
+                df.iat[i, df.columns.get_loc(col_action)] = 1
                 in_trade = True
                 entry_price = price
                 max_price = price
@@ -657,24 +659,23 @@ def generate_trade_actions(
 
             # Sell if price falls below the stop
             if price < stop_level and sig[i] < buy_threshold:
-                df.iat[i, df.columns.get_loc("trade_action")] = -1
+                df.iat[i, df.columns.get_loc(col_action)] = -1
                 in_trade = False
             else:
-                df.iat[i, df.columns.get_loc("trade_action")] = 0
+                df.iat[i, df.columns.get_loc(col_action)] = 0
 
     # If still in trade at end-of-day, force a sell on last row
     if in_trade:
-        df.iat[-1, df.columns.get_loc("trade_action")] = -1
+        df.iat[-1, df.columns.get_loc(col_action)] = -1
 
     return df
 
 
 #########################################################################################################
 
-
-def add_trade_signal_to_results(results_by_day_trad, min_prof_thr, regular_start, reference_gain,
-                                smooth_win_sig, pre_entry_decay,
-                                buy_threshold, trailing_stop_thresh, is_centered):
+# B2
+def add_trade_signal_to_results(results_by_day_trad, col_signal, col_action, min_prof_thr, regular_start, reference_gain,
+                                smooth_win_sig, pre_entry_decay, buy_threshold, trailing_stop_thresh, is_centered):
     """
     Updates the input dictionary (results_by_day_trad) by applying two steps:
     
@@ -695,6 +696,10 @@ def add_trade_signal_to_results(results_by_day_trad, min_prof_thr, regular_start
     Parameters:
       results_by_day_trad : dict
           Dictionary mapping each trading day (Timestamp) to a tuple (day_df, trades).
+      col_signal : float
+          Signal column
+      col_action : int
+          Trade action column
       min_prof_thr : float
           Minimum profit threshold used in continuous signal calculation.
       smooth_win_sig : int, default 5
@@ -719,7 +724,7 @@ def add_trade_signal_to_results(results_by_day_trad, min_prof_thr, regular_start
         df = compute_continuous_signal(day_df, trades, smooth_win_sig, pre_entry_decay, is_centered, reference_gain)
         
         # Step (B): Generate discrete trade actions (using trailing stop loss logic).
-        df = generate_trade_actions(df, buy_threshold, trailing_stop_thresh, regular_start)
+        df = generate_trade_actions(df, col_signal, col_action, buy_threshold, trailing_stop_thresh, regular_start)
         
         updated_results[day] = (df, trades)
     
@@ -727,197 +732,209 @@ def add_trade_signal_to_results(results_by_day_trad, min_prof_thr, regular_start
 
 #########################################################################################################
 
-def simulate_trading(results_by_day_sign, regular_start, regular_end, ticker):
+# B3
+def simulate_trading(
+    results_by_day_sign: Union[dict, pd.DataFrame],
+    col_action: int,
+    regular_start: dt.time,
+    regular_end: dt.time,
+    ticker: str
+) -> dict:
     """
-    Processes the results_by_day_sign dictionary by simulating 
-    trading for each day's DataFrame. It uses the precomputed "trade_action" column to drive 
-    the simulation. The updated DataFrame is augmented with the following new columns:
-      - "Position": cumulative number of shares held.
-      - "Cash": evolving cash balance.
-      - "NetValue": mark-to-market net asset value (cash + position * bid price).
-      - "Action": a string describing the action ("Buy", "Sell", "Hold", "No trade").
-      - "TradedAmount": the number of shares traded (+1 for buy, -1 for sell, 0 otherwise).
-      - "StrategyEarning": the current net value during the session (0 before regular start).
-      - "BuyHoldEarning": profit (or loss) if one had bought at the session’s start ask and sold at the current bid (0 before regular start).
-      - "EarningDiff": the difference between StrategyEarning and BuyHoldEarning.
-      
-    Additionally, it computes two lists:
-      - "Trade Gains ($)": a list of gains for each completed trade.
-      - "Trade Gains (%)": a list of percentage gains for each completed trade.
-      
-    All preexisting columns in the input DataFrame are preserved.
-    
-    Parameters:
-      results_by_day_sign : dict
-          A dictionary mapping each trading day (Timestamp) to a tuple. The tuple can be either:
-              (day_df, trades)
-          or
-              (day_df, trades, performance_stats)
-          where day_df is the DataFrame covering the trading hours (with one-minute frequency)
-          and trades is a list of identified trade tuples.
-      regular_start : datetime.time 
-          Starting time of the trading session (e.g. '13:00').
-      regular_end : datetime.time 
-          Ending time of the trading session (e.g. '20:00').
-    
-    Returns:
-      updated_results_by_day : dict
-          A dictionary mapping each trading day (Timestamp) to a tuple:
-              (df_sim, trades, performance_stats)
-          where df_sim is the updated simulation DataFrame for that day.
+    Simulate per‐minute trading P&L driven by a discrete signal column.
+
+    Accepts either:
+      1) A dict mapping each date → (day_df, trades[, perf_stats]),
+         where day_df has columns 'bid', 'ask', and your discrete col_action (+1/0/-1).
+      2) A single DataFrame with a DatetimeIndex and col_action column,
+         which is split into per‐day slices internally.
+
+    For each day we produce a minute‐level DataFrame df_sim with columns:
+      Position, Cash, NetValue, Action, TradedAmount,
+      BuyHoldEarning, StrategyEarning, EarningDiff
+    Plus per‐trade lists:
+      Trade Gains ($), Trade Gains (%)
+    And overall performance_stats:
+      Final Net Value ($), Buy & Hold Gain ($), Strategy Profit Difference ($),
+      Final Net Return (%), Buy & Hold Return (%), Strategy Improvement (%),
+      Trade Gains ($), Trade Gains (%)
+
+    Returns
+    -------
+    updated_results : dict
+        Maps date → (df_sim, trades_list, performance_stats)
     """
-    
+    # If passed a full DataFrame, split into dict of (day_df, empty trades)
+    if isinstance(results_by_day_sign, pd.DataFrame):
+        df_all = results_by_day_sign.sort_index()
+        rebuilt = {}
+        for date, df_day in df_all.groupby(df_all.index.normalize(), sort=False):
+            rebuilt[date] = (df_day.copy(), [])
+        results_by_day_sign = rebuilt
+
     updated_results = {}
-    
-    # Process each day. Unpack values depending on their length.
-    for day, value in results_by_day_sign.items():
-        if len(value) == 2:
-            day_df, trades = value
-        elif len(value) == 3:
-            day_df, trades, _ = value   # Ignore existing performance_stats if present.
+
+    # Process each day
+    for day, val in results_by_day_sign.items():
+        # Unpack
+        if len(val) == 2:
+            day_df, trades_list = val
+        elif len(val) == 3:
+            day_df, trades_list, _ = val
         else:
-            raise ValueError(f"Expected tuple of length 2 or 3 for key {day}, got {len(value)}")
-        
-        session_df = day_df.copy()  # Work with a copy.
-        
-        # Initialize simulation variables.
-        position = 0   # shares held
-        cash = 0       # starting cash
-        
-        positions = []      # cumulative position per minute
-        cash_balances = []  # cash balance per minute
-        net_values = []     # net asset value: cash + position * bid
-        actions = []        # descriptive action: "Buy", "Sell", "Hold", "No trade"
-        traded_amounts = [] # numeric traded amount: +1, -1, or 0
-        
-        # Lists for the earnings:
-        buy_hold_earnings = []     # Earning without the strategy (buy-and-hold)
-        strategy_earnings = []     # Earning with the strategy (actual simulation net value)
-        
-        session_initial_trade_price = None  # Will be set at the first row with time >= regular_start
-        
-        # Loop over each minute (row) in the session.
-        for timestamp, row in session_df.iterrows():
-            bid_price = row['bid']
-            ask_price = row['ask']
-            action_num = row['trade_action']   # Precomputed signal: +1 (buy), -1 (sell), 0 (hold)
-            current_time = timestamp.time()
-            
-            # Only execute trades if within session hours.
-            if regular_start <= current_time < regular_end:
-                if action_num == 1:
+            raise ValueError(f"Expected day tuple of length 2 or 3; got {len(val)} for {day}")
+
+        # We'll simulate on a copy
+        session_df = day_df.copy()
+
+        # --- Initialize state ------------------------------------------------
+        position = 0          # shares held
+        cash     = 0.0        # cash balance
+        session_open_price = None  # first ask ≥ regular_start
+
+        # History lists
+        positions         = []
+        cash_balances     = []
+        net_values        = []
+        actions           = []
+        traded_amounts    = []
+        buy_hold_earnings = []
+        strat_earnings    = []
+
+        # Loop minute by minute
+        for ts, row in session_df.iterrows():
+            bid   = row['bid']
+            ask   = row['ask']
+            sig   = int(row[col_action])  # must be -1, 0, or +1
+            now   = ts.time()
+
+            # Determine trade action
+            if regular_start <= now < regular_end:
+                if sig == 1:
                     position += 1
-                    cash -= ask_price  # buy at ask price
-                    action = "Buy"
-                    traded_amt = 1
-                elif action_num == -1:
-                    if position > 0:
-                        position -= 1
-                        cash += bid_price  # sell at bid price
-                        action = "Sell"
-                        traded_amt = -1
-                    else:
-                        action = "Hold"
-                        traded_amt = 0
+                    cash     -= ask
+                    action    = "Buy"
+                    amt       = +1
+                elif sig == -1 and position > 0:
+                    position -= 1
+                    cash     += bid
+                    action    = "Sell"
+                    amt       = -1
                 else:
-                    action = "Hold"
-                    traded_amt = 0
+                    action    = "Hold"
+                    amt       = 0
             else:
-                action = "No trade"
-                traded_amt = 0
-            
+                action    = "No trade"
+                amt       = 0
+
+            # Record state
             positions.append(position)
             cash_balances.append(np.round(cash, 3))
-            net_val = np.round(cash + position * bid_price, 3)
+            net_val = np.round(cash + position * bid, 3)
             net_values.append(net_val)
             actions.append(action)
-            traded_amounts.append(traded_amt)
-            
-            # Compute earnings only if current_time >= regular_start.
-            if current_time >= regular_start:
-                if session_initial_trade_price is None:
-                    # Set the reference (buy-and-hold) price at the first row of the session.
-                    session_initial_trade_price = ask_price
-                current_bh = bid_price - session_initial_trade_price
-                current_strat = net_val  # Strategy net value.
-            else:
-                current_bh = 0
-                current_strat = 0
-            buy_hold_earnings.append(np.round(current_bh, 3))
-            strategy_earnings.append(np.round(current_strat, 3))
-        
-        # Build the simulation DataFrame (preserving all preexisting columns).
-        df_sim = session_df.copy()
-        df_sim['Position'] = positions
-        df_sim['Cash'] = cash_balances
-        df_sim['NetValue'] = net_values
-        df_sim['Action'] = actions
-        df_sim['TradedAmount'] = traded_amounts
-        
-        # Append the new earnings columns.
-        df_sim['StrategyEarning'] = strategy_earnings
-        df_sim['BuyHoldEarning'] = buy_hold_earnings
-        df_sim['EarningDiff'] = df_sim['StrategyEarning'] - df_sim['BuyHoldEarning']
-        
-        # --------------------------------------------------------------------
-        # NEW: Compute separate gains (in $ and in %) for each trade using the "Action" column.
-        # A trade is defined as a "Buy" (recorded from the Ask price) followed by the next "Sell" (using the Bid).
-        trade_gains = []
-        trade_gains_perc = []
-        buy_price = None  # Reference price for the current trade.
-        for timestamp, row in df_sim.iterrows():
-            if row['Action'] == "Buy":
-                buy_price = row['ask']
-            elif row['Action'] == "Sell" and buy_price is not None:
-                gain = row['bid'] - buy_price
-                perc_gain = (gain / buy_price) * 100
-                trade_gains.append(np.round(gain, 3))
-                trade_gains_perc.append(np.round(perc_gain, 3))
-                buy_price = None
-        # NEW: If there's an open trade at the end, simulate a sale using the final bid price.
-        if buy_price is not None:
-            final_bid = df_sim.iloc[-1]['bid']
-            gain = final_bid - buy_price
-            perc_gain = (gain / buy_price) * 100
-            trade_gains.append(np.round(gain, 3))
-            trade_gains_perc.append(np.round(perc_gain, 3))
-        # --------------------------------------------------------------------
-        
-        # --- Compute performance statistics using realistic prices ---
-        idx_start = df_sim.index.get_loc(next(ts for ts in df_sim.index if ts.time() >= regular_start))
-        baseline_price = session_df.iloc[idx_start]['ask']
-        if len(session_df) > 1:
-            final_liquidation_price = session_df.iloc[-2]['bid']  # penultimate row's bid.
-            buy_hold_gain = final_liquidation_price - baseline_price
-            final_net_value = net_values[-2]
-        else:
-            final_liquidation_price = session_df.iloc[-1]['bid']
-            buy_hold_gain = final_liquidation_price - baseline_price
-            final_net_value = net_values[-1]
-        
-        profit_diff = final_net_value - buy_hold_gain
-        final_net_return_pct = (final_net_value / baseline_price) * 100
-        buy_hold_return_pct = (buy_hold_gain / baseline_price) * 100
-        
-        strategy_improve_pct = final_net_return_pct - buy_hold_return_pct
-        
-        performance_stats = {
-            'Final Net Value ($)': np.round(final_net_value, 3),
-            'Buy & Hold Gain ($)': np.round(buy_hold_gain, 3),
-            'Strategy Profit Difference ($)': np.round(profit_diff, 3),
-            'Final Net Return (%)': np.round(final_net_return_pct, 3),
-            'Buy & Hold Return (%)': np.round(buy_hold_return_pct, 3),
-            'Strategy Improvement (%)': np.round(strategy_improve_pct, 3),
-            'Trade Gains ($)': trade_gains,            # List of individual trade gains (in dollars).
-            'Trade Gains (%)': trade_gains_perc          # List of individual trade gain percentages.
-        }
-        
-        updated_results[day] = (df_sim, trades, performance_stats)
+            traded_amounts.append(amt)
 
-        # Save the simulation DataFrame.
-        df_sim.to_csv(f'backtest/df_label_{ticker}.csv', index=True)
-    
+            # Compute earnings only after session opens
+            if now >= regular_start:
+                # lock in open price once
+                if session_open_price is None:
+                    session_open_price = ask
+                bh = bid - session_open_price
+                st = net_val
+            else:
+                bh = 0.0
+                st = 0.0
+
+            buy_hold_earnings.append(np.round(bh, 3))
+            strat_earnings.append(np.round(st, 3))
+
+        # --- Build simulation DataFrame --------------------------------------
+        df_sim = session_df.copy()
+        df_sim['Position']        = positions
+        df_sim['Cash']            = cash_balances
+        df_sim['NetValue']        = net_values
+        df_sim['Action']          = actions
+        df_sim['TradedAmount']    = traded_amounts
+        df_sim['BuyHoldEarning']  = buy_hold_earnings
+        df_sim['StrategyEarning'] = strat_earnings
+        df_sim['EarningDiff']     = df_sim['StrategyEarning'] - df_sim['BuyHoldEarning']
+
+        # --- Compute per-trade gains -----------------------------------------
+        trade_gains     = []
+        trade_gains_pct = []
+        entry_price     = None
+        entry_ts        = None
+
+        for ts, row in df_sim.iterrows():
+            act = row['Action']
+            if act == "Buy" and entry_price is None:
+                # open new trade
+                entry_price = row['ask']
+                entry_ts    = ts
+            elif act == "Sell" and entry_price is not None:
+                # close trade
+                exit_price = row['bid']
+                gain       = exit_price - entry_price
+                pct_gain   = 100 * gain / entry_price
+
+                trade_gains.append(np.round(gain, 3))
+                trade_gains_pct.append(np.round(pct_gain, 3))
+                # reset entry
+                entry_price = None
+                entry_ts    = None
+
+        # if still holding at end, liquidate at last bid
+        if entry_price is not None:
+            final_bid = df_sim['bid'].iloc[-1]
+            gain      = final_bid - entry_price
+            pct_gain  = 100 * gain / entry_price
+            trade_gains.append(np.round(gain, 3))
+            trade_gains_pct.append(np.round(pct_gain, 3))
+
+        # --- Compute overall performance ------------------------------------
+        # Select all minutes within session window
+        mask = (df_sim.index.time >= regular_start) & (df_sim.index.time < regular_end)
+        if mask.any() and session_open_price is not None:
+            # First and last valid indices
+            valid_idxs = np.where(mask)[0]
+            start_i    = valid_idxs[0]
+            end_i      = valid_idxs[-1]
+
+            baseline_ask    = session_open_price
+            final_net_value = net_values[end_i]
+            final_bid_price = session_df['bid'].iat[end_i]
+        else:
+            # No valid trading minutes → zeroed stats
+            baseline_ask    = session_open_price or np.nan
+            final_net_value = net_values[-1]
+            final_bid_price = session_df['bid'].iat[-1]
+
+        buy_hold_gain     = final_bid_price - baseline_ask
+        profit_diff       = final_net_value - buy_hold_gain
+        final_ret_pct     = 100 * final_net_value / baseline_ask
+        buy_hold_ret_pct  = 100 * buy_hold_gain   / baseline_ask
+        improve_pct       = final_ret_pct - buy_hold_ret_pct
+
+        performance_stats = {
+            'Final Net Value ($)'          : np.round(final_net_value, 3),
+            'Buy & Hold Gain ($)'          : np.round(buy_hold_gain, 3),
+            'Strategy Profit Difference ($)': np.round(profit_diff, 3),
+            'Final Net Return (%)'         : np.round(final_ret_pct, 3),
+            'Buy & Hold Return (%)'        : np.round(buy_hold_ret_pct, 3),
+            'Strategy Improvement (%)'     : np.round(improve_pct, 3),
+            'Trade Gains ($)'              : trade_gains,
+            'Trade Gains (%)'              : trade_gains_pct
+        }
+
+        # Store results
+        updated_results[day] = (df_sim, trades_list, performance_stats)
+
+        # Optionally save per-day CSV
+        df_sim.to_csv(f'csv simul/df_sim_{ticker}.csv', index=True)
+
     return updated_results
+
 
 
 #########################################################################################################
@@ -925,6 +942,8 @@ def simulate_trading(results_by_day_sign, regular_start, regular_end, ticker):
 
 def run_trading_pipeline(
     df_prep,
+    col_signal,
+    col_action,
     reference_gain,
     min_prof_thr=params.min_prof_thr_man, 
     max_down_prop=params.max_down_prop_man, 
@@ -954,6 +973,8 @@ def run_trading_pipeline(
     print("Step B2: add_trade_signal_to_results …")
     signaled = add_trade_signal_to_results(
         results_by_day_trad=trades_by_day,
+        col_signal=col_signal,
+        col_action=col_action,
         min_prof_thr=min_prof_thr,
         regular_start=params.regular_start,
         reference_gain=reference_gain,
@@ -967,6 +988,7 @@ def run_trading_pipeline(
     print("Step B3: simulate_trading …")
     sim_results = simulate_trading(
         results_by_day_sign=signaled,
+        col_action=col_action,
         regular_start=params.regular_start,
         regular_end=params.regular_end,
         ticker=params.ticker

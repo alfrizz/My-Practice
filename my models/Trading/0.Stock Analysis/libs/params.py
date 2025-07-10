@@ -67,6 +67,7 @@ def signal_parameters(ticker):
         pre_entry_decay=0.77
         # to define the final buy and sell triggers:
         buy_threshold=0.1
+        pred_threshold=0.3
         trailing_stop_thresh=0.16
         
     if ticker == 'GOOGL':
@@ -81,6 +82,7 @@ def signal_parameters(ticker):
         pre_entry_decay=0.005
         # to define the final buy and sell triggers:
         buy_threshold=0.15
+        pred_threshold=0.3
         trailing_stop_thresh=0.2
         
     if ticker == 'TSLA':
@@ -95,11 +97,12 @@ def signal_parameters(ticker):
         pre_entry_decay=0.6
         # to define the final buy and sell triggers:
         buy_threshold=0.1 
+        pred_threshold=0.3
         trailing_stop_thresh=0.1 
 
     return min_prof_thr, max_down_prop, gain_tightening_factor, smooth_win_sig, pre_entry_decay, \
-        buy_threshold, trailing_stop_thresh, merging_retracement_thr, merging_time_gap_thr
+        buy_threshold, pred_threshold, trailing_stop_thresh, merging_retracement_thr, merging_time_gap_thr
 
 # run the function to get the parameters ("_man": manually assigned)
 min_prof_thr_man, max_down_prop_man, gain_tightening_factor_man, smooth_win_sig_man, pre_entry_decay_man, \
-buy_threshold_man, trailing_stop_thresh_man, merging_retracement_thr_man, merging_time_gap_thr_man = signal_parameters(ticker)
+buy_threshold_man, pred_threshold_man, trailing_stop_thresh_man, merging_retracement_thr_man, merging_time_gap_thr_man = signal_parameters(ticker)
