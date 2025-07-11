@@ -192,12 +192,12 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
     # For each buy-sell pair, add a vertical shaded region with annotation.
     for j, (buy_ts, sell_ts) in enumerate(pairs):
         if (performance_stats is not None and 
-            "Trade Gains ($)" in performance_stats and 
-            "Trade Gains (%)" in performance_stats and 
-            len(performance_stats["Trade Gains ($)"]) > j and 
-            len(performance_stats["Trade Gains (%)"]) > j):
-            ann_text = (f"TA Trade {j+1}<br>$: {performance_stats['Trade Gains ($)'][j]}<br>"
-                        f"%: {performance_stats['Trade Gains (%)'][j]}")
+            "Trades Returns ($)" in performance_stats and 
+            "Trades Returns (%)" in performance_stats and 
+            len(performance_stats["Trades Returns ($)"]) > j and 
+            len(performance_stats["Trades Returns (%)"]) > j):
+            ann_text = (f"TA Trade {j+1}<br>$: {performance_stats['Trades Returns ($)'][j]}<br>"
+                        f"%: {performance_stats['Trades Returns (%)'][j]}")
         else:
             ann_text = f"TA Trade {j+1}"
             
@@ -285,3 +285,58 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
     )
     
     fig.show()
+
+
+
+def aggregate_performance(
+    perf_list: list,
+    round_digits: int = 3
+) -> dict:
+    """
+    Given a list of daily performance dictionaries, return one summary dict:
+    """
+
+    # 1) Collect all keys present in daily dicts
+    all_keys = set().union(*(perf.keys() for perf in perf_list if perf))
+
+    aggregated = {}
+    for key in all_keys:
+        # 2) numeric fields → sum them
+        if key not in ('Trades Returns ($)', 'Trades Returns (%)'):
+            total = 0.0
+            for perf in perf_list:
+                v = perf.get(key)
+                if isinstance(v, (int, float)):
+                    total += v
+            aggregated[key] = round(total, round_digits)
+
+    # 3) Keep only the trade-count fields (no lists)
+    #    We assume daily dicts have list-valued keys named exactly:
+    #       'Trades Returns ($)' and 'Trades Returns (%)'
+    #    We turn them into “N trades”
+    for key in ('Trades Returns ($)', 'Trades Returns (%)'):
+        count = 0
+        for perf in perf_list:
+            lst = perf.get(key)
+            if isinstance(lst, list):
+                count += len(lst)
+        aggregated[key] = f"{count} trades"
+
+    # 4) Rename the per-day Buy & Hold keys
+    #    original names: 'Buy & Hold Return ($)', 'Buy & Hold Return (%)'
+    aggregated['Buy & Hold – each day ($)'] = aggregated.pop('Buy & Hold Return ($)')
+    aggregated['Buy & Hold – each day (%)']  = aggregated.pop('Buy & Hold Return (%)')
+
+    # 5) Recompute difference/improvement from the renamed fields
+    aggregated['Strategy Return Difference ($)'] = round(
+        aggregated['Strategy Return ($)'] 
+      - aggregated['Buy & Hold – each day ($)'],
+        round_digits
+    )
+    aggregated['Strategy Return Improvement (%)'] = round(
+        aggregated['Strategy Return (%)'] 
+      - aggregated['Buy & Hold – each day (%)'],
+        round_digits
+    )
+
+    return aggregated
