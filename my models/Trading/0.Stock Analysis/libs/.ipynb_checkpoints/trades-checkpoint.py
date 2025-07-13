@@ -13,26 +13,6 @@ from typing import Optional, Dict, Tuple, List, Sequence, Union
 import matplotlib.pyplot as plt
 
 from libs import params
-#########################################################################################################
-
-def compute_reference_gain(df):
-    """
-    Computes the *relative* reference gain (%) as the average daily % range:
-       daily_pct_range = (high.max - low.min) / low.min
-    Returns a float like 0.025 if on average days swing 2.5%.
-    (used afterwards to adjust the smoothed continuous signal , while normalizing it)
-    """
-    # Ensure your index is datetime
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df.index = pd.to_datetime(df.index)
-
-    # For each calendar day compute (high.max - low.min) / low.min
-    daily_pct = (
-        df.groupby(df.index.date)
-          .apply(lambda d: (d["high"].max() - d["low"].min()) / d["low"].min())
-    )
-    # If you want it in percent points, multiply by 100 here.
-    return daily_pct.median() # or mean()
 
 
 #########################################################################################################
@@ -45,6 +25,7 @@ def plot_close_volume(df, title="Close Price and Volume"):
     ax = df[['close', 'volume']].plot(secondary_y=['volume'], figsize=(10, 5), title=title, alpha=0.7)
     ax.set_xlabel("Date")
     plt.show()
+
 
 def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1):
     """
@@ -96,6 +77,7 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
                     df_adj.loc[:df_adj.index[i-1], 'volume'] /= candidate_factor
                     
     return df_adj, split_events
+
 
 def process_splits(folder, ticker, bidasktoclose_spread, vol_fact):
     """
@@ -183,90 +165,95 @@ def is_dst_for_day(day, tz_str="US/Eastern"):
     return bool(dt.dst())
 
 
+
 def prepare_interpolate_data(
     df,
-    regular_start,   # str or time: session open (e.g. "08:00" or your pre-market shifted start)
-    regular_end,     # str or time: session close (e.g. "16:00")
-    red_pretr_win=1, # int: factor for smoothing pre/post-market bars by volume ratio
-    tz_str="US/Eastern"  # str: timezone for DST adjustment
+    regular_start_shifted,  # str or time: lower‐bound of minute grid (e.g. look-back start)
+    regular_start,          # str or time: official session open (for reg_mask)
+    regular_end,            # str or time: official session close
+    red_pretr_win=1,        # int: factor for smoothing pre/post-market by vol ratio
+    tz_str="US/Eastern"     # str: timezone name for DST adjustment
 ):
     """
-    1) Shift timestamps on DST days
-    2) Smooth non-regular (pre/post-market) bars by volume ratio
-    3) For each calendar day, build a minute grid that covers both:
-         • the raw-data span (first→last bar)
-         • the official session span (regular_start→regular_end)
-       then reindex & linearly interpolate both directions to fill all gaps.
+    Prepares and fills minute‐bar data for each calendar day, with two distinct “starts”:
+      • regular_start_shifted: defines how early to begin your minute grid
+      • regular_start: classifies which bars count as “in‐session” vs pre/post‐market
+
+    Steps:
+      1. DST‐shift timestamps forward 1h on DST days.
+      2. Mark bars inside [regular_start, regular_end] as regular, others non‐regular.
+      3. Compute a small rolling‐mean window for non‐regular bars by volume ratio.
+      4. Apply that rolling‐mean to non‐regular bars only.
+      5. For each calendar day:
+           • Build a 1-minute index from the earliest raw tick or regular_start_shifted
+           • through the latest raw tick or regular_end.
+           • Reindex the DataFrame to that grid and linearly interpolate both ways.
+      6. Concatenate all days, sort, and drop any duplicate timestamps.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame reindexed to every minute in each day’s span,
+        with non‐regular bars smoothed and gaps filled.
     """
 
-    # Make a copy and preserve originals
+    # 0) Clone to avoid mutating the caller’s df, and keep a copy of raw values
     df = df.copy()
     df_orig = df.add_suffix("_orig")
     df = df.join(df_orig)
 
-    # Cast working columns to float64
+    # 1) Cast working columns (non-_orig) to float64
     working = [c for c in df.columns if not c.endswith("_orig")]
     df[working] = df[working].astype(np.float64)
 
-    # 1) DST adjustment
+    # 2) DST adjustment: shift each day’s timestamps +1h if in DST
     ts = df.index.to_series()
     for day, grp in df.groupby(df.index.normalize()):
         shift = pd.Timedelta(hours=1) if is_dst_for_day(day, tz_str) else pd.Timedelta(0)
         ts.loc[grp.index] = grp.index + shift
     df.index = ts.sort_values()
-    df = df.sort_index()
+    df.sort_index(inplace=True)
 
-    # 2) Identify regular vs non-regular bars
+    # 3) Identify regular vs non‐regular bars by official session times
+    #    *regular_start_shifted* is NOT used here; only for grid bounds later.
     start_t = (pd.to_datetime(regular_start).time()
                if isinstance(regular_start, str) else regular_start)
     end_t   = (pd.to_datetime(regular_end).time()
-               if isinstance(regular_end, str)   else regular_end)
-    times   = df.index.time
+               if isinstance(regular_end,   str) else regular_end)
+
+    times       = df.index.time
     reg_mask    = (times >= start_t) & (times <= end_t)
     nonreg_mask = ~reg_mask
 
-    # 3) Compute smoothing window (pre/post-market) by volume ratio
-    v_reg = df.loc[reg_mask,    "volume_orig"].mean()
-    v_non = df.loc[nonreg_mask, "volume_orig"].mean()
-    if pd.isna(v_non) or v_non == 0:
-        v_non = red_pretr_win
-    ratio = v_reg / v_non if v_non else np.nan
-    w_non  = 1 if pd.isna(ratio) else max(int(ratio / red_pretr_win), 1)
 
-    # 4) Smooth non-regular bars
-    for col in working:
-        vals = df.loc[nonreg_mask, col].reset_index(drop=True)
-        sm   = vals.rolling(window=w_non, min_periods=1).mean()
-        if col != "volume":
-            df.loc[nonreg_mask, col] = np.round(sm, 4).values
-        else:
-            df.loc[nonreg_mask, col] = np.rint(sm).astype(np.int64).values
-
-    # 5) Reindex & interpolate per day over combined span
+    # 4) Build minute‐grid per day, clamped by regular_start_shifted & regular_end
     filled = []
     for day, grp in df.groupby(df.index.normalize()):
         day_str = day.strftime("%Y-%m-%d")
 
-        # official session window
-        start_idx = pd.Timestamp(f"{day_str} {regular_start}")
-        end_idx   = pd.Timestamp(f"{day_str} {regular_end}")
+        # compute grid bounds
+        grid_start_idx   = pd.Timestamp(f"{day_str} {regular_start_shifted}")
+        session_end_idx  = pd.Timestamp(f"{day_str} {regular_end}")
 
-        # also cover any raw-data bars outside that window
-        idx_start = min(grp.index.min(), start_idx)
-        idx_end   = max(grp.index.max(), end_idx)
+        # allow raw-data to extend beyond either bound
+        idx_start = min(grp.index.min(), grid_start_idx)
+        idx_end   = max(grp.index.max(), session_end_idx)
 
         full_idx = pd.date_range(start=idx_start, end=idx_end, freq="1min")
 
-        # two-way linear interpolation to fill all NaNs
+        # reindex → insert NaNs → interpolate both forward/back
         grp_f = grp.reindex(full_idx).interpolate(
             method="linear", limit_direction="both"
         )
 
         filled.append(grp_f)
 
-    return pd.concat(filled)
-
-
+    # 5) Concatenate all days, sort, and drop any duplicate timestamps
+    out = pd.concat(filled).sort_index()
+    out = out[~out.index.duplicated(keep="first")]
+    
+    return out
+    
 
 #########################################################################################################
 
@@ -503,14 +490,30 @@ def identify_trades_daily(
 
 #########################################################################################################
 
-# B2.1
+
+#B2.1.1
+def compute_reference_gain(df):
+    """
+    Computes the reference gain for the provided DataFrame slice:
+      daily_pct_range = (high.max - low.min) / low.min
+    Returns a float like 0.025 for a 2.5% average daily range.
+    """
+    # ensure datetime index
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+
+    # calculate one-day pct range
+    daily_pct = ((df["high"].max() - df["low"].min())
+                 / df["low"].min()) if not df.empty else 0.0
+    return daily_pct
+
+#B2.1
 def compute_continuous_signal(
     day_df,
     trades,
     smooth_win_sig,
-    decay,
+    pre_entry_decay,
     is_centered,
-    reference_gain,
     regular_start=params.regular_start,
     regular_end=params.regular_end,
     clip_quantiles=(0.01, 0.99),
@@ -519,28 +522,26 @@ def compute_continuous_signal(
     """
     1) Build raw decayed signal → signal_raw
     2) Robust min–max normalize signal_raw → signal_norm
-    3) Compute today’s intraday range robustly → raw_range
-    4) Compute and clip scale relative to reference_gain → scale
-    5) Apply scale → signal_scaled
-    6) Smooth the scaled curve → signal_smooth
+    3) Compute today's intraday range → raw_range
+    4) Compute today's reference_gain (avg daily range) from [regular_start, regular_end]
+    5) Compute scale = raw_range / reference_gain, clipped to scale_bounds
+    6) Apply scale → signal_scaled
+    7) Smooth the scaled curve → signal_smooth
     """
-    # Make a working copy
+
+    # Copy to avoid side effects
     df = day_df.copy()
 
-    # 1) Build raw decayed signal: for each sell event, backfill a decaying value
+    # 1) Raw decayed signal: backfill from each sell event
     df["signal_raw"] = 0.0
     for (_, sell_dt), (_, sell_price), _ in trades:
-        mask = df.index <= sell_dt
-        # time difference in minutes
-        delta_mins = (sell_dt - df.index[mask]).total_seconds() / 60.0
-        # positive profit diffs only
-        diffs = (sell_price - df.loc[mask, "close"]).clip(lower=0)
-        # exponential decay
-        vals = diffs * np.exp(-decay * delta_mins)
-        # take the maximum decay-value per timestamp across all sells
-        df.loc[mask, "signal_raw"] = np.maximum(df.loc[mask, "signal_raw"], vals)
+        mask        = df.index <= sell_dt
+        delta_mins  = (sell_dt - df.index[mask]).total_seconds() / 60.0
+        diffs       = (sell_price - df.loc[mask, "close"]).clip(lower=0)
+        decayed     = diffs * np.exp(-pre_entry_decay/100 * delta_mins)
+        df.loc[mask, "signal_raw"] = np.maximum(df.loc[mask, "signal_raw"], decayed)
 
-    # 2) Robust normalize to [0,1] using clipped percentiles
+    # 2) Robust normalization of signal_raw to [0,1]
     lo_q, hi_q = clip_quantiles
     lo = df["signal_raw"].quantile(lo_q)
     hi = df["signal_raw"].quantile(hi_q)
@@ -550,29 +551,30 @@ def compute_continuous_signal(
     else:
         df["signal_norm"] = 0.0
 
-    # 3) Compute today's intraday high/low robustly (quantile-based)
-    reg = df.between_time(regular_start, regular_end)
-    highs = reg["high"] if not reg.empty else df["high"]
-    lows  = reg["low"]  if not reg.empty else df["low"]
-    # use 99th/1st percentiles to ignore bar-level spikes
-    day_hi = highs.quantile(0.99)
-    day_lo = lows.quantile(0.01)
+    # 3) Compute today's intraday high/low over official session
+    reg     = df.between_time(regular_start, regular_end)
+    highs   = reg["high"] if not reg.empty else df["high"]
+    lows    = reg["low"]  if not reg.empty else df["low"]
+    day_hi  = highs.quantile(0.99)
+    day_lo  = lows.quantile(0.01)
+    raw_range = ((day_hi - day_lo) / day_lo) if day_lo else 0.0
 
-    # relative range for the day
-    raw_range = (day_hi - day_lo) / day_lo if day_lo else 0.0
+    # 4) Compute reference_gain from today's session data
+    #    This uses the same high/low slice to get that day's typical range
+    reference_gain = compute_reference_gain(reg)
 
-    # 4) Compute scale as ratio to reference_gain, then clip to bounds
-    if reference_gain:
+    # 5) Scale factor = raw_range / reference_gain, clipped to bounds
+    if reference_gain > 0:
         raw_scale = raw_range / reference_gain
     else:
         raw_scale = 1.0
     min_s, max_s = scale_bounds
     scale = np.clip(raw_scale, min_s, max_s)
 
-    # 5) Apply scale to normalized signal
+    # 6) Apply scale to the normalized signal
     df["signal_scaled"] = df["signal_norm"] * scale
 
-    # 6) Smooth the scaled signal
+    # 7) Smooth the scaled signal with a rolling window
     df["signal_smooth"] = (
         df["signal_scaled"]
           .rolling(window=smooth_win_sig, center=is_centered, min_periods=1)
@@ -580,7 +582,6 @@ def compute_continuous_signal(
     )
 
     return df
-
 
 #########################################################################################################
 
@@ -596,6 +597,7 @@ def generate_trade_actions(
     """
     Given a DataFrame for one trading day that already contains:
         • col_signal           — signal to use for trading
+        • col_action           — name to assign to the action column
         • "close"              — the price series
     
     This function strips out any normalization or scaling steps and simply:
@@ -674,7 +676,7 @@ def generate_trade_actions(
 #########################################################################################################
 
 # B2
-def add_trade_signal_to_results(results_by_day_trad, col_signal, col_action, min_prof_thr, regular_start, reference_gain,
+def add_trade_signal_to_results(results_by_day_trad, col_signal, col_action, min_prof_thr, regular_start,
                                 smooth_win_sig, pre_entry_decay, buy_threshold, trailing_stop_thresh, is_centered):
     """
     Updates the input dictionary (results_by_day_trad) by applying two steps:
@@ -721,7 +723,7 @@ def add_trade_signal_to_results(results_by_day_trad, col_signal, col_action, min
     for day, (day_df, trades) in results_by_day_trad.items():
         
         # Step (A): Compute the continuous trading signal.
-        df = compute_continuous_signal(day_df, trades, smooth_win_sig, pre_entry_decay, is_centered, reference_gain)
+        df = compute_continuous_signal(day_df, trades, smooth_win_sig, pre_entry_decay, is_centered) 
         
         # Step (B): Generate discrete trade actions (using trailing stop loss logic).
         df = generate_trade_actions(df, col_signal, col_action, buy_threshold, trailing_stop_thresh, regular_start)
@@ -916,14 +918,9 @@ def simulate_trading(
 
         # build performance_stats with your exact keys & order
         performance_stats = {
-            'Strategy Return ($)'              : np.round(final_net_value, 3),
-            'Strategy Return (%)'              : np.round(final_ret_pct, 3),
-            'Buy & Hold Return ($)'          : np.round(buy_hold_gain,    3),
-            'Buy & Hold Return (%)'            : np.round(buy_hold_ret_pct,3),
-            'Strategy Return Difference ($)' : np.round(profit_diff,     3),
-            'Strategy Return Improvement (%)'  : np.round(improve_pct,      3),
+            'Strategy Return ($)'            : np.round(final_net_value, 3),
+            'Buy & Hold Return ($)'          : np.round(buy_hold_gain, 3),
             'Trades Returns ($)'             : trade_gains,
-            'Trades Returns (%)'               : trade_gains_pct
         }
             
         updated_results[day] = (df_sim, trades_list, performance_stats)
@@ -937,7 +934,6 @@ def run_trading_pipeline(
     df_prep,
     col_signal,
     col_action,
-    reference_gain,
     min_prof_thr=params.min_prof_thr_man, 
     max_down_prop=params.max_down_prop_man, 
     gain_tightening_factor=params.gain_tightening_factor_man, 
@@ -970,7 +966,6 @@ def run_trading_pipeline(
         col_action=col_action,
         min_prof_thr=min_prof_thr,
         regular_start=params.regular_start,
-        reference_gain=reference_gain,
         smooth_win_sig=smooth_win_sig,
         pre_entry_decay=pre_entry_decay,
         buy_threshold=buy_threshold,

@@ -17,9 +17,10 @@ save_path      = Path("dfs training")
 label_col      = "signal_smooth"
 feature_cols   = ["open", "high", "low", "close", "volume"]
 
-look_back = 90
-red_pretr_win = 1 # factor to reduce the smoothing of the pretrade smoothing window
+look_back = 120
 is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
+
+bidasktoclose_spread = 0.03
 
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
 # Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
@@ -36,6 +37,8 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 
 afterhours_end = datetime.strptime('00:00' , '%H:%M').time()  
 
+date_to_check =  '2025-03' # set to None to analyze all dates save the final CSV
+
 #########################################################################################################
 
 def signal_parameters(ticker):
@@ -49,10 +52,11 @@ def signal_parameters(ticker):
     
     # to define the smoothed signal
     smooth_win_sig ==> # smoothing window of the signal used for the identification of the final trades 
-    pre_entry_decay ==> # pre-trade decay of the final trades' raw signal
+    pre_entry_decay ==> # pre-trade decay of the final trades' raw signal (higher: quicker decay [0.1 - 1])
     
     # to define the final buy and sell triggers
     buy_threshold ==> # float (percent/100) threshold of the smoothed signal to trigger the final trade
+    pred_threshold ==> # float (percent/100) threshold of the predicted signal to trigger the final trade
     trailing_stop_thresh ==> # percent of the trailing stop loss of the final trade
     '''
     if ticker == 'AAPL':
@@ -78,11 +82,11 @@ def signal_parameters(ticker):
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
         # to define the smoothed signal:
-        smooth_win_sig=30
-        pre_entry_decay=0.005
+        smooth_win_sig=10
+        pre_entry_decay=0.3
         # to define the final buy and sell triggers:
-        buy_threshold=0.15
-        pred_threshold=0.3
+        buy_threshold=0.2
+        pred_threshold=0.2
         trailing_stop_thresh=0.2
         
     if ticker == 'TSLA':

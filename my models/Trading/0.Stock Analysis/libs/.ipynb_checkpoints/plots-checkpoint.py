@@ -1,4 +1,4 @@
-
+from libs import params
 import matplotlib
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
@@ -133,7 +133,7 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
 
     Parameters:
       df : pd.DataFrame
-          DataFrame with a datetime index and at least the columns "close", "signal_scaled", "signal_smooth", and col_action.
+          DataFrame with a datetime index and at least the columns "close", col_signal1, col_signal2, col_action,.
       trades : list
           A list of tuples, each in the form:
             ((buy_date, sell_date), (buy_price, sell_price), profit_pc).
@@ -142,8 +142,7 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
           secondary y-axis).
       performance_stats : dict, optional
           Dictionary containing performance metrics. If provided and if it contains keys
-          "Trade Gains ($)" and "Trade Gains (%)" (each a list), they will be added to the
-          trade annotations. 
+          "Trade Gains ($)" (each a list), they will be added to the trade annotations. 
       trade_color : str, optional
           The color to use for the original trade traces.
     """
@@ -189,15 +188,13 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
         elif action == -1 and prev_buy is not None:
             pairs.append((prev_buy, timestamp))
             prev_buy = None
+
     # For each buy-sell pair, add a vertical shaded region with annotation.
     for j, (buy_ts, sell_ts) in enumerate(pairs):
         if (performance_stats is not None and 
             "Trades Returns ($)" in performance_stats and 
-            "Trades Returns (%)" in performance_stats and 
-            len(performance_stats["Trades Returns ($)"]) > j and 
-            len(performance_stats["Trades Returns (%)"]) > j):
-            ann_text = (f"TA Trade {j+1}<br>$: {performance_stats['Trades Returns ($)'][j]}<br>"
-                        f"%: {performance_stats['Trades Returns (%)'][j]}")
+            len(performance_stats["Trades Returns ($)"]) > j):  
+            ann_text = (f"TA Trade {j+1}<br>$: {performance_stats['Trades Returns ($)'][j]}<br>")
         else:
             ann_text = f"TA Trade {j+1}"
             
@@ -277,7 +274,7 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
         yaxis_title="Close Price",
         height=700,
         yaxis2=dict(
-            title="Signal (Normalized)",
+            title="Signals",
             overlaying="y",
             side="right",
             showgrid=False,
@@ -288,55 +285,176 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
 
 
 
+# def aggregate_performance(
+#     perf_list: list,
+#     round_digits: int = 3
+# ) -> dict:
+#     """
+#     Given a list of daily performance dictionaries, return one summary dict:
+#     """
+
+#     # 1) Collect all keys present in daily dicts
+#     all_keys = set().union(*(perf.keys() for perf in perf_list if perf))
+
+#     aggregated = {}
+#     for key in all_keys:
+#         # 2) numeric fields → sum them
+#         if key != ('Trades Returns ($)'): 
+#             total = 0.0
+#             for perf in perf_list:
+#                 v = perf.get(key)
+#                 if isinstance(v, (int, float)):
+#                     total += v
+#             aggregated[key] = round(total, round_digits)
+
+#     # 3) Keep only the trade-count fields (no lists)
+#     #    We assume daily dicts have list-valued keys named exactly:
+#     #    We turn them into “N trades”
+#     for key in ('Trades Returns ($)',): 
+#         count = 0
+#         for perf in perf_list:
+#             lst = perf.get(key)
+#             if isinstance(lst, list):
+#                 count += len(lst)
+#         aggregated[key] = f"{count} trades"
+
+#     # 4) Rename the per-day Buy & Hold keys
+#     aggregated['Buy & Hold – each day ($)'] = aggregated.pop('Buy & Hold Return ($)')
+
+
+#     return aggregated
+
+
+# def aggregate_performance(
+#     perf_list: list,
+#     df: pd.DataFrame,
+#     round_digits: int = 3
+# ) -> dict:
+#     """
+#     Given a list of daily performance dicts and the full-minute-bar
+#     DataFrame, print & return one summary dict.
+#     """
+#     # 1) Collect all keys present in daily dicts
+#     all_keys = set().union(*(perf.keys() for perf in perf_list if perf))
+
+#     # 2) Sum numeric fields except 'Trades Returns ($)'
+#     aggregated = {}
+#     for key in all_keys:
+#         if key != "Trades Returns ($)":
+#             total = sum(
+#                 perf.get(key, 0)
+#                 for perf in perf_list
+#                 if isinstance(perf.get(key), (int, float))
+#             )
+#             aggregated[key] = round(total, round_digits)
+
+#     # 3) Count total trades
+#     trades_count = sum(
+#         len(perf.get("Trades Returns ($)", []))
+#         for perf in perf_list
+#         if isinstance(perf.get("Trades Returns ($)"), list)
+#     )
+#     aggregated["Trades Returns ($)"] = f"{trades_count} trades"
+
+#     # 4) Rename the per-day Buy & Hold key
+#     aggregated["Buy & Hold – each day ($)"] = aggregated.pop("Buy & Hold Return ($)")
+
+#     # 5) Infer start/end dates from df.index
+#     days       = df.index.normalize().unique()
+#     start_date = days.min()   # Timestamp at midnight
+#     end_date   = days.max()
+
+#     # 6) Print one-time buy&hold summary
+#     print(f"\n=== Overall Summary ({start_date.date()} → {end_date.date()}) ===")
+
+#     # slice out the 'ask' on start_date and 'bid' on end_date
+#     s = df.loc[df.index.normalize() == start_date, "ask"]
+#     e = df.loc[df.index.normalize() == end_date,   "bid"]
+
+#     if s.empty or e.empty:
+#         print("Could not find start/end prices in df.")
+#     else:
+#         start_ask = s.iloc[-1]
+#         end_bid   = e.iloc[-1]
+#         print(f"Start date price: {start_date.date()} = {start_ask:.4f}")
+#         print(f"  End date price:  {end_date.date()} = {end_bid:.4f}")
+#         print(f"One-time buy&hold gain: {end_bid - start_ask:.3f}\n")
+
+#     return aggregated
+
+
 def aggregate_performance(
     perf_list: list,
+    df: pd.DataFrame,
     round_digits: int = 3
 ) -> dict:
     """
-    Given a list of daily performance dictionaries, return one summary dict:
+    Given a list of daily performance dicts and the full-minute-bar
+    DataFrame, print & return one summary dict.  Buy&hold uses the
+    first ask after regular_start on the first day and the last bid
+    before regular_end on the last day.
     """
-
     # 1) Collect all keys present in daily dicts
     all_keys = set().union(*(perf.keys() for perf in perf_list if perf))
 
+    # 2) Sum numeric fields except 'Trades Returns ($)'
     aggregated = {}
     for key in all_keys:
-        # 2) numeric fields → sum them
-        if key not in ('Trades Returns ($)', 'Trades Returns (%)'):
-            total = 0.0
-            for perf in perf_list:
-                v = perf.get(key)
-                if isinstance(v, (int, float)):
-                    total += v
+        if key != "Trades Returns ($)":
+            total = sum(
+                perf.get(key, 0)
+                for perf in perf_list
+                if isinstance(perf.get(key), (int, float))
+            )
             aggregated[key] = round(total, round_digits)
 
-    # 3) Keep only the trade-count fields (no lists)
-    #    We assume daily dicts have list-valued keys named exactly:
-    #       'Trades Returns ($)' and 'Trades Returns (%)'
-    #    We turn them into “N trades”
-    for key in ('Trades Returns ($)', 'Trades Returns (%)'):
-        count = 0
-        for perf in perf_list:
-            lst = perf.get(key)
-            if isinstance(lst, list):
-                count += len(lst)
-        aggregated[key] = f"{count} trades"
-
-    # 4) Rename the per-day Buy & Hold keys
-    #    original names: 'Buy & Hold Return ($)', 'Buy & Hold Return (%)'
-    aggregated['Buy & Hold – each day ($)'] = aggregated.pop('Buy & Hold Return ($)')
-    aggregated['Buy & Hold – each day (%)']  = aggregated.pop('Buy & Hold Return (%)')
-
-    # 5) Recompute difference/improvement from the renamed fields
-    aggregated['Strategy Return Difference ($)'] = round(
-        aggregated['Strategy Return ($)'] 
-      - aggregated['Buy & Hold – each day ($)'],
-        round_digits
+    # 3) Count total trades
+    trades_count = sum(
+        len(perf.get("Trades Returns ($)", []))
+        for perf in perf_list
+        if isinstance(perf.get("Trades Returns ($)"), list)
     )
-    aggregated['Strategy Return Improvement (%)'] = round(
-        aggregated['Strategy Return (%)'] 
-      - aggregated['Buy & Hold – each day (%)'],
-        round_digits
+    aggregated["Trades Returns ($)"] = f"{trades_count} trades"
+
+    # 4) Rename the per-day Buy & Hold key
+    aggregated["Buy & Hold – each day ($)"] = aggregated.pop("Buy & Hold Return ($)")
+
+    # 5) Restrict to bars inside your regular hours, to find the true trading days
+    session_df = df.between_time(params.regular_start, params.regular_end)
+    if not session_df.empty:
+        first_day = session_df.index.normalize().min()
+        last_day  = session_df.index.normalize().max()
+    else:
+        # fallback if somehow no bars in session hours at all
+        all_days  = df.index.normalize().unique()
+        first_day = all_days.min()
+        last_day  = all_days.max()
+
+    # 6) Grab the first ask ≥ regular_start on first_day
+    mask_start = (
+        (df.index.normalize() == first_day) &
+        (df.index.time     >= params.regular_start)
     )
+    if df.loc[mask_start, "ask"].empty:
+        # if the day's first session-minute bar is missing, just take the day's first ask
+        mask_start = df.index.normalize() == first_day
+    start_ask = df.loc[mask_start, "ask"].iloc[0]
+
+    # 7) Grab the last bid ≤ regular_end on last_day
+    mask_end = (
+        (df.index.normalize() == last_day) &
+        (df.index.time     <= params.regular_end)
+    )
+    if df.loc[mask_end, "bid"].empty:
+        # if the day's last session-minute bar is missing, just take the day's last bid
+        mask_end = df.index.normalize() == last_day
+    end_bid = df.loc[mask_end, "bid"].iloc[-1]
+
+    # 8) Print the clean summary
+    print(f"\n=== Overall Summary ({first_day.date()} → {last_day.date()}) ===")
+    print(f"Start date price: {first_day.date()} = {start_ask:.4f}")
+    print(f"  End date price:  {last_day.date()} = {end_bid:.4f}")
+    print(f"One-time buy&hold gain: {end_bid - start_ask:.3f}\n")
+
 
     return aggregated
