@@ -17,6 +17,9 @@ save_path      = Path("dfs training")
 label_col      = "signal_smooth"
 feature_cols   = ["open", "high", "low", "close", "volume"]
 
+# dataset split proportions
+train_prop, val_prop = 0.70, 0.15
+
 look_back = 120
 is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
 
@@ -29,15 +32,17 @@ bidasktoclose_spread = 0.03
 
 premarket_start  = datetime.strptime('09:00', '%H:%M').time()   
 
-regular_start  = datetime.strptime('14:30', '%H:%M').time()   
+regular_start  = datetime.strptime('14:30', '%H:%M').time()  
 
-regular_start_shifted = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back, 60))
+regular_start_pred = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back, 60))
+regular_start_shifted = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back*2, 60))
 
 regular_end = datetime.strptime('21:00' , '%H:%M').time()   
 
 afterhours_end = datetime.strptime('00:00' , '%H:%M').time()  
 
-date_to_check =  '2025-03' # set to None to analyze all dates save the final CSV
+date_to_check = None
+# date_to_check = '2023-11' # set to None to analyze all dates save the final CSV
 
 #########################################################################################################
 

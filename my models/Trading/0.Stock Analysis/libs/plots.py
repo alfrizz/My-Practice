@@ -1,11 +1,11 @@
 from libs import params
+import pandas as pd
+import numpy  as np
+
 import matplotlib
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from IPython.display import display, HTML
-
-import pandas as pd
-import numpy  as np
 
 ###############################################################################
 
@@ -147,6 +147,9 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
           The color to use for the original trade traces.
     """
     fig = go.Figure()
+
+    # only plot from regular_start_pred
+    df = df.loc[df.index.time >= params.regular_start_pred]
     
     # Trace 0: Base close-price trace.
     fig.add_trace(go.Scatter(
@@ -284,104 +287,7 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
     fig.show()
 
 
-
-# def aggregate_performance(
-#     perf_list: list,
-#     round_digits: int = 3
-# ) -> dict:
-#     """
-#     Given a list of daily performance dictionaries, return one summary dict:
-#     """
-
-#     # 1) Collect all keys present in daily dicts
-#     all_keys = set().union(*(perf.keys() for perf in perf_list if perf))
-
-#     aggregated = {}
-#     for key in all_keys:
-#         # 2) numeric fields → sum them
-#         if key != ('Trades Returns ($)'): 
-#             total = 0.0
-#             for perf in perf_list:
-#                 v = perf.get(key)
-#                 if isinstance(v, (int, float)):
-#                     total += v
-#             aggregated[key] = round(total, round_digits)
-
-#     # 3) Keep only the trade-count fields (no lists)
-#     #    We assume daily dicts have list-valued keys named exactly:
-#     #    We turn them into “N trades”
-#     for key in ('Trades Returns ($)',): 
-#         count = 0
-#         for perf in perf_list:
-#             lst = perf.get(key)
-#             if isinstance(lst, list):
-#                 count += len(lst)
-#         aggregated[key] = f"{count} trades"
-
-#     # 4) Rename the per-day Buy & Hold keys
-#     aggregated['Buy & Hold – each day ($)'] = aggregated.pop('Buy & Hold Return ($)')
-
-
-#     return aggregated
-
-
-# def aggregate_performance(
-#     perf_list: list,
-#     df: pd.DataFrame,
-#     round_digits: int = 3
-# ) -> dict:
-#     """
-#     Given a list of daily performance dicts and the full-minute-bar
-#     DataFrame, print & return one summary dict.
-#     """
-#     # 1) Collect all keys present in daily dicts
-#     all_keys = set().union(*(perf.keys() for perf in perf_list if perf))
-
-#     # 2) Sum numeric fields except 'Trades Returns ($)'
-#     aggregated = {}
-#     for key in all_keys:
-#         if key != "Trades Returns ($)":
-#             total = sum(
-#                 perf.get(key, 0)
-#                 for perf in perf_list
-#                 if isinstance(perf.get(key), (int, float))
-#             )
-#             aggregated[key] = round(total, round_digits)
-
-#     # 3) Count total trades
-#     trades_count = sum(
-#         len(perf.get("Trades Returns ($)", []))
-#         for perf in perf_list
-#         if isinstance(perf.get("Trades Returns ($)"), list)
-#     )
-#     aggregated["Trades Returns ($)"] = f"{trades_count} trades"
-
-#     # 4) Rename the per-day Buy & Hold key
-#     aggregated["Buy & Hold – each day ($)"] = aggregated.pop("Buy & Hold Return ($)")
-
-#     # 5) Infer start/end dates from df.index
-#     days       = df.index.normalize().unique()
-#     start_date = days.min()   # Timestamp at midnight
-#     end_date   = days.max()
-
-#     # 6) Print one-time buy&hold summary
-#     print(f"\n=== Overall Summary ({start_date.date()} → {end_date.date()}) ===")
-
-#     # slice out the 'ask' on start_date and 'bid' on end_date
-#     s = df.loc[df.index.normalize() == start_date, "ask"]
-#     e = df.loc[df.index.normalize() == end_date,   "bid"]
-
-#     if s.empty or e.empty:
-#         print("Could not find start/end prices in df.")
-#     else:
-#         start_ask = s.iloc[-1]
-#         end_bid   = e.iloc[-1]
-#         print(f"Start date price: {start_date.date()} = {start_ask:.4f}")
-#         print(f"  End date price:  {end_date.date()} = {end_bid:.4f}")
-#         print(f"One-time buy&hold gain: {end_bid - start_ask:.3f}\n")
-
-#     return aggregated
-
+#########################################################################################################
 
 def aggregate_performance(
     perf_list: list,
