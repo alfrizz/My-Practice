@@ -490,98 +490,211 @@ def identify_trades_daily(
 
 #########################################################################################################
 
-
-#B2.1.1
-def compute_reference_gain(df):
-    """
-    Computes the reference gain for the provided DataFrame slice:
-      daily_pct_range = (high.max - low.min) / low.min
-    Returns a float like 0.025 for a 2.5% average daily range.
-    """
-    # ensure datetime index
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df.index = pd.to_datetime(df.index)
-
-    # calculate one-day pct range
-    daily_pct = ((df["high"].max() - df["low"].min())
-                 / df["low"].min()) if not df.empty else 0.0
-    return daily_pct
-
 #B2.1
+# def compute_continuous_signal(
+#     day_df: pd.DataFrame,
+#     trades,
+#     smooth_win_sig: int,
+#     pre_entry_decay: float,
+#     short_penalty: float,       # penalty at 1-minute trades
+#     is_centered: bool,
+#     ref_return: float,          # your trade-gain benchmark in same units as profit_pct
+#     clip_quantiles=(0.01, 0.99),
+#     scale_bounds=(0.1, 1.0)
+# ) -> pd.DataFrame:
+#     """
+#     1) RAW SIGNAL (per-trade gains scaled & penalized + decay)
+#       a) scale each trade:  profit_pct/ref_return  (clipped to scale_bounds)
+#       b) decay gap = (sell_price – close[t])·exp(−λ·dt_min)
+#       c) penalty by duration: 1m→short_penalty, 1h→1.0, interp in between
+#       d) combined[t] = decay[t] · raw_scale · penalty
+#       e) signal_raw[t] = max over trades of combined[t]
+
+#     2) (OPTIONAL) NORMALIZATION — commented out so you keep absolute scale  
+#        # lo,hi = signal_raw.quantile(clip_quantiles);  
+#        # signal_norm = (signal_raw−lo)/(hi−lo)  
+
+#     3) BROADCAST for backward compatibility  
+#        signal_scaled = signal_raw  
+
+#     4) SMOOTH  
+#        signal_smooth = rolling_mean(signal_scaled, window=smooth_win_sig)
+#     """
+
+#     # hardcode durations
+#     short_duration = dt.timedelta(minutes=1)
+#     long_duration  = dt.timedelta(hours=1)
+
+#     df = day_df.copy()
+#     df["signal_raw"] = 0.0
+#     λ = pre_entry_decay / 100.0
+
+#     # 1) build per-trade curves
+#     for ((buy_dt, sell_dt), (_, sell_price), profit_pct) in trades:
+#         # 1a) reference scaling
+#         raw_scale = profit_pct / ref_return if ref_return else 1.0
+#         raw_scale = np.clip(raw_scale, *scale_bounds)
+
+#         # 1b) mask bars up to sell
+#         mask  = df.index <= sell_dt
+#         times = df.index[mask]
+#         if times.empty:
+#             continue
+
+#         closes  = df.loc[mask, "close"].to_numpy()
+#         dt_min  = (sell_dt - times).total_seconds() / 60.0
+
+#         # 1c) exponential decay on profit gap
+#         gaps    = np.maximum(sell_price - closes, 0.0)
+#         decayed = gaps * np.exp(-λ * dt_min)
+
+#         # 1d) duration penalty
+#         dur  = sell_dt - buy_dt
+#         frac = (dur - short_duration) / (long_duration - short_duration)
+#         frac = min(max(frac, 0.0), 1.0)
+#         pen  = short_penalty + frac * (1.0 - short_penalty)
+
+#         # 1e) combined per-trade
+#         combined = decayed * raw_scale * pen
+
+#         # 1f) merge into raw signal by max()
+#         existing = df.loc[mask, "signal_raw"].to_numpy()
+#         wins     = combined > existing
+#         ts_upd   = times[wins]
+#         df.loc[ts_upd, "signal_raw"] = combined[wins]
+
+#     # 2) NORMALIZATION — comment out if you want absolute scaling
+#     # lo, hi = df["signal_raw"].quantile(clip_quantiles).to_list()
+#     # if hi > lo:
+#     #     clipped            = df["signal_raw"].clip(lo, hi)
+#     #     df["signal_norm"]  = (clipped - lo) / (hi - lo)
+#     # else:
+#     #     df["signal_norm"]  = 0.0
+
+#     # 3) BROADCAST raw → scaled for backward compatibility
+#     df["signal_scaled"] = df["signal_raw"]
+
+#     # 4) SMOOTH the (un-normalized) scaled signal
+#     df["signal_smooth"] = (
+#         df["signal_scaled"]
+#           .rolling(window=smooth_win_sig, center=is_centered, min_periods=1)
+#           .mean()
+#     )
+
+#     return df
+
+
 def compute_continuous_signal(
-    day_df,
+    day_df: pd.DataFrame,
     trades,
-    smooth_win_sig,
-    pre_entry_decay,
-    is_centered,
-    regular_start=params.regular_start,
-    regular_end=params.regular_end,
-    clip_quantiles=(0.01, 0.99),
-    scale_bounds=(0.5, 2.0)
-):
+    smooth_win_sig: int,
+    pre_entry_decay: float,
+    short_penalty: float,       # penalty factor applied at 1-minute trades
+    is_centered: bool,
+    ref_profit: float           # benchmark profit in dollars (e.g. avg(sell_price−buy_price))
+) -> pd.DataFrame:
     """
-    1) Build raw decayed signal → signal_raw
-    2) Robust min–max normalize signal_raw → signal_norm
-    3) Compute today's intraday range → raw_range
-    4) Compute today's reference_gain (avg daily range) from [regular_start, regular_end]
-    5) Compute scale = raw_range / reference_gain, clipped to scale_bounds
-    6) Apply scale → signal_scaled
-    7) Smooth the scaled curve → signal_smooth
+    Build a 0→1 intraday signal with per-trade scaling, decay and duration penalty:
+
+    1) HARD-CODED DURATIONS
+       • short_duration = 1 minute
+       • long_duration  = 1 hour
+
+    2) REFERENCE SCALE
+       inv_ref = 1/ref_profit ensures a dollar-gain == ref_profit → combined_raw ≈ 1
+
+    3) PER-TRADE “COMBINED” CURVE
+       For each trade ((buy_dt, sell_dt), (buy_price, sell_price), profit_pct):
+       
+       a) Mask bars up to sell_dt:
+            mask  = df.index ≤ sell_dt
+            times = df.index[mask]
+
+       b) Raw dollar gaps & exponential decay:
+            closes      = df.loc[mask, "close"]
+            profit_gaps = max(sell_price − closes, 0)
+            dt_min      = minutes from each bar to sell_dt
+            decayed     = profit_gaps × exp(−(pre_entry_decay/100)·dt_min)
+
+       c) Duration‐penalty (no if/else):
+            dur       = sell_dt − buy_dt
+            time_frac = min(dur / long_duration, 1.0)
+            time_pen  = 1.0 − sign(short_penalty)*(1−short_penalty)*(1−time_frac)
+
+       d) Apply reference scale & penalty:
+            combined_raw = decayed × inv_ref × time_pen
+
+       e) Squash to (0,1):
+            combined = combined_raw / (1 + combined_raw)
+
+       f) Merge via point-wise max:
+            signal_raw[t] = max over trades of combined[t]
+
+    4) BROADCAST FOR COMPATIBILITY
+       signal_scaled = signal_raw
+
+    5) SMOOTH
+       signal_smooth = rolling_mean(signal_scaled,
+                                    window=smooth_win_sig,
+                                    center=is_centered,
+                                    min_periods=1)
+
+    Returns df with columns:
+      • signal_raw
+      • signal_scaled
+      • signal_smooth
     """
 
-    # Copy to avoid side effects
+    # 2) Copy DataFrame and init raw signal
     df = day_df.copy()
-
-    # 1) Raw decayed signal: backfill from each sell event
     df["signal_raw"] = 0.0
-    for (_, sell_dt), (_, sell_price), _ in trades:
-        mask        = df.index <= sell_dt
-        delta_mins  = (sell_dt - df.index[mask]).total_seconds() / 60.0
-        diffs       = (sell_price - df.loc[mask, "close"]).clip(lower=0)
-        decayed     = diffs * np.exp(-pre_entry_decay/100 * delta_mins)
-        df.loc[mask, "signal_raw"] = np.maximum(df.loc[mask, "signal_raw"], decayed)
 
-    # 2) Robust normalization of signal_raw to [0,1]
-    lo_q, hi_q = clip_quantiles
-    lo = df["signal_raw"].quantile(lo_q)
-    hi = df["signal_raw"].quantile(hi_q)
-    if hi > lo:
-        clipped = df["signal_raw"].clip(lower=lo, upper=hi)
-        df["signal_norm"] = (clipped - lo) / (hi - lo)
-    else:
-        df["signal_norm"] = 0.0
+    # 3) Build and merge per-trade “combined” curves
+    for ((buy_dt, sell_dt), (buy_price, sell_price), profit_pct) in trades:
+        # 3a) mask bars up to exit
+        mask  = df.index <= sell_dt
+        times = df.index[mask]
+        if times.empty:
+            continue
 
-    # 3) Compute today's intraday high/low over official session
-    reg     = df.between_time(regular_start, regular_end)
-    highs   = reg["high"] if not reg.empty else df["high"]
-    lows    = reg["low"]  if not reg.empty else df["low"]
-    day_hi  = highs.quantile(0.99)
-    day_lo  = lows.quantile(0.01)
-    raw_range = ((day_hi - day_lo) / day_lo) if day_lo else 0.0
+        # 3b) raw gaps & exponential decay
+        closes      = df.loc[mask, "close"].to_numpy()
+        profit_gaps = np.maximum(sell_price - closes, 0.0)
+        dt_min      = (sell_dt - times).total_seconds() / 60.0
+        λ           = pre_entry_decay / 100.0
+        decayed     = profit_gaps * np.exp(-λ * dt_min)
 
-    # 4) Compute reference_gain from today's session data
-    #    This uses the same high/low slice to get that day's typical range
-    reference_gain = compute_reference_gain(reg)
+        # 3c) duration‐based penalty
+        dur            = sell_dt - buy_dt
+        long_dur  = dt.timedelta(hours=1)
+        time_pen = min(dur / long_dur, 1.0)
+        short_pen = time_pen * (1 - short_penalty)
 
-    # 5) Scale factor = raw_range / reference_gain, clipped to bounds
-    if reference_gain > 0:
-        raw_scale = raw_range / reference_gain
-    else:
-        raw_scale = 1.0
-    min_s, max_s = scale_bounds
-    scale = np.clip(raw_scale, min_s, max_s)
+        # 3d) apply reference scaling & penalty
+        curr_profit = sell_price - buy_price
+        combined_raw =  decayed * (curr_profit / ref_profit) * short_pen
 
-    # 6) Apply scale to the normalized signal
-    df["signal_scaled"] = df["signal_norm"] * scale
+        # 3e) squash into (0,1)
+        combined = combined_raw / (1.0 + combined_raw)
 
-    # 7) Smooth the scaled signal with a rolling window
+        # 3f) point-wise max into signal_raw
+        existing = df.loc[mask, "signal_raw"].to_numpy()
+        wins     = combined > existing
+        ts_upd   = times[wins]
+        df.loc[ts_upd, "signal_raw"] = combined[wins]
+
+    # 5) smooth the final signal
     df["signal_smooth"] = (
-        df["signal_scaled"]
+        df["signal_raw"]
           .rolling(window=smooth_win_sig, center=is_centered, min_periods=1)
           .mean()
     )
 
     return df
+
+
+
+
 
 #########################################################################################################
 
@@ -676,61 +789,125 @@ def generate_trade_actions(
 #########################################################################################################
 
 # B2
-def add_trade_signal_to_results(results_by_day_trad, col_signal, col_action, min_prof_thr, regular_start,
-                                smooth_win_sig, pre_entry_decay, buy_threshold, trailing_stop_thresh, is_centered):
+# def add_trade_signal_to_results(results_by_day_trad, col_signal, col_action, ref_return, min_prof_thr, regular_start,
+#                                 smooth_win_sig, pre_entry_decay, short_penalty, buy_threshold, trailing_stop_thresh, is_centered):
+#     """
+#     Updates the input dictionary (results_by_day_trad) by applying two steps:
+    
+#        (A) Compute the continuous trading signal for each day (using compute_continuous_signal).
+#        (B) Generate discrete trade actions based on the continuous signal and a trailing stop loss 
+#            mechanism (using generate_trade_actions).
+    
+#     The continuous signal uses the formula:
+#          raw_value = (P_max - close(t)) - min_prof_thr,
+#     with exponential decay applied prior to the optimal entry time. The signal is later smoothed.
+    
+#     The discrete trade actions use the normalized continuous signal to identify candidate peaks.
+#     A candidate peak (shifted by half the smoothing window) is taken as the entry (buy signal) if the
+#     raw close is a local minimum. Then, while in a trade, a trailing stop loss is applied: when
+#          (max_price - current_close) / (max_price - buy_price) * 100 >= trailing_stop_thresh,
+#     a sell signal is issued.
+    
+#     Parameters:
+#       results_by_day_trad : dict
+#           Dictionary mapping each trading day (Timestamp) to a tuple (day_df, trades).
+#       col_signal : float
+#           Signal column
+#       col_action : int
+#           Trade action column
+#       min_prof_thr : float
+#           Minimum profit threshold used in continuous signal calculation.
+#       smooth_win_sig : int, default 5
+#           Rolling window size for smoothing signals.
+#       pre_entry_decay : float, default 0.01
+#           Decay rate applied before the trade entry for signal calculation.
+#       buy_threshold : float, default 0.6
+#           Minimum level in the smoothed normalized signal to consider a candidate peak for a trade.
+#       trailing_stop_thresh : float, default 0.5 percent of max stock price
+#           Trailing stop loss threshold. A sell signal is triggered when the retracement in raw close
+#           prices meets/exceeds this value.
+    
+#     Returns:
+#       updated_results : dict
+#           The results_by_day_sign dictionary updated 
+#     """
+#     updated_results = {}
+    
+#     for day, (day_df, trades) in results_by_day_trad.items():
+        
+#         # Step (A): Compute the continuous trading signal.
+#         df = compute_continuous_signal(day_df, trades, smooth_win_sig, pre_entry_decay, short_penalty, is_centered, ref_return) 
+        
+#         # Step (B): Generate discrete trade actions (using trailing stop loss logic).
+#         df = generate_trade_actions(df, col_signal, col_action, buy_threshold, trailing_stop_thresh, regular_start)
+        
+#         updated_results[day] = (df, trades)
+    
+#     return updated_results
+
+
+import numpy as np
+
+def add_trade_signal_to_results(
+    results_by_day_trad: dict,
+    col_signal: str,
+    col_action: str,
+    min_prof_thr: float,
+    regular_start: dt.time,
+    smooth_win_sig: int,
+    pre_entry_decay: float,
+    short_penalty: float,
+    buy_threshold: float,
+    trailing_stop_thresh: float,
+    is_centered: bool,
+    clip_quantiles=(0.01, 0.99),
+    scale_bounds=(0.1, 2.0)
+) -> dict:
     """
-    Updates the input dictionary (results_by_day_trad) by applying two steps:
-    
-       (A) Compute the continuous trading signal for each day (using compute_continuous_signal).
-       (B) Generate discrete trade actions based on the continuous signal and a trailing stop loss 
-           mechanism (using generate_trade_actions).
-    
-    The continuous signal uses the formula:
-         raw_value = (P_max - close(t)) - min_prof_thr,
-    with exponential decay applied prior to the optimal entry time. The signal is later smoothed.
-    
-    The discrete trade actions use the normalized continuous signal to identify candidate peaks.
-    A candidate peak (shifted by half the smoothing window) is taken as the entry (buy signal) if the
-    raw close is a local minimum. Then, while in a trade, a trailing stop loss is applied: when
-         (max_price - current_close) / (max_price - buy_price) * 100 >= trailing_stop_thresh,
-    a sell signal is issued.
-    
-    Parameters:
-      results_by_day_trad : dict
-          Dictionary mapping each trading day (Timestamp) to a tuple (day_df, trades).
-      col_signal : float
-          Signal column
-      col_action : int
-          Trade action column
-      min_prof_thr : float
-          Minimum profit threshold used in continuous signal calculation.
-      smooth_win_sig : int, default 5
-          Rolling window size for smoothing signals.
-      pre_entry_decay : float, default 0.01
-          Decay rate applied before the trade entry for signal calculation.
-      buy_threshold : float, default 0.6
-          Minimum level in the smoothed normalized signal to consider a candidate peak for a trade.
-      trailing_stop_thresh : float, default 0.5 percent of max stock price
-          Trailing stop loss threshold. A sell signal is triggered when the retracement in raw close
-          prices meets/exceeds this value.
-    
-    Returns:
-      updated_results : dict
-          The results_by_day_sign dictionary updated 
+    (A) Derive ref_return from the average profit% of all identified trades.
+    (B) For each day, build the continuous signal (using ref_return in Step 1A),
+        then generate discrete trade actions via trailing‐stop logic.
+
+    Returns updated_results: { day → (df_with_signals&actions, trades) }
     """
+
+    # (A) collect every trade's dollar‐gain
+    profits = []
+    for (_day_df, trades) in results_by_day_trad.values():
+        for ((buy_dt, sell_dt), (buy_price, sell_price), _profit_pct) in trades:
+            profits.append(sell_price - buy_price)
+
+    # ref_profit = np.mean(profits) # mean, median or percentiles
+    ref_profit = np.percentile(profits, 75)
+
     updated_results = {}
-    
     for day, (day_df, trades) in results_by_day_trad.items():
-        
-        # Step (A): Compute the continuous trading signal.
-        df = compute_continuous_signal(day_df, trades, smooth_win_sig, pre_entry_decay, is_centered) 
-        
-        # Step (B): Generate discrete trade actions (using trailing stop loss logic).
-        df = generate_trade_actions(df, col_signal, col_action, buy_threshold, trailing_stop_thresh, regular_start)
-        
-        updated_results[day] = (df, trades)
-    
+
+        # Step 1–3: continuous signal w/ per‐trade scaling
+        df_signal = compute_continuous_signal(
+            day_df          = day_df,
+            trades          = trades,
+            smooth_win_sig  = smooth_win_sig,
+            pre_entry_decay = pre_entry_decay,
+            short_penalty   = short_penalty,
+            is_centered     = is_centered,
+            ref_profit      = ref_profit,
+        )
+
+        # Step B: discrete buy/sell via trailing stop
+        df_actions = generate_trade_actions(
+            df_signal,
+            col_signal          = col_signal,
+            col_action          = col_action,
+            buy_threshold       = buy_threshold,
+            trailing_stop_thresh= trailing_stop_thresh,
+            regular_start       = regular_start
+        )
+
+        updated_results[day] = (df_actions, trades)
+
     return updated_results
+
 
 #########################################################################################################
 
@@ -939,6 +1116,7 @@ def run_trading_pipeline(
     gain_tightening_factor=params.gain_tightening_factor_man, 
     smooth_win_sig=params.smooth_win_sig_man, 
     pre_entry_decay=params.pre_entry_decay_man,
+    short_penalty=params.short_penalty_man,
     buy_threshold=params.buy_threshold_man, 
     trailing_stop_thresh=params.trailing_stop_thresh_man, 
     merging_retracement_thr=params.merging_retracement_thr_man, 
@@ -968,6 +1146,7 @@ def run_trading_pipeline(
         regular_start=params.regular_start,
         smooth_win_sig=smooth_win_sig,
         pre_entry_decay=pre_entry_decay,
+        short_penalty=short_penalty,
         buy_threshold=buy_threshold,
         trailing_stop_thresh=trailing_stop_thresh,
         is_centered=params.is_centered

@@ -9,13 +9,13 @@ import torch.nn.functional as Funct
 
 #########################################################################################################
 
+date_to_check = None
+# date_to_check = '2024-04' # set to None to analyze all dates save the final CSV
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ticker         = 'GOOGL'
 save_path      = Path("dfs training")
-
-label_col      = "signal_smooth"
-feature_cols   = ["open", "high", "low", "close", "volume"]
 
 # dataset split proportions
 train_prop, val_prop = 0.70, 0.15
@@ -41,9 +41,19 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 
 afterhours_end = datetime.strptime('00:00' , '%H:%M').time()  
 
-date_to_check = None
-# date_to_check = '2023-11' # set to None to analyze all dates save the final CSV
+features_cols = [
+    "open", "high", "low", "close", "volume",   # raw OHLCV
+    "r_1", "r_5", "r_15",                       # momentum
+    "vol_15", "volume_spike",                   # volatility & volume
+    "vwap_dev",                                 # intraday bias
+    "rsi_14"                                    # overbought/oversold
+]
 
+label_col = "signal_smooth" 
+
+train_batch = 64
+val_batch = 1
+num_workers = 0      # DataLoader worker count
 #########################################################################################################
 
 def signal_parameters(ticker):
@@ -57,7 +67,8 @@ def signal_parameters(ticker):
     
     # to define the smoothed signal
     smooth_win_sig ==> # smoothing window of the signal used for the identification of the final trades 
-    pre_entry_decay ==> # pre-trade decay of the final trades' raw signal (higher: quicker decay [0.1 - 1])
+    pre_entry_decay ==> # pre-trade decay of the final trades' raw signal (higher: quicker decay [0.01 - 1])
+    short_penalty ==> # duration penalty factor (lower: higher penalization [0.01 - 1])
     
     # to define the final buy and sell triggers
     buy_threshold ==> # float (percent/100) threshold of the smoothed signal to trigger the final trade
@@ -74,6 +85,7 @@ def signal_parameters(ticker):
         # to define the smoothed signal:
         smooth_win_sig=5
         pre_entry_decay=0.77
+        short_penalty=0.1
         # to define the final buy and sell triggers:
         buy_threshold=0.1
         pred_threshold=0.3
@@ -87,11 +99,12 @@ def signal_parameters(ticker):
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
         # to define the smoothed signal:
-        smooth_win_sig=10
-        pre_entry_decay=0.3
+        smooth_win_sig=15
+        pre_entry_decay=0.1
+        short_penalty= 0.1
         # to define the final buy and sell triggers:
-        buy_threshold=0.2
-        pred_threshold=0.2
+        buy_threshold=0.5
+        pred_threshold=0.5
         trailing_stop_thresh=0.2
         
     if ticker == 'TSLA':
@@ -104,14 +117,15 @@ def signal_parameters(ticker):
         # to define the smoothed signal:
         smooth_win_sig=3  
         pre_entry_decay=0.6
+        short_penalty=0.1
         # to define the final buy and sell triggers:
         buy_threshold=0.1 
         pred_threshold=0.3
         trailing_stop_thresh=0.1 
 
-    return min_prof_thr, max_down_prop, gain_tightening_factor, smooth_win_sig, pre_entry_decay, \
+    return min_prof_thr, max_down_prop, gain_tightening_factor, smooth_win_sig, pre_entry_decay, short_penalty, \
         buy_threshold, pred_threshold, trailing_stop_thresh, merging_retracement_thr, merging_time_gap_thr
 
 # run the function to get the parameters ("_man": manually assigned)
-min_prof_thr_man, max_down_prop_man, gain_tightening_factor_man, smooth_win_sig_man, pre_entry_decay_man, \
+min_prof_thr_man, max_down_prop_man, gain_tightening_factor_man, smooth_win_sig_man, pre_entry_decay_man, short_penalty_man, \
 buy_threshold_man, pred_threshold_man, trailing_stop_thresh_man, merging_retracement_thr_man, merging_time_gap_thr_man = signal_parameters(ticker)
