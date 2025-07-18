@@ -2,6 +2,8 @@ Django==5.2.4
 Scrapy==2.13.3
 jupyterlab>=4.0.0
 numpy
+optuna==4.4.0
 pandas
 plotly
 seaborn
+torch-lr-finder==0.2.2

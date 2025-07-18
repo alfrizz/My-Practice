@@ -15,9 +15,13 @@ for pkg in "$@"; do
     line="$name==$ver"
 
     if ! grep -Fxq "$line" "$REQS"; then
-      # ensure the file ends with a newline, then append
-      tail -c1 "$REQS" | read -r _ || echo "" >> "$REQS"
-      echo "$line" >> "$REQS"
+      # ensure a trailing newline
+      if ! tail -c1 "$REQS" | read -r _; then
+        echo "" | sudo tee -a "$REQS" >/dev/null
+      fi
+
+      # append the new requirement as root
+      echo "$line" | sudo tee -a "$REQS" >/dev/null
       echo "✅ Added '$line' to requirements.txt"
     else
       echo "ℹ️  '$line' already in requirements.txt"
@@ -27,5 +31,5 @@ for pkg in "$@"; do
   fi
 done
 
-# optional: sort/unique
-sort -u "$REQS" -o "$REQS"
+# finally, re-sort/uniquify the file (also as root)
+sudo sort -u "$REQS" -o "$REQS"
