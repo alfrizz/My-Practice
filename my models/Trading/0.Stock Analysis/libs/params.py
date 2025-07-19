@@ -10,7 +10,7 @@ import torch.nn.functional as Funct
 #########################################################################################################
 
 date_to_check = None
-date_to_check = '2025-03' # set to None to analyze all dates save the final CSV
+# date_to_check = '2025-03' # set to None to analyze all dates save the final CSV
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -42,16 +42,16 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 afterhours_end = datetime.strptime('00:00' , '%H:%M').time()  
 
 features_cols = [
-    "open", "high", "low", "close", "volume"   # raw OHLCV
-    # "r_1", "r_5", "r_15",                       # momentum
-    # "vol_15", "volume_spike",                   # volatility & volume
-    # "vwap_dev",                                 # intraday bias
-    # "rsi_14"                                    # overbought/oversold
+    "open", "high", "low", "close", "volume",   # raw OHLCV
+    "r_1", "r_5", "r_15",                       # momentum
+    "vol_15", "volume_spike",                   # volatility & volume
+    "vwap_dev",                                 # intraday bias
+    "rsi_14"                                    # overbought/oversold
 ]
 
 label_col = "signal_smooth" 
 
-train_batch = 64
+train_batch = 32
 val_batch = 1
 num_workers = 0      # DataLoader worker count
 #########################################################################################################

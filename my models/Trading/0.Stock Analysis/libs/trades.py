@@ -171,7 +171,7 @@ def prepare_interpolate_data(
     regular_start_shifted,  # str or time: lower‐bound of minute grid (e.g. look-back start)
     regular_start,          # str or time: official session open (for reg_mask)
     regular_end,            # str or time: official session close
-    red_pretr_win=1,        # int: factor for smoothing pre/post-market by vol ratio
+    red_pretr_win=1,        # int: factor for smoothing pre/post-market by vol ratio (not used anymore)
     tz_str="US/Eastern"     # str: timezone name for DST adjustment
 ):
     """
