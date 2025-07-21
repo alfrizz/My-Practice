@@ -1,4 +1,11 @@
+from libs import plots, params
+
 from typing import Sequence, List, Tuple, Optional, Union
+import gc 
+import os
+import shutil
+import atexit
+import copy
 
 import pandas as pd
 import numpy  as np
@@ -11,10 +18,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as Funct
+from torch.amp import GradScaler, autocast
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
+from torch.optim import AdamW
 
 from sklearn.preprocessing import StandardScaler
 
-from libs import params
+from tqdm.auto import tqdm
 
 
 #########################################################################################################
@@ -22,113 +32,121 @@ from libs import params
 def build_lstm_tensors(
     df: pd.DataFrame,
     *,
-    look_back: int,                  # number of past minutes to feed into each LSTM sample
-    features_cols: Sequence[str],    # list of column names to use as inputs
-    label_col: str,                  # name of the column we’ll predict (next‐step)
-    regular_start: dt.time,          # only keep windows whose end‐time ≥ this market‐open time
-    device: torch.device = torch.device("cpu")
+    look_back: int,
+    features_cols: Sequence[str],
+    label_col: str,
+    regular_start: dt.time,
+    tmpdir: str = "/tmp/lstm_memmap",           # directory for .npy files
+    device: torch.device = torch.device("cpu"),
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Convert 1-minute bar data into PyTorch tensors for a stateful LSTM.
+    Build disk-backed memmaps for LSTM windows, then wrap in PyTorch Tensors.
 
-    Each day is processed independently (so we can reset hidden state daily),
-    features are standardized per day, then sliding windows of length `look_back`
-    are built, next-step targets aligned, and finally RTH filtering applied.
-    Everything is concatenated across days, then moved once to the target device.
+    1) Ensure tmpdir exists
+    2) First pass: count total valid windows (N) to size memmaps
+    3) Allocate .npy memmaps: X_mm, y_mm, c_mm, b_mm, a_mm
+    4) Second pass: for each day
+       a) load raw arrays (features, labels, prices) as float32
+       b) standardize features in-place (float32)
+       c) build sliding windows via np.lib.stride_tricks
+       d) align targets (drop last window)
+       e) filter by regular_start (RTH mask)
+       f) write slices into memmaps at offset idx
+    5) Wrap memmaps in torch.from_numpy and move to device
+    6) Return five tensors: X, y, raw_close, raw_bid, raw_ask
 
-    Returns:
-      X         – float32 Tensor, shape (N, look_back, F): standardized input windows
-      y         – float32 Tensor, shape (N,       ): next-step scalar targets
-      raw_close – float32 Tensor, shape (N,       ): actual close price at predict time
-      raw_bid   – float32 Tensor, shape (N,       ): actual bid   price at predict time
-      raw_ask   – float32 Tensor, shape (N,       ): actual ask   price at predict time
-
-    Where:
-      N = total windows across all days passing the RTH filter,
-      F = number of feature columns,
-      look_back = minutes per input window.
+    Auto‐cleanup: the contents of tmpdir persist after this function returns.
+    We register an atexit handler so that when Python exits, tmpdir is
+    automatically removed. 
     """
 
-    # 0) Ensure we have a valid device
-    device = device or torch.device("cpu")
+    # ── Create / verify tmpdir ────────────────────────────────────────────
+    os.makedirs(tmpdir, exist_ok=True)
 
-    # Prepare lists to collect per-day tensors (all on CPU for now)
-    X_days, y_days = [], []
-    c_days, b_days, a_days = [], [], []  # for raw close/bid/ask prices
+    # ── Register cleanup at program exit (only once) ──────────────────────
+    if not hasattr(build_lstm_tensors, "_cleanup_registered"):
+        atexit.register(shutil.rmtree, tmpdir, ignore_errors=True)
+        build_lstm_tensors._cleanup_registered = True
 
-    # 1) Process each calendar day separately
-    for _, day_df in df.groupby(df.index.normalize(), sort=False):
-        # a) sort by timestamp to ensure chronological order
-        day_df = day_df.sort_index()
-
-        # b) extract raw price series as CPU tensors (length T = minutes in this day)
-        close_t = torch.from_numpy(day_df["close"].to_numpy(dtype=np.float32))
-        bid_t   = torch.from_numpy(day_df["bid"].to_numpy(dtype=np.float32))
-        ask_t   = torch.from_numpy(day_df["ask"].to_numpy(dtype=np.float32))
-
-        # c) standardize feature columns *per day*
-        feats_np = StandardScaler().fit_transform(day_df[features_cols].to_numpy())
-        feats_t  = torch.from_numpy(feats_np.astype(np.float32))  # shape (T, F)
-
-        # d) extract next-step labels as a CPU tensor
-        labels_t = torch.from_numpy(day_df[label_col].to_numpy(dtype=np.float32))  # shape (T,)
-
-        # 2) build sliding windows of length `look_back`
-        #    unfold creates (T - look_back + 1, look_back, F)
-        windows = feats_t.unfold(0, look_back, 1)
-
-        # 3) align windows with next-step targets:
-        #    drop the last window so we can pair each window with the label at t+1
-        windows = windows[:-1]               # now (T - look_back, look_back, F)
-        targets  = labels_t[look_back:]      # shape (T - look_back,)
-        c_pts    = close_t[look_back:]       # raw close at prediction time
-        b_pts    = bid_t[look_back:]         # raw bid   at prediction time
-        a_pts    = ask_t[look_back:]         # raw ask   at prediction time
-
-        # 4) RTH filter: keep only windows whose end-time ≥ `regular_start`
-        end_times = day_df.index.time[look_back:]        # length = T - look_back
-        mask      = np.array(end_times) >= regular_start # boolean array
-        if not mask.any():
-            # no valid windows this day → skip
+    # ── 1) Count total number of valid windows across all days ────────────
+    N = 0                     # total windows after RTH filtering
+    F = len(features_cols)    # number of features per time step
+    for _, day in df.groupby(df.index.normalize(), sort=False):
+        T = len(day)  # minutes in this day
+        # windows before filter: T – look_back
+        if T <= look_back:
             continue
+        # boolean mask: which end‐times ≥ regular_start
+        mask = np.array(day.index.time[look_back:]) >= regular_start
+        if mask.any():
+            N += (T - look_back)  # count all windows; we'll only write masked ones later
 
-        # convert to torch mask and apply to all per-day tensors
-        mask_t = torch.from_numpy(mask)
-        windows = windows[mask_t]
-        targets = targets[mask_t]
-        c_pts   = c_pts[mask_t]
-        b_pts   = b_pts[mask_t]
-        a_pts   = a_pts[mask_t]
+    # ── 2) Allocate on‐disk memmaps for X, y, and raw prices ─────────────
+    #   X_mm: shape (N, look_back, F)
+    X_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "X.npy"), mode="w+",
+        dtype=np.float32, shape=(N, look_back, F)
+    )
+    # y_mm and price memmaps: shape (N,)
+    y_mm = np.lib.format.open_memmap(os.path.join(tmpdir, "y.npy"), mode="w+", dtype=np.float32, shape=(N,))
+    c_mm = np.lib.format.open_memmap(os.path.join(tmpdir, "c.npy"), mode="w+", dtype=np.float32, shape=(N,))
+    b_mm = np.lib.format.open_memmap(os.path.join(tmpdir, "b.npy"), mode="w+", dtype=np.float32, shape=(N,))
+    a_mm = np.lib.format.open_memmap(os.path.join(tmpdir, "a.npy"), mode="w+", dtype=np.float32, shape=(N,))
 
-        # 5) collect filtered windows, labels, and raw prices
-        X_days.append(windows)
-        y_days.append(targets)
-        c_days.append(c_pts)
-        b_days.append(b_pts)
-        a_days.append(a_pts)
+    # ── 3) Fill memmaps day by day ────────────────────────────────────────
+    idx = 0  # write offset into memmaps
+    for _, day in df.groupby(df.index.normalize(), sort=False):
+        day = day.sort_index()
+        T   = len(day)
+        if T <= look_back:
+            continue  # not enough points to form one window
 
-    # 6) if nothing survived RTH filter, alert the user
-    if not X_days:
-        raise ValueError(
-            "No windows passed the RTH filter; check your regular_start or input data."
-        )
+        # 3a) Extract raw arrays as NumPy float32
+        feats_np  = day[features_cols].to_numpy(dtype=np.float32)  # (T, F)
+        labels_np = day[label_col].to_numpy(dtype=np.float32)      # (T,)
+        close_np  = day["close"].to_numpy(dtype=np.float32)       # (T,)
+        bid_np    = day["bid"].to_numpy(dtype=np.float32)
+        ask_np    = day["ask"].to_numpy(dtype=np.float32)
 
-    # 7) concatenate all days along the sample dimension (dim=0), still on CPU
-    X_cpu         = torch.cat(X_days, dim=0)  # shape: (N, look_back, F)
-    y_cpu         = torch.cat(y_days, dim=0)  # shape: (N,)
-    raw_close_cpu = torch.cat(c_days, dim=0)  # shape: (N,)
-    raw_bid_cpu   = torch.cat(b_days, dim=0)  # shape: (N,)
-    raw_ask_cpu   = torch.cat(a_days, dim=0)  # shape: (N,)
+        # 3b) Per‐day standardization in float32
+        mu        = feats_np.mean(axis=0, keepdims=True)
+        sd        = feats_np.std (axis=0, keepdims=True) + 1e-6
+        feats_np  = (feats_np - mu) / sd
 
-    # 8) one‐shot move to the target device
-    #    non_blocking=True may overlap host→device copies with compute
-    X         = X_cpu.to(device, non_blocking=True)
-    y         = y_cpu.to(device, non_blocking=True)
-    raw_close = raw_close_cpu.to(device, non_blocking=True)
-    raw_bid   = raw_bid_cpu.to(device, non_blocking=True)
-    raw_ask   = raw_ask_cpu.to(device, non_blocking=True)
+        # 3c) Build sliding windows via stride_tricks
+        #    windows shape before drop: (T - look_back + 1, look_back, F)
+        windows = np.lib.stride_tricks.sliding_window_view(feats_np, window_shape=(look_back, F))
+        windows = windows.reshape(T - look_back + 1, look_back, F)
 
-    # 9) return fully‐prepared tensors for training or inference
+        # 3d) Align to next‐step label: drop the last window
+        windows = windows[:-1]                # now (T - look_back, look_back, F)
+        targets = labels_np[look_back:]       # (T - look_back,)
+        c_pts   = close_np [look_back:]
+        b_pts   = bid_np   [look_back:]
+        a_pts   = ask_np   [look_back:]
+
+        # 3e) RTH filter: end‐time ≥ regular_start
+        mask = np.array(day.index.time[look_back:]) >= regular_start
+        if not mask.any():
+            continue  # skip days with no valid windows
+
+        # 3f) Write valid slices into memmaps
+        m = mask.sum()  # number of valid windows
+        X_mm[idx:idx+m] = windows[mask]
+        y_mm[idx:idx+m] = targets[mask]
+        c_mm[idx:idx+m] = c_pts[mask]
+        b_mm[idx:idx+m] = b_pts[mask]
+        a_mm[idx:idx+m] = a_pts[mask]
+        idx += m  # advance write index
+
+    # ── 4) Wrap memmaps in PyTorch Tensors and move to device ────────────
+    # This is zero‐copy: binary pages remain on disk until accessed.
+    X         = torch.from_numpy(X_mm) .to(device, non_blocking=True)
+    y         = torch.from_numpy(y_mm) .to(device, non_blocking=True)
+    raw_close = torch.from_numpy(c_mm) .to(device, non_blocking=True)
+    raw_bid   = torch.from_numpy(b_mm) .to(device, non_blocking=True)
+    raw_ask   = torch.from_numpy(a_mm) .to(device, non_blocking=True)
+
     return X, y, raw_close, raw_bid, raw_ask
 
 
@@ -453,20 +471,7 @@ def split_to_day_datasets(
     )
     print("   ds_te days:", len(ds_te))
 
-    # # 5) save datasets directly
-    # torch.save(
-    #     ds_val,
-    #     params.save_path / f"{params.ticker}_val_ds.pt",
-    #     _use_new_zipfile_serialization=False
-    # )
-    # torch.save(
-    #     ds_te,
-    #     params.save_path / f"{params.ticker}_test_ds.pt",
-    #     _use_new_zipfile_serialization=False
-    # )
-    # print("datasets saved!")
-
-    # 6) Build DataLoaders with our pad_collate:
+    # 5) Build DataLoaders with our pad_collate:
     print("5) building DataLoaders")
     train_loader = DataLoader(
         ds_tr,
@@ -707,3 +712,246 @@ class DualMemoryLSTM(nn.Module):
         return self.pred(out_long)
 
 
+#########################################################################################################
+ 
+def make_optimizer_and_scheduler(
+    model: nn.Module,
+    initial_lr: float,       
+    weight_decay: float,    
+    clipnorm: float
+):
+    """
+    1) AdamW with decoupled weight decay.
+    2) ReduceLROnPlateau: reduces LR when val‐RMSE stops improving.
+    3) CosineAnnealingWarmRestarts: per‐batch cosine schedule.
+    4) GradScaler for mixed precision.
+    """
+    # AdamW optimizer with L2 regularization
+    optimizer = AdamW(
+        model.parameters(),
+        lr=initial_lr,
+        weight_decay=weight_decay
+    )
+
+    # LR ↓ when validation RMSE plateaus
+    plateau_sched = ReduceLROnPlateau(
+        optimizer,
+        mode='min',
+        factor=params.hparams['PLATEAU_FACTOR'],
+        patience=params.hparams['PLATEAU_PATIENCE'],
+        min_lr=params.hparams['MIN_LR'],
+        verbose=True
+    )
+
+    # Cosine warm‐restarts scheduler (batch-level stepping)
+    cosine_sched = CosineAnnealingWarmRestarts(
+        optimizer, 
+        T_0=params.hparams['T_0'], 
+        T_mult=params.hparams['T_MULT'], 
+        eta_min=params.hparams['ETA_MIN']
+    )
+
+    # AMP scaler for fp16 stability
+    scaler = GradScaler()
+
+    return optimizer, plateau_sched, cosine_sched, scaler, clipnorm
+
+
+def train_step(
+    model:     nn.Module,
+    x_day:     torch.Tensor,    # (W, look_back, F), on device already
+    y_day:     torch.Tensor,    # (W,), on device already
+    optimizer: torch.optim.Optimizer,
+    scaler:    GradScaler,
+    clipnorm:  float,
+) -> float:
+    """
+    Single‐day step:
+      1) zero grads
+      2) fp16 forward+loss
+      3) backward with scaler → unscale → clip → step → update scaler
+      4) return scalar loss
+    """
+    optimizer.zero_grad(set_to_none=True)
+    model.train()
+
+    device_type = x_day.device.type
+    # Mixed‐precision forward
+    with autocast(device_type=device_type):
+        out  = model(x_day)         # → (W, seq_len, 1)
+        last = out[:, -1, 0]        # → (W,)
+        loss = Funct.mse_loss(last, y_day, reduction='mean')
+
+    # Backward + clip + optimizer step
+    scaler.scale(loss).backward()
+    scaler.unscale_(optimizer)     # bring grads to fp32 for clipping
+    torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+    scaler.step(optimizer)
+    scaler.update()
+
+    return loss.item()
+
+#########################################################################################################
+
+def custom_stateful_training_loop(
+    model:         torch.nn.Module,
+    optimizer:     torch.optim.Optimizer,
+    cosine_sched:  CosineAnnealingWarmRestarts,
+    plateau_sched: ReduceLROnPlateau,
+    scaler:        GradScaler,
+    train_loader:  torch.utils.data.DataLoader,
+    val_loader:    torch.utils.data.DataLoader,
+    *,
+    max_epochs:          int,
+    early_stop_patience: int,
+    baseline_val_rmse:   float,
+    clipnorm:            float,
+    device:              torch.device = torch.device("cpu"),
+) -> float:
+    """
+    Full training loop:
+      • CosineAnnealingWarmRestarts stepping per batch, with restart-print
+      • ReduceLROnPlateau stepping per epoch after warmup, with reduction-print
+      • Mixed precision + gradient clipping
+      • Per-day & per-week LSTM state resets
+      • Early stopping + best-model checkpoint
+      • When plateau cuts LR, cosine scheduler is reset to continue from new LR
+    """
+    model.to(device)
+    torch.backends.cudnn.benchmark = True
+
+    best_val_rmse = float('inf')
+    best_state    = None
+    patience_ctr  = 0
+    live_plot     = plots.LiveRMSEPlot()
+
+    for epoch in range(1, max_epochs + 1):
+        gc.collect()
+
+        # ── TRAIN ─────────────────────────────────────────────────────────
+        model.train()
+        model.h_short = model.h_long = None
+        train_losses = []
+        pbar = tqdm(enumerate(train_loader),
+                    total=len(train_loader),
+                    desc=f"Epoch {epoch}",
+                    unit="bundle")
+        for batch_idx, (xb_days, yb_days, wd_days) in pbar:
+            xb_days, yb_days = xb_days.to(device), yb_days.to(device)
+            wd_days          = wd_days.to(device)
+
+            optimizer.zero_grad(set_to_none=True)
+            prev_wd = None
+
+            for di in range(xb_days.size(0)):
+                wd = int(wd_days[di].item())
+                model.reset_short()
+                if prev_wd is not None and wd < prev_wd:
+                    model.reset_long()
+                prev_wd = wd
+
+                # Mixed-precision forward/backward
+                with autocast(device_type=device.type):
+                    out  = model(xb_days[di])
+                    last = out[..., -1, 0]
+                    loss = Funct.mse_loss(last, yb_days[di], reduction='mean')
+                scaler.scale(loss).backward()
+                train_losses.append(loss.item())
+
+                # Detach hidden states to truncate graph
+                if isinstance(model.h_short, tuple):
+                    model.h_short = tuple(h.detach() for h in model.h_short)
+                if isinstance(model.h_long, tuple):
+                    model.h_long  = tuple(h.detach() for h in model.h_long)
+                del out, last, loss
+
+            # Unscale → clip → step → update scaler
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+            scaler.step(optimizer)
+            scaler.update()
+
+            # Cosine scheduler (fractional epoch) + restart print
+            prev_lr_cos = optimizer.param_groups[0]['lr']
+            frac_epoch  = epoch - 1 + batch_idx / len(train_loader)
+            cosine_sched.step(frac_epoch)
+            new_lr_cos  = optimizer.param_groups[0]['lr']
+            if new_lr_cos > prev_lr_cos:
+                print(f"  [Cosine restart] LR {prev_lr_cos:.2e} → {new_lr_cos:.2e}"
+                      f" at epoch {epoch}, batch {batch_idx}")
+
+            # Logging
+            rmse = math.sqrt(sum(train_losses) / len(train_losses))
+            lr   = optimizer.param_groups[0]['lr']
+            pbar.set_postfix(train_rmse=rmse, lr=lr, refresh=False)
+            pbar.update(0)
+            gc.collect()
+        pbar.close()
+
+        # ── VALIDATE ───────────────────────────────────────────────────────
+        model.eval()
+        model.h_short = model.h_long = None
+        val_losses = []
+        prev_wd    = None
+        with torch.no_grad():
+            for xb_day, yb_day, wd in val_loader:
+                wd = int(wd.item())
+                x  = xb_day[0].to(device)
+                y  = yb_day.view(-1).to(device)
+
+                model.reset_short()
+                if prev_wd is not None and wd < prev_wd:
+                    model.reset_long()
+                prev_wd = wd
+
+                out  = model(x)
+                last = out[..., -1, 0]
+                val_losses.append(Funct.mse_loss(last, y, reduction='mean').item())
+                del xb_day, yb_day, x, y, out, last
+
+        val_rmse = math.sqrt(sum(val_losses) / len(val_losses))
+
+        # Live plot & print
+        live_plot.update(rmse, val_rmse)
+        print(f"Epoch {epoch:03d} • train={rmse:.4f} • val={val_rmse:.4f}"
+              f" • lr={optimizer.param_groups[0]['lr']:.2e}")
+
+        # ── ReduceLROnPlateau (after warmup) + reduction print ──────────
+        pre_lr = optimizer.param_groups[0]['lr']
+        if epoch > params.hparams['PLAT_EPOCHS_WARMUP']:
+            plateau_sched.step(val_rmse)
+        post_lr = optimizer.param_groups[0]['lr']
+        if post_lr < pre_lr:
+            print(f"  [Plateau cut] LR {pre_lr:.1e} → {post_lr:.1e}"
+                  f" at epoch {epoch}")
+            # — update cosine scheduler to continue from new LR —
+            cosine_sched.base_lrs = [post_lr for _ in cosine_sched.base_lrs]
+            cosine_sched.last_epoch = epoch - 1
+
+        # ── Early stopping ────────────────────────────────────────────────
+        if val_rmse < best_val_rmse:
+            best_val_rmse = val_rmse
+            best_state    = copy.deepcopy(model.state_dict())
+            patience_ctr  = 0
+        else:
+            patience_ctr += 1
+            if patience_ctr >= early_stop_patience:
+                print("Early stopping at epoch", epoch)
+                break
+
+    # ── Save best model weights ──────────────────────────────────────────
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        
+    ckpt_file = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
+
+    # Save both full model and state_dict+hparams, if you like:
+    torch.save({
+        "model_obj":         model,               
+        "model_state_dict":  model.state_dict(),
+        "hparams":           params.hparams
+    }, ckpt_file)
+    
+    print(f"Saved full model + hparams to {ckpt_file}")
+
+    return best_val_rmse

@@ -1,3 +1,5 @@
+from libs import params
+
 import math
 import pandas as pd
 from pandas import Timestamp
@@ -11,8 +13,6 @@ import datetime as dt
 import pytz
 from typing import Optional, Dict, Tuple, List, Sequence, Union
 import matplotlib.pyplot as plt
-
-from libs import params
 
 
 #########################################################################################################
@@ -171,7 +171,7 @@ def prepare_interpolate_data(
     regular_start_shifted,  # str or time: lower‐bound of minute grid (e.g. look-back start)
     regular_start,          # str or time: official session open (for reg_mask)
     regular_end,            # str or time: official session close
-    red_pretr_win=1,        # int: factor for smoothing pre/post-market by vol ratio
+    red_pretr_win=1,        # int: factor for smoothing pre/post-market by vol ratio (not used anymore)
     tz_str="US/Eastern"     # str: timezone name for DST adjustment
 ):
     """
@@ -640,6 +640,7 @@ def generate_trade_actions(
       pd.DataFrame : original df plus col_action column:
                      +1 = buy, 0 = hold, -1 = sell
     """
+    
     # Work on a copy to avoid side-effects
     df = df.copy()
     n = len(df)
@@ -725,8 +726,7 @@ def add_trade_signal_to_results(
         for ((buy_dt, sell_dt), (buy_price, sell_price), _profit_pct) in trades:
             profits.append(sell_price - buy_price)
 
-    # ref_profit = np.mean(profits) # mean, median or percentiles
-    ref_profit = np.percentile(profits, 75)
+    ref_profit = np.median(profits) # mean, median or percentiles
 
     updated_results = {}
     for day, (day_df, trades) in results_by_day_trad.items():

@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from IPython.display import display, HTML
 
+from optuna.trial import TrialState
+
 ###############################################################################
 
 class LiveRMSEPlot:
@@ -364,3 +366,33 @@ def aggregate_performance(
 
 
     return aggregated
+
+#########################################################################################################
+
+def live_plot_callback(study, _trial):
+    # only use fully completed trials, sorted by index
+    complete = sorted(
+        (t for t in study.trials if t.state == TrialState.COMPLETE),
+        key=lambda t: t.number
+    )
+    if not complete:
+        return
+
+    xs = [t.number for t in complete]
+    ys = [t.value  for t in complete]
+
+    # update line data
+    line.set_data(xs, ys)
+
+    # recompute axis limits + small padding
+    x_min, x_max = xs[0], xs[-1]
+    x_pad = max(1, (x_max - x_min) * 0.05)
+    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+
+    y_min, y_max = min(ys), max(ys)
+    y_pad = (y_max - y_min) * 0.1 or 0.1
+    ax.set_ylim(y_min - y_pad, y_max + y_pad)
+
+    # no tight_layout() needed—constrained_layout will handle margins
+    update_display(fig, display_id=handle.display_id)
+

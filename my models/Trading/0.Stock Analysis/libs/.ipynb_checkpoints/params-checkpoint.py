@@ -10,7 +10,9 @@ import torch.nn.functional as Funct
 #########################################################################################################
 
 date_to_check = None
-# date_to_check = '2025-03' # set to None to analyze all dates save the final CSV
+date_to_check = '2021-04' # set to None to analyze all dates save the final CSV
+
+date_to_test = '2025-04'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -51,9 +53,7 @@ features_cols = [
 
 label_col = "signal_smooth" 
 
-train_batch = 32
-val_batch = 1
-num_workers = 0      # DataLoader worker count
+
 #########################################################################################################
 
 def signal_parameters(ticker):
@@ -93,19 +93,19 @@ def signal_parameters(ticker):
         
     if ticker == 'GOOGL':
         # to define the initial trades:
-        min_prof_thr=0.2 
-        max_down_prop=0.4
-        gain_tightening_factor=0.1
-        merging_retracement_thr=0.9
-        merging_time_gap_thr=0.7
+        min_prof_thr=0.689 
+        max_down_prop=0.896
+        gain_tightening_factor=0.202
+        merging_retracement_thr=0.193
+        merging_time_gap_thr=0.509
         # to define the smoothed signal:
-        smooth_win_sig=15
-        pre_entry_decay=0.1
-        short_penalty= 0.1
+        smooth_win_sig=2
+        pre_entry_decay=0.487
+        short_penalty= 0.149
         # to define the final buy and sell triggers:
-        buy_threshold=0.5
-        pred_threshold=0.5
-        trailing_stop_thresh=0.2
+        buy_threshold=0.120
+        pred_threshold=0.120
+        trailing_stop_thresh=0.130
         
     if ticker == 'TSLA':
         # to define the initial trades:
@@ -129,3 +129,41 @@ def signal_parameters(ticker):
 # run the function to get the parameters ("_man": manually assigned)
 min_prof_thr_man, max_down_prop_man, gain_tightening_factor_man, smooth_win_sig_man, pre_entry_decay_man, short_penalty_man, \
 buy_threshold_man, pred_threshold_man, trailing_stop_thresh_man, merging_retracement_thr_man, merging_time_gap_thr_man = signal_parameters(ticker)
+
+
+#########################################################################################################
+
+
+hparams = {
+    # ── Architecture Parameters ────────────────────────────────────────
+    "SHORT_UNITS":         32,      # hidden size of each daily LSTM layer
+    "LONG_UNITS":          64,      # hidden size of the weekly LSTM
+    "DROPOUT_SHORT":       0.3,     # dropout after residual+attention block
+    "DROPOUT_LONG":        0.4,     # dropout after weekly LSTM outputs
+    "ATT_HEADS":           4,       # number of self-attention heads
+    "ATT_DROPOUT":         0.2,     # dropout rate inside attention
+    "WEIGHT_DECAY":        2e-4,    # L2 weight decay on all model weights
+
+    # ── Training Control Parameters ────────────────────────────────────
+    "TRAIN_BATCH":         16,      # training batch size
+    "VAL_BATCH":           1,       # validation batch size
+    "NUM_WORKERS":         1,       # DataLoader workers
+    "MAX_EPOCHS":          80,      # upper limit on training epochs
+    "EARLY_STOP_PATIENCE": 12,      # stop if no val-improve for this many epochs
+
+    # ── Optimizer Settings ─────────────────────────────────────────────
+    "LR_EPOCHS_WARMUP":    0,       # epochs to wait before decreasing the LR
+    "INITIAL_LR":          1e-3,    # AdamW initial learning rate
+    "CLIPNORM":            0.5,     # max-norm gradient clipping
+
+    # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
+    "T_0":                 100,     # epochs before first cosine restart
+    "T_MULT":              1,       # cycle length multiplier after each restart
+    "ETA_MIN":             5e-5,    # floor LR in each cosine cycle
+
+    # ── ReduceLROnPlateau Scheduler ───────────────────────────────────
+    "PLATEAU_FACTOR":      0.9,     # multiply LR by this factor on plateau
+    "PLATEAU_PATIENCE":    0,       # epochs with no val-improve before LR cut
+    "MIN_LR":              1e-6,    # lower bound on LR after reductions
+    "PLAT_EPOCHS_WARMUP":  999      # epochs to wait before triggering plateau logic
+}
