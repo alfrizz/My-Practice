@@ -136,7 +136,7 @@ buy_threshold_man, pred_threshold_man, trailing_stop_thresh_man, merging_retrace
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":         32,      # hidden size of each daily LSTM layer
+    "SHORT_UNITS":         48,      # hidden size of each daily LSTM layer
     "LONG_UNITS":          64,      # hidden size of the weekly LSTM
     "DROPOUT_SHORT":       0.3,     # dropout after residual+attention block
     "DROPOUT_LONG":        0.4,     # dropout after weekly LSTM outputs
@@ -145,21 +145,21 @@ hparams = {
     "WEIGHT_DECAY":        2e-4,    # L2 weight decay on all model weights
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":         16,      # training batch size
+    "TRAIN_BATCH":         32,      # training batch size
     "VAL_BATCH":           1,       # validation batch size
-    "NUM_WORKERS":         1,       # DataLoader workers
-    "MAX_EPOCHS":          80,      # upper limit on training epochs
+    "NUM_WORKERS":         8,       # DataLoader workers
+    "MAX_EPOCHS":          60,      # upper limit on training epochs
     "EARLY_STOP_PATIENCE": 12,      # stop if no val-improve for this many epochs
 
     # ── Optimizer Settings ─────────────────────────────────────────────
     "LR_EPOCHS_WARMUP":    0,       # epochs to wait before decreasing the LR
-    "INITIAL_LR":          1e-3,    # AdamW initial learning rate
+    "INITIAL_LR":          8e-4,    # AdamW initial learning rate
     "CLIPNORM":            0.5,     # max-norm gradient clipping
 
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
-    "T_0":                 100,     # epochs before first cosine restart
+    "T_0":                 60,     # epochs before first cosine restart
     "T_MULT":              1,       # cycle length multiplier after each restart
-    "ETA_MIN":             5e-5,    # floor LR in each cosine cycle
+    "ETA_MIN":             8e-5,    # floor LR in each cosine cycle
 
     # ── ReduceLROnPlateau Scheduler ───────────────────────────────────
     "PLATEAU_FACTOR":      0.9,     # multiply LR by this factor on plateau

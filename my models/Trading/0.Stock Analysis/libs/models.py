@@ -740,7 +740,6 @@ def make_optimizer_and_scheduler(
         factor=params.hparams['PLATEAU_FACTOR'],
         patience=params.hparams['PLATEAU_PATIENCE'],
         min_lr=params.hparams['MIN_LR'],
-        verbose=True
     )
 
     # Cosine warm‐restarts scheduler (batch-level stepping)
@@ -832,61 +831,72 @@ def custom_stateful_training_loop(
         model.train()
         model.h_short = model.h_long = None
         train_losses = []
+        
+        # 1) Capture the scheduler’s cycle counter before batch 0
+        prev_T_cur = cosine_sched.T_cur
+        
         pbar = tqdm(enumerate(train_loader),
                     total=len(train_loader),
                     desc=f"Epoch {epoch}",
                     unit="bundle")
         for batch_idx, (xb_days, yb_days, wd_days) in pbar:
+            # ensure we’re in train‐mode (for cudnn RNN backward)
+            model.train()
+        
             xb_days, yb_days = xb_days.to(device), yb_days.to(device)
             wd_days          = wd_days.to(device)
-
+        
             optimizer.zero_grad(set_to_none=True)
             prev_wd = None
-
+        
             for di in range(xb_days.size(0)):
                 wd = int(wd_days[di].item())
                 model.reset_short()
                 if prev_wd is not None and wd < prev_wd:
                     model.reset_long()
                 prev_wd = wd
-
-                # Mixed-precision forward/backward
+        
+                # Mixed‐precision forward/backward
                 with autocast(device_type=device.type):
                     out  = model(xb_days[di])
                     last = out[..., -1, 0]
                     loss = Funct.mse_loss(last, yb_days[di], reduction='mean')
                 scaler.scale(loss).backward()
                 train_losses.append(loss.item())
-
-                # Detach hidden states to truncate graph
+        
+                # Detach hidden states
                 if isinstance(model.h_short, tuple):
                     model.h_short = tuple(h.detach() for h in model.h_short)
                 if isinstance(model.h_long, tuple):
                     model.h_long  = tuple(h.detach() for h in model.h_long)
                 del out, last, loss
-
+        
             # Unscale → clip → step → update scaler
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer)
             scaler.update()
-
-            # Cosine scheduler (fractional epoch) + restart print
-            prev_lr_cos = optimizer.param_groups[0]['lr']
-            frac_epoch  = epoch - 1 + batch_idx / len(train_loader)
+        
+            # 2) Cosine‐scheduler step (fractional epoch)
+            frac_epoch = epoch - 1 + batch_idx / len(train_loader)
             cosine_sched.step(frac_epoch)
-            new_lr_cos  = optimizer.param_groups[0]['lr']
-            if new_lr_cos > prev_lr_cos:
-                print(f"  [Cosine restart] LR {prev_lr_cos:.2e} → {new_lr_cos:.2e}"
-                      f" at epoch {epoch}, batch {batch_idx}")
-
+        
+            # 3) True restart detection via T_cur wrap
+            new_T_cur = cosine_sched.T_cur
+            if new_T_cur < prev_T_cur:
+                lr = optimizer.param_groups[0]['lr']
+                print(f"  [Cosine restart] at epoch {epoch}, batch {batch_idx}, lr={lr:.2e}")
+            prev_T_cur = new_T_cur
+        
             # Logging
             rmse = math.sqrt(sum(train_losses) / len(train_losses))
             lr   = optimizer.param_groups[0]['lr']
             pbar.set_postfix(train_rmse=rmse, lr=lr, refresh=False)
             pbar.update(0)
             gc.collect()
+        
         pbar.close()
+
 
         # ── VALIDATE ───────────────────────────────────────────────────────
         model.eval()
