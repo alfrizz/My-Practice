@@ -965,3 +965,36 @@ def custom_stateful_training_loop(
     print(f"Saved full model + hparams to {ckpt_file}")
 
     return best_val_rmse
+    
+#########################################################################################################
+
+def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build your features and return a cleaned DataFrame.
+    """
+    # 1) intraday log‐returns
+    for lag in (1, 5, 15):
+        df[f"r_{lag}"] = np.log(df["close"] / df["close"].shift(lag))
+
+    # 2) volatility & volume spikes
+    df["vol_15"]       = df["r_1"].rolling(15).std()
+    df["volume_spike"] = df["volume"] / df["volume"].rolling(15).mean()
+
+    # 3) VWAP deviation
+    typ_price     = (df["high"] + df["low"] + df["close"]) / 3
+    vwap          = (typ_price * df["volume"]).cumsum() \
+                    / df["volume"].cumsum()
+    df["vwap_dev"] = (df["close"] - vwap) / vwap
+
+    # 4) 14‐period RSI
+    delta     = df["close"].diff()
+    gain      = delta.clip(lower=0)
+    loss      = -delta.clip(upper=0)
+    avg_gain  = gain.rolling(14).mean()
+    avg_loss  = loss.rolling(14).mean()
+    rs        = avg_gain / avg_loss
+    df["rsi_14"] = 100 - (100 / (1 + rs))
+
+    # 5) filter down to your features + bid/ask + label
+    df = df[params.features_cols + ["bid", "ask", params.label_col]].dropna()
+    return df

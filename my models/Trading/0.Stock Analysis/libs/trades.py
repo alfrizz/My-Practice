@@ -427,66 +427,53 @@ def identify_trades(df, min_prof_thr, max_down_prop, gain_tightening_factor, mer
 #########################################################################################################
 # B1
 def identify_trades_daily(
-    df,                          # pd.DataFrame: minute-indexed, DST-adjusted, interpolated
-    min_prof_thr,                # float: minimum profit percentage (%) to retain a trade
-    max_down_prop,               # float: maximum allowed retracement proportion from peak
-    gain_tightening_factor,      # float: factor tightening retracement allowance as gains grow
-    regular_start_shifted,       # str: session open time (e.g. "09:30"), includes pre-market if shifted
-    regular_end,                 # str: session close time (e.g. "16:00")
-    merging_retracement_thr,     # float: retracement threshold for merging adjacent trades
-    merging_time_gap_thr,        # float: time-gap ratio threshold for merging adjacent trades
-    day_to_check: Optional[str] = None  # "YYYY-MM-DD" to process only that day, else all days
-) -> Dict[datetime.date, Tuple[pd.DataFrame, List]]:
+    df: pd.DataFrame,  
+    min_prof_thr: float,
+    max_down_prop: float,
+    gain_tightening_factor: float,
+    merging_retracement_thr: float,
+    merging_time_gap_thr: float,
+    regular_start_shifted: str,
+    regular_end: str,
+    day_to_check: Optional[str] = None
+) -> Dict[dt.date, Tuple[pd.DataFrame, List]]:
     """
-    For each calendar day in `df`, slice out the full minute-bar session
-    from `regular_start_shifted` to `regular_end` (gapless), then identify
-    buy/sell trades via local extrema + retracement logic.
-    
-    Returns a dict mapping each date to (day_df, trades).
+    1) Slice df into daily sessions (regular_start_shifted→regular_end).
+    2) Identify trades via your local-extrema + retracement logic.
+    3) If day_to_check is set, only keep that date in the returned dict.
+    Returns a dict mapping date -> (day_df, trades).
     """
-
-    # 1) Ensure we have a DatetimeIndex
+    # ensure datetime index
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
 
-    results_by_day_trad: Dict[datetime.date, Tuple[pd.DataFrame, List]] = {}
-
-    # 2) Iterate per calendar day
+    results: Dict[dt.date, Tuple[pd.DataFrame, List]] = {}
     for day, group in df.groupby(df.index.normalize()):
-        # If a specific day is requested, skip all others
-        if day_to_check and day.strftime('%Y-%m-%d') != day_to_check:
+        # early filter: skip all but the target date
+        if day_to_check and day.strftime("%Y-%m-%d") != day_to_check:
             continue
 
-        # 2a) Build the exact session minute grid
-        day_str       = day.strftime('%Y-%m-%d')
-        start_ts      = pd.Timestamp(f"{day_str} {regular_start_shifted}")
-        end_ts        = pd.Timestamp(f"{day_str} {regular_end}")
-        trading_index = pd.date_range(start=start_ts, end=end_ts, freq='1min')
+        day_str = day.strftime("%Y-%m-%d")
+        start_ts = pd.Timestamp(f"{day_str} {regular_start_shifted}")
+        end_ts   = pd.Timestamp(f"{day_str} {regular_end}")
+        idx      = pd.date_range(start=start_ts, end=end_ts, freq="1min")
 
-        # 2b) Slice out those minutes (no NaNs because df was pre-filled)
-        # making sure  DataFrame has exactly one row per minute in that window
-        day_df = group.reindex(trading_index)
-
-        # 2c) Skip days with no data
+        day_df = group.reindex(idx)
         if day_df.empty:
             continue
 
-        # 3) Identify trades on this day’s minute bars
         trades = identify_trades(
-            df=day_df,
-            min_prof_thr=min_prof_thr,
-            max_down_prop=max_down_prop,
-            gain_tightening_factor=gain_tightening_factor,
-            merging_retracement_thr=merging_retracement_thr,
-            merging_time_gap_thr=merging_time_gap_thr
+            df                     = day_df,
+            min_prof_thr           = min_prof_thr,
+            max_down_prop          = max_down_prop,
+            gain_tightening_factor = gain_tightening_factor,
+            merging_retracement_thr= merging_retracement_thr,
+            merging_time_gap_thr   = merging_time_gap_thr
         )
-
-        # 4) Keep only days that produced at least one trade
         if trades:
-            results_by_day_trad[day.date()] = (day_df, trades)
+            results[day.date()] = (day_df, trades)
 
-    return results_by_day_trad
-
+    return results
 
 #########################################################################################################
 
@@ -600,9 +587,6 @@ def compute_continuous_signal(
     return df
 
 
-
-
-
 #########################################################################################################
 
 # B2.2
@@ -701,13 +685,14 @@ def add_trade_signal_to_results(
     results_by_day_trad: dict,
     col_signal: str,
     col_action: str,
+    ref_profit: float,
     min_prof_thr: float,
     regular_start: dt.time,
     smooth_win_sig: int,
     pre_entry_decay: float,
     short_penalty: float,
-    buy_threshold: float,
     trailing_stop_thresh: float,
+    buy_threshold: float,
     is_centered: bool,
     clip_quantiles=(0.01, 0.99),
     scale_bounds=(0.1, 2.0)
@@ -719,14 +704,6 @@ def add_trade_signal_to_results(
 
     Returns updated_results: { day → (df_with_signals&actions, trades) }
     """
-
-    # (A) collect every trade's dollar‐gain
-    profits = []
-    for (_day_df, trades) in results_by_day_trad.values():
-        for ((buy_dt, sell_dt), (buy_price, sell_price), _profit_pct) in trades:
-            profits.append(sell_price - buy_price)
-
-    ref_profit = np.median(profits) # mean, median or percentiles
 
     updated_results = {}
     for day, (day_df, trades) in results_by_day_trad.items():
@@ -954,71 +931,111 @@ def simulate_trading(
 
 #########################################################################################################
 
+def compute_global_ref_profit(
+    df: pd.DataFrame,  
+    min_prof_thr         = params.min_prof_thr_tick,
+    max_down_prop        = params.max_down_prop_tick,
+    gain_tightening_factor = params.gain_tightening_factor_tick,
+    merging_retracement_thr= params.merging_retracement_thr_tick,
+    merging_time_gap_thr = params.merging_time_gap_thr_tick,
+    regular_start_shifted= params.regular_start_shifted,
+    regular_end          = params.regular_end
+) -> float:
+    """
+    1) Calls identify_trades_daily over ALL days (day_to_check=None)
+       to get every day’s trades.
+    2) Flattens every trade’s (sell_price - buy_price) into a list.
+    3) Returns the median of that full list.
+    """
+    # collect trades for every day
+    all_trades = identify_trades_daily(
+        df                     = df,
+        min_prof_thr           = min_prof_thr,
+        max_down_prop          = max_down_prop,
+        gain_tightening_factor = gain_tightening_factor,
+        merging_retracement_thr= merging_retracement_thr,
+        merging_time_gap_thr   = merging_time_gap_thr,
+        regular_start_shifted  = regular_start_shifted,
+        regular_end            = regular_end,
+        day_to_check           = None      # no filtering here
+    )
+
+    # flatten all trade gains
+    flat_profits = [
+        sell_price - buy_price
+        for (_df, trades) in all_trades.values()
+        for ((_, _), (buy_price, sell_price), _) in trades
+    ]
+
+    # single median across the entire dataset (assumes at least one trade)
+    return float(np.median(flat_profits))
+
+
+#########################################################################################################
+
 
 def run_trading_pipeline(
     df_prep,
     col_signal,
     col_action,
-    min_prof_thr=params.min_prof_thr_man, 
-    max_down_prop=params.max_down_prop_man, 
-    gain_tightening_factor=params.gain_tightening_factor_man, 
-    smooth_win_sig=params.smooth_win_sig_man, 
-    pre_entry_decay=params.pre_entry_decay_man,
-    short_penalty=params.short_penalty_man,
-    buy_threshold=params.buy_threshold_man, 
-    trailing_stop_thresh=params.trailing_stop_thresh_man, 
-    merging_retracement_thr=params.merging_retracement_thr_man, 
-    merging_time_gap_thr=params.merging_time_gap_thr_man,
-    day_to_check=None
+    ref_profit,           
+    min_prof_thr           = params.min_prof_thr_tick,
+    max_down_prop          = params.max_down_prop_tick,
+    gain_tightening_factor = params.gain_tightening_factor_tick,
+    merging_retracement_thr= params.merging_retracement_thr_tick,
+    merging_time_gap_thr   = params.merging_time_gap_thr_tick,
+    smooth_win_sig         = params.smooth_win_sig_tick,
+    pre_entry_decay        = params.pre_entry_decay_tick,
+    short_penalty          = params.short_penalty_tick,
+    trailing_stop_thresh   = params.trailing_stop_thresh_tick,
+    buy_threshold          = params.buy_threshold_tick,
+    day_to_check: Optional[str] = None
 ):
 
     print("Step B1: identify_trades_daily …")
     trades_by_day = identify_trades_daily(
-        df=df_prep,
-        min_prof_thr=min_prof_thr,
-        max_down_prop=max_down_prop,
-        gain_tightening_factor=gain_tightening_factor,
-        regular_start_shifted=params.regular_start_shifted,
-        regular_end=params.regular_end,
-        merging_retracement_thr=merging_retracement_thr,
-        merging_time_gap_thr=merging_time_gap_thr,
-        day_to_check=day_to_check
+        df                     = df_prep,
+        min_prof_thr           = min_prof_thr,
+        max_down_prop          = max_down_prop,
+        gain_tightening_factor = gain_tightening_factor,
+        merging_retracement_thr= merging_retracement_thr,
+        merging_time_gap_thr   = merging_time_gap_thr,
+        regular_start_shifted  = params.regular_start_shifted,
+        regular_end            = params.regular_end,
+        day_to_check           = day_to_check
     )
 
     print("Step B2: add_trade_signal_to_results …")
     signaled = add_trade_signal_to_results(
         results_by_day_trad=trades_by_day,
-        col_signal=col_signal,
-        col_action=col_action,
-        min_prof_thr=min_prof_thr,
-        regular_start=params.regular_start,
-        smooth_win_sig=smooth_win_sig,
-        pre_entry_decay=pre_entry_decay,
-        short_penalty=short_penalty,
-        buy_threshold=buy_threshold,
-        trailing_stop_thresh=trailing_stop_thresh,
-        is_centered=params.is_centered
+        col_signal        = col_signal,
+        col_action        = col_action,
+        ref_profit        = ref_profit,
+        min_prof_thr      = min_prof_thr,
+        regular_start     = params.regular_start,
+        smooth_win_sig    = smooth_win_sig,
+        pre_entry_decay   = pre_entry_decay,
+        short_penalty     = short_penalty,
+        trailing_stop_thresh= trailing_stop_thresh,
+        buy_threshold     = buy_threshold,
+        is_centered       = params.is_centered
     )
     
     print("Step B3: simulate_trading …")
     sim_results = simulate_trading(
         results_by_day_sign=signaled,
-        col_action=col_action,
-        regular_start=params.regular_start,
-        regular_end=params.regular_end,
-        ticker=params.ticker
+        col_action        = col_action,
+        regular_start     = params.regular_start,
+        regular_end       = params.regular_end,
+        ticker            = params.ticker
     )
 
     if day_to_check:
-        target = pd.to_datetime(day_to_check).date()
-        for ts, triple in sim_results.items():
-            # normalize ts to a date for comparison
-            ts_date = ts.date() if hasattr(ts, "date") else ts
-            if ts_date == target:
-                return triple
-        return None
-        
+        # single-day: return the only triple
+        return next(iter(sim_results.values()), None)
+    # else  
     return sim_results
+
 
 
 
