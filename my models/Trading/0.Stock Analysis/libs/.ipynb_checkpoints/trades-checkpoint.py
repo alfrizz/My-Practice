@@ -1,4 +1,4 @@
-from libs import params
+from libs import params, plots
 
 import math
 import pandas as pd
@@ -16,15 +16,6 @@ import matplotlib.pyplot as plt
 
 
 #########################################################################################################
-
-def plot_close_volume(df, title="Close Price and Volume"):
-    """
-    Quickly plots the 'close' and 'volume' columns from the DataFrame
-    using a secondary y-axis for volume.
-    """
-    ax = df[['close', 'volume']].plot(secondary_y=['volume'], figsize=(10, 5), title=title, alpha=0.7)
-    ax.set_xlabel("Date")
-    plt.show()
 
 
 def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1):
@@ -62,7 +53,7 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
                     print(f"Detected forward split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
                     split_events.append((event_time, candidate_factor, 'forward'))
                     df_adj.loc[:df_adj.index[i-1], price_columns] /= candidate_factor
-                    df_adj.loc[:df_adj.index[i-1], 'volume'] *= candidate_factor * vol_fact # additonal manual volume factor necessary in some cases
+                    df_adj.loc[:df_adj.index[i-1], 'volume'] *= candidate_factor * vol_fact # additonal manual volume factor necessary in some cases (?)
         
         # Detect reverse split (price jump)
         elif ratio > reverse_threshold:
@@ -79,7 +70,8 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
     return df_adj, split_events
 
 
-def process_splits(folder, ticker, bidasktoclose_spread, vol_fact):
+
+def process_splits(folder, ticker, bidasktoclose_spread):
     """
     Processes the intraday CSV file for the given ticker from the specified folder.
     
@@ -99,14 +91,6 @@ def process_splits(folder, ticker, bidasktoclose_spread, vol_fact):
     Returns:
       pd.DataFrame: The processed DataFrame.
     """
-    output_file = f"dfs training/{ticker}_base.csv"
-    
-    # Check if the processed file already exists.
-    if os.path.exists(output_file):
-        print(f"{output_file} already exists. Reading and plotting the processed data...")
-        df_existing = pd.read_csv(output_file, index_col=0, parse_dates=True)
-        plot_close_volume(df_existing, title="Processed Data: Close Price and Volume")
-        return df_existing
 
     # Find the unique intraday CSV file using glob.
     pattern = os.path.join(folder, f"{ticker}_*.csv")
@@ -128,25 +112,19 @@ def process_splits(folder, ticker, bidasktoclose_spread, vol_fact):
     
     # Plot the original data.
     print("Plotting original data...")
-    plot_close_volume(df, title="Before Adjusting Splits: Close Price and Volume")
+    plots.plot_close_volume(df, title="Before Adjusting Splits: Close Price and Volume")
     
     # Detect and adjust splits.
-    df_adjusted, split_events = detect_and_adjust_splits(df=df, vol_fact=vol_fact)
+    df_adjusted, split_events = detect_and_adjust_splits(df=df)
     
     if split_events:
         print("Splits detected. Plotting adjusted data...")
-        plot_close_volume(df_adjusted, title="After Adjusting Splits: Close Price and Volume")
+        plots.plot_close_volume(df_adjusted, title="After Adjusting Splits: Close Price and Volume")
     else:
         print("No splits detected.")
-    
-    # Save the resulting DataFrame.
-    os.makedirs("dfs training", exist_ok=True)
-    df_adjusted.to_csv(output_file, index=True)
-    print(f"Processed data saved to {output_file}")
-    
+  
     return df_adjusted
-
-
+    
 #########################################################################################################
 
 
@@ -168,97 +146,93 @@ def is_dst_for_day(day, tz_str="US/Eastern"):
 
 def prepare_interpolate_data(
     df,
-    regular_start_shifted,  # str or time: lower‐bound of minute grid (e.g. look-back start)
-    regular_start,          # str or time: official session open (for reg_mask)
-    regular_end,            # str or time: official session close
-    red_pretr_win=1,        # int: factor for smoothing pre/post-market by vol ratio (not used anymore)
-    tz_str="US/Eastern"     # str: timezone name for DST adjustment
-):
+    regular_start_shifted,  # str or datetime.time: grid lower‐bound each day
+    regular_start,          # str or datetime.time: official session open
+    regular_end,            # str or datetime.time: official session close
+    red_pretr_win=1,        # legacy argument (unused)
+    tz_str="US/Eastern"     # timezone name for DST logic
+) -> pd.DataFrame:
     """
-    Prepares and fills minute‐bar data for each calendar day, with two distinct “starts”:
-      • regular_start_shifted: defines how early to begin your minute grid
-      • regular_start: classifies which bars count as “in‐session” vs pre/post‐market
+    Exactly your old per‐day interpolation, but applied in one pass over
+    the full multi‐day DataFrame. Steps:
 
-    Steps:
-      1. DST‐shift timestamps forward 1h on DST days.
-      2. Mark bars inside [regular_start, regular_end] as regular, others non‐regular.
-      3. Compute a small rolling‐mean window for non‐regular bars by volume ratio.
-      4. Apply that rolling‐mean to non‐regular bars only.
-      5. For each calendar day:
-           • Build a 1-minute index from the earliest raw tick or regular_start_shifted
-           • through the latest raw tick or regular_end.
-           • Reindex the DataFrame to that grid and linearly interpolate both ways.
-      6. Concatenate all days, sort, and drop any duplicate timestamps.
-
-    Returns
-    -------
-    pd.DataFrame
-        A DataFrame reindexed to every minute in each day’s span,
-        with non‐regular bars smoothed and gaps filled.
+    0) Clone input so we never mutate the caller’s df.
+    1) Cast all columns to float64 (your “working” series).
+    2) Shift each day’s timestamps forward 1h if that calendar day is in DST.
+    3) For each calendar day:
+       a) Build a 1-minute index from min(raw, regular_start_shifted)
+          through max(raw, regular_end).
+       b) Reindex the day’s bars to that grid and linearly interpolate
+          forward & backward.
+    4) Concatenate all per-day frames, sort by timestamp, and drop
+       duplicate timestamps (printing how many were removed).
+    5) Finally, keep only the bars whose time lies between
+       regular_start_shifted and regular_end (session‐plus‐lookback).
     """
 
-    # 0) Clone to avoid mutating the caller’s df, and keep a copy of raw values
+    # 0) Clone
     df = df.copy()
-    df_orig = df.add_suffix("_orig")
-    df = df.join(df_orig)
 
-    # 1) Cast working columns (non-_orig) to float64
-    working = [c for c in df.columns if not c.endswith("_orig")]
-    df[working] = df[working].astype(np.float64)
+    # 1) Cast all columns to float64 for numeric ops
+    all_cols = df.columns.tolist()
+    df[all_cols] = df[all_cols].astype(np.float64)
 
-    # 2) DST adjustment: shift each day’s timestamps +1h if in DST
+    # 2) DST adjustment: shift each day +1h if in DST
     ts = df.index.to_series()
     for day, grp in df.groupby(df.index.normalize()):
-        shift = pd.Timedelta(hours=1) if is_dst_for_day(day, tz_str) else pd.Timedelta(0)
-        ts.loc[grp.index] = grp.index + shift
+        add = pd.Timedelta(hours=1) if is_dst_for_day(day, tz_str) else pd.Timedelta(0)
+        ts.loc[grp.index] = grp.index + add
     df.index = ts.sort_values()
     df.sort_index(inplace=True)
 
-    # 3) Identify regular vs non‐regular bars by official session times
-    #    *regular_start_shifted* is NOT used here; only for grid bounds later.
-    start_t = (pd.to_datetime(regular_start).time()
-               if isinstance(regular_start, str) else regular_start)
-    end_t   = (pd.to_datetime(regular_end).time()
-               if isinstance(regular_end,   str) else regular_end)
-
-    times       = df.index.time
-    reg_mask    = (times >= start_t) & (times <= end_t)
-    nonreg_mask = ~reg_mask
-
-
-    # 4) Build minute‐grid per day, clamped by regular_start_shifted & regular_end
-    filled = []
+    # 3) Loop per calendar day to build & fill a minute grid
+    filled_days = []
     for day, grp in df.groupby(df.index.normalize()):
         day_str = day.strftime("%Y-%m-%d")
 
-        # compute grid bounds
-        grid_start_idx   = pd.Timestamp(f"{day_str} {regular_start_shifted}")
-        session_end_idx  = pd.Timestamp(f"{day_str} {regular_end}")
+        # a) grid bounds: earliest bar vs shifted start → latest bar vs close
+        grid_start  = pd.Timestamp(f"{day_str} {regular_start_shifted}")
+        session_end = pd.Timestamp(f"{day_str} {regular_end}")
 
-        # allow raw-data to extend beyond either bound
-        idx_start = min(grp.index.min(), grid_start_idx)
-        idx_end   = max(grp.index.max(), session_end_idx)
+        idx_start = min(grp.index.min(), grid_start)
+        idx_end   = max(grp.index.max(), session_end)
 
+        # b) reindex on a full 1-min range and interpolate
         full_idx = pd.date_range(start=idx_start, end=idx_end, freq="1min")
-
-        # reindex → insert NaNs → interpolate both forward/back
-        grp_f = grp.reindex(full_idx).interpolate(
+        day_filled = grp.reindex(full_idx).interpolate(
             method="linear", limit_direction="both"
         )
+        filled_days.append(day_filled)
 
-        filled.append(grp_f)
+    # 4) Concatenate all days, sort, and drop duplicates
+    df_out = pd.concat(filled_days).sort_index()
+    before = len(df_out)
+    df_out = df_out[~df_out.index.duplicated(keep="first")]
+    removed = before - len(df_out)
+    print(f"prepare_interpolate_data: removed {removed} duplicate timestamps.")
 
-    # 5) Concatenate all days, sort, and drop any duplicate timestamps
-    out = pd.concat(filled).sort_index()
-    out = out[~out.index.duplicated(keep="first")]
-    
-    return out
-    
+    # 5) Slice to only [regular_start_shifted, regular_end] each day
+    df_out = df_out.between_time(regular_start_shifted, regular_end)
+
+    # 6) drop any calendar day whose close is perfectly flat (to avoid to get extra days as saturdays)
+    df_out = (
+        df_out.groupby(df_out.index.normalize())
+          .filter(lambda grp: grp['close'].nunique() > 1)
+    )
+
+    return df_out
+
 
 #########################################################################################################
 
 # B1.1
-def identify_trades(df, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr):
+def identify_trades(df, # DataFrame with a datetime index and a 'close' column.
+                    min_prof_thr, # Minimum profit required
+                    max_down_prop, # Maximum allowed retracement (as a fraction of the gain)
+                    gain_tightening_factor, # As the gain increases, the allowed retracement is tightened by this factor
+                    merging_retracement_thr, # Maximum allowed intermediate retracement ratio (relative to the profit range of the first trade) to allow merging.
+                    merging_time_gap_thr): # Maximum allowed time gap ratio for merging, where the gap is measured relative to the sum of the
+                                           # active durations (buy-to-sell times) of both trades.
     """
     Identifies trades from a one-minute bars DataFrame using a retracement rule and then iteratively merges
     consecutive trades based on two conditions:
@@ -286,23 +260,6 @@ def identify_trades(df, min_prof_thr, max_down_prop, gain_tightening_factor, mer
       - If both conditions are met, the trades are merged by using the buy data from the first trade and 
         the sell data from the second trade. After merging, the trade’s profit is recalculated.
       - The merging is performed iteratively until no further merges can be done.
-    
-    Parameters:
-      df : pd.DataFrame
-         DataFrame with a datetime index and a 'close' column.
-      min_prof_thr : float
-         Minimum profit percentage required (e.g., 1.5 for 1.5%).
-      max_down_prop : float
-         Maximum allowed retracement (as a fraction of the gain). For example, 0.5 means that if the price
-         falls more than 50% of (max_so_far - buy_price) after the buy, the trade is closed.
-      gain_tightening_factor : float
-         As the gain increases, the allowed retracement is tightened by this factor.
-      merging_retracement_thr : float
-         Maximum allowed intermediate retracement ratio (relative to the profit range of the first trade)
-         to allow merging.
-      merging_time_gap_thr : float
-         Maximum allowed time gap ratio for merging, where the gap is measured relative to the sum of the
-         active durations (buy-to-sell times) of both trades.
     
     Returns:
       merged_trades : list
@@ -933,13 +890,13 @@ def simulate_trading(
 
 def compute_global_ref_profit(
     df: pd.DataFrame,  
-    min_prof_thr         = params.min_prof_thr_tick,
-    max_down_prop        = params.max_down_prop_tick,
+    min_prof_thr           = params.min_prof_thr_tick,
+    max_down_prop          = params.max_down_prop_tick,
     gain_tightening_factor = params.gain_tightening_factor_tick,
     merging_retracement_thr= params.merging_retracement_thr_tick,
-    merging_time_gap_thr = params.merging_time_gap_thr_tick,
-    regular_start_shifted= params.regular_start_shifted,
-    regular_end          = params.regular_end
+    merging_time_gap_thr   = params.merging_time_gap_thr_tick,
+    regular_start_pred     = params.regular_start_pred, # we only calculate the reference over the trading time for which we are computing the signal
+    regular_end            = params.regular_end
 ) -> float:
     """
     1) Calls identify_trades_daily over ALL days (day_to_check=None)
@@ -955,7 +912,7 @@ def compute_global_ref_profit(
         gain_tightening_factor = gain_tightening_factor,
         merging_retracement_thr= merging_retracement_thr,
         merging_time_gap_thr   = merging_time_gap_thr,
-        regular_start_shifted  = regular_start_shifted,
+        regular_start_shifted  = regular_start_pred, # using regular_start_pred
         regular_end            = regular_end,
         day_to_check           = None      # no filtering here
     )
@@ -967,7 +924,7 @@ def compute_global_ref_profit(
         for ((_, _), (buy_price, sell_price), _) in trades
     ]
 
-    # single median across the entire dataset (assumes at least one trade)
+    # single median across the entire dataset 
     return float(np.median(flat_profits))
 
 
@@ -975,7 +932,7 @@ def compute_global_ref_profit(
 
 
 def run_trading_pipeline(
-    df_prep,
+    df,
     col_signal,
     col_action,
     ref_profit,           
@@ -989,23 +946,24 @@ def run_trading_pipeline(
     short_penalty          = params.short_penalty_tick,
     trailing_stop_thresh   = params.trailing_stop_thresh_tick,
     buy_threshold          = params.buy_threshold_tick,
+    regular_start_shifted  = params.regular_start_shifted, # we want it here, because in the optuna signal optimization it can vary
     day_to_check: Optional[str] = None
 ):
 
-    print("Step B1: identify_trades_daily …")
+    print("Identify_trades_daily …")
     trades_by_day = identify_trades_daily(
-        df                     = df_prep,
+        df                     = df,
         min_prof_thr           = min_prof_thr,
         max_down_prop          = max_down_prop,
         gain_tightening_factor = gain_tightening_factor,
         merging_retracement_thr= merging_retracement_thr,
         merging_time_gap_thr   = merging_time_gap_thr,
-        regular_start_shifted  = params.regular_start_shifted,
+        regular_start_shifted  = regular_start_shifted,
         regular_end            = params.regular_end,
         day_to_check           = day_to_check
     )
 
-    print("Step B2: add_trade_signal_to_results …")
+    print("Add_trade_signal_to_results …")
     signaled = add_trade_signal_to_results(
         results_by_day_trad=trades_by_day,
         col_signal        = col_signal,
@@ -1021,7 +979,7 @@ def run_trading_pipeline(
         is_centered       = params.is_centered
     )
     
-    print("Step B3: simulate_trading …")
+    print("Simulate_trading …")
     sim_results = simulate_trading(
         results_by_day_sign=signaled,
         col_action        = col_action,
@@ -1032,7 +990,8 @@ def run_trading_pipeline(
 
     if day_to_check:
         # single-day: return the only triple
-        return next(iter(sim_results.values()), None)
+        triple = next(iter(sim_results.values()), None)
+        return triple
     # else  
     return sim_results
 

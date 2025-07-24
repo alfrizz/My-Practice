@@ -11,11 +11,12 @@ import torch.nn.functional as Funct
 ticker = 'GOOGL'
 
 date_to_check = None # to analyze all dates save the final CSV
-# date_to_check = '2020-04' # set to None to analyze all dates save the final CSV
+# date_to_check = '2025-06' # set to None to analyze all dates save the final CSV
 
-date_to_test = '2020-04'
+date_to_test = '2018-04'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+stocks_folder  = "Intraday stocks" 
 save_path      = Path("dfs training")
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions

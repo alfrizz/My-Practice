@@ -11,6 +11,17 @@ from optuna.trial import TrialState
 
 ###############################################################################
 
+def plot_close_volume(df, title="Close Price and Volume"):
+    """
+    Quickly plots the 'close' and 'volume' columns from the DataFrame
+    using a secondary y-axis for volume.
+    """
+    ax = df[['close', 'volume']].plot(secondary_y=['volume'], figsize=(10, 5), title=title, alpha=0.7)
+    ax.set_xlabel("Date")
+    plt.show()
+    
+#################################################################################
+
 class LiveRMSEPlot:
     """
     LiveRMSEPlot updates a single figure to show training progress without spawning

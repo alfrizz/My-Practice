@@ -11,11 +11,12 @@ import torch.nn.functional as Funct
 ticker = 'GOOGL'
 
 date_to_check = None # to analyze all dates save the final CSV
-# date_to_check = '2020-04' # set to None to analyze all dates save the final CSV
+# date_to_check = '2025-06' # set to None to analyze all dates save the final CSV
 
-date_to_test = '2020-04'
+date_to_test = '2018-04'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+stocks_folder  = "Intraday stocks" 
 save_path      = Path("dfs training")
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
@@ -76,7 +77,7 @@ def signal_parameters(ticker):
         trailing_stop_thresh=0.0962
         buy_threshold=0.0846
         pred_threshold=0.0846
-#
+# {'look_back': 30, 'min_prof_thr': 0.8873023692019155, 'max_down_prop': 0.5542992413400941, 'gain_tightening_factor': 0.3800101769222284, 'merging_retracement_thr': 0.48504854872127645, 'merging_time_gap_thr': 0.6496630991359298, 'smooth_win_sig': 3, 'pre_entry_decay': 0.46541344789493516, 'short_penalty': 0.3830993632494481, 'trailing_stop_thresh': 0.39542503158784303, 'buy_threshold': 0.21133224027063702}
     if ticker == 'TSLA':
         look_back=90
         # to define the initial trades:
