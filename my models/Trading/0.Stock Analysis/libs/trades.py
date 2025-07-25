@@ -575,7 +575,7 @@ def generate_trade_actions(
       trailing_stop_thresh : float
           Percent trailing stop (e.g. 1.5 means 1.5%).
       regular_start : datetime.time or str
-          Don’t enter a new trade before this time (e.g. "13:30").
+          Don’t enter a new trade before this time (e.g. "14:30").
 
     Returns:
       pd.DataFrame : original df plus col_action column:
@@ -970,7 +970,7 @@ def run_trading_pipeline(
         col_action        = col_action,
         ref_profit        = ref_profit,
         min_prof_thr      = min_prof_thr,
-        regular_start     = params.regular_start,
+        regular_start     = params.regular_start, 
         smooth_win_sig    = smooth_win_sig,
         pre_entry_decay   = pre_entry_decay,
         short_penalty     = short_penalty,
@@ -983,7 +983,7 @@ def run_trading_pipeline(
     sim_results = simulate_trading(
         results_by_day_sign=signaled,
         col_action        = col_action,
-        regular_start     = params.regular_start,
+        regular_start     = params.regular_start, 
         regular_end       = params.regular_end,
         ticker            = params.ticker
     )

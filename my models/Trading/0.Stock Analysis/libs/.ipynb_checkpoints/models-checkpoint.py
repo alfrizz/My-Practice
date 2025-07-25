@@ -939,30 +939,25 @@ def custom_stateful_training_loop(
             cosine_sched.last_epoch = epoch - 1
 
         # ── Early stopping ────────────────────────────────────────────────
-        if val_rmse < best_val_rmse:
-            best_val_rmse = val_rmse
-            best_state    = copy.deepcopy(model.state_dict())
-            patience_ctr  = 0
-        else:
+        if val_rmse > best_val_rmse:
             patience_ctr += 1
             if patience_ctr >= early_stop_patience:
                 print("Early stopping at epoch", epoch)
                 break
-
-    # ── Save best model weights ──────────────────────────────────────────
-    if best_state is not None:
-        model.load_state_dict(best_state)
-        
-    ckpt_file = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
-
-    # Save both full model and state_dict+hparams, if you like:
-    torch.save({
-        "model_obj":         model,               
-        "model_state_dict":  model.state_dict(),
-        "hparams":           params.hparams
-    }, ckpt_file)
-    
-    print(f"Saved full model + hparams to {ckpt_file}")
+        else:
+            best_val_rmse = val_rmse
+            best_state    = copy.deepcopy(model.state_dict())   
+            patience_ctr  = 0
+            if epoch > params.hparams['EARLY_STOP_PATIENCE']: # Save both full model and state_dict+hparams
+                model.load_state_dict(best_state)
+                ckpt_file = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
+                torch.save({
+                    "model_obj":         model,               
+                    "model_state_dict":  model.state_dict(),
+                    "hparams":           params.hparams
+                }, ckpt_file)
+                
+                print(f"Saved full model + hparams to {ckpt_file}")
 
     return best_val_rmse
     

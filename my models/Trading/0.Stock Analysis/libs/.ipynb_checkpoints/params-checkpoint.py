@@ -11,9 +11,9 @@ import torch.nn.functional as Funct
 ticker = 'GOOGL'
 
 date_to_check = None # to analyze all dates save the final CSV
-# date_to_check = '2025-06' # set to None to analyze all dates save the final CSV
+date_to_check = '2025-04' # set to None to analyze all dates save the final CSV
 
-date_to_test = '2018-04'
+date_to_test = '2025-04'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "Intraday stocks" 
@@ -62,22 +62,22 @@ def signal_parameters(ticker):
         pred_threshold=0.3
         
     if ticker == 'GOOGL':
-        look_back=90
+        look_back=180
         # to define the initial trades:
-        min_prof_thr= 0.8847
-        max_down_prop=0.7716
-        gain_tightening_factor=0.8953
-        merging_retracement_thr=0.9373
-        merging_time_gap_thr=0.1317
+        min_prof_thr= 0.1295
+        max_down_prop=0.2958
+        gain_tightening_factor=0.1960
+        merging_retracement_thr=0.4328
+        merging_time_gap_thr=0.7622
         # to define the smoothed signal:
-        smooth_win_sig=15
-        pre_entry_decay=0.4431
-        short_penalty=0.1835
+        smooth_win_sig=2
+        pre_entry_decay=0.3227
+        short_penalty=0.1886
         # to define the final buy and sell triggers:
-        trailing_stop_thresh=0.0962
-        buy_threshold=0.0846
-        pred_threshold=0.0846
-# {'look_back': 30, 'min_prof_thr': 0.8873023692019155, 'max_down_prop': 0.5542992413400941, 'gain_tightening_factor': 0.3800101769222284, 'merging_retracement_thr': 0.48504854872127645, 'merging_time_gap_thr': 0.6496630991359298, 'smooth_win_sig': 3, 'pre_entry_decay': 0.46541344789493516, 'short_penalty': 0.3830993632494481, 'trailing_stop_thresh': 0.39542503158784303, 'buy_threshold': 0.21133224027063702}
+        trailing_stop_thresh=0.0530
+        buy_threshold=0.1837
+        pred_threshold=0.1837
+    
     if ticker == 'TSLA':
         look_back=90
         # to define the initial trades:
@@ -129,29 +129,29 @@ label_col = "signal_smooth"
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":         32,      # hidden size of each daily LSTM layer
-    "LONG_UNITS":          32,      # hidden size of the weekly LSTM
+    "LONG_UNITS":          64,      # hidden size of the weekly LSTM
     "DROPOUT_SHORT":       0.3,     # dropout after residual+attention block
     "DROPOUT_LONG":        0.4,     # dropout after weekly LSTM outputs
     "ATT_HEADS":           4,       # number of self-attention heads
     "ATT_DROPOUT":         0.2,     # dropout rate inside attention
-    "WEIGHT_DECAY":        2e-4,    # L2 weight decay on all model weights
+    "WEIGHT_DECAY":        1e-3,    # L2 weight decay on all model weights
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":         32,      # training batch size
+    "TRAIN_BATCH":         16,      # training batch size
     "VAL_BATCH":           1,       # validation batch size
-    "NUM_WORKERS":         8,       # DataLoader workers
+    "NUM_WORKERS":         4,       # DataLoader workers
     "MAX_EPOCHS":          60,      # upper limit on training epochs
-    "EARLY_STOP_PATIENCE": 12,      # stop if no val-improve for this many epochs
+    "EARLY_STOP_PATIENCE": 20,      # stop if no val-improve for this many epochs
 
     # ── Optimizer Settings ─────────────────────────────────────────────
-    "LR_EPOCHS_WARMUP":    0,       # epochs to wait before decreasing the LR
-    "INITIAL_LR":          8e-4,    # AdamW initial learning rate
-    "CLIPNORM":            0.5,     # max-norm gradient clipping
+    "LR_EPOCHS_WARMUP":    3,       # epochs to wait before decreasing the LR
+    "INITIAL_LR":          1e-3,    # AdamW initial learning rate
+    "CLIPNORM":            0.7,      # max-norm gradient clipping
 
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
-    "T_0":                 60,     # epochs before first cosine restart
+    "T_0":                 60,      # epochs before first cosine restart
     "T_MULT":              1,       # cycle length multiplier after each restart
-    "ETA_MIN":             8e-5,    # floor LR in each cosine cycle
+    "ETA_MIN":             1e-5,    # floor LR in each cosine cycle
 
     # ── ReduceLROnPlateau Scheduler ───────────────────────────────────
     "PLATEAU_FACTOR":      0.9,     # multiply LR by this factor on plateau
