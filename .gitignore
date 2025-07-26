@@ -1,34 +1,17 @@
-my models/NLP & more/z_more/CNN/Handwriting recognition/A_Z Handwritten Data.csv
-my models/NLP/LLM/2.Intermediate Deep Learning Pytorch/omniglot-py
-my models/NLP & more/LLM/5.Intro to LLM/smaller_bert_finetuned
-my models/NLP & more/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.safetensors
-my models/NLP & more/BERT/3. BERT classificat/bert_model
-my models/NLP & more/BERT/4. BERT Fine Tuning - Disaster/bert_model
-my models/NLP & more/more/CNN/Handwriting recognition/A_Z Handwritten Data.csv
-my models/NLP & more/BERT/5. BERT Spam OK\!/saved_weights.pt
-my models/NLP & more/BERT/5. BERT Spam transfer-learning/saved_weights.pt
-my models/NLP & more/BERT/1.BERT IMDB fine-tuning - evaluation/output
-my models/z_more/CNN/Handwriting recognition/A_Z Handwritten Data.csv
-
-/my models/BERT/1.BERT IMDB fine-tuning - evaluation/output
-my models/BERT/4. BERT Fine Tuning - Disaster/bert_model
-my models/BERT/5. BERT Spam transfer-learning/saved_weights.pt
-my models/Computer Vision/Handwriting recognition/A_Z Handwritten Data.csv
-my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-1000/model.safetensors
-my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-1000/optimizer.pt
-my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-500/model.safetensors
-my models/LLM/5.Intro to LLM/smaller_bert_finetuned/checkpoint-500/optimizer.pt
+my_models/BERT/1.BERT IMDB fine-tuning - evaluation/output
+my_models/BERT/4. BERT Fine Tuning - Disaster/bert_model
+my_models/BERT/5. BERT Spam transfer-learning/saved_weights.pt
+my_models/Computer Vision/Handwriting recognition/A_Z Handwritten Data.csv
+my models/LLM/5.Intro to LLM/smaller_bert_finetuned/
 my models/LLM/Llama2 fine-tuning/llama-2-7b-fine-tuned/adapter_model.safetensors
-my models/Trading/0.Stock Analysis/daily_archives
-my models/Trading/0.Stock Analysis/Intraday stocks
-my models/Trading/0.Stock Analysis/dfs training
+my_models/Trading/_Stock_Analysis_/daily_archives
+my_models/Trading/_Stock_Analysis_/intraday_stocks
+my_models/Trading/_Stock_Analysis_/dfs_training
 docker_files/cudnn-linux-x86_64-8.9.7.29_cuda12-archive
+
+my_models/Business cases/.ipynb_checkpoints/desktop.ini
+my_models/Business cases/Car Insurance Claim Outcome/.ipynb_checkpoints/desktop.ini
+/.Trash-0
 
 *.ini
 *.env
-*.ini
-my models/Business cases/.ipynb_checkpoints/desktop.ini
-my models/Business cases/Car Insurance Claim Outcome/.ipynb_checkpoints/desktop.ini
-*.ini
-.Trash-0/files/GOOGL_final.csv
-/.Trash-0

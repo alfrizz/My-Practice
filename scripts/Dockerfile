@@ -1,18 +1,19 @@
-# ─────────────────────────────────────────────────────
-# 0) Let the builder pick the base image at build time
-# ─────────────────────────────────────────────────────
 ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:25.02-py3
 FROM ${BASE_IMAGE}
 
-# ─────────────────────────────────────────────────────
-# 1) Set up workspace & deps
-# ─────────────────────────────────────────────────────
 WORKDIR /workspace
-COPY scripts/requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
 
-# ─────────────────────────────────────────────────────
-# 2) Copy your code & launch JupyterLab
-# ─────────────────────────────────────────────────────
-COPY . /workspace
-CMD ["jupyter", "lab", "--no-browser", "--ip=0.0.0.0", "--allow-root", "--NotebookApp.token=''"]
+# 1) Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+ && pip install --no-cache-dir -r requirements.txt
+
+# 2) Copy and set up entrypoint
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+ && chmod +x /usr/local/bin/entrypoint.sh
+
+# 3) Don’t pre-create my_models—Docker Compose will mount it for you
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["jupyter","lab","--no-browser","--ip=0.0.0.0","--allow-root","--NotebookApp.token="]

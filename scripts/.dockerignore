@@ -1,4 +1,39 @@
-cudnn-linux-*
-profiler
-*.log
+# 1) Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2) Virtual environments & pip artifacts
 .venv/
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 3) Jupyter & test caches
+.ipynb_checkpoints/
+.pytest_cache/
+mypy_cache/
+
+# 4) Logs, profiling data, and CUDNN packages
+*.log
+profiler/
+cudnn-linux-*
+
+# 5) Git metadata & OS files
+.git/
+.gitignore
+.DS_Store
+
+# 6) Large data/model/result folders
+data/
+models/
+results/
+
+# 7) Docker build tooling
+# Exclude everything in scripts/ *except* Dockerfile, docker-compose.yml, entrypoint.sh, requirements.txt
+scripts/*
+!scripts/Dockerfile
+!scripts/docker-compose.yml
+!scripts/entrypoint.sh
+!scripts/requirements.txt

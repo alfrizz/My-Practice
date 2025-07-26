@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
+REQS="$PROJECT/scripts/requirements.txt"
+CONTAINER="gpu-jl"
+
+for pkg in "$@"; do
+  echo "🚀 Installing '$pkg' in container…"
+  if docker exec -u root "$CONTAINER" pip install --no-cache-dir "$pkg"; then
+    name=$(docker exec "$CONTAINER" pip show "${pkg%%[=<>]*}" \
+             | awk '/^Name:/ {print $2}')
+    ver=$(docker exec "$CONTAINER" pip show "$name" \
+             | awk '/^Version:/ {print $2}')
+    line="$name==$ver"
+
+    if ! grep -Fxq "$line" "$REQS"; then
+      # ensure a trailing newline
+      if ! tail -c1 "$REQS" | read -r _; then
+        echo "" | sudo tee -a "$REQS" >/dev/null
+      fi
+
+      # append the new requirement as root
+      echo "$line" | sudo tee -a "$REQS" >/dev/null
+      echo "✅ Added '$line' to requirements.txt"
+    else
+      echo "ℹ️  '$line' already in requirements.txt"
+    fi
+  else
+    echo "❌ Failed to install '$pkg'; not touching requirements.txt"
+  fi
+done
+
+# finally, re-sort/uniquify the file (also as root)
+sudo sort -u "$REQS" -o "$REQS"

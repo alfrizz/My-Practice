@@ -1,0 +1,1 @@
+{"symbol": "BABA", "timestamp": "2025-05-27T13:05:40.036386+00:00", "exchange": "V", "price": 119.88, "size": 130.0, "id": 52983525093454, "conditions": [" ", "T"], "tape": "A"}

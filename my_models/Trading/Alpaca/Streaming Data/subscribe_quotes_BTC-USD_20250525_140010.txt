@@ -1,0 +1,4 @@
+{"symbol": "BTC/USD", "timestamp": "2025-05-25T12:03:42.519474+00:00", "bid_price": 107183.9, "bid_size": 1.62051, "bid_exchange": null, "ask_price": 107362.167, "ask_size": 0.796069, "ask_exchange": null, "conditions": null, "tape": null}
+{"symbol": "BTC/USD", "timestamp": "2025-05-25T12:03:42.520080+00:00", "bid_price": 107183.9, "bid_size": 1.62051, "bid_exchange": null, "ask_price": 107391.1, "ask_size": 1.5905, "ask_exchange": null, "conditions": null, "tape": null}
+{"symbol": "BTC/USD", "timestamp": "2025-05-25T12:03:42.520354+00:00", "bid_price": 107183.9, "bid_size": 1.62051, "bid_exchange": null, "ask_price": 107292.537, "ask_size": 0.80003, "ask_exchange": null, "conditions": null, "tape": null}
+{"symbol": "BTC/USD", "timestamp": "2025-05-25T12:03:42.520610+00:00", "bid_price": 107165.03, "bid_size": 0.807258, "bid_exchange": null, "ask_price": 107292.537, "ask_size": 0.80003, "ask_exchange": null, "conditions": null, "tape": null}
