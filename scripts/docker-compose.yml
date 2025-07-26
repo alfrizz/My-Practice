@@ -1,21 +1,33 @@
 services:
   jupyter:
+    container_name: gpu-jl
+
     build:
       context: ${HOME}/my_practice/scripts
       dockerfile: Dockerfile
     image: gpu-jl:latest
+
+    restart: unless-stopped
+
     gpus: all
+    cpus: "20"
+    mem_limit: "28g"
     shm_size: 16g
+
     ports:
       - "8888:8888"
+
     volumes:
       - ${HOME}/my_practice:/workspace
+
     working_dir: /workspace
+
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
-    command: [
-      "jupyter", "lab",
-      "--no-browser",
-      "--ip=0.0.0.0",
-      "--allow-root",
-      "--NotebookApp.token="
-    ]
+
+    command:
+      - jupyter
+      - lab
+      - --no-browser
+      - --ip=0.0.0.0
+      - --allow-root
+      - --NotebookApp.token=

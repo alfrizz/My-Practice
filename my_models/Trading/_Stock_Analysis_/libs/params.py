@@ -128,30 +128,30 @@ label_col = "signal_smooth"
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":         16,      # hidden size of each daily LSTM layer
-    "LONG_UNITS":          32,      # hidden size of the weekly LSTM
-    "DROPOUT_SHORT":       0.5,     # dropout after residual+attention block
-    "DROPOUT_LONG":        0.6,     # dropout after weekly LSTM outputs
+    "SHORT_UNITS":         32,      # hidden size of each daily LSTM layer
+    "LONG_UNITS":          64,      # hidden size of the weekly LSTM
+    "DROPOUT_SHORT":       0.6,     # dropout after residual+attention block
+    "DROPOUT_LONG":        0.7,     # dropout after weekly LSTM outputs
     "ATT_HEADS":           4,       # number of self-attention heads
-    "ATT_DROPOUT":         0.3,     # dropout rate inside attention
+    "ATT_DROPOUT":         0.5,     # dropout rate inside attention
     "WEIGHT_DECAY":        1e-2,    # L2 weight decay on all model weights
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":         64,      # training batch size
+    "TRAIN_BATCH":         32,      # training batch size
     "VAL_BATCH":           1,       # validation batch size
-    "NUM_WORKERS":         8,       # DataLoader workers
+    "NUM_WORKERS":         4,       # DataLoader workers
     "MAX_EPOCHS":          60,      # upper limit on training epochs
     "EARLY_STOP_PATIENCE": 15,      # stop if no val-improve for this many epochs
 
     # ── Optimizer Settings ─────────────────────────────────────────────
     "LR_EPOCHS_WARMUP":    3,       # epochs to wait before decreasing the LR
-    "INITIAL_LR":          5e-4,    # AdamW initial learning rate
+    "INITIAL_LR":          1e-3,    # AdamW initial learning rate
     "CLIPNORM":            1,      # max-norm gradient clipping
 
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
     "T_0":                 60,      # epochs before first cosine restart
     "T_MULT":              1,       # cycle length multiplier after each restart
-    "ETA_MIN":             1e-5,    # floor LR in each cosine cycle
+    "ETA_MIN":             1e-4,    # floor LR in each cosine cycle
 
     # ── ReduceLROnPlateau Scheduler ───────────────────────────────────
     "PLATEAU_FACTOR":      0.9,     # multiply LR by this factor on plateau
