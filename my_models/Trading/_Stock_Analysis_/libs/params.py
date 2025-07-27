@@ -114,13 +114,13 @@ regular_start_pred = dt.time(*divmod(regular_start.hour * 60 + regular_start.min
 regular_start_shifted = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back_tick*2, 60))
 regular_end = datetime.strptime('21:00' , '%H:%M').time()   
 
-features_cols = [
-    "open", "high", "low", "close", "volume",   # raw OHLCV
-    "r_1", "r_5", "r_15",                       # momentum
-    "vol_15", "volume_spike",                   # volatility & volume
-    "vwap_dev",                                 # intraday bias
-    "rsi_14"                                    # overbought/oversold
-]
+# features_cols = [
+#     "open", "high", "low", "close", "volume",   # raw OHLCV
+#     "r_1", "r_5", "r_15",                       # momentum
+#     "vol_15", "volume_spike",                   # volatility & volume
+#     "vwap_dev",                                 # intraday bias
+#     "rsi_14"                                    # overbought/oversold
+# ]
 
 label_col = "signal_smooth" 
 
@@ -128,34 +128,35 @@ label_col = "signal_smooth"
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":         32,      # hidden size of each daily LSTM layer
-    "LONG_UNITS":          64,      # hidden size of the weekly LSTM
-    "DROPOUT_SHORT":       0.6,     # dropout after residual+attention block
-    "DROPOUT_LONG":        0.7,     # dropout after weekly LSTM outputs
-    "ATT_HEADS":           4,       # number of self-attention heads
-    "ATT_DROPOUT":         0.5,     # dropout rate inside attention
-    "WEIGHT_DECAY":        1e-2,    # L2 weight decay on all model weights
+    "SHORT_UNITS":           32,      # hidden size of each daily LSTM layer
+    "LONG_UNITS":            64,      # hidden size of the weekly LSTM
+    "DROPOUT_SHORT":         0.2,     # dropout after residual+attention block
+    "DROPOUT_LONG":          0.25,     # dropout after weekly LSTM outputs
+    "ATT_HEADS":             4,       # number of self-attention heads
+    "ATT_DROPOUT":           0.15,     # dropout rate inside attention
+    "WEIGHT_DECAY":          5e-4,    # L2 weight decay on all model weights
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":         32,      # training batch size
-    "VAL_BATCH":           1,       # validation batch size
-    "NUM_WORKERS":         4,       # DataLoader workers
-    "MAX_EPOCHS":          60,      # upper limit on training epochs
-    "EARLY_STOP_PATIENCE": 15,      # stop if no val-improve for this many epochs
+    "TRAIN_BATCH":           32,      # training batch size
+    "VAL_BATCH":             1,       # validation batch size
+    "NUM_WORKERS":           2,       # DataLoader workers
+    "TRAIN_PREFETCH_FACTOR": 2,       # number of batches pulled by the worker ahead of time
+    "MAX_EPOCHS":            60,      # upper limit on training epochs
+    "EARLY_STOP_PATIENCE":   15,      # stop if no val-improve for this many epochs
 
     # ── Optimizer Settings ─────────────────────────────────────────────
-    "LR_EPOCHS_WARMUP":    3,       # epochs to wait before decreasing the LR
-    "INITIAL_LR":          1e-3,    # AdamW initial learning rate
-    "CLIPNORM":            1,      # max-norm gradient clipping
+    "LR_EPOCHS_WARMUP":      1,       # epochs to wait before decreasing the LR
+    "INITIAL_LR":            1e-3,    # AdamW initial learning rate
+    "CLIPNORM":              0.7,      # max-norm gradient clipping
 
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
-    "T_0":                 60,      # epochs before first cosine restart
-    "T_MULT":              1,       # cycle length multiplier after each restart
-    "ETA_MIN":             1e-4,    # floor LR in each cosine cycle
+    "T_0":                   60,      # epochs before first cosine restart
+    "T_MULT":                1,       # cycle length multiplier after each restart
+    "ETA_MIN":               1e-5,    # floor LR in each cosine cycle
 
     # ── ReduceLROnPlateau Scheduler ───────────────────────────────────
-    "PLATEAU_FACTOR":      0.9,     # multiply LR by this factor on plateau
-    "PLATEAU_PATIENCE":    0,       # epochs with no val-improve before LR cut
-    "MIN_LR":              1e-6,    # lower bound on LR after reductions
-    "PLAT_EPOCHS_WARMUP":  999      # epochs to wait before triggering plateau logic
+    "PLATEAU_FACTOR":        0.9,     # multiply LR by this factor on plateau
+    "PLATEAU_PATIENCE":      0,       # epochs with no val-improve before LR cut
+    "MIN_LR":                1e-6,    # lower bound on LR after reductions
+    "PLAT_EPOCHS_WARMUP":    999      # epochs to wait before triggering plateau logic
 }

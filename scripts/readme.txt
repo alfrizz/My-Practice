@@ -1,13 +1,16 @@
-File/Folder	        Purpose
-.wslconfig	        Defines WSL2 resource limits (memory, CPUs, swap)
-sync-wslconfig.sh	Copies .wslconfig into your Windows profile and restarts WSL
-.dockerignore	        Lists files/folders to exclude from Docker build context
-Dockerfile	        Specifies how to build your Docker image (OS base, Python, dependencies)
-docker-compose.yml	Orchestrates containers and can set container‐level resource limits (CPU, memory)
-entrypoint.sh	        Launches Jupyter Lab inside the Docker container
-requirements.txt	Enumerates Python packages to install in the image
-pipreq	                Script that regenerates requirements.txt based on imports in your notebooks/scripts
-GPU benchmark.ipynb	Jupyter Notebook for measuring GPU performance
-readme.txt	        Legacy notes and quick reminders
-.ipynb_checkpoints/	Auto‐saved notebook checkpoints (can be ignored by Docker via .dockerignore)
-old/	                Archived scripts and previous configurations
+
+File/Folder	Purpose
+
+.wslconfig	Defines WSL2 resource limits (memory, CPU cores, swap file location) to optimize performance; includes localhost forwarding and networking tweaks (NB it´s a link to the original one).
+
+Dockerfile	Specifies the base OS image, installs system and Python dependencies, sets up environment variables, creates a non-root user, and defines the build steps.
+
+docker-compose.yml	Orchestrates multiple services, configures container-level CPU/memory limits, mounts volumes, defines networks, and wires together Jupyter Lab and its deps.
+
+entrypoint.sh	Bootstraps the container environment (e.g. activates venv, fixes permissions), runs migrations or setup tasks, and launches Jupyter Lab with proper flags.
+
+requirements.txt	Enumerates all Python packages with pinned versions for a reproducible image build; can be hand-edited or auto-regenerated as needed.
+
+pipreq	Wrapper script around pipreqs that scans project files for imports, regenerates requirements.txt, and skips dev/test modules (run pipreq instead of e.g. pip3, pipx).
+
+.dockerignore	Lists files and folders (e.g. .git, __pycache__, large data dumps) to exclude from Docker build context, keeping images lean and builds fast.

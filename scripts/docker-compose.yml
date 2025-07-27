@@ -10,9 +10,9 @@ services:
     restart: unless-stopped
 
     gpus: all
-    cpus: "20"
-    mem_limit: "28g"
-    shm_size: 16g
+    cpus: "18"
+    mem_limit: "24g"
+    shm_size: 16g      # to comfortably fit num_workers × prefetch_factor × batch_size
 
     ports:
       - "8888:8888"
