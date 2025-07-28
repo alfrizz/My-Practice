@@ -7,4 +7,5 @@ optuna==4.4.0
 pandas==2.2.3
 plotly
 seaborn
+shap==0.48.0
 torch-lr-finder==0.2.2

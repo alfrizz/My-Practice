@@ -1053,39 +1053,132 @@ def custom_stateful_training_loop(
 
 #########################################################################################################
 
-def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
+def feature_engineering(df: pd.DataFrame,
+                        features_cols: list,
+                        label_col: str) -> pd.DataFrame:
     """
-    Build your features and return a cleaned DataFrame.
+    Compute only the features in features_cols + ['bid','ask',label_col].
+    High-impact features are calculated first, then the rest in list order.
     """
-    
-    features_cols = ["open", "high", "low", "close", "volume"]
-    
-    # 1) intraday log‐returns
-    for lag in (1,5):
-        col = f"r_{lag}"
-        df[col] = np.log(df["close"] / df["close"].shift(lag))
-        features_cols.append(col)
+    # ensure DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
 
+    # 1) High-impact features
 
-    # # 2) volatility & volume spikes
-    # df["vol_15"]       = df["r_1"].rolling(15).std()
-    # df["volume_spike"] = df["volume"] / df["volume"].rolling(15).mean()
+    # VWAP deviation
+    if "vwap_dev" in features_cols:
+        tp = (df["high"] + df["low"] + df["close"]) / 3
+        cum_vp = (tp * df["volume"]).cumsum()
+        cum_vol = df["volume"].cumsum()
+        vwap = cum_vp / cum_vol
+        df["vwap_dev"] = (df["close"] - vwap) / vwap
 
-    # # 3) VWAP deviation
-    # typ_price     = (df["high"] + df["low"] + df["close"]) / 3
-    # vwap          = (typ_price * df["volume"]).cumsum() \
-    #                 / df["volume"].cumsum()
-    # df["vwap_dev"] = (df["close"] - vwap) / vwap
+    # Intraday log‐returns
+    if "r_1" in features_cols:
+        df["r_1"] = np.log(df["close"] / df["close"].shift(1))
+    if "r_5" in features_cols:
+        df["r_5"] = np.log(df["close"] / df["close"].shift(5))
+    if "r_15" in features_cols:
+        df["r_15"] = np.log(df["close"] / df["close"].shift(15))
 
-    # # 4) 14‐period RSI
-    # delta     = df["close"].diff()
-    # gain      = delta.clip(lower=0)
-    # loss      = -delta.clip(upper=0)
-    # avg_gain  = gain.rolling(14).mean()
-    # avg_loss  = loss.rolling(14).mean()
-    # rs        = avg_gain / avg_loss
-    # df["rsi_14"] = 100 - (100 / (1 + rs))
+    # Average True Range
+    if "atr_14" in features_cols:
+        hl = df["high"] - df["low"]
+        hp = (df["high"] - df["close"].shift()).abs()
+        lp = (df["low"]  - df["close"].shift()).abs()
+        tr = pd.concat([hl, hp, lp], axis=1).max(axis=1)
+        df["atr_14"] = tr.rolling(14).mean()
 
-    # 5) filter down to your features + bid/ask + label
-    df = df[features_cols + ["bid", "ask", params.label_col]].dropna()
-    return df, features_cols
+    # 2) Rest of features (list order)
+
+    # Rolling 15-period volatility
+    if "vol_15" in features_cols:
+        # ensure r_1 exists
+        if "r_1" not in df.columns and "r_1" in features_cols:
+            df["r_1"] = np.log(df["close"] / df["close"].shift(1))
+        df["vol_15"] = df["r_1"].rolling(15).std()
+
+    # Volume spike over 15
+    if "volume_spike" in features_cols:
+        df["volume_spike"] = df["volume"] / df["volume"].rolling(15).mean()
+
+    # RSI (14)
+    if "rsi_14" in features_cols:
+        d = df["close"].diff()
+        gain = d.clip(lower=0)
+        loss = -d.clip(upper=0)
+        ag = gain.rolling(14).mean()
+        al = loss.rolling(14).mean()
+        rs = ag / al
+        df["rsi_14"] = 100 - (100 / (1 + rs))
+
+    # Bollinger Band width (20, ±2σ)
+    if "bb_width_20" in features_cols:
+        m20 = df["close"].rolling(20).mean()
+        s20 = df["close"].rolling(20).std()
+        upper = m20 + 2 * s20
+        lower = m20 - 2 * s20
+        df["bb_width_20"] = (upper - lower) / m20
+
+    # Stochastic oscillator
+    if "stoch_k_14" in features_cols or "stoch_d_3" in features_cols:
+        lo14 = df["low"].rolling(14).min()
+        hi14 = df["high"].rolling(14).max()
+        k = 100 * (df["close"] - lo14) / (hi14 - lo14)
+        if "stoch_k_14" in features_cols:
+            df["stoch_k_14"] = k
+        if "stoch_d_3" in features_cols:
+            df["stoch_d_3"] = k.rolling(3).mean()
+
+    # Moving averages & cross
+    if "ma_5" in features_cols:
+        df["ma_5"] = df["close"].rolling(5).mean()
+    if "ma_20" in features_cols:
+        df["ma_20"] = df["close"].rolling(20).mean()
+    if "ma_diff" in features_cols:
+        if {"ma_5", "ma_20"}.issubset(df.columns):
+            df["ma_diff"] = df["ma_5"] - df["ma_20"]
+
+    # MACD & signal
+    if {"macd_12_26", "macd_signal_9"} & set(features_cols):
+        e12 = df["close"].ewm(span=12, adjust=False).mean()
+        e26 = df["close"].ewm(span=26, adjust=False).mean()
+        macd = e12 - e26
+        sig  = macd.ewm(span=9, adjust=False).mean()
+        if "macd_12_26" in features_cols:
+            df["macd_12_26"] = macd
+        if "macd_signal_9" in features_cols:
+            df["macd_signal_9"] = sig
+
+    # On-Balance Volume
+    if "obv" in features_cols:
+        dir_ = np.sign(df["close"].diff()).fillna(0)
+        df["obv"] = (dir_ * df["volume"]).cumsum()
+
+    # Calendar flags
+    if "hour" in features_cols:
+        df["hour"] = df.index.hour
+    if "day_of_week" in features_cols:
+        df["day_of_week"] = df.index.dayofweek
+    if "month" in features_cols:
+        df["month"] = df.index.month
+
+    # Order-book imbalance
+    if "order_imbalance" in features_cols:
+        bv = df.get("bid_volume", 0)
+        av = df.get("ask_volume", 0)
+        df["order_imbalance"] = (bv - av) / (bv + av).replace(0, np.nan)
+
+    if "in_trading" in features_cols:
+        df["in_trading"] = (
+            (df.index.time >= params.regular_start) &
+            (df.index.time < params.regular_end) &
+            (df.index.dayofweek < 5)           # Monday=0 … Friday=4
+        ).astype(int)
+
+    # Final filter
+    cols = [c for c in features_cols if c in df.columns] + ["bid", "ask", label_col]
+    df = df.loc[:, cols].dropna()
+
+    return df

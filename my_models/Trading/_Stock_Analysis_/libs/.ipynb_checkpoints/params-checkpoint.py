@@ -9,11 +9,52 @@ import torch.nn.functional as Funct
 
 #########################################################################################################
 ticker = 'GOOGL'
+features_cols = [
+    "open",             # Opening price
+    "high",             # Highest price
+    "low",              # Lowest price
+    "close",            # Closing price
+    "volume",           # Traded volume
+
+    "r_1",              # 1-period log return
+    "r_5",              # 5-period log return
+    "r_15",             # 15-period log return
+
+    "vol_15",           # Rolling 15-period volatility of r_1
+    "volume_spike",     # Current volume / avg volume over 15
+
+    "atr_14",           # 14-period Average True Range
+
+    "vwap_dev",         # (close – VWAP) / VWAP
+
+    "rsi_14",           # 14-period Relative Strength Index
+    "bb_width_20",      # (BB upper – BB lower) / MA20
+    "stoch_k_14",       # %K of 14-period Stochastic
+    "stoch_d_3",        # 3-period SMA of %K
+
+    "ma_5",             # 5-period simple moving average
+    "ma_20",            # 20-period simple moving average
+    "ma_diff",          # ma_5 – ma_20
+
+    "macd_12_26",       # EMA12 – EMA26
+    "macd_signal_9",    # 9-period EMA of MACD
+
+    "obv",              # On-Balance Volume
+
+    "in_trading",       # Within regular trading time
+    "hour",             # Hour of the day (0–23)
+    "day_of_week",      # Day of week (0=Mon…6=Sun)
+    "month",            # Month (1–12)
+
+    # "order_imbalance",  # (bid_volume – ask_volume)/(bid+ask)
+]
+
+label_col = "signal_smooth" 
 
 date_to_check = None # to analyze all dates save the final CSV
-# date_to_check = '2025-04' # set to None to analyze all dates save the final CSV
+# date_to_check = '2025-03' # set to None to analyze all dates save the "ready" CSV
 
-date_to_test = '2025-04'
+date_to_test = '2024-06'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -114,41 +155,32 @@ regular_start_pred = dt.time(*divmod(regular_start.hour * 60 + regular_start.min
 regular_start_shifted = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back_tick*2, 60))
 regular_end = datetime.strptime('21:00' , '%H:%M').time()   
 
-# features_cols = [
-#     "open", "high", "low", "close", "volume",   # raw OHLCV
-#     "r_1", "r_5", "r_15",                       # momentum
-#     "vol_15", "volume_spike",                   # volatility & volume
-#     "vwap_dev",                                 # intraday bias
-#     "rsi_14"                                    # overbought/oversold
-# ]
-
-label_col = "signal_smooth" 
 
 #########################################################################################################
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           32,      # hidden size of each daily LSTM layer
-    "LONG_UNITS":            64,      # hidden size of the weekly LSTM
-    "DROPOUT_SHORT":         0.2,     # dropout after residual+attention block
-    "DROPOUT_LONG":          0.25,     # dropout after weekly LSTM outputs
-    "ATT_HEADS":             4,       # number of self-attention heads
-    "ATT_DROPOUT":           0.15,     # dropout rate inside attention
-    "WEIGHT_DECAY":          5e-4,    # L2 weight decay on all model weights
+    "SHORT_UNITS":           48,    # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
+    "LONG_UNITS":            64,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
+    "DROPOUT_SHORT":         0.20,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_LONG":          0.25,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
+    "ATT_HEADS":             4,     # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
+    "ATT_DROPOUT":           0.15,   # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "WEIGHT_DECAY":          1e-4,  # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           32,      # training batch size
-    "VAL_BATCH":             1,       # validation batch size
-    "NUM_WORKERS":           2,       # DataLoader workers
-    "TRAIN_PREFETCH_FACTOR": 2,       # number of batches pulled by the worker ahead of time
-    "MAX_EPOCHS":            60,      # upper limit on training epochs
-    "EARLY_STOP_PATIENCE":   15,      # stop if no val-improve for this many epochs
+    "TRAIN_BATCH":           32,   # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
+    "VAL_BATCH":             1,    # validation batch size; ↑ faster eval but uses more memory, ↓ slower eval but uses less memory
+    "NUM_WORKERS":           2,    # DataLoader workers; ↑ parallel loading (bus error risk + overhead), ↓ safer but less parallelism
+    "TRAIN_PREFETCH_FACTOR": 1,    # batches to prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
+    "MAX_EPOCHS":            60,   # maximum training epochs; ↑ more training (risk wasted compute), ↓ shorter runs (risk undertraining)
+    "EARLY_STOP_PATIENCE":   12,   # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
-    "LR_EPOCHS_WARMUP":      1,       # epochs to wait before decreasing the LR
-    "INITIAL_LR":            1e-3,    # AdamW initial learning rate
-    "CLIPNORM":              0.7,      # max-norm gradient clipping
-
+    "LR_EPOCHS_WARMUP":      3,    # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
+    "INITIAL_LR":            3e-3, # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
+    "CLIPNORM":              0.9,  # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
+    
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
     "T_0":                   60,      # epochs before first cosine restart
     "T_MULT":                1,       # cycle length multiplier after each restart
