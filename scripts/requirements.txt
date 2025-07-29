@@ -8,4 +8,5 @@ pandas==2.2.3
 plotly
 seaborn
 shap==0.48.0
+statsmodels==0.14.5
 torch-lr-finder==0.2.2
