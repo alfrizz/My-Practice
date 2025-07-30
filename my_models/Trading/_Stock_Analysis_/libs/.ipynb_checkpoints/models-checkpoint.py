@@ -3,6 +3,7 @@ from libs import plots, params
 from typing import Sequence, List, Tuple, Optional, Union
 import gc 
 import os
+import io
 import shutil
 import atexit
 import copy
@@ -330,84 +331,6 @@ class DayWindowDataset(Dataset):
 
         
 #########################################################################################################
-
-
-# def pad_collate(
-#     batch: List[
-#         Union[
-#             Tuple[torch.Tensor, torch.Tensor, int],
-#             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]
-#         ]
-#     ]
-# ) -> Union[
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-# ]:
-#     """
-#     Pads a batch of per-day tensors to the maximum window length within the batch.
-    
-#     Supports two element types:
-#       1) (x_day, y_day, weekday)
-#       2) (x_day, y_day, raw_close, raw_bid, raw_ask, weekday)
-    
-#     Returns either:
-#       - (batch_x, batch_y, batch_wd)
-#       - (batch_x, batch_y, batch_rc, batch_rb, batch_ra, batch_wd)
-    
-#     All outputs live on CPU. Shapes:
-#       batch_x: (B, W_max, look_back, F)
-#       batch_y: (B, W_max)
-#       batch_wd: (B,)
-#       batch_rc/rb/ra: (B, W_max) if present
-#     """
-    
-#     # 1) Infer batch size and window dims
-#     B = len(batch)
-#     # Each x_day has shape (1, W_i, look_back, F). We extract W_i from dim=1
-#     W_max = max(elem[0].shape[1] for elem in batch)
-#     _, _, look_back, F = batch[0][0].shape   # get look_back & features
-#     # Detect whether raw_close/raw_bid/raw_ask are present
-#     has_raw = len(batch[0]) == 6
-
-#     # 2) Pre-allocate zero tensors for the final batched output
-#     #    Using torch.zeros avoids repeated allocations inside the loop.
-#     batch_x  = torch.zeros(B, W_max, look_back, F, dtype=batch[0][0].dtype)
-#     batch_y  = torch.zeros(B, W_max,            dtype=batch[0][1].dtype)
-#     batch_wd = torch.empty(B,                  dtype=torch.int64)
-    
-#     if has_raw:
-#         batch_rc = torch.zeros(B, W_max, dtype=batch[0][2].dtype)
-#         batch_rb = torch.zeros(B, W_max, dtype=batch[0][3].dtype)
-#         batch_ra = torch.zeros(B, W_max, dtype=batch[0][4].dtype)
-
-#     # 3) Copy each example into the allocated tensors
-#     for i, elem in enumerate(batch):
-#         # Unpack: either (x,y,wd) or (x,y,rc,rb,ra,wd)
-#         x_day, y_day, *rest = elem
-#         weekday = rest[-1]            # always the last element
-#         W_i = x_day.shape[1]          # actual number of windows for this day
-
-#         # x_day shape: (1, W_i, look_back, F) → squeeze batch-dim then copy
-#         batch_x[i, :W_i] = x_day.squeeze(0)
-        
-#         # y_day shape: (1, W_i) → squeeze then copy
-#         batch_y[i, :W_i] = y_day.squeeze(0)
-        
-#         # weekday is a scalar int
-#         batch_wd[i] = weekday
-
-#         if has_raw:
-#             # raw_close/rb/ra each have shape (W_i,)
-#             rc, rb, ra = rest[:-1]
-#             batch_rc[i, :W_i] = rc
-#             batch_rb[i, :W_i] = rb
-#             batch_ra[i, :W_i] = ra
-
-#     # 4) Return the same tuple structure as before
-#     if has_raw:
-#         return batch_x, batch_y, batch_rc, batch_rb, batch_ra, batch_wd
-#     else:
-#         return batch_x, batch_y, batch_wd
 
 def pad_collate(
     batch: List[
@@ -776,9 +699,10 @@ class DualMemoryLSTM(nn.Module):
         out_long = self.do_long(out_long)
         out_long = self.ln_long(out_long)
 
-        # 8) linear head → (B, S, 1)
-        return self.pred(out_long)
+        # 8) linear head → raw output
+        raw = self.pred(out_long)        # shape: (B, S, 1)
 
+        return raw
 
 
 
@@ -876,12 +800,31 @@ def custom_stateful_training_loop(
     device:              torch.device = torch.device("cpu"),
 ) -> float:
     """
-    A stateful training loop for a dual‐memory LSTM model.
-    This version:
-      - Pre-binds loss and regex to avoid re-creation each batch.
-      - Drops per-batch garbage collections.
-      - Detaches hidden states in-place for minimal tensor churn.
-      - Retains the exact logic, scheduling, and checkpointing of the original.
+    • Device and performance setup
+      – Sends the model to CPU/GPU
+      – Enables cuDNN benchmarking for dynamic kernel tuning
+    • Pre-binding of heavy objects
+      – Caches MSE-loss function
+      – Compiles regex once for checkpoint filename matching
+    • Epoch-wise Python-side garbage collection
+      – Frees unused objects at the start of each epoch to limit memory churn
+    • Dual-memory LSTM state management
+      – Resets short‐term LSTM state on every new slice
+      – Detects week boundaries via weekday index to reset long‐term memory
+    • Mixed precision training
+      – Wraps forward/backward in autocast
+      – Scales and unscales gradients, clips by norm, steps optimizer & scaler
+    • Cosine Annealing with Warm Restarts
+      – Steps the scheduler by fractional epoch to smoothly vary LR
+      – Logs every restart event with the new LR
+    • Plateau-based LR reduction
+      – After warmup epochs, steps ReduceLROnPlateau on validation RMSE
+      – Re-anchors the cosine scheduler whenever the plateau cuts LR
+    • Live, real-time plotting
+      – Streams train/val RMSE by epoch via an IPython or inline draw widget
+      – Retains full history for a final summary plot
+    • Early stopping
+      – Halts training if validation RMSE fails to improve for patience epochs
     """
 
     # 1) Send model to GPU/CPU and enable cudnn autotuner for speed
@@ -939,7 +882,9 @@ def custom_stateful_training_loop(
                 # Mixed precision forward/backward
                 with autocast(device_type=device.type):
                     out  = model(xb_days[di])         # (look_back, 1) prediction tensor
-                    last = out[..., -1, 0]            # take only the final time‐step
+                    last = out[..., -1, 0]        
+                    
+                    # take only the final time‐step
                     loss = loss_fn(last, yb_days[di], reduction='mean')
 
                 # Scale, backpropagate, and collect loss
@@ -1028,24 +973,29 @@ def custom_stateful_training_loop(
 
             # reload best weights before saving new checkpoint
             model.load_state_dict(best_state)
+            
+    # Final conditional save (once per run)
+    rmses = [
+        float(m.group(1))
+        for f in params.save_path.glob(f"{params.ticker}_*.pth")
+        for m in (save_pattern.match(f.name),)
+        if m
+    ]
+    # if no prior checkpoint or improvement, save
+    if not rmses or best_val_rmse < min(rmses):
+        buf = io.BytesIO()
+        live_plot.fig.savefig(buf, format="png")
+        buf.seek(0)
+        plot_png = buf.read()
 
-            # scan saved checkpoints just once, using precompiled regex
-            rmses = [
-                float(m.group(1))
-                for f in params.save_path.glob(f"{params.ticker}_*.pth")
-                for m in (save_pattern.match(f.name),)
-                if m
-            ]
-
-            # if no prior checkpoint or improvement, save
-            if not rmses or best_val_rmse < min(rmses):
-                ckpt = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
-                torch.save({
-                    "model_obj":        model,
-                    "model_state_dict": model.state_dict(),
-                    "hparams":          params.hparams
-                }, ckpt)
-                print(f"Saved new best model: {ckpt.name}")
+        ckpt = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
+        torch.save({
+            "model_obj":        model,
+            "model_state_dict": best_state,
+            "hparams":          params.hparams,
+            "train_plot_png":   plot_png,
+        }, ckpt)
+        print(f"Saved final best model and training plot: {ckpt.name}")
 
     return best_val_rmse
 
