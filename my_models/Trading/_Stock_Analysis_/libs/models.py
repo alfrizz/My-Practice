@@ -784,6 +784,7 @@ def train_step(
     
 #########################################################################################################
 
+
 def custom_stateful_training_loop(
     model:         torch.nn.Module,
     optimizer:     torch.optim.Optimizer,
@@ -823,6 +824,9 @@ def custom_stateful_training_loop(
     • Live, real-time plotting
       – Streams train/val RMSE by epoch via an IPython or inline draw widget
       – Retains full history for a final summary plot
+    • Global RMSE calculation
+      – Accumulates squared errors and counts across all validation windows
+      – Reports one RMSE that weights each window equally
     • Early stopping
       – Halts training if validation RMSE fails to improve for patience epochs
     """
@@ -882,9 +886,7 @@ def custom_stateful_training_loop(
                 # Mixed precision forward/backward
                 with autocast(device_type=device.type):
                     out  = model(xb_days[di])         # (look_back, 1) prediction tensor
-                    last = out[..., -1, 0]        
-                    
-                    # take only the final time‐step
+                    last = out[..., -1, 0]             # take only the final time‐step
                     loss = loss_fn(last, yb_days[di], reduction='mean')
 
                 # Scale, backpropagate, and collect loss
@@ -923,8 +925,9 @@ def custom_stateful_training_loop(
         # 4) Validation phase (no gradients)
         model.eval()
         model.h_short = model.h_long = None
-        val_losses = []
-        prev_wd    = None
+        total_sq_error = 0.0
+        total_windows  = 0
+        prev_wd        = None
 
         with torch.no_grad():
             for xb_day, yb_day, wd in val_loader:
@@ -937,13 +940,13 @@ def custom_stateful_training_loop(
                     model.reset_long()
                 prev_wd = wd
 
-                out  = model(x)
-                last = out[..., -1, 0]
-                val_losses.append(
-                    loss_fn(last, y, reduction='mean').item()
-                )
+                out      = model(x)
+                last     = out[..., -1, 0]
+                sq_error = (last - y).pow(2).sum().item()
+                total_sq_error += sq_error
+                total_windows  += y.numel()
 
-        val_rmse = math.sqrt(sum(val_losses) / len(val_losses))
+        val_rmse = math.sqrt(total_sq_error / total_windows)
 
         # 5) Live plot update and logging
         live_plot.update(rmse, val_rmse)
@@ -982,7 +985,7 @@ def custom_stateful_training_loop(
         if m
     ]
     # if no prior checkpoint or improvement, save
-    if not rmses or best_val_rmse < min(rmses):
+    if not rmses or best_val_rmse < max(rmses):
         buf = io.BytesIO()
         live_plot.fig.savefig(buf, format="png")
         buf.seek(0)

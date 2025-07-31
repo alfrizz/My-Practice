@@ -162,11 +162,11 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           64,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
-    "LONG_UNITS":            92,     # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
-    "DROPOUT_SHORT":         0.35,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
-    "DROPOUT_LONG":          0.4,    # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
+    "LONG_UNITS":            128,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
+    "DROPOUT_SHORT":         0.25,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_LONG":          0.35,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
     "ATT_HEADS":             8,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
-    "ATT_DROPOUT":           0.3,   # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "ATT_DROPOUT":           0.3,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
     "WEIGHT_DECAY":          1e-4,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
 
     # ── Training Control Parameters ────────────────────────────────────
@@ -175,15 +175,15 @@ hparams = {
     "NUM_WORKERS":           2,      # DataLoader workers; ↑ parallel loading (bus error risk + overhead), ↓ safer but less parallelism
     "TRAIN_PREFETCH_FACTOR": 1,      # batches to prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
     "MAX_EPOCHS":            60,     # maximum training epochs; ↑ more training (risk wasted compute), ↓ shorter runs (risk undertraining)
-    "EARLY_STOP_PATIENCE":   9,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
+    "EARLY_STOP_PATIENCE":   10,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
-    "LR_EPOCHS_WARMUP":      0,      # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
+    "LR_EPOCHS_WARMUP":      1,      # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
     "INITIAL_LR":            7e-4,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
-    "CLIPNORM":              1,    # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
+    "CLIPNORM":              1,      # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
     
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
-    "ETA_MIN":               5e-5,   # floor LR in each cosine cycle
+    "ETA_MIN":               2e-5,   # floor LR in each cosine cycle
     "T_0":                   60,     # epochs before first cosine restart
     "T_MULT":                1,      # cycle length multiplier after each restart
 
