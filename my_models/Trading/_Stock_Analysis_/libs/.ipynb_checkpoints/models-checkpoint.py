@@ -258,11 +258,11 @@ def chronological_split(
     day_id_val = make_day_ids(cut_train+1, cut_val)
     day_id_te  = make_day_ids(cut_val+1,  D-1)
 
-    # ────────────────────────────────────────────────────────────────────────────
-    # SIDE‐EFFECT: dump the raw‐bar test‐period DF exactly as before
-    test_days = [all_days[i] for i in range(D) if i > cut_val]
-    df_test   = df.loc[df.index.normalize().isin(test_days)]
-    df_test.to_csv(params.save_path / f"{params.ticker}_test_DF.csv", index=True)
+    # # ────────────────────────────────────────────────────────────────────────────
+    # # SIDE‐EFFECT: dump the raw‐bar test‐period DF exactly as before
+    # test_days = [all_days[i] for i in range(D) if i > cut_val]
+    # df_test   = df.loc[df.index.normalize().isin(test_days)]
+    # df_test.to_csv(params.save_path / f"{params.ticker}_test_DF.csv", index=True)
 
     # 8) Return splits + metadata
     return (

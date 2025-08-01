@@ -1,6 +1,7 @@
 from libs import params
 import pandas as pd
 import numpy  as np
+import gc
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -413,5 +414,40 @@ def make_live_plot_callback(fig, ax, line, handle):
         update_display(fig, display_id=handle.display_id)
 
     return live_plot_callback
+
+
+def lightweight_plot_callback(
+    study, 
+    trial, 
+    state={
+        "trial_x": [], "trial_y": [], "initialized": False, 
+        "fig": None, "ax": None, "line": None, "handle": None
+    }
+):
+    # initialize once
+    if not state["initialized"]:
+        fig, ax = plt.subplots(figsize=(7, 3))
+        line, = ax.plot([], [], "bo-")
+        ax.set(xlabel="Trial #", ylabel="Avg Daily P&L", title="Optuna Progress")
+        ax.grid(True)
+        handle = display(fig, display_id=True)
+        plt.close(fig)
+
+        state.update({
+            "initialized": True,
+            "fig": fig, "ax": ax, "line": line, "handle": handle
+        })
+
+    # update plot
+    state["trial_x"].append(trial.number)
+    state["trial_y"].append(trial.value)
+    state["line"].set_data(state["trial_x"], state["trial_y"])
+    state["ax"].relim()
+    state["ax"].autoscale_view()
+    state["handle"].update(state["fig"])
+
+
+def cleanup_callback(study, trial):
+    gc.collect()
 
 

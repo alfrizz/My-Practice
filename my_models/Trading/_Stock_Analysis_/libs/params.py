@@ -9,19 +9,25 @@ import torch.nn.functional as Funct
 
 #########################################################################################################
 ticker = 'GOOGL'
+save_path  = Path("dfs_training")
+model_path = save_path / f"{ticker}_0.2451.pth" # model RMSE
 
 date_to_check = None # to analyze all dates save the final CSV
 # date_to_check = '2025-03' # set to None to analyze all dates save the "ready" CSV
-
 date_to_test = '2024-09'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
-save_path      = Path("dfs_training")
+optuna_folder = "optuna results" 
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
 bidasktoclose_spread = 0.03
+
+base_csv = save_path / f"{ticker}_1_base.csv"
+ready_csv = save_path / f"{ticker}_2_ready.csv"
+final_csv = save_path / f"{ticker}_3_final.csv"
+pred_csv = save_path / f"{ticker}_4_preds.csv"
 
 features_cols = [
     "open",             # Opening price
@@ -85,6 +91,7 @@ def signal_parameters(ticker):
     buy_threshold ==> # float (percent/100) threshold of the smoothed signal to trigger the final trade
     pred_threshold ==> # float (percent/100) threshold of the predicted signal to trigger the final trade
     trailing_stop_thresh ==> # percent of the trailing stop loss of the final trade
+    trailing_stop_pred ==> # percent of the trailing stop loss of the predicted signal
     '''
     if ticker == 'AAPL':
         look_back=90
@@ -100,6 +107,7 @@ def signal_parameters(ticker):
         short_penalty=0.1
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.16
+        trailing_stop_pred=0.16
         buy_threshold=0.1
         pred_threshold=0.3
         
@@ -117,6 +125,7 @@ def signal_parameters(ticker):
         short_penalty=0.1886
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.0530
+        trailing_stop_pred=0.0530
         buy_threshold=0.1837
         pred_threshold=0.1837
     
@@ -134,15 +143,16 @@ def signal_parameters(ticker):
         short_penalty=0.1
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.1 
+        trailing_stop_pred=0.16
         buy_threshold=0.1 
         pred_threshold=0.3
 
     return look_back, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr,  \
-        smooth_win_sig, pre_entry_decay, short_penalty, trailing_stop_thresh, buy_threshold, pred_threshold
+        smooth_win_sig, pre_entry_decay, short_penalty, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
 
 # automatically executed function to get the parameters for the selected ticker
-look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, \
-smooth_win_sig_tick, pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
+look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, smooth_win_sig_tick, \
+pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, trailing_stop_pred_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
 
 #########################################################################################################
 
