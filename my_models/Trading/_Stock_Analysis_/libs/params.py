@@ -14,11 +14,11 @@ model_path = save_path / f"{ticker}_0.2451.pth" # model RMSE
 
 date_to_check = None # to analyze all dates save the final CSV
 # date_to_check = '2025-03' # set to None to analyze all dates save the "ready" CSV
-date_to_test = '2024-09'
+date_to_test = '2025-06'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
-optuna_folder = "optuna results" 
+optuna_folder = "optuna_results" 
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
@@ -48,11 +48,11 @@ features_cols = [
     "vwap_dev",         # (close – VWAP) / VWAP
 
     # "rsi_14",           # 14-period Relative Strength Index
-    # "bb_width_20",      # (BB upper – BB lower) / MA20
+    "bb_width_20",      # (BB upper – BB lower) / MA20
     # "stoch_k_14",       # %K of 14-period Stochastic
     # "stoch_d_3",        # 3-period SMA of %K
 
-    # "ma_5",             # 5-period simple moving average
+    "ma_5",             # 5-period simple moving average
     "ma_20",            # 20-period simple moving average
     # "ma_diff",          # ma_5 – ma_20
 
@@ -61,12 +61,12 @@ features_cols = [
 
     "obv",              # On-Balance Volume
 
-    # "in_trading",       # Within regular trading time
+    "in_trading",       # Within regular trading time
     "hour",             # Hour of the day (0–23)
     # "day_of_week",      # Day of week (0=Mon…6=Sun)
-    "month",            # Month (1–12)
+    # "month",            # Month (1–12)
 
-    # "order_imbalance",  # (bid_volume – ask_volume)/(bid+ask)
+    ### "order_imbalance",  # (bid_volume – ask_volume)/(bid+ask)
 ]
 
 label_col = "signal_smooth" 
@@ -88,10 +88,10 @@ def signal_parameters(ticker):
     short_penalty ==> # duration penalty factor (lower: higher penalization [0.01 - 1])
     
     # to define the final buy and sell triggers
-    buy_threshold ==> # float (percent/100) threshold of the smoothed signal to trigger the final trade
-    pred_threshold ==> # float (percent/100) threshold of the predicted signal to trigger the final trade
-    trailing_stop_thresh ==> # percent of the trailing stop loss of the final trade
-    trailing_stop_pred ==> # percent of the trailing stop loss of the predicted signal
+    buy_threshold ==> # (percent/100) threshold of the smoothed signal to trigger the final trade
+    pred_threshold ==> # (percent/100) threshold of the predicted signal to trigger the final trade
+    trailing_stop_thresh ==> # (percent/100) of the trailing stop loss of the final trade
+    trailing_stop_pred ==> # (percent/100) of the trailing stop loss of the predicted signal
     '''
     if ticker == 'AAPL':
         look_back=90
@@ -112,23 +112,29 @@ def signal_parameters(ticker):
         pred_threshold=0.3
         
     if ticker == 'GOOGL':
-        look_back=180
+        look_back=120
         # to define the initial trades:
-        min_prof_thr= 0.1295
-        max_down_prop=0.2958
-        gain_tightening_factor=0.1960
-        merging_retracement_thr=0.4328
-        merging_time_gap_thr=0.7622
+        min_prof_thr= 0.1376
+        max_down_prop=0.4278
+        gain_tightening_factor=0.5446
+        merging_retracement_thr=0.1240
+        merging_time_gap_thr=0.2310
         # to define the smoothed signal:
-        smooth_win_sig=2
-        pre_entry_decay=0.3227
-        short_penalty=0.1886
+        smooth_win_sig=1
+        pre_entry_decay=0.4659
+        short_penalty=0.0508
         # to define the final buy and sell triggers:
-        trailing_stop_thresh=0.0530
-        trailing_stop_pred=0.0530
-        buy_threshold=0.1837
-        pred_threshold=0.1837
-    
+        trailing_stop_thresh=0.0654
+        trailing_stop_pred=0
+        buy_threshold=0.1806
+        pred_threshold=0
+
+# signal b
+# 0.7685528368794327 and parameters: {'look_back': 120, 'min_prof_thr': 0.13763972058205504, 'max_down_prop': 0.42778881628257825, 'gain_tightening_factor': 0.5445875497539636, 'merging_retracement_thr': 0.12399283114515154, 'merging_time_gap_thr': 0.2309617116211783, 'smooth_win_sig': 1, 'pre_entry_decay': 0.46590861152802665, 'short_penalty': 0.05080406329723604, 'trailing_stop_thresh': 0.06537361893701088, 'buy_threshold': 0.18056979062291903}
+
+# current signal
+# 0.4420675562969141 and parameters: {'pred_threshold': 0.29529766705519833, 'trailing_stop_pred': 0.013353609091854051}
+
     if ticker == 'TSLA':
         look_back=90
         # to define the initial trades:

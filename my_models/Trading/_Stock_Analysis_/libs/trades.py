@@ -695,196 +695,196 @@ def add_trade_signal_to_results(
 
 # B3
 def simulate_trading(
-    results_by_day_sign: Union[dict, pd.DataFrame],
+    results_by_day_sign: Union[Dict[pd.Timestamp, Tuple[pd.DataFrame, List]], pd.DataFrame],
     col_action: str,
     regular_start: dt.time,
-    regular_end:   dt.time,
-    ticker:        str
-) -> dict:
+    regular_end: dt.time,
+    ticker: str
+) -> Dict[pd.Timestamp, Tuple[pd.DataFrame, List, Dict[str, object]]]:
     """
-    Simulate per‐minute trading P&L driven by a discrete signal column.
+    Simulate minute-level trading P&L driven by a discrete signal.
 
-    Accepts either:
-      1) A dict mapping each date → (day_df, trades[, perf_stats]), where
-         day_df has columns ['bid','ask', col_action].
-      2) A single DataFrame with a DatetimeIndex and col_action column,
-         which is split into per‐day slices internally.
-
-    For each day we produce:
-      • df_sim: minute‐level DataFrame with columns
-          Position, Cash, NetValue, Action, TradedAmount,
-          BuyHoldEarning, StrategyEarning, EarningDiff
-      • trades_list: list of (gain $, gain %) for each completed round‐trip
-      • performance_stats: dict with keys
+    Parameters
+    ----------
+    results_by_day_sign : dict or DataFrame
+        Either a dict mapping each date → (day_df, trades_list[, perf_stats]),
+        or a single DataFrame with a DatetimeIndex and signal column.
+    col_action : str
+        Column name holding discrete trading signals: +1=buy, ‑1=sell, 0=hold.
+    regular_start : datetime.time
+        Inclusive start of regular session.
+    regular_end   : datetime.time
+        Exclusive end of regular session.
+    ticker : str
+        Asset symbol (only for logging/extensibility).
 
     Returns
     -------
     updated_results : dict
-        Maps date → (df_sim, trades_list, performance_stats)
+        Maps date → (
+          df_sim: minute-level DataFrame with Position, Cash, NetValue, etc.,
+          trades: list of ((buy_ts, sell_ts), (buy_price, sell_price), pct_return),
+          performance_stats: {
+            'Strategy Return ($)'   : final P&L,
+            'Buy & Hold Return ($)' : baseline P&L,
+            'Trades Returns ($)'    : list of dollar gains per trade
+          }
+        )
     """
 
-    # 1) If a single DataFrame was passed, split into a dict by calendar day
+    # 1) If user passed one big DataFrame, split it by calendar date
     if isinstance(results_by_day_sign, pd.DataFrame):
         df_all = results_by_day_sign.sort_index()
-        rebuilt = {}
+        per_day = {}
         for date, df_day in df_all.groupby(df_all.index.normalize(), sort=False):
-            rebuilt[date] = (df_day.copy(), [])
-        results_by_day_sign = rebuilt
+            per_day[date] = (df_day.copy(), [])
+        results_by_day_sign = per_day
 
     updated_results = {}
 
-    # 2) Process each day separately
+    # 2) Process each day in isolation
     for day, val in results_by_day_sign.items():
-        # Unpack tuple (day_df, trades_list[, perf_stats])
+        # Unpack: (day_df, trades_list[, perf_stats])
         if len(val) == 2:
-            day_df, trades_list = val
+            session_df, prior_trades = val
         elif len(val) == 3:
-            day_df, trades_list, _ = val
+            session_df, prior_trades, _ = val
         else:
-            raise ValueError(
-                f"Expected tuple of length 2 or 3 for {day}; got {len(val)}"
-            )
+            raise ValueError(f"Expected tuple of length 2 or 3 for {day}; got {len(val)}")
 
-        session_df = day_df.sort_index().copy()
+        # Ensure minute bars are sorted
+        session_df = session_df.sort_index().copy()
 
-        # --- Initialize trading state --------------------------------------
-        position          = 0       # current long position (number of shares)
-        cash              = 0.0     # cash P&L
-        session_open_price = None   # first ask price when market opens
+        # Initialize state
+        position           = 0       # current long position
+        cash               = 0.0     # cash P&L
+        session_open_price = None    # first ask at or after open
 
-        # Lists to record minute-by-minute state
-        positions         = []
-        cash_balances     = []
-        net_values        = []
-        actions           = []
-        traded_amounts    = []
-        buy_hold_earnings = []
-        strat_earnings    = []
+        # Buffers for minute-by-minute tracking
+        positions      = []
+        cash_balances  = []
+        net_values     = []
+        actions        = []
+        traded_amounts = []
+        bh_running     = []  # buy-and-hold P&L per bar
+        st_running     = []  # strategy P&L per bar
 
-        # 3) Loop over each minute-bar
+        # 3) Iterate each minute bar
         for ts, row in session_df.iterrows():
-            bid = row['bid']
-            ask = row['ask']
-            sig = int(row[col_action])  # discrete signal: -1,0,+1
-            now = ts.time()
+            bid, ask = row['bid'], row['ask']
+            sig       = int(row[col_action])
+            now       = ts.time()
 
-            # 3a) Determine trade action only during regular hours
+            # Only trade within regular hours
             if regular_start <= now < regular_end:
+                # lock in first ask once
+                if session_open_price is None:
+                    session_open_price = ask
+
                 if sig == 1:
                     position += 1
                     cash     -= ask
-                    action    = "Buy"
-                    amt       = +1
+                    action   = "Buy"
+                    amt      = +1
                 elif sig == -1 and position > 0:
                     position -= 1
                     cash     += bid
-                    action    = "Sell"
-                    amt       = -1
+                    action   = "Sell"
+                    amt      = -1
                 else:
-                    action = "Hold"
-                    amt    = 0
+                    action   = "Hold"
+                    amt      = 0
             else:
                 action = "No trade"
                 amt    = 0
 
-            # 3b) Record position & cash
+            # record state
             positions.append(position)
             cash_balances.append(np.round(cash, 3))
-            # mark-to-market P&L: cash + position × current bid
             net_val = np.round(cash + position * bid, 3)
             net_values.append(net_val)
             actions.append(action)
             traded_amounts.append(amt)
 
-            # 3c) Compute per-minute earnings relative to buy‐and‐hold
-            if now >= regular_start:
-                if session_open_price is None:
-                    session_open_price = ask   # lock in open price
-                # buy‐and‐hold profit = current bid − initial ask
+            # running buy-and-hold vs strategy
+            if session_open_price is not None:
                 bh = bid - session_open_price
-                # strategy profit = net P&L
                 st = net_val
             else:
-                bh = 0.0
-                st = 0.0
+                bh = st = 0.0
 
-            buy_hold_earnings.append(np.round(bh, 3))
-            strat_earnings.append(np.round(st, 3))
+            bh_running.append(np.round(bh, 3))
+            st_running.append(np.round(st, 3))
 
-        # --- Assemble the per-minute simulation DataFrame ---------------
+        # assemble minute-level DataFrame
         df_sim = session_df.copy()
         df_sim['Position']        = positions
         df_sim['Cash']            = cash_balances
         df_sim['NetValue']        = net_values
         df_sim['Action']          = actions
         df_sim['TradedAmount']    = traded_amounts
-        df_sim['BuyHoldEarning']  = buy_hold_earnings
-        df_sim['StrategyEarning'] = strat_earnings
+        df_sim['BuyHoldEarning']  = bh_running
+        df_sim['StrategyEarning'] = st_running
         df_sim['EarningDiff']     = df_sim['StrategyEarning'] - df_sim['BuyHoldEarning']
 
-        # --- Compute per‐trade round‐trip gains -------------------------
-        trade_gains     = []
-        trade_gains_pct = []
-        entry_price     = None
+        # 4) Compute per-trade round-trip results with timestamps & % return
+        trades = []
+        entry_price = None
+        entry_ts    = None
 
         for ts, row in df_sim.iterrows():
-            act = row['Action']
-            if act == "Buy" and entry_price is None:
+            if row['Action'] == "Buy" and entry_price is None:
                 entry_price = row['ask']
-            elif act == "Sell" and entry_price is not None:
+                entry_ts    = ts
+
+            elif row['Action'] == "Sell" and entry_price is not None:
                 exit_price = row['bid']
-                gain   = exit_price - entry_price
-                pct    = 100 * gain / entry_price
-                trade_gains.append(np.round(gain, 3))
-                trade_gains_pct.append(np.round(pct, 3))
+                exit_ts    = ts
+                gain_pct   = 100 * (exit_price - entry_price) / entry_price
+
+                trades.append((
+                    (entry_ts, exit_ts),
+                    (entry_price, exit_price),
+                    np.round(gain_pct, 3)
+                ))
                 entry_price = None
+                entry_ts    = None
 
-        # if still long at end of day, liquidate at last bid
+        # if still long at end, liquidate at last bid
         if entry_price is not None:
-            final_bid = df_sim['bid'].iat[-1]
-            gain      = final_bid - entry_price
-            pct       = 100 * gain / entry_price
-            trade_gains.append(np.round(gain, 3))
-            trade_gains_pct.append(np.round(pct, 3))
+            exit_price = df_sim['bid'].iat[-1]
+            exit_ts    = df_sim.index[-1]
+            gain_pct   = 100 * (exit_price - entry_price) / entry_price
 
-        # --- Compute overall performance metrics ------------------------
-        # mask of minutes during regular trading session
-        mask = (
-            (df_sim.index.time >= regular_start) &
-            (df_sim.index.time <  regular_end)
-        )
-        if mask.any() and session_open_price is not None:
-            idxs        = np.where(mask)[0]
-            start_i     = idxs[0]
-            end_i       = idxs[-1]
-            baseline_ask    = session_open_price
-            final_net_value = net_values[end_i]
-            final_bid_price = session_df['bid'].iat[end_i]
+            trades.append((
+                (entry_ts, exit_ts),
+                (entry_price, exit_price),
+                np.round(gain_pct, 3)
+            ))
+
+        # 5) Compute day-level performance
+        session = df_sim.between_time(regular_start, regular_end)
+
+        if not session.empty:
+            open_ask  = session['ask'].iloc[0]
+            close_bid = session['bid'].iloc[-1]
+            buy_hold_gain = close_bid - open_ask
+            strat_gain    = session['NetValue'].iloc[-1]
         else:
-            # if no trading minutes, safe‐default to end‐of‐day
-            baseline_ask    = session_open_price or np.nan
-            final_net_value = net_values[-1]
-            final_bid_price = session_df['bid'].iat[-1]
+            buy_hold_gain = strat_gain = 0.0
 
-        # --- Compute overall performance ------------------------------------
-        # baseline ask = session_open_price (first ask when market opened)
-        # final bid = bid at last regular‐hour bar
-        buy_hold_gain   = final_bid_price - session_open_price
-        profit_diff     = final_net_value - buy_hold_gain
-        final_ret_pct   = 100 * final_net_value      / session_open_price
-        buy_hold_ret_pct= 100 * buy_hold_gain        / session_open_price
-        improve_pct     = final_ret_pct - buy_hold_ret_pct
-
-        # build performance_stats with your exact keys & order
         performance_stats = {
-            'Strategy Return ($)'            : np.round(final_net_value, 3),
-            'Buy & Hold Return ($)'          : np.round(buy_hold_gain, 3),
-            'Trades Returns ($)'             : trade_gains,
+            'Strategy Return ($)'   : np.round(strat_gain,    3),
+            'Buy & Hold Return ($)' : np.round(buy_hold_gain, 3),
+            'Trades Returns ($)'    : [round((p/100)*(price[0]), 3)
+                                       for (_, _), price, p in trades]
         }
-            
-        updated_results[day] = (df_sim, trades_list, performance_stats)
-        
+
+        # store final results
+        updated_results[day] = (df_sim, trades, performance_stats)
+
     return updated_results
+
 
 #########################################################################################################
 
