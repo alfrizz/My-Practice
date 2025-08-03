@@ -1,4 +1,4 @@
-from libs import params
+from libs import params, trades
 import pandas as pd
 import numpy  as np
 import gc
@@ -307,13 +307,18 @@ def aggregate_performance(
     perf_list: list,
     df: pd.DataFrame,
     round_digits: int = 3
-) -> dict:
+) -> None:
     """
-    Given a list of daily performance dicts and the full-minute-bar
-    DataFrame, print & return one summary dict.  Buy&hold uses the
-    first ask after regular_start on the first day and the last bid
-    before regular_end on the last day.
+    Given per-day performance dicts and the full-minute-bar DataFrame,
+    print a clean summary:
+      • One-time buy&-hold gain over the entire period
+      • Sum of daily Buy & Hold returns (intraday)
+      • Sum of Strategy returns
+      • Total number of trades
+      • Strategy return per trade
+      • Number of trading days
     """
+
     # 1) Collect all keys present in daily dicts
     all_keys = set().union(*(perf.keys() for perf in perf_list if perf))
 
@@ -334,50 +339,129 @@ def aggregate_performance(
         for perf in perf_list
         if isinstance(perf.get("Trades Returns ($)"), list)
     )
-    aggregated["Trades Returns ($)"] = f"{trades_count} trades"
+    aggregated["Trades Count"] = trades_count
 
     # 4) Rename the per-day Buy & Hold key
-    aggregated["Buy & Hold – each day ($)"] = aggregated.pop("Buy & Hold Return ($)")
+    aggregated["Buy & Hold – each day ($)"] = aggregated.pop("Buy & Hold Return ($)", 0.0)
 
-    # 5) Restrict to bars inside your regular hours, to find the true trading days
+    # 5) Determine first and last trading days from df
     session_df = df.between_time(params.regular_start, params.regular_end)
     if not session_df.empty:
         first_day = session_df.index.normalize().min()
         last_day  = session_df.index.normalize().max()
     else:
-        # fallback if somehow no bars in session hours at all
         all_days  = df.index.normalize().unique()
         first_day = all_days.min()
         last_day  = all_days.max()
 
-    # 6) Grab the first ask ≥ regular_start on first_day
+    # 6) One-time buy & hold legs
     mask_start = (
         (df.index.normalize() == first_day) &
-        (df.index.time     >= params.regular_start)
+        (df.index.time >= params.regular_start)
     )
     if df.loc[mask_start, "ask"].empty:
-        # if the day's first session-minute bar is missing, just take the day's first ask
         mask_start = df.index.normalize() == first_day
     start_ask = df.loc[mask_start, "ask"].iloc[0]
 
-    # 7) Grab the last bid ≤ regular_end on last_day
     mask_end = (
         (df.index.normalize() == last_day) &
-        (df.index.time     <= params.regular_end)
+        (df.index.time <= params.regular_end)
     )
     if df.loc[mask_end, "bid"].empty:
-        # if the day's last session-minute bar is missing, just take the day's last bid
         mask_end = df.index.normalize() == last_day
     end_bid = df.loc[mask_end, "bid"].iloc[-1]
 
-    # 8) Print the clean summary
-    print(f"\n=== Overall Summary ({first_day.date()} → {last_day.date()}) ===")
-    print(f"Start date price: {first_day.date()} = {start_ask:.4f}")
-    print(f"  End date price:  {last_day.date()} = {end_bid:.4f}")
-    print(f"One-time buy&hold gain: {end_bid - start_ask:.3f}\n")
+    # Print overall summary
+    print(f"\n=============================================================================================================")
+    print(f"Overall Summary ({first_day.date()} = {start_ask:.4f} → {last_day.date()} = {end_bid:.4f})")
+    print(f"\nOne-time buy&hold gain: {end_bid - start_ask:.3f}")
+    strategy_sum = aggregated.get("Strategy Return ($)", 0.0)
+    buyhold_sum  = aggregated.get("Buy & Hold – each day ($)", 0.0)
 
+    # — use all actual trading days for the Num. trading days —
+    num_days = trades.count_trading_days(df, params.regular_start, params.regular_end)
 
-    return aggregated
+    print(f"Buy & Hold – each day ($): {buyhold_sum:.3f}")
+    print(f"Strategy Return ($): {strategy_sum:.3f}")
+    print(f"Trades Count: {aggregated['Trades Count']}")
+    if aggregated["Trades Count"] > 0:
+        per_trade = strategy_sum / aggregated["Trades Count"]
+        print(f"Strategy return per trade: {per_trade:.3f}")
+    print(f"Num. trading days: {num_days}")
+    if num_days > 0:
+        per_day = strategy_sum / num_days
+        print(f"Strategy return per trading day: {per_day:.3f}")
+
+    ####################### simple plots ############################
+
+    # 1) Pack your metrics into two groups
+    one_time_bh  = end_bid - start_ask
+    buyhold_sum  = aggregated.get("Buy & Hold – each day ($)", 0.0)
+    strategy_sum = aggregated.get("Strategy Return ($)", 0.0)
+    trades_cnt   = aggregated["Trades Count"]
+    per_trade    = strategy_sum / trades_cnt if trades_cnt else 0.0
+    per_day      = strategy_sum / num_days if num_days else 0.0
+
+    # Only keep non-zero metrics (optional)
+    primary = {
+        "One-time B&H": one_time_bh,
+        "Sum intraday B&H": buyhold_sum,
+        "Sum Strategy": strategy_sum
+    }
+    secondary = {
+        "Per trade": per_trade,
+        "Per day": per_day
+    }
+
+    # 2) Set up figure + twin axes
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+    ax2 = ax1.twinx()
+
+    # 3) Build x-locations
+    names1 = list(primary.keys())
+    names2 = list(secondary.keys())
+    x1 = np.arange(len(names1))
+    x2 = np.arange(len(names2)) + len(names1)  # shift right of primary
+
+    # 4) Plot bars
+    width = 0.6
+    bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", label="Primary metrics")
+    bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", label="Secondary metrics")
+
+    # 5) Ticks / labels
+    all_names = names1 + names2
+    ax1.set_xticks(np.concatenate([x1, x2]))
+    ax1.set_xticklabels(all_names, rotation=30, ha="right")
+    ax1.set_ylabel("USD (big sums)")
+    ax2.set_ylabel("USD (per trade/day)")
+    ax1.set_title(f"Performance Summary ({first_day.date()} → {last_day.date()})")
+
+    # 6) Grid & annotation
+    ax1.yaxis.grid(True, linestyle="--", alpha=0.5)
+
+    for bar in bars1:
+        h = bar.get_height()
+        ax1.annotate(f"{h:.2f}",
+                     xy=(bar.get_x() + bar.get_width()/2, h),
+                     xytext=(0, 3), textcoords="offset points",
+                     ha="center", va="bottom", fontsize=9)
+
+    for bar in bars2:
+        h = bar.get_height()
+        ax2.annotate(f"{h:.2f}",
+                     xy=(bar.get_x() + bar.get_width()/2, h),
+                     xytext=(0, 3), textcoords="offset points",
+                     ha="center", va="bottom", fontsize=9)
+
+    # 7) Legend & layout
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(handles1 + handles2, labels1 + labels2, loc="upper left")
+
+    plt.tight_layout()
+    plt.show()
+
+    
 
 #########################################################################################################
 

@@ -10,11 +10,12 @@ import torch.nn.functional as Funct
 #########################################################################################################
 ticker = 'GOOGL'
 save_path  = Path("dfs_training")
-model_path = save_path / f"{ticker}_0.2451.pth" # model RMSE
+model_path = save_path / f"{ticker}_0.2419.pth" # model RMSE
 
 date_to_check = None # to analyze all dates save the final CSV
 # date_to_check = '2025-03' # set to None to analyze all dates save the "ready" CSV
-date_to_test = '2025-06'
+
+date_to_test = '2024-11' # in the ML_Results notebook
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -125,15 +126,18 @@ def signal_parameters(ticker):
         short_penalty=0.0508
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.0654
-        trailing_stop_pred=0
+        trailing_stop_pred=0.03
         buy_threshold=0.1806
-        pred_threshold=0
+        pred_threshold=0.33
 
-# signal b
+ 
 # 0.7685528368794327 and parameters: {'look_back': 120, 'min_prof_thr': 0.13763972058205504, 'max_down_prop': 0.42778881628257825, 'gain_tightening_factor': 0.5445875497539636, 'merging_retracement_thr': 0.12399283114515154, 'merging_time_gap_thr': 0.2309617116211783, 'smooth_win_sig': 1, 'pre_entry_decay': 0.46590861152802665, 'short_penalty': 0.05080406329723604, 'trailing_stop_thresh': 0.06537361893701088, 'buy_threshold': 0.18056979062291903}
 
-# current signal
-# 0.4420675562969141 and parameters: {'pred_threshold': 0.29529766705519833, 'trailing_stop_pred': 0.013353609091854051}
+# 0.42778440366972476 and parameters: {'pred_threshold': 0.34173415291231724, 'trailing_stop_pred': 0.024125635968185476}
+# 0.43773644703919934 and parameters: {'pred_threshold': 0.3311018836275292, 'trailing_stop_pred': 0.04182910447070286}
+# 0.4290542118432027 and parameters: {'pred_threshold': 0.32680248786653876, 'trailing_stop_pred': 0.0713479297738757}
+# 0.4321876563803169 and parameters: {'pred_threshold': 0.3375790501521938, 'trailing_stop_pred': 0.020774442275706247}
+
 
     if ticker == 'TSLA':
         look_back=90
@@ -149,9 +153,9 @@ def signal_parameters(ticker):
         short_penalty=0.1
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.1 
-        trailing_stop_pred=0.16
+        trailing_stop_pred=0.6 #0.16
         buy_threshold=0.1 
-        pred_threshold=0.3
+        pred_threshold=0.4 #0.3
 
     return look_back, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr,  \
         smooth_win_sig, pre_entry_decay, short_penalty, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
@@ -177,13 +181,13 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           64,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
-    "LONG_UNITS":            128,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
-    "DROPOUT_SHORT":         0.25,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
-    "DROPOUT_LONG":          0.35,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
-    "ATT_HEADS":             8,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
-    "ATT_DROPOUT":           0.3,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
-    "WEIGHT_DECAY":          1e-4,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
+    "SHORT_UNITS":           32,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
+    "LONG_UNITS":            64,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
+    "DROPOUT_SHORT":         0.2,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_LONG":          0.25,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
+    "ATT_HEADS":             4,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
+    "ATT_DROPOUT":           0.15,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "WEIGHT_DECAY":          1e-5,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,     # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
@@ -191,11 +195,11 @@ hparams = {
     "NUM_WORKERS":           2,      # DataLoader workers; ↑ parallel loading (bus error risk + overhead), ↓ safer but less parallelism
     "TRAIN_PREFETCH_FACTOR": 1,      # batches to prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
     "MAX_EPOCHS":            60,     # maximum training epochs; ↑ more training (risk wasted compute), ↓ shorter runs (risk undertraining)
-    "EARLY_STOP_PATIENCE":   10,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
+    "EARLY_STOP_PATIENCE":   12,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
     "LR_EPOCHS_WARMUP":      1,      # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
-    "INITIAL_LR":            7e-4,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
+    "INITIAL_LR":            5e-4,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
     "CLIPNORM":              1,      # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
     
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────

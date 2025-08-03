@@ -17,6 +17,16 @@ import matplotlib.pyplot as plt
 
 #########################################################################################################
 
+def count_trading_days(df, start, end):
+    return (
+        df
+        .between_time(start, end)
+        .index
+        .normalize()
+        .nunique()
+    )
+
+#########################################################################################################
 
 def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1):
     """
@@ -874,8 +884,8 @@ def simulate_trading(
             buy_hold_gain = strat_gain = 0.0
 
         performance_stats = {
-            'Strategy Return ($)'   : np.round(strat_gain,    3),
             'Buy & Hold Return ($)' : np.round(buy_hold_gain, 3),
+            'Strategy Return ($)'   : np.round(strat_gain,    3),
             'Trades Returns ($)'    : [round((p/100)*(price[0]), 3)
                                        for (_, _), price, p in trades]
         }
@@ -994,10 +1004,4 @@ def run_trading_pipeline(
         return triple
     # else  
     return sim_results
-
-
-
-
-
-
 
