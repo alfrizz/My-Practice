@@ -13,7 +13,7 @@ save_path  = Path("dfs_training")
 model_path = save_path / f"{ticker}_0.2419.pth" # model RMSE
 
 date_to_check = None # to analyze all dates save the final CSV
-# date_to_check = '2025-03' # set to None to analyze all dates save the "ready" CSV
+# date_to_check = '2024-11' # set to None to analyze all dates save the "ready" CSV
 
 date_to_test = '2024-11' # in the ML_Results notebook
 
@@ -29,46 +29,6 @@ base_csv = save_path / f"{ticker}_1_base.csv"
 ready_csv = save_path / f"{ticker}_2_ready.csv"
 final_csv = save_path / f"{ticker}_3_final.csv"
 pred_csv = save_path / f"{ticker}_4_preds.csv"
-
-features_cols = [
-    "open",             # Opening price
-    "high",             # Highest price
-    "low",              # Lowest price
-    "close",            # Closing price
-    # "volume",           # Traded volume
-
-    # "r_1",              # 1-period log return
-    # "r_5",              # 5-period log return
-    # "r_15",             # 15-period log return
-
-    # "vol_15",           # Rolling 15-period volatility of r_1
-    # "volume_spike",     # Current volume / avg volume over 15
-
-    "atr_14",           # 14-period Average True Range
-
-    "vwap_dev",         # (close – VWAP) / VWAP
-
-    # "rsi_14",           # 14-period Relative Strength Index
-    "bb_width_20",      # (BB upper – BB lower) / MA20
-    # "stoch_k_14",       # %K of 14-period Stochastic
-    # "stoch_d_3",        # 3-period SMA of %K
-
-    "ma_5",             # 5-period simple moving average
-    "ma_20",            # 20-period simple moving average
-    # "ma_diff",          # ma_5 – ma_20
-
-    "macd_12_26",       # EMA12 – EMA26
-    # "macd_signal_9",    # 9-period EMA of MACD
-
-    "obv",              # On-Balance Volume
-
-    "in_trading",       # Within regular trading time
-    "hour",             # Hour of the day (0–23)
-    # "day_of_week",      # Day of week (0=Mon…6=Sun)
-    # "month",            # Month (1–12)
-
-    ### "order_imbalance",  # (bid_volume – ask_volume)/(bid+ask)
-]
 
 label_col = "signal_smooth" 
 
@@ -95,24 +55,27 @@ def signal_parameters(ticker):
     trailing_stop_pred ==> # (percent/100) of the trailing stop loss of the predicted signal
     '''
     if ticker == 'AAPL':
+        features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
         look_back=90
         # to define the initial trades:
-        min_prof_thr=0.2 
-        max_down_prop=0.4
-        gain_tightening_factor=0.1
-        merging_retracement_thr=0.9
-        merging_time_gap_thr=0.7
+        min_prof_thr=0.18 
+        max_down_prop=0.2
+        gain_tightening_factor=0.7
+        merging_retracement_thr=0.13
+        merging_time_gap_thr=0.2
         # to define the smoothed signal:
-        smooth_win_sig=5
-        pre_entry_decay=0.77
-        short_penalty=0.1
+        smooth_win_sig=2
+        pre_entry_decay=0.43
+        short_penalty=0.11
         # to define the final buy and sell triggers:
-        trailing_stop_thresh=0.16
+        trailing_stop_thresh=0.015
         trailing_stop_pred=0.16
-        buy_threshold=0.1
+        buy_threshold=0.21
         pred_threshold=0.3
         
+
     if ticker == 'GOOGL':
+        features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
         look_back=120
         # to define the initial trades:
         min_prof_thr= 0.1376
@@ -140,6 +103,7 @@ def signal_parameters(ticker):
 
 
     if ticker == 'TSLA':
+        # features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
         look_back=90
         # to define the initial trades:
         min_prof_thr=0.45 
@@ -157,11 +121,11 @@ def signal_parameters(ticker):
         buy_threshold=0.1 
         pred_threshold=0.4 #0.3
 
-    return look_back, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr,  \
+    return features_cols, look_back, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr,  \
         smooth_win_sig, pre_entry_decay, short_penalty, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
 
 # automatically executed function to get the parameters for the selected ticker
-look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, smooth_win_sig_tick, \
+features_cols_tick, look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, smooth_win_sig_tick, \
 pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, trailing_stop_pred_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
 
 #########################################################################################################
@@ -181,11 +145,11 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           32,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
-    "LONG_UNITS":            64,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
+    "SHORT_UNITS":           64,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
+    "LONG_UNITS":            96,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
     "DROPOUT_SHORT":         0.2,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
     "DROPOUT_LONG":          0.25,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
-    "ATT_HEADS":             4,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
+    "ATT_HEADS":             8,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
     "ATT_DROPOUT":           0.15,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
     "WEIGHT_DECAY":          1e-5,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
 

@@ -1017,8 +1017,6 @@ def feature_engineering(df: pd.DataFrame,
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
 
-    # 1) High-impact features
-
     # VWAP deviation
     if "vwap_dev" in features_cols:
         tp = (df["high"] + df["low"] + df["close"]) / 3
@@ -1042,8 +1040,6 @@ def feature_engineering(df: pd.DataFrame,
         lp = (df["low"]  - df["close"].shift()).abs()
         tr = pd.concat([hl, hp, lp], axis=1).max(axis=1)
         df["atr_14"] = tr.rolling(14).mean()
-
-    # 2) Rest of features (list order)
 
     # Rolling 15-period volatility
     if "vol_15" in features_cols:
