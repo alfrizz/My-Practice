@@ -1,0 +1,9 @@
+root = /home/alfrizz/my_practice
+root = /home/alfrizz/my_practice/gdrive
+
+auto = true
+batch = true
+fastcheck = true
+confirmbigdel = false
+
+ignore = Path .git

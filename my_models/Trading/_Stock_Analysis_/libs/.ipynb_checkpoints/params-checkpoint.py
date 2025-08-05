@@ -72,7 +72,12 @@ def signal_parameters(ticker):
         trailing_stop_pred=0.16
         buy_threshold=0.21
         pred_threshold=0.3
-        
+
+# 0.4758224074074074 and parameters: {'look_back': 30, 'min_prof_thr': 0.4007334956004331, 'max_down_prop': 0.8958687050225091, 'gain_tightening_factor': 0.29980968526857443, 'merging_retracement_thr': 0.48044860560860875, 'merging_time_gap_thr': 0.6683135517082273, 'smooth_win_sig': 1, 'pre_entry_decay': 0.6809348120667733, 'short_penalty': 0.1496217840938199, 'trailing_stop_thresh': 0.021944988389281724, 'buy_threshold': 0.14234228824999817}
+
+# 0.4758283333333333 and parameters: {'look_back': 90, 'min_prof_thr': 0.26584136629951327, 'max_down_prop': 0.899916381174531, 'gain_tightening_factor': 0.2967213783701883, 'merging_retracement_thr': 0.4833871145558546, 'merging_time_gap_thr': 0.667690556754095, 'smooth_win_sig': 1, 'pre_entry_decay': 0.6726795870808902, 'short_penalty': 0.17713784511171282, 'trailing_stop_thresh': 0.019711216162029734, 'buy_threshold': 0.1436557422863084}
+
+# 0.4715737037037037 and parameters: {'look_back': 90, 'min_prof_thr': 0.3190155886125781, 'max_down_prop': 0.8973443800286667, 'gain_tightening_factor': 0.25746823944480324, 'merging_retracement_thr': 0.47960850718006615, 'merging_time_gap_thr': 0.6658517124072176, 'smooth_win_sig': 1, 'pre_entry_decay': 0.6478622298287043, 'short_penalty': 0.17572118814275617, 'trailing_stop_thresh': 0.02358430306544406, 'buy_threshold': 0.11467298992733813}
 
     if ticker == 'GOOGL':
         features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
@@ -145,8 +150,8 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           64,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
-    "LONG_UNITS":            96,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
+    "SHORT_UNITS":           96,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
+    "LONG_UNITS":            128,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
     "DROPOUT_SHORT":         0.2,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
     "DROPOUT_LONG":          0.25,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
     "ATT_HEADS":             8,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)

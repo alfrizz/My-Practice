@@ -14,3 +14,7 @@ requirements.txt	Enumerates all Python packages with pinned versions for a repro
 pipreq	Wrapper script around pipreqs that scans project files for imports, regenerates requirements.txt, and skips dev/test modules (run pipreq instead of e.g. pip3, pipx).
 
 .dockerignore	Lists files and folders (e.g. .git, __pycache__, large data dumps) to exclude from Docker build context, keeping images lean and builds fast.
+
+sync-practice.sh – An executable Bash wrapper on ext4 workspace (~/my_practice/scripts/sync-practice.sh) that runs unison mypractice -batch -auto -fastcheck -confirmbigdel to kick off the two-way sync.
+
+my_practice.prf – The Unison profile (saved under ~/.unison/mypractice.prf) that defines the two roots, the ignore rule for .git, and all the non-interactive flags (auto, batch, fastcheck, confirmbigdel).
