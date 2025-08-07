@@ -72,12 +72,7 @@ def signal_parameters(ticker):
         trailing_stop_pred=0.16
         buy_threshold=0.21
         pred_threshold=0.3
-
-# 0.4758224074074074 and parameters: {'look_back': 30, 'min_prof_thr': 0.4007334956004331, 'max_down_prop': 0.8958687050225091, 'gain_tightening_factor': 0.29980968526857443, 'merging_retracement_thr': 0.48044860560860875, 'merging_time_gap_thr': 0.6683135517082273, 'smooth_win_sig': 1, 'pre_entry_decay': 0.6809348120667733, 'short_penalty': 0.1496217840938199, 'trailing_stop_thresh': 0.021944988389281724, 'buy_threshold': 0.14234228824999817}
-
-# 0.4758283333333333 and parameters: {'look_back': 90, 'min_prof_thr': 0.26584136629951327, 'max_down_prop': 0.899916381174531, 'gain_tightening_factor': 0.2967213783701883, 'merging_retracement_thr': 0.4833871145558546, 'merging_time_gap_thr': 0.667690556754095, 'smooth_win_sig': 1, 'pre_entry_decay': 0.6726795870808902, 'short_penalty': 0.17713784511171282, 'trailing_stop_thresh': 0.019711216162029734, 'buy_threshold': 0.1436557422863084}
-
-# 0.4715737037037037 and parameters: {'look_back': 90, 'min_prof_thr': 0.3190155886125781, 'max_down_prop': 0.8973443800286667, 'gain_tightening_factor': 0.25746823944480324, 'merging_retracement_thr': 0.47960850718006615, 'merging_time_gap_thr': 0.6658517124072176, 'smooth_win_sig': 1, 'pre_entry_decay': 0.6478622298287043, 'short_penalty': 0.17572118814275617, 'trailing_stop_thresh': 0.02358430306544406, 'buy_threshold': 0.11467298992733813}
+        
 
     if ticker == 'GOOGL':
         features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
@@ -97,7 +92,6 @@ def signal_parameters(ticker):
         trailing_stop_pred=0.03
         buy_threshold=0.1806
         pred_threshold=0.33
-
  
 # 0.7685528368794327 and parameters: {'look_back': 120, 'min_prof_thr': 0.13763972058205504, 'max_down_prop': 0.42778881628257825, 'gain_tightening_factor': 0.5445875497539636, 'merging_retracement_thr': 0.12399283114515154, 'merging_time_gap_thr': 0.2309617116211783, 'smooth_win_sig': 1, 'pre_entry_decay': 0.46590861152802665, 'short_penalty': 0.05080406329723604, 'trailing_stop_thresh': 0.06537361893701088, 'buy_threshold': 0.18056979062291903}
 
@@ -105,7 +99,6 @@ def signal_parameters(ticker):
 # 0.43773644703919934 and parameters: {'pred_threshold': 0.3311018836275292, 'trailing_stop_pred': 0.04182910447070286}
 # 0.4290542118432027 and parameters: {'pred_threshold': 0.32680248786653876, 'trailing_stop_pred': 0.0713479297738757}
 # 0.4321876563803169 and parameters: {'pred_threshold': 0.3375790501521938, 'trailing_stop_pred': 0.020774442275706247}
-
 
     if ticker == 'TSLA':
         # features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']

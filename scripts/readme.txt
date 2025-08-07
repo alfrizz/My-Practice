@@ -7,7 +7,7 @@ Dockerfile	Specifies the base OS image, installs system and Python dependencies,
 
 docker-compose.yml	Orchestrates multiple services, configures container-level CPU/memory limits, mounts volumes, defines networks, and wires together Jupyter Lab and its deps.
 
-entrypoint.sh	Bootstraps the container environment (e.g. activates venv, fixes permissions), runs migrations or setup tasks, and launches Jupyter Lab with proper flags.
+entrypoint.sh	very first script that runs inside  container or WSL environment before JupyterLab launches. Its job is to prepare the workspace so every piece of code that follows has what it needs.
 
 requirements.txt	Enumerates all Python packages with pinned versions for a reproducible image build; can be hand-edited or auto-regenerated as needed.
 
