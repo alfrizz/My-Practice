@@ -1,9 +1,23 @@
 root = /home/alfrizz/my_practice
-root = /home/alfrizz/my_practice/gdrive
+root = /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
 
 auto = true
 batch = true
 fastcheck = true
 confirmbigdel = false
 
+fat = true
+perms = 0
+
 ignore = Path .git
+ignore = Name build
+ignore = Path **/dist/**
+ignore = Path **/*.log
+ignore = Regex .*[Cc]heckpoint.*
+ignore = Path **/.ipynb_checkpoints/**
+ignore = Name __pycache__
+ignore = Path **/__pycache__/**
+ignore = Name *.sw?
+ignore = Path scripts/*.sw?
+ignore = Name *~
+ignore = Name .DS_Store
