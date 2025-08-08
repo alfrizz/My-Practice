@@ -50,3 +50,13 @@ done
   my_practice
 
 echo "[$(date '+%F %T')] Unison exited." >> "$LOG"
+
+# --- Cleanup Unison temp files
+TMP_CLEAN_COUNT=$(find "$TARGET" -type f -name '*.unison.tmp' | wc -l)
+if (( TMP_CLEAN_COUNT > 0 )); then
+  echo "[$(date '+%F %T')] Cleaning $TMP_CLEAN_COUNT temp files..." >> "$LOG"
+  find "$TARGET" -type f -name '*.unison.tmp' -delete
+  echo "[$(date '+%F %T')] Temp cleanup complete." >> "$LOG"
+else
+  echo "[$(date '+%F %T')] No temp files to clean." >> "$LOG"
+fi

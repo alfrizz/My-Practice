@@ -236,18 +236,19 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
         visible=True,
         yaxis="y2"
     ))
-    
-    # Signal2 trace on a secondary y-axis.
-    fig.add_trace(go.Scatter(
-        x=df.index,
-        y=df[col_signal2],
-        mode='lines',
-        line=dict(color='red', width=2, dash='dash'),
-        name=col_signal2,
-        hovertemplate="Date: %{x}<br>Smooth Signal: %{y:.2f}<extra></extra>",
-        visible=True,
-        yaxis="y2"
-    ))
+
+    if col_signal2:
+        # Signal2 trace on a secondary y-axis.
+        fig.add_trace(go.Scatter(
+            x=df.index,
+            y=df[col_signal2],
+            mode='lines',
+            line=dict(color='red', width=2, dash='dash'),
+            name=col_signal2,
+            hovertemplate="Date: %{x}<br>Smooth Signal: %{y:.2f}<extra></extra>",
+            visible=True,
+            yaxis="y2"
+        ))
     
     # Add a horizontal dotted line for the buy_threshold (on secondary y-axis).
     fig.add_hline(y=buy_threshold, line=dict(color="purple", dash="dot"),
@@ -500,35 +501,43 @@ def make_live_plot_callback(fig, ax, line, handle):
     return live_plot_callback
 
 
+
 def lightweight_plot_callback(
-    study, 
-    trial, 
+    study,
+    trial,
     state={
-        "trial_x": [], "trial_y": [], "initialized": False, 
-        "fig": None, "ax": None, "line": None, "handle": None
+        "initialized": False,
+        "fig": None, "ax": None, "line": None, "handle": None,
+        "x": [], "y": [],
     }
 ):
-    # initialize once
+    # Ignore trials without a numeric value (e.g., pruned)
+    if trial.value is None:
+        return
+
+    # One-time init: create one figure + one display handle
     if not state["initialized"]:
+        import matplotlib.pyplot as plt
+        plt.ioff()  # prevent interactive backend from opening extra windows
         fig, ax = plt.subplots(figsize=(7, 3))
-        line, = ax.plot([], [], "bo-")
+        (line,) = ax.plot([], [], "bo-", markersize=3, linewidth=1)
         ax.set(xlabel="Trial #", ylabel="Avg Daily P&L", title="Optuna Progress")
         ax.grid(True)
         handle = display(fig, display_id=True)
-        plt.close(fig)
-
+        # DO NOT close the figure here if you want continuous updates
         state.update({
             "initialized": True,
             "fig": fig, "ax": ax, "line": line, "handle": handle
         })
 
-    # update plot
-    state["trial_x"].append(trial.number)
-    state["trial_y"].append(trial.value)
-    state["line"].set_data(state["trial_x"], state["trial_y"])
+    # Append and update
+    state["x"].append(trial.number)
+    state["y"].append(float(trial.value))
+    state["line"].set_data(state["x"], state["y"])
     state["ax"].relim()
     state["ax"].autoscale_view()
     state["handle"].update(state["fig"])
+
 
 
 def cleanup_callback(study, trial):

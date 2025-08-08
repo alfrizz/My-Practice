@@ -236,13 +236,13 @@ def prepare_interpolate_data(
 #########################################################################################################
 
 # B1.1
-def identify_trades(df, # DataFrame with a datetime index and a 'close' column.
-                    min_prof_thr, # Minimum profit required
-                    max_down_prop, # Maximum allowed retracement (as a fraction of the gain)
+def identify_trades(df,                     # DataFrame with a datetime index and a 'close' column.
+                    min_prof_thr,           # Minimum profit required
+                    max_down_prop,          # Maximum allowed retracement (as a fraction of the gain)
                     gain_tightening_factor, # As the gain increases, the allowed retracement is tightened by this factor
-                    merging_retracement_thr, # Maximum allowed intermediate retracement ratio (relative to the profit range of the first trade) to allow merging.
-                    merging_time_gap_thr): # Maximum allowed time gap ratio for merging, where the gap is measured relative to the sum of the
-                                           # active durations (buy-to-sell times) of both trades.
+                    merging_retracement_thr,# Maximum allowed intermediate retracement ratio (relative to the profit range of the first trade) to allow merging.
+                    merging_time_gap_thr):  # Maximum allowed time gap ratio for merging, where the gap is measured relative to the sum of the
+                                            # active durations (buy-to-sell times) of both trades.
     """
     Identifies trades from a one-minute bars DataFrame using a retracement rule and then iteratively merges
     consecutive trades based on two conditions:
@@ -449,109 +449,66 @@ def compute_continuous_signal(
     day_df: pd.DataFrame,
     trades,
     smooth_win_sig: int,
-    pre_entry_decay: float,
-    short_penalty: float,       # penalty factor applied at 1-minute trades
+    pre_entry_decay: float,   # percent decay per minute (e.g., 10 means lambda=0.10)
+    short_penalty: float,     # 0..1; lowers contribution for very short trades
     is_centered: bool,
-    ref_profit: float           # benchmark profit in dollars (e.g. avg(sell_price−buy_price))
+    ref_profit: float         # percentile of percentage profits (unitless)
 ) -> pd.DataFrame:
     """
-    Build a 0→1 intraday signal with per-trade scaling, decay and duration penalty:
-
-    1) HARD-CODED DURATIONS
-       • short_duration = 1 minute
-       • long_duration  = 1 hour
-
-    2) REFERENCE SCALE
-       inv_ref = 1/ref_profit ensures a dollar-gain == ref_profit → combined_raw ≈ 1
-
-    3) PER-TRADE “COMBINED” CURVE
-       For each trade ((buy_dt, sell_dt), (buy_price, sell_price), profit_pct):
-       
-       a) Mask bars up to sell_dt:
-            mask  = df.index ≤ sell_dt
-            times = df.index[mask]
-
-       b) Raw dollar gaps & exponential decay:
-            closes      = df.loc[mask, "close"]
-            profit_gaps = max(sell_price − closes, 0)
-            dt_min      = minutes from each bar to sell_dt
-            decayed     = profit_gaps × exp(−(pre_entry_decay/100)·dt_min)
-
-       c) Duration‐penalty (no if/else):
-            dur       = sell_dt − buy_dt
-            time_frac = min(dur / long_duration, 1.0)
-            time_pen  = 1.0 − sign(short_penalty)*(1−short_penalty)*(1−time_frac)
-
-       d) Apply reference scale & penalty:
-            combined_raw = decayed × inv_ref × time_pen
-
-       e) Squash to (0,1):
-            combined = combined_raw / (1 + combined_raw)
-
-       f) Merge via point-wise max:
-            signal_raw[t] = max over trades of combined[t]
-
-    4) BROADCAST FOR COMPATIBILITY
-       signal_scaled = signal_raw
-
-    5) SMOOTH
-       signal_smooth = rolling_mean(signal_scaled,
-                                    window=smooth_win_sig,
-                                    center=is_centered,
-                                    min_periods=1)
-
-    Returns df with columns:
-      • signal_raw
-      • signal_scaled
-      • signal_smooth
+    Build a continuous signal from per-trade curves, all in percentage units:
+      - per-bar gap: (sell - close) / sell
+      - per-trade scale: max((sell - buy)/buy, 0) / max(ref_profit, eps)
+      - decay to exit and duration penalty
+      - merge via pointwise max, then smooth
     """
-
-    # 2) Copy DataFrame and init raw signal
+    eps = 1e-12
     df = day_df.copy()
-    df["signal_raw"] = 0.0
+    df["signal"] = 0.0
 
-    # 3) Build and merge per-trade “combined” curves
-    for ((buy_dt, sell_dt), (buy_price, sell_price), profit_pct) in trades:
-        # 3a) mask bars up to exit
+    for ((buy_dt, sell_dt), (buy_price, sell_price), _profit_pct) in trades:
+        # Bars up to exit
         mask  = df.index <= sell_dt
         times = df.index[mask]
         if times.empty:
             continue
 
-        # 3b) raw gaps & exponential decay
-        closes      = df.loc[mask, "close"].to_numpy()
-        profit_gaps = np.maximum(sell_price - closes, 0.0)
-        dt_min      = (sell_dt - times).total_seconds() / 60.0
-        λ           = pre_entry_decay / 100.0
-        decayed     = profit_gaps * np.exp(-λ * dt_min)
+        # Percent gap to sell (unitless)
+        closes            = df.loc[mask, "close"].to_numpy()
+        profit_gaps_pct   = np.maximum((sell_price - closes) / sell_price, 0.0)
 
-        # 3c) duration‐based penalty
-        dur            = sell_dt - buy_dt
-        long_dur  = dt.timedelta(hours=1)
-        time_pen = min(dur / long_dur, 1.0)
-        short_pen = time_pen * (1 - short_penalty)
+        # Vectorized minutes to exit
+        dt_min = ((sell_dt - times).to_numpy() / np.timedelta64(1, 'm')).astype(float)
 
-        # 3d) apply reference scaling & penalty
-        curr_profit = sell_price - buy_price
-        combined_raw =  decayed * (curr_profit / ref_profit) * short_pen
+        # Exponential decay
+        lam     = pre_entry_decay / 100.0
+        decayed = profit_gaps_pct * np.exp(-lam * dt_min)
 
-        # 3e) squash into (0,1)
-        combined = combined_raw / (1.0 + combined_raw)
+        # Duration penalty in [short_penalty, 1]
+        long_dur   = pd.Timedelta(hours=1)
+        time_frac  = min((sell_dt - buy_dt) / long_dur, 1.0)
+        time_pen   = short_penalty + (1.0 - short_penalty) * time_frac
 
-        # 3f) point-wise max into signal_raw
-        existing = df.loc[mask, "signal_raw"].to_numpy()
-        wins     = combined > existing
-        ts_upd   = times[wins]
-        df.loc[ts_upd, "signal_raw"] = combined[wins]
+        # Per-trade scale by realized percentage vs reference percentile
+        curr_profit_pct = (sell_price - buy_price) / buy_price
+        scale           = max(curr_profit_pct, 0.0) / max(ref_profit, eps)
 
-    # 5) smooth the final signal
-    df["signal_smooth"] = (
-        df["signal_raw"]
+        # Final per-trade contribution (unitless, shape preserved)
+        contribution = decayed * scale * time_pen
+
+        # Merge via pointwise max (vector-safe)
+        existing = df.loc[mask, "signal"].to_numpy()
+        updated  = np.maximum(existing, contribution)
+        df.loc[times, "signal"] = updated
+
+    # Smooth
+    df["signal"] = (
+        df["signal"]
           .rolling(window=smooth_win_sig, center=is_centered, min_periods=1)
           .mean()
     )
 
     return df
+
 
 
 #########################################################################################################
@@ -683,7 +640,7 @@ def add_trade_signal_to_results(
             pre_entry_decay = pre_entry_decay,
             short_penalty   = short_penalty,
             is_centered     = is_centered,
-            ref_profit      = ref_profit,
+            ref_profit      = ref_profit
         )
 
         # Step B: discrete buy/sell via trailing stop
@@ -905,16 +862,16 @@ def compute_global_ref_profit(
     gain_tightening_factor = params.gain_tightening_factor_tick,
     merging_retracement_thr= params.merging_retracement_thr_tick,
     merging_time_gap_thr   = params.merging_time_gap_thr_tick,
-    regular_start_pred     = params.regular_start_pred, # we only calculate the reference over the trading time for which we are computing the signal
+    percentile_ref         = params.percentile_ref_tick,
+    regular_start_pred     = params.regular_start_pred,
     regular_end            = params.regular_end
 ) -> float:
     """
     1) Calls identify_trades_daily over ALL days (day_to_check=None)
        to get every day’s trades.
-    2) Flattens every trade’s (sell_price - buy_price) into a list.
-    3) Returns the median of that full list.
+    2) Flattens every trade’s profit_pcts into a list.
+    3) Returns the percentile of that full list.
     """
-    # collect trades for every day
     all_trades = identify_trades_daily(
         df                     = df,
         min_prof_thr           = min_prof_thr,
@@ -922,20 +879,24 @@ def compute_global_ref_profit(
         gain_tightening_factor = gain_tightening_factor,
         merging_retracement_thr= merging_retracement_thr,
         merging_time_gap_thr   = merging_time_gap_thr,
-        regular_start_shifted  = regular_start_pred, # using regular_start_pred
+        regular_start_shifted  = regular_start_pred,
         regular_end            = regular_end,
-        day_to_check           = None      # no filtering here
+        day_to_check           = None
     )
 
-    # flatten all trade gains
-    flat_profits = [
-        sell_price - buy_price
+    profit_pcts = [
+        (sell_price - buy_price) / buy_price
         for (_df, trades) in all_trades.values()
         for ((_, _), (buy_price, sell_price), _) in trades
+        if buy_price and sell_price
     ]
 
-    # single median across the entire dataset 
-    return float(np.median(flat_profits))
+    if not profit_pcts:
+        return 0.0  # or np.nan
+
+    return float(np.percentile(profit_pcts, percentile_ref))
+
+
 
 
 #########################################################################################################
@@ -945,7 +906,7 @@ def run_trading_pipeline(
     df,
     col_signal,
     col_action,
-    ref_profit,           
+    ref_profit,     
     min_prof_thr           = params.min_prof_thr_tick,
     max_down_prop          = params.max_down_prop_tick,
     gain_tightening_factor = params.gain_tightening_factor_tick,

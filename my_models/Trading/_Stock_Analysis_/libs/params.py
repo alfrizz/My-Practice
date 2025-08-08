@@ -8,14 +8,14 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as Funct
 
 #########################################################################################################
-ticker = 'GOOGL'
+ticker = 'AAPL'
 save_path  = Path("dfs_training")
 model_path = save_path / f"{ticker}_0.2419.pth" # model RMSE
 
 date_to_check = None # to analyze all dates save the final CSV
-# date_to_check = '2024-11' # set to None to analyze all dates save the "ready" CSV
+date_to_check = '2004-03' # set to None to analyze all dates and save the "ready" CSV
 
-date_to_test = '2024-11' # in the ML_Results notebook
+date_to_test = '2004-03' # in the ML_Results notebook and ML_DF_prep (if date_to_check==None)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -30,7 +30,7 @@ ready_csv = save_path / f"{ticker}_2_ready.csv"
 final_csv = save_path / f"{ticker}_3_final.csv"
 pred_csv = save_path / f"{ticker}_4_preds.csv"
 
-label_col = "signal_smooth" 
+label_col = "signal" 
 
 #########################################################################################################
 
@@ -43,13 +43,14 @@ def signal_parameters(ticker):
     merging_retracement_thr ==> # intermediate retracement, relative to the first trade's full range
     merging_time_gap_thr ==> # time gap between trades, relative to the first and second trade durations
     
-    # to define the smoothed signal
+    # to define the  signal
     smooth_win_sig ==> # smoothing window of the signal used for the identification of the final trades 
-    pre_entry_decay ==> # pre-trade decay of the final trades' raw signal (higher: quicker decay [0.01 - 1])
+    pre_entry_decay ==> # pre-trade decay of the trades' raw signal (higher: quicker decay [0.01 - 1])
     short_penalty ==> # duration penalty factor (lower: higher penalization [0.01 - 1])
+    percentile_ref ==> # percentile (eg 50 if median) of the percentage profit to use as reference to scale the signal
     
     # to define the final buy and sell triggers
-    buy_threshold ==> # (percent/100) threshold of the smoothed signal to trigger the final trade
+    buy_threshold ==> # (percent/100) threshold of the true signal to trigger the final trade
     pred_threshold ==> # (percent/100) threshold of the predicted signal to trigger the final trade
     trailing_stop_thresh ==> # (percent/100) of the trailing stop loss of the final trade
     trailing_stop_pred ==> # (percent/100) of the trailing stop loss of the predicted signal
@@ -58,22 +59,22 @@ def signal_parameters(ticker):
         features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
         look_back=90
         # to define the initial trades:
-        min_prof_thr=0.18 
-        max_down_prop=0.2
-        gain_tightening_factor=0.7
+        min_prof_thr=0.05
+        max_down_prop=0.86
+        gain_tightening_factor=0.2
         merging_retracement_thr=0.13
-        merging_time_gap_thr=0.2
-        # to define the smoothed signal:
-        smooth_win_sig=2
-        pre_entry_decay=0.43
-        short_penalty=0.11
+        merging_time_gap_thr=0.12
+        # to define the true signal:
+        smooth_win_sig=1
+        pre_entry_decay=0.5
+        short_penalty=0.39
+        percentile_ref=75
         # to define the final buy and sell triggers:
-        trailing_stop_thresh=0.015
-        trailing_stop_pred=0.16
-        buy_threshold=0.21
-        pred_threshold=0.3
+        trailing_stop_thresh=0.01
+        trailing_stop_pred=0.01
+        buy_threshold=0.01
+        pred_threshold=0.01
         
-
     if ticker == 'GOOGL':
         features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
         look_back=120
@@ -83,23 +84,17 @@ def signal_parameters(ticker):
         gain_tightening_factor=0.5446
         merging_retracement_thr=0.1240
         merging_time_gap_thr=0.2310
-        # to define the smoothed signal:
+        # to define the true signal:
         smooth_win_sig=1
         pre_entry_decay=0.4659
         short_penalty=0.0508
+        percentile_ref=75
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.0654
         trailing_stop_pred=0.03
         buy_threshold=0.1806
         pred_threshold=0.33
  
-# 0.7685528368794327 and parameters: {'look_back': 120, 'min_prof_thr': 0.13763972058205504, 'max_down_prop': 0.42778881628257825, 'gain_tightening_factor': 0.5445875497539636, 'merging_retracement_thr': 0.12399283114515154, 'merging_time_gap_thr': 0.2309617116211783, 'smooth_win_sig': 1, 'pre_entry_decay': 0.46590861152802665, 'short_penalty': 0.05080406329723604, 'trailing_stop_thresh': 0.06537361893701088, 'buy_threshold': 0.18056979062291903}
-
-# 0.42778440366972476 and parameters: {'pred_threshold': 0.34173415291231724, 'trailing_stop_pred': 0.024125635968185476}
-# 0.43773644703919934 and parameters: {'pred_threshold': 0.3311018836275292, 'trailing_stop_pred': 0.04182910447070286}
-# 0.4290542118432027 and parameters: {'pred_threshold': 0.32680248786653876, 'trailing_stop_pred': 0.0713479297738757}
-# 0.4321876563803169 and parameters: {'pred_threshold': 0.3375790501521938, 'trailing_stop_pred': 0.020774442275706247}
-
     if ticker == 'TSLA':
         # features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
         look_back=90
@@ -109,10 +104,11 @@ def signal_parameters(ticker):
         gain_tightening_factor=0.02
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
-        # to define the smoothed signal:
+        # to define the true signal:
         smooth_win_sig=3  
         pre_entry_decay=0.6
         short_penalty=0.1
+        percentile_ref=75
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.1 
         trailing_stop_pred=0.6 #0.16
@@ -120,11 +116,11 @@ def signal_parameters(ticker):
         pred_threshold=0.4 #0.3
 
     return features_cols, look_back, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr,  \
-        smooth_win_sig, pre_entry_decay, short_penalty, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
+        smooth_win_sig, pre_entry_decay, short_penalty, percentile_ref, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
 
 # automatically executed function to get the parameters for the selected ticker
 features_cols_tick, look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, smooth_win_sig_tick, \
-pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, trailing_stop_pred_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
+pre_entry_decay_tick, short_penalty_tick, percentile_ref_tick, trailing_stop_thresh_tick, trailing_stop_pred_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
 
 #########################################################################################################
 
