@@ -13,7 +13,7 @@ save_path  = Path("dfs_training")
 model_path = save_path / f"{ticker}_0.2419.pth" # model RMSE
 
 date_to_check = None # to analyze all dates save the final CSV
-date_to_check = '2004-03' # set to None to analyze all dates and save the "ready" CSV
+# date_to_check = '2004-03' # set to None to analyze all dates and save the "ready" CSV
 
 date_to_test = '2004-03' # in the ML_Results notebook and ML_DF_prep (if date_to_check==None)
 

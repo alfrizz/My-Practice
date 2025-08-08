@@ -45,7 +45,7 @@ done
   -prefer newer \
   -links true \
   -fastcheck true \
-  -repeat 7 \
+  -repeat 70 \
   -logfile "$LOG" \
   my_practice
 
