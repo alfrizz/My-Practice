@@ -12,10 +12,8 @@ ticker = 'AAPL'
 save_path  = Path("dfs_training")
 model_path = save_path / f"{ticker}_0.2419.pth" # model RMSE
 
-date_to_check = None # to analyze all dates save the final CSV
-# date_to_check = '2004-03' # set to None to analyze all dates and save the "ready" CSV
-
-date_to_test = '2004-03' # in the ML_Results notebook and ML_DF_prep (if date_to_check==None)
+createCSVready = True
+date_to_check = '2004-03' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -31,6 +29,36 @@ final_csv = save_path / f"{ticker}_3_final.csv"
 pred_csv = save_path / f"{ticker}_4_preds.csv"
 
 label_col = "signal" 
+
+feats_cols_all = [
+    "open",             # Opening price
+    "high",             # Highest price
+    "low",              # Lowest price
+    "close",            # Closing price
+    "volume",           # Traded volume
+    "r_1",              # 1-period log return
+    "r_5",              # 5-period log return
+    "r_15",             # 15-period log return
+    "vol_15",           # Rolling 15-period volatility of r_1
+    "volume_spike",     # Current volume / avg volume over 15
+    "atr_14",           # 14-period Average True Range
+    "vwap_dev",         # (close – VWAP) / VWAP
+    "rsi_14",           # 14-period Relative Strength Index
+    "bb_width_20",      # (BB upper – BB lower) / MA20
+    "stoch_k_14",       # %K of 14-period Stochastic
+    "stoch_d_3",        # 3-period SMA of %K
+    "ma_5",             # 5-period simple moving average
+    "ma_20",            # 20-period simple moving average
+    "ma_diff",          # ma_5 – ma_20
+    "macd_12_26",       # EMA12 – EMA26
+    "macd_signal_9",    # 9-period EMA of MACD
+    "obv",              # On-Balance Volume
+    "in_trading",       # Within regular trading time
+    "hour",             # Hour of the day (0–23)
+    "day_of_week",      # Day of week (0=Mon…6=Sun)
+    "month",            # Month (1–12)
+]
+
 
 #########################################################################################################
 
@@ -56,23 +84,24 @@ def signal_parameters(ticker):
     trailing_stop_pred ==> # (percent/100) of the trailing stop loss of the predicted signal
     '''
     if ticker == 'AAPL':
-        features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
-        look_back=90
+        features_cols = ['vol_15', 'bb_width_20', 'hour', 'ma_20', 'macd_signal_9', 'low', 'atr_14', 'obv', 'vwap_dev', 'volume_spike', 'r_15', 'close', 'ma_5', 'open', 'high']
+        look_back=60
         # to define the initial trades:
-        min_prof_thr=0.05
-        max_down_prop=0.86
-        gain_tightening_factor=0.2
-        merging_retracement_thr=0.13
-        merging_time_gap_thr=0.12
+        min_prof_thr=0.22
+        max_down_prop=0.45
+        gain_tightening_factor=0.85
+        merging_retracement_thr=0.05
+        merging_time_gap_thr=0.07
         # to define the true signal:
         smooth_win_sig=1
-        pre_entry_decay=0.5
-        short_penalty=0.39
-        percentile_ref=75
-        # to define the final buy and sell triggers:
-        trailing_stop_thresh=0.01
+        pre_entry_decay=0.9
+        short_penalty=0.9
+        percentile_ref=50
+        # true signal buy and SL triggers:
+        trailing_stop_thresh=0.03
+        buy_threshold=0.003
+        # predicted signal buy and SL triggers:
         trailing_stop_pred=0.01
-        buy_threshold=0.01
         pred_threshold=0.01
         
     if ticker == 'GOOGL':

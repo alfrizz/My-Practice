@@ -1039,7 +1039,7 @@ def feature_engineering(df: pd.DataFrame,
     # Rolling 15-period volatility
     if "vol_15" in features_cols:
         # ensure r_1 exists
-        if "r_1" not in df.columns and "r_1" in features_cols:
+        if "r_1" not in df.columns: # and "r_1" in features_cols:
             df["r_1"] = np.log(df["close"] / df["close"].shift(1))
         df["vol_15"] = df["r_1"].rolling(15).std()
 
