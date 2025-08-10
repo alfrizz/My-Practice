@@ -10,10 +10,10 @@ import torch.nn.functional as Funct
 #########################################################################################################
 ticker = 'AAPL'
 save_path  = Path("dfs_training")
-model_path = save_path / f"{ticker}_0.2419.pth" # model RMSE
+model_path = save_path / f"{ticker}_0.0190.pth" # model RMSE
 
-createCSVready = True
-date_to_check = '2004-03' 
+createCSVsign = False
+date_to_check = '2022-07' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -24,9 +24,9 @@ is_centered = True # smoothing and centering using past and future data (True) o
 bidasktoclose_spread = 0.03
 
 base_csv = save_path / f"{ticker}_1_base.csv"
-ready_csv = save_path / f"{ticker}_2_ready.csv"
-final_csv = save_path / f"{ticker}_3_final.csv"
-pred_csv = save_path / f"{ticker}_4_preds.csv"
+sign_csv = save_path / f"{ticker}_2_sign.csv"
+feat_csv = save_path / f"{ticker}_3_feat.csv"
+pred_csv = save_path / f"{ticker}_4_pred.csv"
 
 label_col = "signal" 
 
@@ -170,27 +170,27 @@ hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           96,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
     "LONG_UNITS":            128,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
-    "DROPOUT_SHORT":         0.2,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
-    "DROPOUT_LONG":          0.25,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
+    "DROPOUT_SHORT":         0.1,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_LONG":          0.15,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
     "ATT_HEADS":             8,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
-    "ATT_DROPOUT":           0.15,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
-    "WEIGHT_DECAY":          1e-5,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
+    "ATT_DROPOUT":           0.1,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "WEIGHT_DECAY":          1e-6,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,     # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
     "VAL_BATCH":             1,      # validation batch size; ↑ faster eval but uses more memory, ↓ slower eval but uses less memory
     "NUM_WORKERS":           2,      # DataLoader workers; ↑ parallel loading (bus error risk + overhead), ↓ safer but less parallelism
-    "TRAIN_PREFETCH_FACTOR": 1,      # batches to prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
+    "TRAIN_PREFETCH_FACTOR": 1,      # batches Sto prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
     "MAX_EPOCHS":            60,     # maximum training epochs; ↑ more training (risk wasted compute), ↓ shorter runs (risk undertraining)
     "EARLY_STOP_PATIENCE":   12,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
     "LR_EPOCHS_WARMUP":      1,      # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
-    "INITIAL_LR":            5e-4,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
+    "INITIAL_LR":            5e-2,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
     "CLIPNORM":              1,      # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
     
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
-    "ETA_MIN":               2e-5,   # floor LR in each cosine cycle
+    "ETA_MIN":               5e-5,   # floor LR in each cosine cycle
     "T_0":                   60,     # epochs before first cosine restart
     "T_MULT":                1,      # cycle length multiplier after each restart
 

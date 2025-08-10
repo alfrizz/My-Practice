@@ -31,6 +31,7 @@ torch.backends.cudnn.allow_tf32         = True
 torch.backends.cudnn.benchmark          = True
 
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 from tqdm.auto import tqdm
 
@@ -50,18 +51,16 @@ def build_lstm_tensors(
     """
     Build disk-backed memmaps for LSTM windows, then wrap in PyTorch Tensors.
 
-    1) Ensure tmpdir exists
-    2) First pass: count total valid windows (N) to size memmaps
-    3) Allocate .npy memmaps: X_mm, y_mm, c_mm, b_mm, a_mm
-    4) Second pass: for each day
+    1) First pass: count total valid windows (N) to size memmaps
+    2) Allocate .npy memmaps: X_mm, y_mm, c_mm, b_mm, a_mm
+    3) Second pass: for each day
        a) load raw arrays (features, labels, prices) as float32
-       b) standardize features in-place (float32)
-       c) build sliding windows via np.lib.stride_tricks
-       d) align targets (drop last window)
-       e) filter by regular_start (RTH mask)
-       f) write slices into memmaps at offset idx
-    5) Wrap memmaps in torch.from_numpy and move to device
-    6) Return five tensors: X, y, raw_close, raw_bid, raw_ask
+       b) build sliding windows via np.lib.stride_tricks
+       c) align targets (drop last window)
+       d) filter by regular_start (RTH mask)
+       e) write slices into memmaps at offset idx
+    4) Wrap memmaps in torch.from_numpy and move to device
+    5) Return five tensors: X, y, raw_close, raw_bid, raw_ask
 
     Auto‐cleanup: the contents of tmpdir persist after this function returns.
     We register an atexit handler so that when Python exits, tmpdir is
@@ -115,11 +114,6 @@ def build_lstm_tensors(
         close_np  = day["close"].to_numpy(dtype=np.float32)       # (T,)
         bid_np    = day["bid"].to_numpy(dtype=np.float32)
         ask_np    = day["ask"].to_numpy(dtype=np.float32)
-
-        # 3b) Per‐day standardization in float32
-        mu        = feats_np.mean(axis=0, keepdims=True)
-        sd        = feats_np.std (axis=0, keepdims=True) + 1e-6
-        feats_np  = (feats_np - mu) / sd
 
         # 3c) Build sliding windows via stride_tricks
         #    windows shape before drop: (T - look_back + 1, look_back, F)
@@ -183,18 +177,24 @@ def chronological_split(
     torch.Tensor, torch.Tensor, torch.Tensor
 ]:
     """
-    Split the big (N, look_back, F) dataset into train/val/test by calendar day
-    using index‐range slicing (no giant boolean masks). All splits happen on `device`.
+    Split the full sliding‐window dataset (X, y, raw_*) into train, validation,
+    and test sets by calendar day, then apply Max‐Abs scaling fitted on
+    the train split only.
 
-    Returns exactly:
-      (X_tr, y_tr),
-      (X_val, y_val),
-      (X_te, y_te, close_te, bid_te, ask_te),
-      samples_per_day,
-      day_id_tr, day_id_val, day_id_te
+    We first move all tensors to the chosen device. By grouping `df` on
+    normalized dates and checking `look_back` vs. `regular_start`, we
+    build `samples_per_day` and verify it matches X.size(0). We then
+    decide how many days go to train (rounded up to `train_batch`),
+    val, and test.
+
+    Using a cumulative sum of daily counts, we slice X, y, and raw price
+    tensors into their respective splits without boolean indexing.
+    
+    Finally build day‐ID tags via `repeat_interleave` so each window 
+    can be traced back to its original calendar day.
     """
 
-    # 0) pick a real device & move the full dataset there
+    # Pick a real device & move the full dataset there
     device = device or (X.device if X.device is not None else torch.device("cpu"))
     X         = X.to(device)
     y         = y.to(device)
@@ -259,7 +259,7 @@ def chronological_split(
     day_id_te  = make_day_ids(cut_val+1,  D-1)
 
 
-    # 8) Return splits + metadata
+    # Return splits + metadata
     return (
         (X_tr, y_tr),
         (X_val, y_val),
@@ -1126,3 +1126,152 @@ def feature_engineering(df: pd.DataFrame,
     df = df.loc[:, cols].dropna()
 
     return df
+
+
+#########################################################################################################
+
+
+
+def scale_with_splits(
+    df: pd.DataFrame,
+    features_cols: list[str],
+    label_col: str,
+    train_prop: float = 0.70,
+    val_prop: float   = 0.15
+) -> pd.DataFrame:
+    """
+     Split a time-indexed DataFrame into train/validation/test by row order.
+     Encode hour, day_of_week, month as single cyclic PCA features.
+     Scale feature groups WITHOUT LEAKAGE:
+       - Price–volume features: per-day robust scaling
+       - Ratio/indicator features: global StandardScaler on train only
+       - Binary flags: passthrough {0,1}
+       - Cyclical time features (hour, day_of_week, month): PCA→1D passthrough
+     Return a single DataFrame, preserving original feature names and the label_col.
+    """
+
+    df = df.copy()
+
+    # 1) Split into train/val/test
+    n       = len(df)
+    n_train = int(n * train_prop)
+    n_val   = int(n * val_prop)
+    if n_train + n_val >= n:
+        raise ValueError("train_prop + val_prop must sum to < 1.0")
+
+    df_tr = df.iloc[:n_train].copy()
+    df_v  = df.iloc[n_train : n_train + n_val].copy()
+    df_te = df.iloc[n_train + n_val :].copy()
+
+    # 2) Generate sin & cos for each cyclic feature
+    for sub in (df_tr, df_v, df_te):
+        # hour
+        h = sub["hour"]
+        sub["hour_sin"] = np.sin(2 * np.pi * h / 24)
+        sub["hour_cos"] = np.cos(2 * np.pi * h / 24)
+        # day_of_week
+        d = sub["day_of_week"]
+        sub["day_of_week_sin"] = np.sin(2 * np.pi * d / 7)
+        sub["day_of_week_cos"] = np.cos(2 * np.pi * d / 7)
+        # month
+        m = sub["month"]
+        sub["month_sin"] = np.sin(2 * np.pi * m / 12)
+        sub["month_cos"] = np.cos(2 * np.pi * m / 12)
+
+    # 3) Define feature groups
+    price_feats = [
+        "open", "high", "low", "close", "volume",
+        "atr_14", "ma_5", "ma_20", "ma_diff",
+        "macd_12_26", "macd_signal_9", "obv"
+    ]
+    ratio_feats = [
+        "r_1", "r_5", "r_15",
+        "vol_15", "volume_spike", "vwap_dev",
+        "rsi_14", "bb_width_20", "stoch_k_14", "stoch_d_3"
+    ]
+    binary_feats = ["in_trading"]
+    cyclic_feats  = ["hour", "day_of_week", "month"]
+
+    price_feats  = [f for f in price_feats  if f in features_cols]
+    ratio_feats  = [f for f in ratio_feats  if f in features_cols]
+    binary_feats = [f for f in binary_feats if f in features_cols]
+    # note: cyclic_feats will be re‐added post-PCA
+
+    # 4) Fit global scaler on ratio/indicator features
+    ratio_scaler = StandardScaler()
+    if ratio_feats:
+        ratio_scaler.fit(df_tr[ratio_feats])
+
+    # 5) Per-day robust scaler for price features
+    def scale_price_per_day(sub: pd.DataFrame, desc: str) -> pd.DataFrame:
+        out = sub.copy()
+        days = out.index.normalize().unique()
+        for day in tqdm(days, desc=f"Scaling price per day ({desc})", unit="day"):
+            mask  = out.index.normalize() == day
+            block = out.loc[mask, price_feats]
+            med   = block.median(axis=0)
+            iqr   = block.quantile(0.75, axis=0) - block.quantile(0.25, axis=0)
+            iqr[iqr == 0] = 1e-6
+            out.loc[mask, price_feats] = (block - med) / iqr
+        return out
+
+    # 6) Transform splits (price + ratio)
+    def transform(sub: pd.DataFrame, split_name: str) -> pd.DataFrame:
+        out = sub.copy()
+        if price_feats:
+            out = scale_price_per_day(out, split_name)
+        if ratio_feats:
+            out[ratio_feats] = ratio_scaler.transform(sub[ratio_feats])
+        return out
+
+    df_tr_s  = transform(df_tr,  "train")
+    df_val_s = transform(df_v,   "val")
+    df_te_s  = transform(df_te,  "test")
+
+    # 7) Fit PCA on train‐only sin/cos pairs
+    pca_hour = PCA(n_components=1).fit(df_tr_s[["hour_sin","hour_cos"]])
+    pca_dow  = PCA(n_components=1).fit(df_tr_s[["day_of_week_sin","day_of_week_cos"]])
+    pca_mo   = PCA(n_components=1).fit(df_tr_s[["month_sin","month_cos"]])
+
+    # 8) Apply PCA → 1D, round, drop sin/cos, reattach original names
+    def apply_cyclic_pca(sub: pd.DataFrame) -> pd.DataFrame:
+        # hour
+        h_pc1 = pca_hour.transform(sub[["hour_sin","hour_cos"]])[:,0]
+        sub["hour"] = np.round(h_pc1, 3)
+        # day_of_week
+        d_pc1 = pca_dow.transform(sub[["day_of_week_sin","day_of_week_cos"]])[:,0]
+        sub["day_of_week"] = np.round(d_pc1, 3)
+        # month
+        m_pc1 = pca_mo.transform(sub[["month_sin","month_cos"]])[:,0]
+        sub["month"] = np.round(m_pc1, 3)
+
+        # drop the intermediate columns
+        sub.drop([
+            "hour_sin","hour_cos",
+            "day_of_week_sin","day_of_week_cos",
+            "month_sin","month_cos"
+        ], axis=1, inplace=True)
+
+        return sub
+
+    df_tr_s  = apply_cyclic_pca(df_tr_s)
+    df_val_s = apply_cyclic_pca(df_val_s)
+    df_te_s  = apply_cyclic_pca(df_te_s)
+
+    # 9) Reattach label and recombine
+    for subset in (df_tr_s, df_val_s, df_te_s):
+        subset[label_col] = df.loc[subset.index, label_col]
+
+    df_final = pd.concat([df_tr_s, df_val_s, df_te_s]).sort_index()
+
+    # 10) Select final columns
+    final_cols = (
+        price_feats
+        + ratio_feats
+        + binary_feats
+        + cyclic_feats      # now holds the PCA‐1D values
+        + ["bid", "ask"]
+        + [label_col]
+    )
+    return df_final[final_cols]
+

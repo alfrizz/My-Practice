@@ -2,11 +2,13 @@ from libs import params, trades
 import pandas as pd
 import numpy  as np
 import gc
+import math
 
 import matplotlib
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from IPython.display import display, update_display, HTML
+import seaborn as sns
 
 from optuna.trial import TrialState
 
@@ -543,4 +545,123 @@ def lightweight_plot_callback(
 def cleanup_callback(study, trial):
     gc.collect()
 
+
+
+#########################################################################################################
+
+
+sns.set_style("white")
+
+def plot_dual_histograms(
+    df_before: pd.DataFrame,
+    df_after:  pd.DataFrame,
+    features:  list[str],
+    sample:    int | None        = 50000,
+    bins:      int               = 40,
+    clip_pct:  tuple[float,float] = (0.02, 0.98),
+):
+    # 1) figure out which features we can plot
+    common = [f for f in features if f in df_before and f in df_after]
+    if not common:
+        raise ValueError("No overlapping features.")
+
+    # 2) optional sampling
+    if sample:
+        dfb = df_before.sample(min(len(df_before), sample), random_state=0)
+        dfa = df_after .sample(min(len(df_after),  sample), random_state=0)
+    else:
+        dfb, dfa = df_before, df_after
+
+    # 3) layout
+    cols = 2
+    rows = math.ceil(len(common) / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4))
+    axes = axes.flatten()
+
+    for ax, feat in zip(axes, common):
+        before = dfb[feat].dropna()
+        after  = dfa[feat].dropna()
+
+        # only numeric, high‐cardinality fields get overlaid histograms
+        if pd.api.types.is_numeric_dtype(before) and before.nunique() > 10:
+            # compute clipped ranges
+            lo_b, hi_b = np.quantile(before, clip_pct)
+            lo_a, hi_a = np.quantile(after,  clip_pct)
+
+            # bin edges for each
+            edges_b = np.linspace(lo_b, hi_b, bins + 1)
+            edges_a = np.linspace(lo_a, hi_a, bins + 1)
+
+            # --- BLUE histogram on primary ax ---
+            ax.hist(before, bins=edges_b, color="C0", alpha=0.6, edgecolor="C0")
+            ax.set_xlim(lo_b, hi_b)
+            ax.margins(x=0)
+
+            # style blue spines & ticks
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["bottom"].set_color("C0")
+            ax.spines["left"].set_color("C0")
+            ax.tick_params(axis="x", colors="C0", rotation=45)
+            ax.tick_params(axis="y", colors="C0")
+
+            # --- ORANGE histogram on top‐x + right‐y twin axes ---
+            ax_top = ax.twiny()        # new x-axis on top, shares y with ax
+            ax_orange = ax_top.twinx() # new y-axis on right, shares x with ax_top
+
+            # draw orange bars onto the right‐y axis
+            ax_orange.hist(after, bins=edges_a, color="C1", alpha=0.6, edgecolor="C1")
+
+            # set the orange x‐range (this also applies to ax_orange, since x is shared)
+            ax_top.set_xlim(lo_a, hi_a)
+            ax_top.margins(x=0)
+
+            # style top x-axis
+            ax_top.spines["bottom"].set_visible(False)
+            ax_top.spines["left"].set_visible(False)
+            ax_top.spines["right"].set_visible(False)
+            ax_top.spines["top"].set_color("C1")
+            ax_top.xaxis.set_ticks_position("top")
+            ax_top.xaxis.set_label_position("top")
+            ax_top.tick_params(axis="x", colors="C1", rotation=45)
+
+            # style right y-axis
+            ax_orange.spines["bottom"].set_visible(False)
+            ax_orange.spines["left"].set_visible(False)
+            ax_orange.spines["top"].set_visible(False)
+            ax_orange.spines["right"].set_color("C1")
+            ax_orange.yaxis.set_ticks_position("right")
+            ax_orange.yaxis.set_label_position("right")
+            ax_orange.tick_params(axis="y", colors="C1", labelright=True)
+
+        else:
+            # fallback: side-by-side bars for categorical or low-cardinality
+            bd = before.value_counts(normalize=True).sort_index()
+            ad = after .value_counts(normalize=True).sort_index()
+            cats = sorted(set(bd.index) | set(ad.index))
+            x = np.arange(len(cats))
+            w = 0.4
+
+            ax.bar(x - w/2, [bd.get(c, 0) for c in cats],
+                   w, color="C0", alpha=0.6)
+            ax.bar(x + w/2, [ad.get(c, 0) for c in cats],
+                   w, color="C1", alpha=0.6)
+
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["bottom"].set_color("black")
+            ax.spines["left"].set_color("C0")
+
+            ax.set_xticks(x)
+            ax.set_xticklabels(cats, rotation=45)
+            ax.tick_params(axis="y", colors="C0")
+
+        ax.set_title(feat, color="black")
+
+    # disable any unused subplots
+    for extra in axes[len(common):]:
+        extra.axis("off")
+
+    plt.tight_layout()
+    plt.show()
 
