@@ -10,17 +10,16 @@ import torch.nn.functional as Funct
 #########################################################################################################
 ticker = 'AAPL'
 save_path  = Path("dfs_training")
-model_path = save_path / f"{ticker}_0.0190.pth" # model RMSE
+model_path = save_path / f"{ticker}_0.1638.pth" # model RMSE
 
-createCSVsign = False
-date_to_check = '2022-07' 
+createCSVsign = True
+date_to_check = '2025-05' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
 optuna_folder = "optuna_results" 
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-is_centered = True # smoothing and centering using past and future data (True) or only with past data without centering (False)
 bidasktoclose_spread = 0.03
 
 base_csv = save_path / f"{ticker}_1_base.csv"
@@ -72,10 +71,9 @@ def signal_parameters(ticker):
     merging_time_gap_thr ==> # time gap between trades, relative to the first and second trade durations
     
     # to define the  signal
-    smooth_win_sig ==> # smoothing window of the signal used for the identification of the final trades 
     pre_entry_decay ==> # pre-trade decay of the trades' raw signal (higher: quicker decay [0.01 - 1])
     short_penalty ==> # duration penalty factor (lower: higher penalization [0.01 - 1])
-    percentile_ref ==> # percentile (eg 50 if median) of the percentage profit to use as reference to scale the signal
+    # percentile_ref ==> # percentile (eg 50 if median) of the percentage profit to use as reference to scale the signal
     
     # to define the final buy and sell triggers
     buy_threshold ==> # (percent/100) threshold of the true signal to trigger the final trade
@@ -87,22 +85,21 @@ def signal_parameters(ticker):
         features_cols = ['vol_15', 'bb_width_20', 'hour', 'ma_20', 'macd_signal_9', 'low', 'atr_14', 'obv', 'vwap_dev', 'volume_spike', 'r_15', 'close', 'ma_5', 'open', 'high']
         look_back=60
         # to define the initial trades:
-        min_prof_thr=0.22
-        max_down_prop=0.45
+        min_prof_thr=0.2
+        max_down_prop=0.2
         gain_tightening_factor=0.85
-        merging_retracement_thr=0.05
-        merging_time_gap_thr=0.07
+        merging_retracement_thr=0.5
+        merging_time_gap_thr=0.7
         # to define the true signal:
-        smooth_win_sig=1
         pre_entry_decay=0.9
-        short_penalty=0.9
-        percentile_ref=50
+        short_penalty=0.6
+        # percentile_ref=50
         # true signal buy and SL triggers:
-        trailing_stop_thresh=0.03
-        buy_threshold=0.003
+        trailing_stop_thresh=0.02
+        buy_threshold=0.2
         # predicted signal buy and SL triggers:
-        trailing_stop_pred=0.01
-        pred_threshold=0.01
+        trailing_stop_pred=0.02
+        pred_threshold=0.2
         
     if ticker == 'GOOGL':
         features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
@@ -114,10 +111,9 @@ def signal_parameters(ticker):
         merging_retracement_thr=0.1240
         merging_time_gap_thr=0.2310
         # to define the true signal:
-        smooth_win_sig=1
         pre_entry_decay=0.4659
         short_penalty=0.0508
-        percentile_ref=75
+        # percentile_ref=75
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.0654
         trailing_stop_pred=0.03
@@ -134,10 +130,9 @@ def signal_parameters(ticker):
         merging_retracement_thr=0.9
         merging_time_gap_thr=0.7
         # to define the true signal:
-        smooth_win_sig=3  
         pre_entry_decay=0.6
         short_penalty=0.1
-        percentile_ref=75
+        # percentile_ref=75
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.1 
         trailing_stop_pred=0.6 #0.16
@@ -145,11 +140,11 @@ def signal_parameters(ticker):
         pred_threshold=0.4 #0.3
 
     return features_cols, look_back, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr,  \
-        smooth_win_sig, pre_entry_decay, short_penalty, percentile_ref, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
+        pre_entry_decay, short_penalty, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, smooth_win_sig_tick, \
-pre_entry_decay_tick, short_penalty_tick, percentile_ref_tick, trailing_stop_thresh_tick, trailing_stop_pred_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
+features_cols_tick, look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, \
+pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, trailing_stop_pred_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
 
 #########################################################################################################
 
@@ -168,13 +163,13 @@ regular_end = datetime.strptime('21:00' , '%H:%M').time()
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           96,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
-    "LONG_UNITS":            128,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
-    "DROPOUT_SHORT":         0.1,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
-    "DROPOUT_LONG":          0.15,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
-    "ATT_HEADS":             8,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
-    "ATT_DROPOUT":           0.1,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
-    "WEIGHT_DECAY":          1e-6,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
+    "SHORT_UNITS":           64,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
+    "LONG_UNITS":            64,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
+    "DROPOUT_SHORT":         0.4,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_LONG":          0.4,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
+    "ATT_HEADS":             4,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
+    "ATT_DROPOUT":           0.2,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "WEIGHT_DECAY":          5e-4,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,     # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
@@ -185,12 +180,12 @@ hparams = {
     "EARLY_STOP_PATIENCE":   12,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
-    "LR_EPOCHS_WARMUP":      1,      # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
-    "INITIAL_LR":            5e-2,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
-    "CLIPNORM":              1,      # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
+    "LR_EPOCHS_WARMUP":      5,      # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
+    "INITIAL_LR":            3e-5,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
+    "CLIPNORM":              0.5,      # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
     
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
-    "ETA_MIN":               5e-5,   # floor LR in each cosine cycle
+    "ETA_MIN":               1e-6,   # floor LR in each cosine cycle
     "T_0":                   60,     # epochs before first cosine restart
     "T_MULT":                1,      # cycle length multiplier after each restart
 

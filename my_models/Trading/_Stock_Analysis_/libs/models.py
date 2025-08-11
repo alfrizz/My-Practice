@@ -477,7 +477,7 @@ def split_to_day_datasets(
         ds_tr,
         batch_size=train_batch,
         shuffle=False,
-        drop_last=True,
+        drop_last=False, ######################
         collate_fn=pad_collate,
 
         # these three lines were already here,

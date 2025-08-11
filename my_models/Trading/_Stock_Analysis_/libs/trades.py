@@ -448,18 +448,14 @@ def identify_trades_daily(
 def compute_continuous_signal(
     day_df: pd.DataFrame,
     trades,
-    smooth_win_sig: int,
     pre_entry_decay: float,   # percent decay per minute (e.g., 10 means lambda=0.10)
-    short_penalty: float,     # 0..1; lowers contribution for very short trades
-    is_centered: bool,
-    ref_profit: float         # percentile of percentage profits (unitless)
+    short_penalty: float     # 0..1; lowers contribution for very short trades
 ) -> pd.DataFrame:
     """
     Build a continuous signal from per-trade curves, all in percentage units:
       - per-bar gap: (sell - close) / sell
-      - per-trade scale: max((sell - buy)/buy, 0) / max(ref_profit, eps)
       - decay to exit and duration penalty
-      - merge via pointwise max, then smooth
+      - merge via pointwise max
     """
     eps = 1e-12
     df = day_df.copy()
@@ -474,7 +470,7 @@ def compute_continuous_signal(
 
         # Percent gap to sell (unitless)
         closes            = df.loc[mask, "close"].to_numpy()
-        profit_gaps_pct   = np.maximum((sell_price - closes) / sell_price, 0.0)
+        profit_gaps_pct   = np.maximum((sell_price - closes) / sell_price * 100, 0.0)
 
         # Vectorized minutes to exit
         dt_min = ((sell_dt - times).to_numpy() / np.timedelta64(1, 'm')).astype(float)
@@ -488,24 +484,13 @@ def compute_continuous_signal(
         time_frac  = min((sell_dt - buy_dt) / long_dur, 1.0)
         time_pen   = short_penalty + (1.0 - short_penalty) * time_frac
 
-        # Per-trade scale by realized percentage vs reference percentile
-        curr_profit_pct = (sell_price - buy_price) / buy_price
-        scale           = max(curr_profit_pct, 0.0) / max(ref_profit, eps)
-
-        # Final per-trade contribution (unitless, shape preserved)
-        contribution = decayed * scale * time_pen
+        # Final per-trade contribution capped at 1
+        contribution = np.minimum(decayed * time_pen, 1)
 
         # Merge via pointwise max (vector-safe)
         existing = df.loc[mask, "signal"].to_numpy()
         updated  = np.maximum(existing, contribution)
         df.loc[times, "signal"] = updated
-
-    # Smooth
-    df["signal"] = (
-        df["signal"]
-          .rolling(window=smooth_win_sig, center=is_centered, min_periods=1)
-          .mean()
-    )
 
     return df
 
@@ -529,7 +514,7 @@ def generate_trade_actions(
         • "close"              — the price series
     
     This function strips out any normalization or scaling steps and simply:
-      1) Buys when the smoothed signal ≥ buy_threshold (only at/after regular_start)
+      1) Buys when the signal ≥ buy_threshold (only at/after regular_start)
       2) Tracks a simple trailing stop of trailing_stop_thresh% off the highest price since entry
       3) Sells when price falls below that trailing stop
       4) Forces a sell at EOD if still in trade
@@ -609,23 +594,17 @@ def add_trade_signal_to_results(
     results_by_day_trad: dict,
     col_signal: str,
     col_action: str,
-    ref_profit: float,
     min_prof_thr: float,
     regular_start: dt.time,
-    smooth_win_sig: int,
     pre_entry_decay: float,
     short_penalty: float,
     trailing_stop_thresh: float,
     buy_threshold: float,
-    is_centered: bool,
     clip_quantiles=(0.01, 0.99),
     scale_bounds=(0.1, 2.0)
 ) -> dict:
     """
-    (A) Derive ref_return from the average profit% of all identified trades.
-    (B) For each day, build the continuous signal (using ref_return in Step 1A),
-        then generate discrete trade actions via trailing‐stop logic.
-
+    For each day, build the continuous signal, then generate discrete trade actions via trailing‐stop logic.
     Returns updated_results: { day → (df_with_signals&actions, trades) }
     """
 
@@ -636,11 +615,8 @@ def add_trade_signal_to_results(
         df_signal = compute_continuous_signal(
             day_df          = day_df,
             trades          = trades,
-            smooth_win_sig  = smooth_win_sig,
             pre_entry_decay = pre_entry_decay,
-            short_penalty   = short_penalty,
-            is_centered     = is_centered,
-            ref_profit      = ref_profit
+            short_penalty   = short_penalty
         )
 
         # Step B: discrete buy/sell via trailing stop
@@ -855,64 +831,16 @@ def simulate_trading(
 
 #########################################################################################################
 
-def compute_global_ref_profit(
-    df: pd.DataFrame,  
-    min_prof_thr           = params.min_prof_thr_tick,
-    max_down_prop          = params.max_down_prop_tick,
-    gain_tightening_factor = params.gain_tightening_factor_tick,
-    merging_retracement_thr= params.merging_retracement_thr_tick,
-    merging_time_gap_thr   = params.merging_time_gap_thr_tick,
-    percentile_ref         = params.percentile_ref_tick,
-    regular_start_pred     = params.regular_start_pred,
-    regular_end            = params.regular_end
-) -> float:
-    """
-    1) Calls identify_trades_daily over ALL days (day_to_check=None)
-       to get every day’s trades.
-    2) Flattens every trade’s profit_pcts into a list.
-    3) Returns the percentile of that full list.
-    """
-    all_trades = identify_trades_daily(
-        df                     = df,
-        min_prof_thr           = min_prof_thr,
-        max_down_prop          = max_down_prop,
-        gain_tightening_factor = gain_tightening_factor,
-        merging_retracement_thr= merging_retracement_thr,
-        merging_time_gap_thr   = merging_time_gap_thr,
-        regular_start_shifted  = regular_start_pred,
-        regular_end            = regular_end,
-        day_to_check           = None
-    )
-
-    profit_pcts = [
-        (sell_price - buy_price) / buy_price
-        for (_df, trades) in all_trades.values()
-        for ((_, _), (buy_price, sell_price), _) in trades
-        if buy_price and sell_price
-    ]
-
-    if not profit_pcts:
-        return 0.0  # or np.nan
-
-    return float(np.percentile(profit_pcts, percentile_ref))
-
-
-
-
-#########################################################################################################
-
 
 def run_trading_pipeline(
     df,
     col_signal,
     col_action,
-    ref_profit,     
     min_prof_thr           = params.min_prof_thr_tick,
     max_down_prop          = params.max_down_prop_tick,
     gain_tightening_factor = params.gain_tightening_factor_tick,
     merging_retracement_thr= params.merging_retracement_thr_tick,
     merging_time_gap_thr   = params.merging_time_gap_thr_tick,
-    smooth_win_sig         = params.smooth_win_sig_tick,
     pre_entry_decay        = params.pre_entry_decay_tick,
     short_penalty          = params.short_penalty_tick,
     trailing_stop_thresh   = params.trailing_stop_thresh_tick,
@@ -939,15 +867,12 @@ def run_trading_pipeline(
         results_by_day_trad=trades_by_day,
         col_signal        = col_signal,
         col_action        = col_action,
-        ref_profit        = ref_profit,
         min_prof_thr      = min_prof_thr,
         regular_start     = params.regular_start, 
-        smooth_win_sig    = smooth_win_sig,
         pre_entry_decay   = pre_entry_decay,
         short_penalty     = short_penalty,
         trailing_stop_thresh= trailing_stop_thresh,
         buy_threshold     = buy_threshold,
-        is_centered       = params.is_centered
     )
     
     print("Simulate_trading …")

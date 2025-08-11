@@ -138,8 +138,8 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
 
     • The base trace (grey) plots the close-price series on the primary y-axis.
     • Trade traces (green by default) indicate the intervals for each trade from the original trade list.
-    • A dotted blue line shows the raw normalized "signal" on a secondary y-axis.
-    • A dashed red line shows the smooth normalized signal on the secondary y-axis.
+    • A dotted blue line shows the"signal" on a secondary y-axis.
+    • A dashed red line shows the predicted signal on the secondary y-axis.
     • A horizontal dotted line is drawn at the buy_threshold.
     • Additionally, areas between each buy and sell event determined by the new 
       col_action field (buy=+1, sell=-1) are highlighted (in orange).
@@ -247,7 +247,7 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
             mode='lines',
             line=dict(color='red', width=2, dash='dash'),
             name=col_signal2,
-            hovertemplate="Date: %{x}<br>Smooth Signal: %{y:.2f}<extra></extra>",
+            hovertemplate="Date: %{x}<br>Pred Signal: %{y:.2f}<extra></extra>",
             visible=True,
             yaxis="y2"
         ))
