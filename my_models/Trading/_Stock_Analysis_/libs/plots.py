@@ -382,7 +382,8 @@ def aggregate_performance(
     buyhold_sum  = aggregated.get("Buy & Hold – each day ($)", 0.0)
 
     # — use all actual trading days for the Num. trading days —
-    num_days = trades.count_trading_days(df, params.regular_start, params.regular_end)
+    # count calendar days with any bar in the raw df
+    num_days = df.index.normalize().nunique()
 
     print(f"Buy & Hold – each day ($): {buyhold_sum:.3f}")
     print(f"Strategy Return ($): {strategy_sum:.3f}")
@@ -463,7 +464,6 @@ def aggregate_performance(
 
     plt.tight_layout()
     plt.show()
-
     
 
 #########################################################################################################

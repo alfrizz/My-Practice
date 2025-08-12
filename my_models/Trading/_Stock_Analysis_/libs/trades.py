@@ -17,17 +17,6 @@ import matplotlib.pyplot as plt
 
 #########################################################################################################
 
-def count_trading_days(df, start, end):
-    return (
-        df
-        .between_time(start, end)
-        .index
-        .normalize()
-        .nunique()
-    )
-
-#########################################################################################################
-
 def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1):
     """
     Detects forward and reverse splits in the DataFrame and adjusts the price
@@ -408,7 +397,7 @@ def identify_trades_daily(
     1) Slice df into daily sessions (regular_start_shifted→regular_end).
     2) Identify trades via your local-extrema + retracement logic.
     3) If day_to_check is set, only keep that date in the returned dict.
-    Returns a dict mapping date -> (day_df, trades).
+    Returns a dict mapping date -> (day_df, trades), even if trades == [].
     """
     # ensure datetime index
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -420,7 +409,7 @@ def identify_trades_daily(
         if day_to_check and day.strftime("%Y-%m-%d") != day_to_check:
             continue
 
-        day_str = day.strftime("%Y-%m-%d")
+        day_str  = day.strftime("%Y-%m-%d")
         start_ts = pd.Timestamp(f"{day_str} {regular_start_shifted}")
         end_ts   = pd.Timestamp(f"{day_str} {regular_end}")
         idx      = pd.date_range(start=start_ts, end=end_ts, freq="1min")
@@ -430,17 +419,19 @@ def identify_trades_daily(
             continue
 
         trades = identify_trades(
-            df                     = day_df,
-            min_prof_thr           = min_prof_thr,
-            max_down_prop          = max_down_prop,
-            gain_tightening_factor = gain_tightening_factor,
-            merging_retracement_thr= merging_retracement_thr,
-            merging_time_gap_thr   = merging_time_gap_thr
+            df                      = day_df,
+            min_prof_thr            = min_prof_thr,
+            max_down_prop           = max_down_prop,
+            gain_tightening_factor  = gain_tightening_factor,
+            merging_retracement_thr = merging_retracement_thr,
+            merging_time_gap_thr    = merging_time_gap_thr
         )
-        if trades:
-            results[day.date()] = (day_df, trades)
+
+        # minimum fix: record every day, even when trades == []
+        results[day.date()] = (day_df, trades)
 
     return results
+
 
 #########################################################################################################
 

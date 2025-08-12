@@ -13,7 +13,7 @@ save_path  = Path("dfs_training")
 model_path = save_path / f"{ticker}_0.1638.pth" # model RMSE
 
 createCSVsign = True
-date_to_check = '2025-05' 
+date_to_check = '2015-05' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -73,7 +73,6 @@ def signal_parameters(ticker):
     # to define the  signal
     pre_entry_decay ==> # pre-trade decay of the trades' raw signal (higher: quicker decay [0.01 - 1])
     short_penalty ==> # duration penalty factor (lower: higher penalization [0.01 - 1])
-    # percentile_ref ==> # percentile (eg 50 if median) of the percentage profit to use as reference to scale the signal
     
     # to define the final buy and sell triggers
     buy_threshold ==> # (percent/100) threshold of the true signal to trigger the final trade
@@ -83,24 +82,23 @@ def signal_parameters(ticker):
     '''
     if ticker == 'AAPL':
         features_cols = ['vol_15', 'bb_width_20', 'hour', 'ma_20', 'macd_signal_9', 'low', 'atr_14', 'obv', 'vwap_dev', 'volume_spike', 'r_15', 'close', 'ma_5', 'open', 'high']
-        look_back=60
+        look_back=150
         # to define the initial trades:
-        min_prof_thr=0.2
-        max_down_prop=0.2
-        gain_tightening_factor=0.85
-        merging_retracement_thr=0.5
-        merging_time_gap_thr=0.7
+        min_prof_thr=0.637803580
+        max_down_prop=0.130444352
+        gain_tightening_factor=0.91264513
+        merging_retracement_thr=0.5568179
+        merging_time_gap_thr=0.65796809
         # to define the true signal:
-        pre_entry_decay=0.9
-        short_penalty=0.6
-        # percentile_ref=50
+        pre_entry_decay=1.07555014
+        short_penalty=0.7879927
         # true signal buy and SL triggers:
-        trailing_stop_thresh=0.02
-        buy_threshold=0.2
+        trailing_stop_thresh=0.126629370
+        buy_threshold=0.13132919
         # predicted signal buy and SL triggers:
-        trailing_stop_pred=0.02
-        pred_threshold=0.2
-        
+        trailing_stop_pred=0.045
+        pred_threshold=0.17
+  
     if ticker == 'GOOGL':
         features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
         look_back=120
@@ -113,7 +111,6 @@ def signal_parameters(ticker):
         # to define the true signal:
         pre_entry_decay=0.4659
         short_penalty=0.0508
-        # percentile_ref=75
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.0654
         trailing_stop_pred=0.03
@@ -132,7 +129,6 @@ def signal_parameters(ticker):
         # to define the true signal:
         pre_entry_decay=0.6
         short_penalty=0.1
-        # percentile_ref=75
         # to define the final buy and sell triggers:
         trailing_stop_thresh=0.1 
         trailing_stop_pred=0.6 #0.16
@@ -156,6 +152,7 @@ pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, trailing_st
 regular_start  = datetime.strptime('14:30', '%H:%M').time()  
 regular_start_pred = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back_tick, 60))
 regular_start_shifted = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back_tick*2, 60))
+regular_start_premarket = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - 330, 60)) 
 regular_end = datetime.strptime('21:00' , '%H:%M').time()   
 
 
