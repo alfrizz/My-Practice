@@ -571,8 +571,8 @@ def save_best_trial_callback(study, trial):
             continue
 
     # only save if our new best_value beats all on disk
-    max_existing = max(existing) if existing else float("-inf")
-    if best_value <= max_existing:
+    min_existing = min(existing) if existing else float("-inf")
+    if best_value <= min_existing:
         return
 
     # dump to a new file
