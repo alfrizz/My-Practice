@@ -827,16 +827,16 @@ def run_trading_pipeline(
     df,
     col_signal,
     col_action,
-    min_prof_thr           = params.min_prof_thr_tick,
-    max_down_prop          = params.max_down_prop_tick,
-    gain_tightening_factor = params.gain_tightening_factor_tick,
-    merging_retracement_thr= params.merging_retracement_thr_tick,
-    merging_time_gap_thr   = params.merging_time_gap_thr_tick,
-    pre_entry_decay        = params.pre_entry_decay_tick,
-    short_penalty          = params.short_penalty_tick,
-    trailing_stop_thresh   = params.trailing_stop_thresh_tick,
-    buy_threshold          = params.buy_threshold_tick,
-    regular_start_shifted  = params.regular_start_shifted, # we want it here, because in the optuna signal optimization it can vary
+    min_prof_thr,
+    max_down_prop,
+    gain_tightening_factor,
+    merging_retracement_thr,
+    merging_time_gap_thr,
+    pre_entry_decay,
+    short_penalty,
+    trailing_stop_thresh,
+    buy_threshold,
+    regular_start_shifted, # we want it here, because in the optuna signal optimization it can vary
     day_to_check: Optional[str] = None
 ):
 

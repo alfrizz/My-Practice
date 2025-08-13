@@ -82,65 +82,14 @@ def signal_parameters(ticker):
     '''
     if ticker == 'AAPL':
         features_cols = ['vol_15', 'bb_width_20', 'hour', 'ma_20', 'macd_signal_9', 'low', 'atr_14', 'obv', 'vwap_dev', 'volume_spike', 'r_15', 'close', 'ma_5', 'open', 'high']
-        look_back=150
-        # to define the initial trades:
-        min_prof_thr=0.637803580
-        max_down_prop=0.130444352
-        gain_tightening_factor=0.91264513
-        merging_retracement_thr=0.5568179
-        merging_time_gap_thr=0.65796809
-        # to define the true signal:
-        pre_entry_decay=1.07555014
-        short_penalty=0.7879927
-        # true signal buy and SL triggers:
-        trailing_stop_thresh=0.126629370
-        buy_threshold=0.13132919
-        # predicted signal buy and SL triggers:
         trailing_stop_pred=0.045
         pred_threshold=0.17
-  
-    if ticker == 'GOOGL':
-        features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
-        look_back=120
-        # to define the initial trades:
-        min_prof_thr= 0.1376
-        max_down_prop=0.4278
-        gain_tightening_factor=0.5446
-        merging_retracement_thr=0.1240
-        merging_time_gap_thr=0.2310
-        # to define the true signal:
-        pre_entry_decay=0.4659
-        short_penalty=0.0508
-        # to define the final buy and sell triggers:
-        trailing_stop_thresh=0.0654
-        trailing_stop_pred=0.03
-        buy_threshold=0.1806
-        pred_threshold=0.33
- 
-    if ticker == 'TSLA':
-        # features_cols = ['obv', 'hour', 'high', 'low', 'vwap_dev', 'open', 'ma_20', 'ma_5', 'close', 'atr_14', 'macd_12_26', 'bb_width_20', 'in_trading']
-        look_back=90
-        # to define the initial trades:
-        min_prof_thr=0.45 
-        max_down_prop=0.3
-        gain_tightening_factor=0.02
-        merging_retracement_thr=0.9
-        merging_time_gap_thr=0.7
-        # to define the true signal:
-        pre_entry_decay=0.6
-        short_penalty=0.1
-        # to define the final buy and sell triggers:
-        trailing_stop_thresh=0.1 
-        trailing_stop_pred=0.6 #0.16
-        buy_threshold=0.1 
-        pred_threshold=0.4 #0.3
+        
 
-    return features_cols, look_back, min_prof_thr, max_down_prop, gain_tightening_factor, merging_retracement_thr, merging_time_gap_thr,  \
-        pre_entry_decay, short_penalty, trailing_stop_thresh, trailing_stop_pred, buy_threshold, pred_threshold
+    return features_cols, trailing_stop_pred, pred_threshold
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, look_back_tick, min_prof_thr_tick, max_down_prop_tick, gain_tightening_factor_tick, merging_retracement_thr_tick, merging_time_gap_thr_tick, \
-pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, trailing_stop_pred_tick, buy_threshold_tick, pred_threshold_tick = signal_parameters(ticker)
+features_cols_tick, trailing_stop_pred_tick, pred_threshold_tick = signal_parameters(ticker)
 
 #########################################################################################################
 
@@ -150,9 +99,7 @@ pre_entry_decay_tick, short_penalty_tick, trailing_stop_thresh_tick, trailing_st
 # After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
 
 regular_start  = datetime.strptime('14:30', '%H:%M').time()  
-regular_start_pred = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back_tick, 60))
-regular_start_shifted = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - look_back_tick*2, 60))
-regular_start_premarket = dt.time(*divmod(regular_start.hour * 60 + regular_start.minute - 330, 60)) 
+regular_start_premarket = datetime.strptime('09:00' , '%H:%M').time()  
 regular_end = datetime.strptime('21:00' , '%H:%M').time()   
 
 

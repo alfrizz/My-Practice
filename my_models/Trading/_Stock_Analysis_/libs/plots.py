@@ -1,8 +1,12 @@
 from libs import params, trades
+
 import pandas as pd
 import numpy  as np
 import gc
 import math
+import os
+import json
+import glob
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -131,7 +135,7 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
-def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold, performance_stats, trade_color="green"):
+def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold, performance_stats, regular_start_pred, trade_color="green"):
     """
     Plots the overall close-price series plus trade intervals and two continuous signals,
     with the signals shown on a secondary y-axis.
@@ -165,7 +169,7 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
     fig = go.Figure()
 
     # only plot from regular_start_pred
-    df = df.loc[df.index.time >= params.regular_start_pred]
+    df = df.loc[df.index.time >= regular_start_pred]
     
     # Trace 0: Base close-price trace.
     fig.add_trace(go.Scatter(
@@ -542,11 +546,52 @@ def lightweight_plot_callback(
 
 
 
+def save_best_trial_callback(study, trial):
+    # only act when this trial just became the study’s best
+    if study.best_trial != trial:
+        return
+
+    best_value  = trial.value
+    best_params = trial.params
+
+    # scan the folder for existing JSONs for this ticker
+    pattern = os.path.join(params.optuna_folder, f"{params.ticker}_*.json")
+    files   = glob.glob(pattern)
+
+    # extract the float values out of the filenames
+    existing = []
+    prefix   = f"{params.ticker}_"
+    for fn in files:
+        name = os.path.basename(fn)
+        # name looks like "AAPL_0.6036.json"
+        try:
+            val = float(name[len(prefix):-5])
+            existing.append(val)
+        except ValueError:
+            continue
+
+    # only save if our new best_value beats all on disk
+    max_existing = max(existing) if existing else float("-inf")
+    if best_value <= max_existing:
+        return
+
+    # dump to a new file
+    fname = f"{params.ticker}_{best_value:.4f}.json"
+    path  = os.path.join(params.optuna_folder, fname)
+    with open(path, "w") as fp:
+        json.dump(
+            {"value":  best_value,
+             "params": best_params},
+            fp,
+            indent=2
+        )
+
+
+
+
 def cleanup_callback(study, trial):
     gc.collect()
-
-
-
+    
 #########################################################################################################
 
 
