@@ -12,15 +12,16 @@ ticker = 'AAPL'
 save_path  = Path("dfs_training")
 model_path = save_path / f"{ticker}_0.1638.pth" # model RMSE
 
-createCSVsign = True
-date_to_check = '2015-05' 
+createCSVsign = False
+date_to_check = '2025-05' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
 optuna_folder = "optuna_results" 
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidasktoclose_spread = 0.03
+bidasktoclose_pct = 0.1 # 0.1 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
+# trailing_stop_pct = 0.05 # percent, decimal stop distance (0.05% conservative minimum threshold)
 
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
@@ -71,8 +72,12 @@ def signal_parameters(ticker):
     merging_time_gap_thr ==> # time gap between trades, relative to the first and second trade durations
     
     # to define the  signal
-    pre_entry_decay ==> # pre-trade decay of the trades' raw signal (higher: quicker decay [0.01 - 1])
-    short_penalty ==> # duration penalty factor (lower: higher penalization [0.01 - 1])
+    pre_entry_decay ==> # per-minute decay rate for the profit-gap:  range: 0.01–0.5  
+                                                               #     ↓ → slower fade (signal lingers longer)  
+                                                               #     ↑ → faster fade (signal drops off sooner)
+    short_penal_decay ==> # strength of the duration penalty:        range: 0.5–2.5  
+                                                               #     ↓ → milder penalty (short trades less suppressed)  
+                                                               #     ↑ → stronger penalty (short trades heavily suppressed)
     
     # to define the final buy and sell triggers
     buy_threshold ==> # (percent/100) threshold of the true signal to trigger the final trade

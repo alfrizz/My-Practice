@@ -9,4 +9,5 @@ plotly
 seaborn
 shap==0.48.0
 statsmodels==0.14.5
+tdigest==0.5.2.2
 torch-lr-finder==0.2.2

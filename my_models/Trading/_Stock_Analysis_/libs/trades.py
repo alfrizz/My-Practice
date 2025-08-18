@@ -10,10 +10,10 @@ import os
 from pathlib import Path 
 from datetime import datetime
 import datetime as dt
+
 import pytz
 from typing import Optional, Dict, Tuple, List, Sequence, Union
 import matplotlib.pyplot as plt
-
 
 #########################################################################################################
 
@@ -70,7 +70,7 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
 
 
 
-def process_splits(folder, ticker, bidasktoclose_spread):
+def process_splits(folder, ticker, bidasktoclose_pct):
     """
     Processes the intraday CSV file for the given ticker from the specified folder.
     
@@ -78,14 +78,14 @@ def process_splits(folder, ticker, bidasktoclose_spread):
     Then, it checks if the processed file already exists in 'dfs training/{ticker}_base.csv'.
       - If it exists, the function reads it, plots its data, and returns the DataFrame.
       - Otherwise, it reads the intraday CSV, keeps only necessary columns,
-        creates the 'ask' and 'bid' columns using the provided bidasktoclose_spread (e.g. 0.03 for 3%),
+        creates the 'ask' and 'bid' columns using the provided bidasktoclose_spread,
         plots the original data, detects and adjusts splits (also adjusting volume),
         plots the adjusted data if splits are detected, saves the resulting DataFrame, and returns it.
     
     Parameters:
       folder (str): The folder where the intraday CSV file is stored (e.g. "Intraday stocks").
       ticker (str): The ticker symbol used to locate the file and name the output.
-      bidasktoclose_spread (float): The spread fraction; e.g., 0.03 means 3% (do not divide by 100).
+      +    bidasktoclose_pct (percent): The one‐way per‐leg spread in percent (realistic 0.5%).
       
     Returns:
       pd.DataFrame: The processed DataFrame.
@@ -104,10 +104,12 @@ def process_splits(folder, ticker, bidasktoclose_spread):
     # Read the intraday CSV, using the 'datetime' column for dates.
     df = pd.read_csv(intraday_csv, index_col=0, parse_dates=["datetime"])
     df = df[['open', 'high', 'low', 'close', 'volume']]
+
+    bidasktoclose_spread = bidasktoclose_pct / 100
     
-    # Create 'ask' and 'bid' columns using the given spread (e.g. 0.03 means 3%).
-    df['ask'] = round(df['close'] * (1 + bidasktoclose_spread/100), 4)
-    df['bid'] = round(df['close'] * (1 - bidasktoclose_spread/100), 4)
+    # Create 'ask' and 'bid' columns using the given spread 
+    df['ask'] = round(df['close'] * (1 + bidasktoclose_spread), 4)
+    df['bid'] = round(df['close'] * (1 - bidasktoclose_spread), 4)
     
     # Plot the original data.
     print("Plotting original data...")
@@ -438,53 +440,52 @@ def identify_trades_daily(
 #B2.1
 def compute_continuous_signal(
     day_df: pd.DataFrame,
-    trades,
-    pre_entry_decay: float,   # percent decay per minute (e.g., 10 means lambda=0.10)
-    short_penalty: float     # 0..1; lowers contribution for very short trades
+    trades: list,
+    pre_entry_decay: float,
+    short_penal_decay: float,
+    smoothing_window: int
 ) -> pd.DataFrame:
     """
-    Build a continuous signal from per-trade curves, all in percentage units:
-      - per-bar gap: (sell - close) / sell
-      - decay to exit and duration penalty
-      - merge via pointwise max
-    """
-    eps = 1e-12
-    df = day_df.copy()
-    df["signal"] = 0.0
+    Build an un‐normalized per‐bar confidence curve for one trading day.
 
-    for ((buy_dt, sell_dt), (buy_price, sell_price), _profit_pct) in trades:
-        # Bars up to exit
-        mask  = df.index <= sell_dt
-        times = df.index[mask]
-        if times.empty:
+    1) As before, compute raw “signal” = profit_gap * time_decay * dur_penalty.
+    2) Optionally apply a centered moving‐average smoother.
+    3) Return df["signal"] as raw (>=0) values—no scaling to [0,1] here.
+    """
+    df = day_df.copy()
+    n = len(df)
+    signal = np.zeros(n, dtype=float)
+    times = df.index.to_numpy()
+
+    for (buy_dt, sell_dt), (_, sell_price), _ in trades:
+        exit_ts = np.datetime64(sell_dt)
+        mask = times <= exit_ts
+        if not mask.any():
             continue
 
-        # Percent gap to sell (unitless)
-        closes            = df.loc[mask, "close"].to_numpy()
-        profit_gaps_pct   = np.maximum((sell_price - closes) / sell_price * 100, 0.0)
+        closes = df["close"].to_numpy()[mask]
+        gap = np.maximum((sell_price - closes) / sell_price, 0.0)
 
-        # Vectorized minutes to exit
-        dt_min = ((sell_dt - times).to_numpy() / np.timedelta64(1, 'm')).astype(float)
+        mins_to_exit = (exit_ts - times[mask]) / np.timedelta64(1, "m")
+        decay_time = np.exp(-pre_entry_decay * mins_to_exit)
 
-        # Exponential decay
-        lam     = pre_entry_decay / 100.0
-        decayed = profit_gaps_pct * np.exp(-lam * dt_min)
+        dur_min = max((sell_dt - buy_dt).total_seconds() / 60.0, 1.0)
+        decay_dur = np.exp(-short_penal_decay / dur_min)
 
-        # Duration penalty in [short_penalty, 1]
-        long_dur   = pd.Timedelta(hours=1)
-        time_frac  = min((sell_dt - buy_dt) / long_dur, 1.0)
-        time_pen   = short_penalty + (1.0 - short_penalty) * time_frac
+        trade_score = gap * decay_time * decay_dur
+        signal[mask] = np.maximum(signal[mask], trade_score)
 
-        # Final per-trade contribution capped at 1
-        contribution = np.minimum(decayed * time_pen, 1)
+    df["signal"] = signal
 
-        # Merge via pointwise max (vector-safe)
-        existing = df.loc[mask, "signal"].to_numpy()
-        updated  = np.maximum(existing, contribution)
-        df.loc[times, "signal"] = updated
+    # --- smoothing step ---
+    if smoothing_window:
+        df["signal"] = (
+            df["signal"]
+            .rolling(window=smoothing_window, center=True, min_periods=1)
+            .mean()
+        )
 
     return df
-
 
 
 #########################################################################################################
@@ -495,34 +496,27 @@ def generate_trade_actions(
     col_signal,
     col_action,
     buy_threshold,
-    trailing_stop_thresh,
+    trailing_stop_pct,
     regular_start
 ):
     """
-    Given a DataFrame for one trading day that already contains:
-        • col_signal           — signal to use for trading
-        • col_action           — name to assign to the action column
-        • "close"              — the price series
-    
-    This function strips out any normalization or scaling steps and simply:
-      1) Buys when the signal ≥ buy_threshold (only at/after regular_start)
-      2) Tracks a simple trailing stop of trailing_stop_thresh% off the highest price since entry
-      3) Sells when price falls below that trailing stop
-      4) Forces a sell at EOD if still in trade
+    Generates per-bar trade actions for one day:
+
+    - Buy when signal ≥ buy_threshold (only after regular_start time).
+    - Update highest price since entry.
+    - Compute stop_level = max_price * (1 - trailing_stop_thresh).
+    - Sell when price < stop_level or at end of day.
 
     Parameters:
-      df : pd.DataFrame
-          Must have a DatetimeIndex, and column "close".
-      buy_threshold : float
-          Cut-off on signal at which to enter a trade.
-      trailing_stop_thresh : float
-          Percent trailing stop (e.g. 1.5 means 1.5%).
-      regular_start : datetime.time or str
-          Don’t enter a new trade before this time (e.g. "14:30").
+      df: pd.DataFrame with DatetimeIndex and 'close' column
+      col_signal: str, name of signal column
+      col_action: str, name for output action column
+      buy_threshold: float, entry cutoff (signal domain)
+      trailing_stop_pct: percent, decimal stop distance (eg 0.05% conservative minimum threshold)
+      regular_start: time or "HH:MM" string to begin new trades
 
     Returns:
-      pd.DataFrame : original df plus col_action column:
-                     +1 = buy, 0 = hold, -1 = sell
+      pd.DataFrame with new col_action: +1=buy, 0=hold, -1=sell
     """
     
     # Work on a copy to avoid side-effects
@@ -531,8 +525,11 @@ def generate_trade_actions(
 
     # Initialize trade_action and state
     df[col_action] = 0
+    
+    # Convert trailing stop percentages into decimal thresholds
+    trailing_stop_thresh = trailing_stop_pct / 100.0
+    
     in_trade = False
-    entry_price = None
     max_price = None
 
     # Convert regular_start to time if needed
@@ -553,7 +550,6 @@ def generate_trade_actions(
             if sig[i] >= buy_threshold and t >= regular_start:
                 df.iat[i, df.columns.get_loc(col_action)] = 1
                 in_trade = True
-                entry_price = price
                 max_price = price
             # else: remain flat (0)
         else:
@@ -562,7 +558,7 @@ def generate_trade_actions(
                 max_price = price
 
             # Compute simple trailing-stop level
-            stop_level = max_price * (1 - trailing_stop_thresh / 100.0)
+            stop_level = max_price * (1 - trailing_stop_thresh)
 
             # Sell if price falls below the stop
             if price < stop_level and sig[i] < buy_threshold:
@@ -582,47 +578,74 @@ def generate_trade_actions(
 
 # B2
 def add_trade_signal_to_results(
-    results_by_day_trad: dict,
+    results_by_day_trad: Dict[dt.date, Tuple[pd.DataFrame, any]],
     col_signal: str,
     col_action: str,
     min_prof_thr: float,
     regular_start: dt.time,
     pre_entry_decay: float,
-    short_penalty: float,
-    trailing_stop_thresh: float,
+    short_penal_decay: float,
+    trailing_stop_pct: float,
     buy_threshold: float,
-    clip_quantiles=(0.01, 0.99),
-    scale_bounds=(0.1, 2.0)
-) -> dict:
+    top_percentile: float = 1,
+    smoothing_window: Optional[int] = False
+) -> Dict[dt.date, Tuple[pd.DataFrame, any]]:
     """
-    For each day, build the continuous signal, then generate discrete trade actions via trailing‐stop logic.
-    Returns updated_results: { day → (df_with_signals&actions, trades) }
+    1) First pass: compute raw signals (with smoothing if set), collect all signal values.
+    2) Compute threshold = (100 - top_percentile)th percentile of all raw signals.
+    3) Second pass: scale each day’s signal by a single factor and cap at 1.0,
+       so that exactly top_percentile% of minute‐bars become 1.0.
     """
+    # First pass: compute & gather raw signals
+    raw_results: Dict[dt.date, Tuple[pd.DataFrame, any]] = {}
+    all_vals: list = []
 
-    updated_results = {}
     for day, (day_df, trades) in results_by_day_trad.items():
-
-        # Step 1–3: continuous signal w/ per‐trade scaling
-        df_signal = compute_continuous_signal(
-            day_df          = day_df,
-            trades          = trades,
-            pre_entry_decay = pre_entry_decay,
-            short_penalty   = short_penalty
+        df_sig = compute_continuous_signal(
+            day_df            = day_df,
+            trades            = trades,
+            pre_entry_decay   = pre_entry_decay,
+            short_penal_decay = short_penal_decay,
+            smoothing_window  = smoothing_window
         )
+        raw_results[day] = (df_sig, trades)
+        all_vals.append(df_sig["signal"].to_numpy())
 
-        # Step B: discrete buy/sell via trailing stop
+    if not all_vals:
+        return {}  # no data at all
+
+    # Flatten and compute global cutoff
+    flat_vals = np.concatenate(all_vals)
+    pct       = 100.0 - top_percentile
+    threshold = np.percentile(flat_vals, pct)
+
+    # Compute one linear scale factor
+    scale = 1.0 / threshold if threshold > 0 else 0.0
+
+    # Second pass: scale & cap, then generate actions
+    updated_results: Dict[dt.date, Tuple[pd.DataFrame, any]] = {}
+    for day, (df_sig, trades) in raw_results.items():
+        # apply the same multiplier to every bar
+        df_sig[col_signal] = df_sig["signal"] * scale
+        # cap at 1.0
+        df_sig[col_signal] = np.minimum(df_sig[col_signal], 1.0)
+
         df_actions = generate_trade_actions(
-            df_signal,
-            col_signal          = col_signal,
-            col_action          = col_action,
-            buy_threshold       = buy_threshold,
-            trailing_stop_thresh= trailing_stop_thresh,
-            regular_start       = regular_start
+            df_sig,
+            col_signal           = col_signal,
+            col_action           = col_action,
+            buy_threshold        = buy_threshold,
+            trailing_stop_pct    = trailing_stop_pct,
+            regular_start        = regular_start
         )
-
         updated_results[day] = (df_actions, trades)
 
     return updated_results
+
+
+
+
+
 
 
 #########################################################################################################
@@ -833,10 +856,12 @@ def run_trading_pipeline(
     merging_retracement_thr,
     merging_time_gap_thr,
     pre_entry_decay,
-    short_penalty,
-    trailing_stop_thresh,
+    short_penal_decay,
+    trailing_stop_pct, 
     buy_threshold,
-    regular_start_shifted, # we want it here, because in the optuna signal optimization it can vary
+    regular_start_shifted,
+    top_percentile,
+    smoothing_window: Optional[str] = False,
     day_to_check: Optional[str] = None
 ):
 
@@ -856,23 +881,25 @@ def run_trading_pipeline(
     print("Add_trade_signal_to_results …")
     signaled = add_trade_signal_to_results(
         results_by_day_trad=trades_by_day,
-        col_signal        = col_signal,
-        col_action        = col_action,
-        min_prof_thr      = min_prof_thr,
-        regular_start     = params.regular_start, 
-        pre_entry_decay   = pre_entry_decay,
-        short_penalty     = short_penalty,
-        trailing_stop_thresh= trailing_stop_thresh,
-        buy_threshold     = buy_threshold,
+        col_signal           = col_signal,
+        col_action           = col_action,
+        min_prof_thr         = min_prof_thr,
+        regular_start        = params.regular_start, 
+        pre_entry_decay      = pre_entry_decay,
+        short_penal_decay    = short_penal_decay,
+        trailing_stop_pct    = trailing_stop_pct,
+        buy_threshold        = buy_threshold,
+        top_percentile       = top_percentile,
+        smoothing_window     = smoothing_window
     )
     
     print("Simulate_trading …")
     sim_results = simulate_trading(
-        results_by_day_sign=signaled,
-        col_action        = col_action,
-        regular_start     = params.regular_start, 
-        regular_end       = params.regular_end,
-        ticker            = params.ticker
+        results_by_day_sign = signaled,
+        col_action          = col_action,
+        regular_start       = params.regular_start, 
+        regular_end         = params.regular_end,
+        ticker              = params.ticker
     )
 
     if day_to_check:
