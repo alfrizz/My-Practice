@@ -5,6 +5,7 @@ import gc
 import os
 import io
 import shutil
+import tempfile
 import atexit
 import copy
 import re
@@ -26,6 +27,8 @@ from torch.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch.optim import AdamW
 
+import torchmetrics
+
 torch.backends.cuda.matmul.allow_tf32    = True
 torch.backends.cudnn.allow_tf32         = True
 torch.backends.cudnn.benchmark          = True
@@ -44,9 +47,9 @@ def build_lstm_tensors(
     look_back: int,
     features_cols: Sequence[str],
     label_col: str,
-    regular_start: dt.time,
-    tmpdir: str = "/tmp/lstm_memmap",           # directory for .npy files
+    tmpdir: str = None,
     device: torch.device = torch.device("cpu"),
+    sess_start = True
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Build disk-backed memmaps for LSTM windows, then wrap in PyTorch Tensors.
@@ -57,7 +60,7 @@ def build_lstm_tensors(
        a) load raw arrays (features, labels, prices) as float32
        b) build sliding windows via np.lib.stride_tricks
        c) align targets (drop last window)
-       d) filter by regular_start (RTH mask)
+       d) filter by sess_start (RTH mask)
        e) write slices into memmaps at offset idx
     4) Wrap memmaps in torch.from_numpy and move to device
     5) Return five tensors: X, y, raw_close, raw_bid, raw_ask
@@ -66,14 +69,17 @@ def build_lstm_tensors(
     We register an atexit handler so that when Python exits, tmpdir is
     automatically removed. 
     """
+    if not sess_start: # if we want the predictions not to start from sess_start, but from sess_start_pred
+        sess_start = dt.time(*divmod((params.sess_start.hour * 60 + params.sess_start.minute) - look_back, 60))
+    else:
+        sess_start = params.sess_start
 
     # ── Create / verify tmpdir ────────────────────────────────────────────
-    os.makedirs(tmpdir, exist_ok=True)
-
-    # ── Register cleanup at program exit (only once) ──────────────────────
-    if not hasattr(build_lstm_tensors, "_cleanup_registered"):
-        atexit.register(shutil.rmtree, tmpdir, ignore_errors=True)
-        build_lstm_tensors._cleanup_registered = True
+    # 0) temp directory
+    if tmpdir is None:
+        tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
+    else:
+        os.makedirs(tmpdir, exist_ok=True)
 
     # ── 1) Count total number of valid windows across all days ────────────
     N = 0                     # total windows after RTH filtering
@@ -83,17 +89,14 @@ def build_lstm_tensors(
         # windows before filter: T – look_back
         if T <= look_back:
             continue
-        # boolean mask: which end‐times ≥ regular_start
-        mask = np.array(day.index.time[look_back:]) >= regular_start
+        # boolean mask: which end‐times ≥ sess_start
+        mask = np.array(day.index.time[look_back:]) >= sess_start
         if mask.any():
-            N += (T - look_back)  # count all windows; we'll only write masked ones later
+            N += int(mask.sum())
 
     # ── 2) Allocate on‐disk memmaps for X, y, and raw prices ─────────────
     #   X_mm: shape (N, look_back, F)
-    X_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "X.npy"), mode="w+",
-        dtype=np.float32, shape=(N, look_back, F)
-    )
+    X_mm = np.lib.format.open_memmap(os.path.join(tmpdir, "X.npy"), mode="w+", dtype=np.float32, shape=(N, look_back, F))
     # y_mm and price memmaps: shape (N,)
     y_mm = np.lib.format.open_memmap(os.path.join(tmpdir, "y.npy"), mode="w+", dtype=np.float32, shape=(N,))
     c_mm = np.lib.format.open_memmap(os.path.join(tmpdir, "c.npy"), mode="w+", dtype=np.float32, shape=(N,))
@@ -127,8 +130,8 @@ def build_lstm_tensors(
         b_pts   = bid_np   [look_back:]
         a_pts   = ask_np   [look_back:]
 
-        # 3e) RTH filter: end‐time ≥ regular_start
-        mask = np.array(day.index.time[look_back:]) >= regular_start
+        # 3e) RTH filter: end‐time ≥ sess_start
+        mask = np.array(day.index.time[look_back:]) >= sess_start
         if not mask.any():
             continue  # skip days with no valid windows
 
@@ -142,12 +145,30 @@ def build_lstm_tensors(
         idx += m  # advance write index
 
     # ── 4) Wrap memmaps in PyTorch Tensors and move to device ────────────
-    # This is zero‐copy: binary pages remain on disk until accessed.
-    X         = torch.from_numpy(X_mm) .to(device, non_blocking=True)
-    y         = torch.from_numpy(y_mm) .to(device, non_blocking=True)
-    raw_close = torch.from_numpy(c_mm) .to(device, non_blocking=True)
-    raw_bid   = torch.from_numpy(b_mm) .to(device, non_blocking=True)
-    raw_ask   = torch.from_numpy(a_mm) .to(device, non_blocking=True)
+
+    # COPY the memmaps into brand‐new NumPy arrays
+    X_arr = np.array(X_mm, copy=True)
+    y_arr = np.array(y_mm, copy=True)
+    c_arr = np.array(c_mm, copy=True)
+    b_arr = np.array(b_mm, copy=True)
+    a_arr = np.array(a_mm, copy=True)
+
+    # CLEAN UP the memmaps + folder
+    del X_mm, y_mm, c_mm, b_mm, a_mm
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # Convert to PyTorch Tensors (this is where the actual copy happens)
+    X = torch.tensor(X_arr, device=device)
+    y = torch.tensor(y_arr, device=device)
+    raw_close = torch.tensor(c_arr, device=device)
+    raw_bid   = torch.tensor(b_arr, device=device)
+    raw_ask   = torch.tensor(a_arr, device=device)
+    
+    # Clean up intermediates & cache
+    del X_arr, y_arr, c_arr, b_arr, a_arr
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    gc.collect()
 
     return X, y, raw_close, raw_bid, raw_ask
 
@@ -164,11 +185,11 @@ def chronological_split(
     df: pd.DataFrame,
     *,
     look_back: int,
-    regular_start: dt.time,
     train_prop: float,
     val_prop: float,
     train_batch: int,
-    device = torch.device("cpu")
+    device = torch.device("cpu"),
+    sess_start = True
 ) -> Tuple[
     Tuple[torch.Tensor, torch.Tensor],
     Tuple[torch.Tensor, torch.Tensor],
@@ -182,7 +203,7 @@ def chronological_split(
     the train split only.
 
     We first move all tensors to the chosen device. By grouping `df` on
-    normalized dates and checking `look_back` vs. `regular_start`, we
+    normalized dates and checking `look_back` vs. `sess_start`, we
     build `samples_per_day` and verify it matches X.size(0). We then
     decide how many days go to train (rounded up to `train_batch`),
     val, and test.
@@ -193,7 +214,11 @@ def chronological_split(
     Finally build day‐ID tags via `repeat_interleave` so each window 
     can be traced back to its original calendar day.
     """
-
+    if not sess_start: # if we want the predictions not to start from sess_start, but from sess_start_pred
+        sess_start = dt.time(*divmod((params.sess_start.hour * 60 + params.sess_start.minute) - look_back, 60))
+    else:
+        sess_start = params.sess_start
+        
     # Pick a real device & move the full dataset there
     device = device or (X.device if X.device is not None else torch.device("cpu"))
     X         = X.to(device)
@@ -209,7 +234,7 @@ def chronological_split(
     for day, day_df in df.groupby(df.index.normalize(), sort=False):
         all_days.append(day)
         end_times = day_df.index.time[look_back:]
-        mask_rth  = np.array([t >= regular_start for t in end_times])
+        mask_rth  = np.array([t >= sess_start for t in end_times])
         samples_per_day.append(int(mask_rth.sum()))
 
     # 2) Sanity‐check total windows
@@ -408,7 +433,7 @@ def split_to_day_datasets(
     raw_ask_te:   torch.Tensor,
     *,
     df:           pd.DataFrame,   # full-minute DataFrame for weekday lookup
-    train_batch:  int = 8,        # days per training batch
+    train_batch:  int = 32,        # days per training batch
     train_workers:int = 0,        # number of background workers
     train_prefetch_factor:int = 1,# number of batches pulled by the worker ahead of time
     device = torch.device("cpu")
@@ -780,6 +805,225 @@ def train_step(
 #########################################################################################################
 
 
+# def custom_stateful_training_loop(
+#     model:         torch.nn.Module,
+#     optimizer:     torch.optim.Optimizer,
+#     cosine_sched:  CosineAnnealingWarmRestarts,
+#     plateau_sched: ReduceLROnPlateau,
+#     scaler:        GradScaler,
+#     train_loader:  torch.utils.data.DataLoader,
+#     val_loader:    torch.utils.data.DataLoader,
+#     *,
+#     max_epochs:          int,
+#     early_stop_patience: int,
+#     baseline_val_rmse:   float,
+#     clipnorm:            float,
+#     device:              torch.device = torch.device("cpu"),
+# ) -> float:
+#     """
+#     • Device and performance setup
+#       – Sends the model to CPU/GPU
+#       – Enables cuDNN benchmarking for dynamic kernel tuning
+#     • Pre-binding of heavy objects
+#       – Caches MSE-loss function
+#       – Compiles regex once for checkpoint filename matching
+#     • Epoch-wise Python-side garbage collection
+#       – Frees unused objects at the start of each epoch to limit memory churn
+#     • Dual-memory LSTM state management
+#       – Resets short‐term LSTM state on every new slice
+#       – Detects week boundaries via weekday index to reset long‐term memory
+#     • Mixed precision training
+#       – Wraps forward/backward in autocast
+#       – Scales and unscales gradients, clips by norm, steps optimizer & scaler
+#     • Cosine Annealing with Warm Restarts
+#       – Steps the scheduler by fractional epoch to smoothly vary LR
+#       – Logs every restart event with the new LR
+#     • Plateau-based LR reduction
+#       – After warmup epochs, steps ReduceLROnPlateau on validation RMSE
+#       – Re-anchors the cosine scheduler whenever the plateau cuts LR
+#     • Live, real-time plotting
+#       – Streams train/val RMSE by epoch via an IPython or inline draw widget
+#       – Retains full history for a final summary plot
+#     • Global RMSE calculation
+#       – Accumulates squared errors and counts across all validation windows
+#       – Reports one RMSE that weights each window equally
+#     • Early stopping
+#       – Halts training if validation RMSE fails to improve for patience epochs
+#     """
+
+#     # 1) Send model to GPU/CPU and enable cudnn autotuner for speed
+#     model.to(device)
+#     torch.backends.cudnn.benchmark = True
+
+#     # 2) Pre-bind often-used objects outside the epoch loop
+#     loss_fn      = torch.nn.functional.mse_loss
+#     save_pattern = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
+
+#     best_val_rmse = float('inf')   # Best validation RMSE seen so far
+#     best_state    = None           # To store model weights for best RMSE
+#     patience_ctr  = 0              # Counter for early stopping
+#     live_plot     = plots.LiveRMSEPlot()  # Real-time training/validation plot
+
+#     # 3) Main epoch loop
+#     for epoch in range(1, max_epochs + 1):
+#         # a) Single garbage collection at epoch start to free Python objects
+#         gc.collect()
+
+#         model.train()                # Set dropout, batchnorm, etc. to train mode
+#         model.h_short = model.h_long = None  # Reset hidden/cell to trigger lazy-init
+#         train_losses = []            # Accumulate per-batch MSEs
+
+#         prev_T_cur = cosine_sched.T_cur  # Track cosine restarts
+
+#         # b) Iterate over training data batches
+#         pbar = tqdm(
+#             enumerate(train_loader),
+#             total=len(train_loader),
+#             desc=f"Epoch {epoch}",
+#             unit="bundle",
+#         )
+#         for batch_idx, (xb_days, yb_days, wd_days) in pbar:
+
+#             # Move data to device; non_blocking if DataLoader uses pinned memory
+#             xb_days = xb_days.to(device, non_blocking=True)
+#             yb_days = yb_days.to(device, non_blocking=True)
+#             wd_days = wd_days.to(device, non_blocking=True)
+
+#             optimizer.zero_grad(set_to_none=True)
+#             prev_wd = None
+
+#             # c) Inner loop over each “day” slice in the bundle
+#             for di in range(xb_days.size(0)):
+#                 wd = int(wd_days[di].item())
+
+#                 # Reset short‐term LSTM state at each new slice
+#                 model.reset_short()
+#                 # If weekday decreases, it's a new week → reset long‐term state
+#                 if prev_wd is not None and wd < prev_wd:
+#                     model.reset_long()
+#                 prev_wd = wd
+
+#                 # Mixed precision forward/backward
+#                 with autocast(device_type=device.type):
+#                     out  = model(xb_days[di])         # (look_back, 1) prediction tensor
+#                     last = out[..., -1, 0]             # take only the final time‐step
+#                     loss = loss_fn(last, yb_days[di], reduction='mean')
+
+#                 # Scale, backpropagate, and collect loss
+#                 scaler.scale(loss).backward()
+#                 train_losses.append(loss.item())
+
+#                 # In‐place detach hidden/cell tensors to avoid new allocations
+#                 model.h_short.detach_()
+#                 model.c_short.detach_()
+#                 model.h_long.detach_()
+#                 model.c_long.detach_()
+
+#             # d) After stepping through all days in this batch:
+#             scaler.unscale_(optimizer)
+#             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+#             scaler.step(optimizer)
+#             scaler.update()
+
+#             # e) Update cosine‐annealing schedule by fractional epoch
+#             frac_epoch = epoch - 1 + batch_idx / len(train_loader)
+#             cosine_sched.step(frac_epoch)
+
+#             # Log if a cosine “restart” happened
+#             if cosine_sched.T_cur < prev_T_cur:
+#                 lr = optimizer.param_groups[0]['lr']
+#                 print(f"  [Cosine restart] epoch {epoch}, batch {batch_idx}, lr={lr:.2e}")
+#             prev_T_cur = cosine_sched.T_cur
+
+#             # f) Refresh progress bar metrics
+#             rmse = math.sqrt(sum(train_losses) / len(train_losses))
+#             lr   = optimizer.param_groups[0]['lr']
+#             pbar.set_postfix(train_rmse=rmse, lr=lr, refresh=False)
+
+#         pbar.close()
+
+#         # 4) Validation phase (no gradients)
+#         model.eval()
+#         model.h_short = model.h_long = None
+#         total_sq_error = 0.0
+#         total_windows  = 0
+#         prev_wd        = None
+
+#         with torch.no_grad():
+#             for xb_day, yb_day, wd in val_loader:
+#                 wd = int(wd.item())
+#                 x  = xb_day[0].to(device, non_blocking=True)
+#                 y  = yb_day.view(-1).to(device, non_blocking=True)
+
+#                 model.reset_short()
+#                 if prev_wd is not None and wd < prev_wd:
+#                     model.reset_long()
+#                 prev_wd = wd
+
+#                 out      = model(x)
+#                 last     = out[..., -1, 0]
+#                 sq_error = (last - y).pow(2).sum().item()
+#                 total_sq_error += sq_error
+#                 total_windows  += y.numel()
+
+#         val_rmse = math.sqrt(total_sq_error / total_windows)
+
+#         # 5) Live plot update and logging
+#         live_plot.update(rmse, val_rmse)
+#         print(f"Epoch {epoch:03d} • train={rmse:.4f} • val={val_rmse:.4f}"
+#               f" • lr={optimizer.param_groups[0]['lr']:.2e}")
+
+#         # 6) Plateau scheduler after warm-up
+#         pre_lr = optimizer.param_groups[0]['lr']
+#         if epoch > params.hparams['PLAT_EPOCHS_WARMUP']:
+#             plateau_sched.step(val_rmse)
+#         post_lr = optimizer.param_groups[0]['lr']
+#         if post_lr < pre_lr:
+#             print(f"  [Plateau cut] LR {pre_lr:.1e} → {post_lr:.1e} at epoch {epoch}")
+#             cosine_sched.base_lrs = [post_lr for _ in cosine_sched.base_lrs]
+#             cosine_sched.last_epoch = epoch - 1
+
+#         # 7) Early-stopping and checkpointing
+#         if val_rmse >= best_val_rmse:
+#             patience_ctr += 1
+#             if patience_ctr >= early_stop_patience:
+#                 print("Early stopping at epoch", epoch)
+#                 break
+#         else:
+#             best_val_rmse = val_rmse
+#             best_state    = copy.deepcopy(model.state_dict())
+#             patience_ctr  = 0
+
+#             # reload best weights before saving new checkpoint
+#             model.load_state_dict(best_state)
+            
+#     # Final conditional save (once per run)
+#     rmses = [
+#         float(m.group(1))
+#         for f in params.save_path.glob(f"{params.ticker}_*.pth")
+#         for m in (save_pattern.match(f.name),)
+#         if m
+#     ]
+#     # if no prior checkpoint or improvement, save
+#     if not rmses or best_val_rmse < max(rmses):
+#         buf = io.BytesIO()
+#         live_plot.fig.savefig(buf, format="png")
+#         buf.seek(0)
+#         plot_png = buf.read()
+
+#         ckpt = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
+#         torch.save({
+#             "model_obj":        model,
+#             "model_state_dict": best_state,
+#             "hparams":          params.hparams,
+#             "train_plot_png":   plot_png,
+#         }, ckpt)
+#         print(f"Saved final best model and training plot: {ckpt.name}")
+
+#     return best_val_rmse
+
+
+
 def custom_stateful_training_loop(
     model:         torch.nn.Module,
     optimizer:     torch.optim.Optimizer,
@@ -802,6 +1046,7 @@ def custom_stateful_training_loop(
     • Pre-binding of heavy objects
       – Caches MSE-loss function
       – Compiles regex once for checkpoint filename matching
+      – Initializes torchmetrics RMSE for train/val on the correct device
     • Epoch-wise Python-side garbage collection
       – Frees unused objects at the start of each epoch to limit memory churn
     • Dual-memory LSTM state management
@@ -819,9 +1064,9 @@ def custom_stateful_training_loop(
     • Live, real-time plotting
       – Streams train/val RMSE by epoch via an IPython or inline draw widget
       – Retains full history for a final summary plot
-    • Global RMSE calculation
-      – Accumulates squared errors and counts across all validation windows
-      – Reports one RMSE that weights each window equally
+    • Uniform RMSE via torchmetrics
+      – Uses torchmetrics.MeanSquaredError(squared=False) for both train & val
+      – Resets at epoch start, updates per window, and computes one RMSE
     • Early stopping
       – Halts training if validation RMSE fails to improve for patience epochs
     """
@@ -834,6 +1079,10 @@ def custom_stateful_training_loop(
     loss_fn      = torch.nn.functional.mse_loss
     save_pattern = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
 
+    # initialize torchmetrics RMSE accumulators
+    train_metric = torchmetrics.MeanSquaredError(squared=False).to(device)
+    val_metric   = torchmetrics.MeanSquaredError(squared=False).to(device)
+
     best_val_rmse = float('inf')   # Best validation RMSE seen so far
     best_state    = None           # To store model weights for best RMSE
     patience_ctr  = 0              # Counter for early stopping
@@ -844,9 +1093,10 @@ def custom_stateful_training_loop(
         # a) Single garbage collection at epoch start to free Python objects
         gc.collect()
 
-        model.train()                # Set dropout, batchnorm, etc. to train mode
-        model.h_short = model.h_long = None  # Reset hidden/cell to trigger lazy-init
-        train_losses = []            # Accumulate per-batch MSEs
+        # reset train-phase metric and switch to train mode
+        train_metric.reset()
+        model.train()
+        model.h_short = model.h_long = None
 
         prev_T_cur = cosine_sched.T_cur  # Track cosine restarts
 
@@ -859,7 +1109,6 @@ def custom_stateful_training_loop(
         )
         for batch_idx, (xb_days, yb_days, wd_days) in pbar:
 
-            # Move data to device; non_blocking if DataLoader uses pinned memory
             xb_days = xb_days.to(device, non_blocking=True)
             yb_days = yb_days.to(device, non_blocking=True)
             wd_days = wd_days.to(device, non_blocking=True)
@@ -871,58 +1120,53 @@ def custom_stateful_training_loop(
             for di in range(xb_days.size(0)):
                 wd = int(wd_days[di].item())
 
-                # Reset short‐term LSTM state at each new slice
                 model.reset_short()
-                # If weekday decreases, it's a new week → reset long‐term state
                 if prev_wd is not None and wd < prev_wd:
                     model.reset_long()
                 prev_wd = wd
 
-                # Mixed precision forward/backward
                 with autocast(device_type=device.type):
-                    out  = model(xb_days[di])         # (look_back, 1) prediction tensor
-                    last = out[..., -1, 0]             # take only the final time‐step
+                    out  = model(xb_days[di])         # (look_back, 1)
+                    last = out[..., -1, 0]            # final time‐step
                     loss = loss_fn(last, yb_days[di], reduction='mean')
 
-                # Scale, backpropagate, and collect loss
                 scaler.scale(loss).backward()
-                train_losses.append(loss.item())
 
-                # In‐place detach hidden/cell tensors to avoid new allocations
+                # update train RMSE uniformly
+                train_metric.update(last, yb_days[di])
+
+                # detach LSTM states
                 model.h_short.detach_()
                 model.c_short.detach_()
                 model.h_long.detach_()
                 model.c_long.detach_()
 
-            # d) After stepping through all days in this batch:
+            # d) Optimizer step with gradient clipping
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer)
             scaler.update()
 
-            # e) Update cosine‐annealing schedule by fractional epoch
+            # e) Cosine‐annealing by fractional epoch
             frac_epoch = epoch - 1 + batch_idx / len(train_loader)
             cosine_sched.step(frac_epoch)
-
-            # Log if a cosine “restart” happened
             if cosine_sched.T_cur < prev_T_cur:
                 lr = optimizer.param_groups[0]['lr']
                 print(f"  [Cosine restart] epoch {epoch}, batch {batch_idx}, lr={lr:.2e}")
             prev_T_cur = cosine_sched.T_cur
 
-            # f) Refresh progress bar metrics
-            rmse = math.sqrt(sum(train_losses) / len(train_losses))
+            # f) Refresh progress bar metrics using torchmetrics RMSE
+            rmse = train_metric.compute().cpu().item()
             lr   = optimizer.param_groups[0]['lr']
             pbar.set_postfix(train_rmse=rmse, lr=lr, refresh=False)
 
         pbar.close()
 
-        # 4) Validation phase (no gradients)
+        # 4) Validation phase (no gradients), uniform RMSE
         model.eval()
         model.h_short = model.h_long = None
-        total_sq_error = 0.0
-        total_windows  = 0
-        prev_wd        = None
+        prev_wd = None
+        val_metric.reset()
 
         with torch.no_grad():
             for xb_day, yb_day, wd in val_loader:
@@ -935,13 +1179,13 @@ def custom_stateful_training_loop(
                     model.reset_long()
                 prev_wd = wd
 
-                out      = model(x)
-                last     = out[..., -1, 0]
-                sq_error = (last - y).pow(2).sum().item()
-                total_sq_error += sq_error
-                total_windows  += y.numel()
+                out  = model(x)
+                last = out[..., -1, 0]
 
-        val_rmse = math.sqrt(total_sq_error / total_windows)
+                # update validation RMSE
+                val_metric.update(last, y)
+
+        val_rmse = val_metric.compute().cpu().item()
 
         # 5) Live plot update and logging
         live_plot.update(rmse, val_rmse)
@@ -968,18 +1212,15 @@ def custom_stateful_training_loop(
             best_val_rmse = val_rmse
             best_state    = copy.deepcopy(model.state_dict())
             patience_ctr  = 0
-
-            # reload best weights before saving new checkpoint
             model.load_state_dict(best_state)
-            
-    # Final conditional save (once per run)
+
+    # Final conditional save (unchanged) …
     rmses = [
         float(m.group(1))
         for f in params.save_path.glob(f"{params.ticker}_*.pth")
         for m in (save_pattern.match(f.name),)
         if m
     ]
-    # if no prior checkpoint or improvement, save
     if not rmses or best_val_rmse < max(rmses):
         buf = io.BytesIO()
         live_plot.fig.savefig(buf, format="png")
@@ -996,7 +1237,6 @@ def custom_stateful_training_loop(
         print(f"Saved final best model and training plot: {ckpt.name}")
 
     return best_val_rmse
-
 
 
 #########################################################################################################
@@ -1116,13 +1356,14 @@ def feature_engineering(df: pd.DataFrame,
 
     if "in_trading" in features_cols:
         df["in_trading"] = (
-            (df.index.time >= params.regular_start) &
-            (df.index.time < params.regular_end) &
+            (df.index.time >= params.sess_start) &
+            (df.index.time < params.sess_end) &
             (df.index.dayofweek < 5)           # Monday=0 … Friday=4
         ).astype(int)
 
     # Final filter
     cols = [c for c in features_cols if c in df.columns] + ["bid", "ask", label_col]
+
     df = df.loc[:, cols].dropna()
 
     return df

@@ -147,9 +147,9 @@ def is_dst_for_day(day, tz_str="US/Eastern"):
 
 def prepare_interpolate_data(
     df,
-    regular_start_shifted,  # str or datetime.time: grid lower‐bound each day
-    regular_start,          # str or datetime.time: official session open
-    regular_end,            # str or datetime.time: official session close
+    sess_premark,           # str or datetime.time: grid lower‐bound each day
+    sess_start,             # str or datetime.time: official session open
+    sess_end,               # str or datetime.time: official session close
     red_pretr_win=1,        # legacy argument (unused)
     tz_str="US/Eastern"     # timezone name for DST logic
 ) -> pd.DataFrame:
@@ -161,14 +161,14 @@ def prepare_interpolate_data(
     1) Cast all columns to float64 (your “working” series).
     2) Shift each day’s timestamps forward 1h if that calendar day is in DST.
     3) For each calendar day:
-       a) Build a 1-minute index from min(raw, regular_start_shifted)
-          through max(raw, regular_end).
+       a) Build a 1-minute index from min(raw, sess_premark)
+          through max(raw, sess_end).
        b) Reindex the day’s bars to that grid and linearly interpolate
           forward & backward.
     4) Concatenate all per-day frames, sort by timestamp, and drop
        duplicate timestamps (printing how many were removed).
     5) Finally, keep only the bars whose time lies between
-       regular_start_shifted and regular_end (session‐plus‐lookback).
+       sess_premark and sess_end .
     """
 
     # 0) Clone
@@ -192,8 +192,8 @@ def prepare_interpolate_data(
         day_str = day.strftime("%Y-%m-%d")
 
         # a) grid bounds: earliest bar vs shifted start → latest bar vs close
-        grid_start  = pd.Timestamp(f"{day_str} {regular_start_shifted}")
-        session_end = pd.Timestamp(f"{day_str} {regular_end}")
+        grid_start  = pd.Timestamp(f"{day_str} {sess_premark}")
+        session_end = pd.Timestamp(f"{day_str} {sess_end}")
 
         idx_start = min(grp.index.min(), grid_start)
         idx_end   = max(grp.index.max(), session_end)
@@ -212,8 +212,8 @@ def prepare_interpolate_data(
     removed = before - len(df_out)
     print(f"prepare_interpolate_data: removed {removed} duplicate timestamps.")
 
-    # 5) Slice to only [regular_start_shifted, regular_end] each day
-    df_out = df_out.between_time(regular_start_shifted, regular_end)
+    # 5) Slice to only [sess_premark, sess_end] each day
+    df_out = df_out.between_time(sess_premark, sess_end)
 
     # 6) drop any calendar day whose close is perfectly flat (to avoid to get extra days as saturdays)
     df_out = (
@@ -391,13 +391,13 @@ def identify_trades_daily(
     gain_tightening_factor: float,
     merging_retracement_thr: float,
     merging_time_gap_thr: float,
-    regular_start_shifted: str,
-    regular_end: str,
+    sess_premark: str,
+    sess_end: str,
     day_to_check: Optional[str] = None
 ) -> Dict[dt.date, Tuple[pd.DataFrame, List]]:
     """
-    1) Slice df into daily sessions (regular_start_shifted→regular_end).
-    2) Identify trades via your local-extrema + retracement logic.
+    1) Slice df into daily sessions (sess_premark→sess_end).
+    2) Identify trades via local-extrema + retracement logic.
     3) If day_to_check is set, only keep that date in the returned dict.
     Returns a dict mapping date -> (day_df, trades), even if trades == [].
     """
@@ -412,8 +412,8 @@ def identify_trades_daily(
             continue
 
         day_str  = day.strftime("%Y-%m-%d")
-        start_ts = pd.Timestamp(f"{day_str} {regular_start_shifted}")
-        end_ts   = pd.Timestamp(f"{day_str} {regular_end}")
+        start_ts = pd.Timestamp(f"{day_str} {sess_premark}")
+        end_ts   = pd.Timestamp(f"{day_str} {sess_end}")
         idx      = pd.date_range(start=start_ts, end=end_ts, freq="1min")
 
         day_df = group.reindex(idx)
@@ -497,12 +497,12 @@ def generate_trade_actions(
     col_action,
     buy_threshold,
     trailing_stop_pct,
-    regular_start
+    sess_start
 ):
     """
     Generates per-bar trade actions for one day:
 
-    - Buy when signal ≥ buy_threshold (only after regular_start time).
+    - Buy when signal ≥ buy_threshold (only after sess_start time).
     - Update highest price since entry.
     - Compute stop_level = max_price * (1 - trailing_stop_thresh).
     - Sell when price < stop_level or at end of day.
@@ -513,7 +513,7 @@ def generate_trade_actions(
       col_action: str, name for output action column
       buy_threshold: float, entry cutoff (signal domain)
       trailing_stop_pct: percent, decimal stop distance (eg 0.05% conservative minimum threshold)
-      regular_start: time or "HH:MM" string to begin new trades
+      sess_start: time or "HH:MM" string to begin new trades
 
     Returns:
       pd.DataFrame with new col_action: +1=buy, 0=hold, -1=sell
@@ -532,9 +532,9 @@ def generate_trade_actions(
     in_trade = False
     max_price = None
 
-    # Convert regular_start to time if needed
-    if isinstance(regular_start, str):
-        regular_start = pd.to_datetime(regular_start).time()
+    # Convert sess_start to time if needed
+    if isinstance(sess_start, str):
+        sess_start = pd.to_datetime(sess_start).time()
 
     # Extract series for speed
     sig = df[col_signal].values
@@ -546,8 +546,8 @@ def generate_trade_actions(
         price = closes[i]
 
         if not in_trade:
-            # Check buy condition: signal crosses threshold, and time ≥ regular_start
-            if sig[i] >= buy_threshold and t >= regular_start:
+            # Check buy condition: signal crosses threshold, and time ≥ sess_start
+            if sig[i] >= buy_threshold and t >= sess_start:
                 df.iat[i, df.columns.get_loc(col_action)] = 1
                 in_trade = True
                 max_price = price
@@ -582,7 +582,7 @@ def add_trade_signal_to_results(
     col_signal: str,
     col_action: str,
     min_prof_thr: float,
-    regular_start: dt.time,
+    sess_start: dt.time,
     pre_entry_decay: float,
     short_penal_decay: float,
     trailing_stop_pct: float,
@@ -636,7 +636,7 @@ def add_trade_signal_to_results(
             col_action           = col_action,
             buy_threshold        = buy_threshold,
             trailing_stop_pct    = trailing_stop_pct,
-            regular_start        = regular_start
+            sess_start           = sess_start
         )
         updated_results[day] = (df_actions, trades)
 
@@ -654,8 +654,8 @@ def add_trade_signal_to_results(
 def simulate_trading(
     results_by_day_sign: Union[Dict[pd.Timestamp, Tuple[pd.DataFrame, List]], pd.DataFrame],
     col_action: str,
-    regular_start: dt.time,
-    regular_end: dt.time,
+    sess_start: dt.time,
+    sess_end: dt.time,
     ticker: str
 ) -> Dict[pd.Timestamp, Tuple[pd.DataFrame, List, Dict[str, object]]]:
     """
@@ -668,9 +668,9 @@ def simulate_trading(
         or a single DataFrame with a DatetimeIndex and signal column.
     col_action : str
         Column name holding discrete trading signals: +1=buy, ‑1=sell, 0=hold.
-    regular_start : datetime.time
+    sess_start : datetime.time
         Inclusive start of regular session.
-    regular_end   : datetime.time
+    sess_end   : datetime.time
         Exclusive end of regular session.
     ticker : str
         Asset symbol (only for logging/extensibility).
@@ -733,7 +733,7 @@ def simulate_trading(
             now       = ts.time()
 
             # Only trade within regular hours
-            if regular_start <= now < regular_end:
+            if sess_start <= now < sess_end:
                 # lock in first ask once
                 if session_open_price is None:
                     session_open_price = ask
@@ -820,7 +820,7 @@ def simulate_trading(
             ))
 
         # 5) Compute day-level performance
-        session = df_sim.between_time(regular_start, regular_end)
+        session = df_sim.between_time(sess_start, sess_end)
 
         if not session.empty:
             open_ask  = session['ask'].iloc[0]
@@ -859,7 +859,6 @@ def run_trading_pipeline(
     short_penal_decay,
     trailing_stop_pct, 
     buy_threshold,
-    regular_start_shifted,
     top_percentile,
     smoothing_window: Optional[str] = False,
     day_to_check: Optional[str] = None
@@ -873,8 +872,8 @@ def run_trading_pipeline(
         gain_tightening_factor = gain_tightening_factor,
         merging_retracement_thr= merging_retracement_thr,
         merging_time_gap_thr   = merging_time_gap_thr,
-        regular_start_shifted  = regular_start_shifted,
-        regular_end            = params.regular_end,
+        sess_premark           = params.sess_premark,
+        sess_end               = params.sess_end,
         day_to_check           = day_to_check
     )
 
@@ -884,7 +883,7 @@ def run_trading_pipeline(
         col_signal           = col_signal,
         col_action           = col_action,
         min_prof_thr         = min_prof_thr,
-        regular_start        = params.regular_start, 
+        sess_start           = params.sess_start, 
         pre_entry_decay      = pre_entry_decay,
         short_penal_decay    = short_penal_decay,
         trailing_stop_pct    = trailing_stop_pct,
@@ -897,8 +896,8 @@ def run_trading_pipeline(
     sim_results = simulate_trading(
         results_by_day_sign = signaled,
         col_action          = col_action,
-        regular_start       = params.regular_start, 
-        regular_end         = params.regular_end,
+        sess_start          = params.sess_start, 
+        sess_end            = params.sess_end,
         ticker              = params.ticker
     )
 

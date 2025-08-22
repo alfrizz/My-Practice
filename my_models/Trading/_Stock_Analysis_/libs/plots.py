@@ -15,6 +15,7 @@ from IPython.display import display, update_display, HTML
 import seaborn as sns
 
 from optuna.trial import TrialState
+import torch
 
 ###############################################################################
 
@@ -135,7 +136,7 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
-def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold, performance_stats, regular_start_pred, trade_color="green"):
+def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold, performance_stats, start_plot, trade_color="green"):
     """
     Plots the overall close-price series plus trade intervals and two continuous signals,
     with the signals shown on a secondary y-axis.
@@ -168,8 +169,8 @@ def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold,
     """
     fig = go.Figure()
 
-    # only plot from regular_start_pred
-    df = df.loc[df.index.time >= regular_start_pred]
+    # only plot from start_plot
+    df = df.loc[df.index.time >= start_plot]
     
     # Trace 0: Base close-price trace.
     fig.add_trace(go.Scatter(
@@ -352,7 +353,7 @@ def aggregate_performance(
     aggregated["Buy & Hold – each day ($)"] = aggregated.pop("Buy & Hold Return ($)", 0.0)
 
     # 5) Determine first and last trading days from df
-    session_df = df.between_time(params.regular_start, params.regular_end)
+    session_df = df.between_time(params.sess_start, params.sess_end)
     if not session_df.empty:
         first_day = session_df.index.normalize().min()
         last_day  = session_df.index.normalize().max()
@@ -364,7 +365,7 @@ def aggregate_performance(
     # 6) One-time buy & hold legs
     mask_start = (
         (df.index.normalize() == first_day) &
-        (df.index.time >= params.regular_start)
+        (df.index.time >= params.sess_start)
     )
     if df.loc[mask_start, "ask"].empty:
         mask_start = df.index.normalize() == first_day
@@ -372,7 +373,7 @@ def aggregate_performance(
 
     mask_end = (
         (df.index.normalize() == last_day) &
-        (df.index.time <= params.regular_end)
+        (df.index.time <= params.sess_end)
     )
     if df.loc[mask_end, "bid"].empty:
         mask_end = df.index.normalize() == last_day
@@ -508,41 +509,48 @@ def make_live_plot_callback(fig, ax, line, handle):
 
 
 
-def lightweight_plot_callback(
-    study,
-    trial,
-    state={
-        "initialized": False,
-        "fig": None, "ax": None, "line": None, "handle": None,
-        "x": [], "y": [],
-    }
-):
-    # Ignore trials without a numeric value (e.g., pruned)
-    if trial.value is None:
-        return
+def lightweight_plot_callback(study, trial):
+    """
+    Live-update a small Matplotlib line chart of trial.value vs. trial.number.
+    `state` lives across calls and holds the figure, axes and data lists.
+    """
+    # 1) Initialize a single persistent state dict
+    if not hasattr(lightweight_plot_callback, "state"):
+        lightweight_plot_callback.state = {
+            "initialized": False,
+            "fig": None, "ax": None, "line": None, "handle": None,
+            "x": [], "y": []
+        }
+    state = lightweight_plot_callback.state
 
-    # One-time init: create one figure + one display handle
+    # 2) Skip pruned or errored trials
+    if trial.value is None:
+        return state
+
+    # 3) One-time figure setup
     if not state["initialized"]:
         import matplotlib.pyplot as plt
-        plt.ioff()  # prevent interactive backend from opening extra windows
+        plt.ioff()
         fig, ax = plt.subplots(figsize=(7, 3))
-        (line,) = ax.plot([], [], "bo-", markersize=3, linewidth=1)
+        line, = ax.plot([], [], "bo-", markersize=3, linewidth=1)
         ax.set(xlabel="Trial #", ylabel="Avg Daily P&L", title="Optuna Progress")
         ax.grid(True)
         handle = display(fig, display_id=True)
-        # DO NOT close the figure here if you want continuous updates
-        state.update({
-            "initialized": True,
-            "fig": fig, "ax": ax, "line": line, "handle": handle
-        })
+        state.update(fig=fig, ax=ax, line=line, handle=handle, initialized=True)
 
-    # Append and update
+    # 4) Append new point and redraw
     state["x"].append(trial.number)
     state["y"].append(float(trial.value))
     state["line"].set_data(state["x"], state["y"])
     state["ax"].relim()
     state["ax"].autoscale_view()
     state["handle"].update(state["fig"])
+
+    # 5) Close the figure to free memory—but keep the display alive
+    import matplotlib.pyplot as plt
+    plt.close(state["fig"])
+
+    return state
 
 
 
@@ -588,9 +596,11 @@ def save_best_trial_callback(study, trial):
 
 
 
-
 def cleanup_callback(study, trial):
     gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     
 #########################################################################################################
 

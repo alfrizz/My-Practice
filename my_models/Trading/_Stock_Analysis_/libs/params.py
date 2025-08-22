@@ -10,9 +10,9 @@ import torch.nn.functional as Funct
 #########################################################################################################
 ticker = 'AAPL'
 save_path  = Path("dfs_training")
-model_path = save_path / f"{ticker}_0.1638.pth" # model RMSE
+model_path = save_path / f"{ticker}_0.2861.pth" # model RMSE
 
-createCSVsign = False
+createCSVsign = True
 date_to_check = '2025-05' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -20,7 +20,7 @@ stocks_folder  = "intraday_stocks"
 optuna_folder = "optuna_results" 
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidasktoclose_pct = 0.1 # 0.1 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
+bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one
 # trailing_stop_pct = 0.05 # percent, decimal stop distance (0.05% conservative minimum threshold)
 
 base_csv = save_path / f"{ticker}_1_base.csv"
@@ -59,6 +59,16 @@ feats_cols_all = [
     "month",            # Month (1–12)
 ]
 
+#########################################################################################################
+
+# Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
+# Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
+# Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
+# After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
+
+sess_start         = datetime.strptime('14:30', '%H:%M').time()  
+sess_premark       = datetime.strptime('09:00' , '%H:%M').time()  
+sess_end           = datetime.strptime('21:00' , '%H:%M').time()   
 
 #########################################################################################################
 
@@ -84,58 +94,52 @@ def signal_parameters(ticker):
     pred_threshold ==> # (percent/100) threshold of the predicted signal to trigger the final trade
     trailing_stop_thresh ==> # (percent/100) of the trailing stop loss of the final trade
     trailing_stop_pred ==> # (percent/100) of the trailing stop loss of the predicted signal
+
+    # to train the model
+    look_back ==> length of historical window (how many minutes of history each training example contains): number of past time‐steps fed into the LSTM to predict next value
     '''
     if ticker == 'AAPL':
-        features_cols = ['vol_15', 'bb_width_20', 'hour', 'ma_20', 'macd_signal_9', 'low', 'atr_14', 'obv', 'vwap_dev', 'volume_spike', 'r_15', 'close', 'ma_5', 'open', 'high']
-        trailing_stop_pred=0.045
-        pred_threshold=0.17
+        look_back = 60
+        sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
+        sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
+        features_cols = ['vol_15', 'ma_5', 'ma_20', 'close', 'hour', 'bb_width_20', 'high', 'low', 'open', 'vwap_dev', 'in_trading', 'atr_14', 'r_5', 'r_1', 'r_15']
+        trailing_stop_pred = 0.045
+        pred_threshold = 0.17
         
 
-    return features_cols, trailing_stop_pred, pred_threshold
+    return look_back, sess_start_pred, sess_start_shift, features_cols, trailing_stop_pred, pred_threshold
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, trailing_stop_pred_tick, pred_threshold_tick = signal_parameters(ticker)
-
-#########################################################################################################
-
-# Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
-# Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
-# Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
-# After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
-
-regular_start  = datetime.strptime('14:30', '%H:%M').time()  
-regular_start_premarket = datetime.strptime('09:00' , '%H:%M').time()  
-regular_end = datetime.strptime('21:00' , '%H:%M').time()   
-
+look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick, trailing_stop_pred_tick, pred_threshold_tick = signal_parameters(ticker)
 
 #########################################################################################################
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           64,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
-    "LONG_UNITS":            64,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
-    "DROPOUT_SHORT":         0.4,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
-    "DROPOUT_LONG":          0.4,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
-    "ATT_HEADS":             4,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
-    "ATT_DROPOUT":           0.2,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
-    "WEIGHT_DECAY":          5e-4,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
+    "SHORT_UNITS":           128,     # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
+    "LONG_UNITS":            128,    # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
+    "DROPOUT_SHORT":         0.1,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_LONG":          0.1,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
+    "ATT_HEADS":             8,      # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
+    "ATT_DROPOUT":           0.1,    # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "WEIGHT_DECAY":          1e-5,   # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,     # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
     "VAL_BATCH":             1,      # validation batch size; ↑ faster eval but uses more memory, ↓ slower eval but uses less memory
     "NUM_WORKERS":           2,      # DataLoader workers; ↑ parallel loading (bus error risk + overhead), ↓ safer but less parallelism
     "TRAIN_PREFETCH_FACTOR": 1,      # batches Sto prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
-    "MAX_EPOCHS":            60,     # maximum training epochs; ↑ more training (risk wasted compute), ↓ shorter runs (risk undertraining)
-    "EARLY_STOP_PATIENCE":   12,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
+    "MAX_EPOCHS":            90,     # maximum training epochs; ↑ more training (risk wasted compute), ↓ shorter runs (risk undertraining)
+    "EARLY_STOP_PATIENCE":   15,     # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
     "LR_EPOCHS_WARMUP":      5,      # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
-    "INITIAL_LR":            3e-5,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
-    "CLIPNORM":              0.5,      # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
+    "INITIAL_LR":            5e-4,   # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
+    "CLIPNORM":              1.0,    # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
     
     # ── CosineAnnealingWarmRestarts Scheduler ──────────────────────────
-    "ETA_MIN":               1e-6,   # floor LR in each cosine cycle
-    "T_0":                   60,     # epochs before first cosine restart
+    "ETA_MIN":               5e-6,   # floor LR in each cosine cycle
+    "T_0":                   90,     # epochs before first cosine restart
     "T_MULT":                1,      # cycle length multiplier after each restart
 
     # ── ReduceLROnPlateau Scheduler ───────────────────────────────────
