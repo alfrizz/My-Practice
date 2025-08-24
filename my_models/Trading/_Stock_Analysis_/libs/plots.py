@@ -136,7 +136,11 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
-def plot_trades(df, col_signal1, col_signal2, col_action, trades, buy_threshold, performance_stats, start_plot, trade_color="green"):
+def plot_trades(df, 
+                col_signal1, col_signal2, col_action, 
+                trades, buy_threshold, performance_stats, 
+                start_plot=params.sess_start_pred_tick, 
+                trade_color="green"):
     """
     Plots the overall close-price series plus trade intervals and two continuous signals,
     with the signals shown on a secondary y-axis.
