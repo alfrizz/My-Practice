@@ -79,7 +79,7 @@ def build_lstm_tensors(
       raw_ask   : torch.Tensor of shape (N,)
     """
     if not sess_start: # if we want the predictions not to start from sess_start, but from sess_start_pred
-        sess_start = dt.time(*divmod((params.sess_start.hour * 60 + params.sess_start.minute) - look_back, 60))
+        sess_start = params.sess_start_pred_tick
     else:
         sess_start = params.sess_start
 
@@ -170,6 +170,124 @@ def build_lstm_tensors(
 #########################################################################################################
 
 
+# def chronological_split(
+#     X: torch.Tensor,
+#     y: torch.Tensor,
+#     raw_close: torch.Tensor,
+#     raw_bid: torch.Tensor,
+#     raw_ask: torch.Tensor,
+#     df: pd.DataFrame,
+#     *,
+#     look_back: int,
+#     train_prop: float,
+#     val_prop: float,
+#     train_batch: int,
+#     device = torch.device("cpu"),
+#     sess_start = True
+# ) -> Tuple[
+#     Tuple[torch.Tensor, torch.Tensor],
+#     Tuple[torch.Tensor, torch.Tensor],
+#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+#     List[int],
+#     torch.Tensor, torch.Tensor, torch.Tensor
+# ]:
+#     """
+#     Split the full sliding‐window dataset (X, y, raw_*) into train, validation,
+#     and test sets by calendar day, then apply Max‐Abs scaling fitted on
+#     the train split only.
+
+#     We first move all tensors to the chosen device. By grouping `df` on
+#     normalized dates and checking `look_back` vs. `sess_start`, we
+#     build `samples_per_day` and verify it matches X.size(0). We then
+#     decide how many days go to train (rounded up to `train_batch`),
+#     val, and test.
+
+#     Using a cumulative sum of daily counts, we slice X, y, and raw price
+#     tensors into their respective splits without boolean indexing.
+    
+#     Finally build day‐ID tags via `repeat_interleave` so each window 
+#     can be traced back to its original calendar day.
+#     """
+#     if not sess_start: # if we want the predictions not to start from sess_start, but from sess_start_pred
+#         sess_start = dt.time(*divmod((params.sess_start.hour * 60 + params.sess_start.minute) - look_back, 60))
+#     else:
+#         sess_start = params.sess_start
+        
+#     # Pick a real device & move the full dataset there
+#     device = device or (X.device if X.device is not None else torch.device("cpu"))
+#     X         = X.to(device)
+#     y         = y.to(device)
+#     raw_close = raw_close.to(device)
+#     raw_bid   = raw_bid.to(device)
+#     raw_ask   = raw_ask.to(device)
+
+#     # 1) Count how many windows come from each calendar day
+#     samples_per_day: List[int] = []
+#     all_days: List[pd.Timestamp] = []
+
+#     for day, day_df in df.groupby(df.index.normalize(), sort=False):
+#         all_days.append(day)
+#         end_times = day_df.index.time[look_back:]
+#         mask_rth  = np.array([t >= sess_start for t in end_times])
+#         samples_per_day.append(int(mask_rth.sum()))
+
+#     # 2) Sanity‐check total windows
+#     total = sum(samples_per_day)
+#     if total != X.size(0):
+#         raise ValueError(f"Window count mismatch: {total} vs {X.size(0)}")
+
+#     # 3) Decide how many days go to train/val/test
+#     D               = len(samples_per_day)
+#     train_days_orig = int(D * train_prop)
+#     batches_needed  = (train_days_orig + train_batch - 1) // train_batch
+#     train_days      = min(D, batches_needed * train_batch)
+#     cut_train       = train_days - 1
+#     cut_val         = int(D * (train_prop + val_prop))  # inclusive last val‐day index
+
+#     # 4) Build a cumulative‐sum array of sample counts
+#     #    cum[i] = total windows in days[0..i-1], so slices are views
+#     cum = np.concatenate([[0], np.cumsum(samples_per_day)])
+
+#     # 5) Compute slice indices
+#     end_train = int(cum[train_days])          # start of day train_days
+#     end_val   = int(cum[cut_val + 1])        # start of day cut_val+1
+
+#     # 6) Range‐slice the big tensors (these are views, not copies)
+#     X_tr       = X[:end_train]
+#     y_tr       = y[:end_train]
+
+#     X_val      = X[end_train:end_val]
+#     y_val      = y[end_train:end_val]
+
+#     X_te       = X[end_val:]
+#     y_te       = y[end_val:]
+#     close_te   = raw_close[end_val:]
+#     bid_te     = raw_bid[end_val:]
+#     ask_te     = raw_ask[end_val:]
+
+#     # 7) Build day‐ID tags via repeat_interleave per split
+#     #    (you can drop these if you don’t strictly need them)
+#     def make_day_ids(start_day: int, end_day: int) -> torch.Tensor:
+#         # day indices start_day .. end_day inclusive
+#         counts = samples_per_day[start_day : end_day + 1]
+#         days   = torch.arange(start_day, end_day + 1, device=device, dtype=torch.long)
+#         return torch.repeat_interleave(days, torch.tensor(counts, device=device))
+
+#     day_id_tr  = make_day_ids(0,          cut_train)
+#     day_id_val = make_day_ids(cut_train+1, cut_val)
+#     day_id_te  = make_day_ids(cut_val+1,  D-1)
+
+
+#     # Return splits + metadata
+#     return (
+#         (X_tr, y_tr),
+#         (X_val, y_val),
+#         (X_te, y_te, close_te, bid_te, ask_te),
+#         samples_per_day,
+#         day_id_tr, day_id_val, day_id_te
+#     )
+
+
 def chronological_split(
     X: torch.Tensor,
     y: torch.Tensor,
@@ -182,82 +300,79 @@ def chronological_split(
     train_prop: float,
     val_prop: float,
     train_batch: int,
-    device = torch.device("cpu"),
-    sess_start = True
+    sess_start: dt.time,
+    device: torch.device = torch.device("cpu")
 ) -> Tuple[
-    Tuple[torch.Tensor, torch.Tensor],
-    Tuple[torch.Tensor, torch.Tensor],
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, np.ndarray],
+    Tuple[torch.Tensor, torch.Tensor, np.ndarray],
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, np.ndarray],
     List[int],
     torch.Tensor, torch.Tensor, torch.Tensor
 ]:
     """
-    Split the full sliding‐window dataset (X, y, raw_*) into train, validation,
-    and test sets by calendar day, then apply Max‐Abs scaling fitted on
-    the train split only.
+    Split a sliding‐window dataset into train/val/test by calendar day, fit
+    MaxAbsScaler on train only, and return all metadata.
 
-    We first move all tensors to the chosen device. By grouping `df` on
-    normalized dates and checking `look_back` vs. `sess_start`, we
-    build `samples_per_day` and verify it matches X.size(0). We then
-    decide how many days go to train (rounded up to `train_batch`),
-    val, and test.
-
-    Using a cumulative sum of daily counts, we slice X, y, and raw price
-    tensors into their respective splits without boolean indexing.
-    
-    Finally build day‐ID tags via `repeat_interleave` so each window 
-    can be traced back to its original calendar day.
+    Steps:
+      1) Move everything to `device`.
+      2) For each calendar day in `df`, count how many windows survive
+         the `look_back` + `session_start` filter.
+      3) Verify total windows == X.size(0).
+      4) Allocate days to train/val/test based on `train_prop`/`val_prop`
+         (rounding train days up to multiples of `train_batch`).
+      5) Slice X, y, raw_* into X_tr/val/te & y_tr/val/te & raw_*_te views.
+      6) Build per‐window `day_id_*` via `repeat_interleave`.
+      7) Build per‐window `idxs_* = np.arange(n_windows)`, so downstream
+         loaders can track original indices.
     """
-    if not sess_start: # if we want the predictions not to start from sess_start, but from sess_start_pred
-        sess_start = dt.time(*divmod((params.sess_start.hour * 60 + params.sess_start.minute) - look_back, 60))
-    else:
-        sess_start = params.sess_start
-        
-    # Pick a real device & move the full dataset there
-    device = device or (X.device if X.device is not None else torch.device("cpu"))
+
+    # 1) push to device
     X         = X.to(device)
     y         = y.to(device)
     raw_close = raw_close.to(device)
     raw_bid   = raw_bid.to(device)
     raw_ask   = raw_ask.to(device)
 
-    # 1) Count how many windows come from each calendar day
+    if not sess_start: # if we want the predictions not to start from sess_start, but from sess_start_pred
+        sess_start = params.sess_start_pred_tick
+    else:
+        sess_start = params.sess_start
+
+    # 2) count windows per calendar day
     samples_per_day: List[int] = []
     all_days: List[pd.Timestamp] = []
-
     for day, day_df in df.groupby(df.index.normalize(), sort=False):
         all_days.append(day)
+        # skip the first `look_back` minutes, then enforce session start
         end_times = day_df.index.time[look_back:]
         mask_rth  = np.array([t >= sess_start for t in end_times])
         samples_per_day.append(int(mask_rth.sum()))
 
-    # 2) Sanity‐check total windows
-    total = sum(samples_per_day)
-    if total != X.size(0):
-        raise ValueError(f"Window count mismatch: {total} vs {X.size(0)}")
+    # 3) sanity check
+    total_windows = X.size(0)
+    if sum(samples_per_day) != total_windows:
+        raise ValueError(
+            f"Window count mismatch: {sum(samples_per_day)} vs {total_windows}"
+        )
 
-    # 3) Decide how many days go to train/val/test
+    # 4) decide how many days go to train/val/test
     D               = len(samples_per_day)
     train_days_orig = int(D * train_prop)
     batches_needed  = (train_days_orig + train_batch - 1) // train_batch
     train_days      = min(D, batches_needed * train_batch)
     cut_train       = train_days - 1
-    cut_val         = int(D * (train_prop + val_prop))  # inclusive last val‐day index
+    cut_val         = int(D * (train_prop + val_prop))  # inclusive last val‐day
 
-    # 4) Build a cumulative‐sum array of sample counts
-    #    cum[i] = total windows in days[0..i-1], so slices are views
+    # 5) cumulative sum to slice tensors
     cum = np.concatenate([[0], np.cumsum(samples_per_day)])
+    end_train = int(cum[train_days])
+    end_val   = int(cum[cut_val + 1])
 
-    # 5) Compute slice indices
-    end_train = int(cum[train_days])          # start of day train_days
-    end_val   = int(cum[cut_val + 1])        # start of day cut_val+1
+    X_tr  = X[:end_train]
+    y_tr  = y[:end_train]
 
-    # 6) Range‐slice the big tensors (these are views, not copies)
-    X_tr       = X[:end_train]
-    y_tr       = y[:end_train]
-
-    X_val      = X[end_train:end_val]
-    y_val      = y[end_train:end_val]
+    X_val = X[end_train:end_val]
+    y_val = y[end_train:end_val]
 
     X_te       = X[end_val:]
     y_te       = y[end_val:]
@@ -265,28 +380,29 @@ def chronological_split(
     bid_te     = raw_bid[end_val:]
     ask_te     = raw_ask[end_val:]
 
-    # 7) Build day‐ID tags via repeat_interleave per split
-    #    (you can drop these if you don’t strictly need them)
-    def make_day_ids(start_day: int, end_day: int) -> torch.Tensor:
-        # day indices start_day .. end_day inclusive
-        counts = samples_per_day[start_day : end_day + 1]
-        days   = torch.arange(start_day, end_day + 1, device=device, dtype=torch.long)
+    # 6) build day_id tensors
+    def make_day_ids(start: int, end: int) -> torch.Tensor:
+        counts = samples_per_day[start : end + 1]
+        days   = torch.arange(start, end + 1, device=device, dtype=torch.long)
         return torch.repeat_interleave(days, torch.tensor(counts, device=device))
 
     day_id_tr  = make_day_ids(0,          cut_train)
     day_id_val = make_day_ids(cut_train+1, cut_val)
-    day_id_te  = make_day_ids(cut_val+1,  D-1)
+    day_id_te  = make_day_ids(cut_val+1,  D - 1)
 
+    # 7) build idx arrays so downstream knows each window’s original index
+    n_tr, n_val, n_te = X_tr.size(0), X_val.size(0), X_te.size(0)
+    idxs_tr  = np.arange(n_tr,  dtype=np.int64)
+    idxs_val = np.arange(n_val, dtype=np.int64)
+    idxs_te  = np.arange(n_te,  dtype=np.int64)
 
-    # Return splits + metadata
     return (
-        (X_tr, y_tr),
-        (X_val, y_val),
-        (X_te, y_te, close_te, bid_te, ask_te),
+        (X_tr,  y_tr,  idxs_tr),
+        (X_val, y_val, idxs_val),
+        (X_te,  y_te,  close_te, bid_te, ask_te, idxs_te),
         samples_per_day,
         day_id_tr, day_id_val, day_id_te
     )
-
 
 #########################################################################################################
 
@@ -294,11 +410,15 @@ def chronological_split(
 # class DayWindowDataset(Dataset):
 #     """
 #     Dataset of calendar‐day windows. Each __getitem__(i) returns:
+
 #       - x_day: (1, W_i, look_back, F)
 #       - y_day: (1, W_i)
+#       - y_day_cls: (1, W_i)           # binary labels in {0,1}
 #       - weekday: int
+
 #     Or, for test days:
-#       - x_day, y_day, raw_close, raw_bid, raw_ask, weekday
+
+#       - x_day, y_day, y_day_cls, raw_close, raw_bid, raw_ask, weekday
 #     """
 #     def __init__(
 #         self,
@@ -308,54 +428,97 @@ def chronological_split(
 #         weekday: torch.Tensor,
 #         raw_close: Optional[torch.Tensor] = None,
 #         raw_bid:   Optional[torch.Tensor] = None,
-#         raw_ask:   Optional[torch.Tensor] = None
+#         raw_ask:   Optional[torch.Tensor] = None,
+#         threshold: float = params.best_optuna_params['buy_threshold']
 #     ):
-#         self.X    = X
-#         self.y    = y
-#         self.day_id = day_id
-#         self.weekday = weekday
+#         # store the full feature matrix and targets
+#         self.X         = X
+#         self.y         = y
+
+#         # day_id maps each sample to its calendar‐day index
+#         self.day_id    = day_id
+
+#         # weekday code for each sample (0=Monday … 6=Sunday)
+#         self.weekday   = weekday
+
+#         # optional raw price series for test‐time plotting
 #         self.raw_close = raw_close
 #         self.raw_bid   = raw_bid
 #         self.raw_ask   = raw_ask
-#         # compute counts per day and build boundaries
+
+#         # threshold for binarizing y → spike/no‐spike
+#         self.threshold = threshold
+
+#         # count how many samples belong to each day_id
 #         counts = torch.bincount(day_id)
+
+#         # cumulative boundaries: [0, c0, c0+c1, …, total]
 #         boundaries = torch.cat([
 #             torch.tensor([0], dtype=torch.long),
 #             torch.cumsum(counts, dim=0)
 #         ])
-#         self.start = boundaries[:-1]
-#         self.end   = boundaries[1:]
+
+#         # slice-point arrays for each day window
+#         self.start   = boundaries[:-1]  # inclusive start index per day
+#         self.end     = boundaries[1:]   # exclusive end index per day
+
+#         # flag: do we have raw_close/raw_bid/raw_ask available?
 #         self.has_raw = raw_close is not None
 
 #     def __len__(self):
+#         # number of distinct calendar days in this split
 #         return len(self.start)
 
 #     def __getitem__(self, idx: int):
+#         # map day‐index → global sample range [s:e)
 #         s = self.start[idx].item()
 #         e = self.end[idx].item()
-#         x_day = self.X[s:e].unsqueeze(0)   # (1, W_i, look_back, F)
-#         y_day = self.y[s:e].unsqueeze(0)   # (1, W_i)
-#         wd    = int(self.weekday[s].item())
+
+#         # slice out this day's feature block and add batch‐dim
+#         x_day = self.X[s:e].unsqueeze(0)   # shape: (1, W_i, look_back, F)
+
+#         # slice out continuous targets and add batch‐dim
+#         y_day = self.y[s:e].unsqueeze(0)   # shape: (1, W_i)
+
+#         # create binary spike‐labels via thresholding
+#         y_day_cls = (y_day > self.threshold).float()  # shape: (1, W_i)
+
+#         # weekday code for this entire window
+#         wd = int(self.weekday[s].item())
+
 #         if self.has_raw:
-#             rc = self.raw_close[s:e]
-#             rb = self.raw_bid[s:e]
-#             ra = self.raw_ask[s:e]
-#             return x_day, y_day, rc, rb, ra, wd
-#         return x_day, y_day, wd
+#             # for test‐time plotting: slice raw price series
+#             rc = self.raw_close[s:e]      # (W_i,)
+#             rb = self.raw_bid[s:e]        # (W_i,)
+#             ra = self.raw_ask[s:e]        # (W_i,)
+
+#             # return full 7‐tuple for test splits
+#             return x_day, y_day, y_day_cls, rc, rb, ra, wd
+
+#         # return 4‐tuple for train/val splits
+#         return x_day, y_day, y_day_cls, wd
 
 
 class DayWindowDataset(Dataset):
     """
-    Dataset of calendar‐day windows. Each __getitem__(i) returns:
+    A Dataset where each item is one calendar‐day’s worth of look-back windows.
 
-      - x_day: (1, W_i, look_back, F)
-      - y_day: (1, W_i)
-      - y_day_cls: (1, W_i)           # binary labels in {0,1}
-      - weekday: int
+    On init you supply:
+      • X         tensor of shape (N_windows, look_back, F)
+      • y         tensor of shape (N_windows,)
+      • day_id    tensor of shape (N_windows,) mapping each window → day index
+      • weekday   tensor of shape (N_windows,) giving 0=Mon…6=Sun
+      • idxs      1D array of length N_windows of the exact
+                  window-end timestamps (ns since epoch)
+      • raw_close/bid/ask (optional) of shape (N_windows,)
 
-    Or, for test days:
-
-      - x_day, y_day, y_day_cls, raw_close, raw_bid, raw_ask, weekday
+    __getitem__(i) returns for the ith calendar day:
+      • x_day      Tensor (1, W_i, look_back, F)
+      • y_day      Tensor (1, W_i)
+      • y_day_cls  Tensor (1, W_i)  – binary labels thresholded
+      • wd         int              – weekday code for that day
+      • idxs_day   np.ndarray of length W_i  – timestamps
+      • (optionally) rc, rb, ra each of shape (W_i,)
     """
     def __init__(
         self,
@@ -363,332 +526,397 @@ class DayWindowDataset(Dataset):
         y: torch.Tensor,
         day_id: torch.Tensor,
         weekday: torch.Tensor,
-        raw_close: Optional[torch.Tensor] = None,
-        raw_bid:   Optional[torch.Tensor] = None,
-        raw_ask:   Optional[torch.Tensor] = None,
-        threshold: float = params.best_optuna_params['buy_threshold']
+        idxs: Union[torch.Tensor, np.ndarray, pd.DatetimeIndex],
+        raw_close:  Optional[torch.Tensor] = None,
+        raw_bid:    Optional[torch.Tensor] = None,
+        raw_ask:    Optional[torch.Tensor] = None,
+        threshold:  float = params.best_optuna_params['buy_threshold']
     ):
-        # store the full feature matrix and targets
-        self.X         = X
-        self.y         = y
+        # store raw tensors
+        self.X       = X
+        self.y       = y
+        self.day_id  = day_id
+        self.weekday = weekday
+        self.threshold = threshold
 
-        # day_id maps each sample to its calendar‐day index
-        self.day_id    = day_id
+        # normalize idxs → numpy array of ns timestamps
+        if isinstance(idxs, torch.Tensor):
+            self.idxs = idxs.cpu().numpy()
+        else:
+            # handles np.ndarray or pd.DatetimeIndex
+            self.idxs = np.asarray(idxs, dtype='datetime64[ns]').astype('datetime64[ns]').astype(np.int64)
 
-        # weekday code for each sample (0=Monday … 6=Sunday)
-        self.weekday   = weekday
-
-        # optional raw price series for test‐time plotting
+        # optional raw price series
         self.raw_close = raw_close
         self.raw_bid   = raw_bid
         self.raw_ask   = raw_ask
+        self.has_raw   = raw_close is not None
 
-        # threshold for binarizing y → spike/no‐spike
-        self.threshold = threshold
-
-        # count how many samples belong to each day_id
-        counts = torch.bincount(day_id)
-
-        # cumulative boundaries: [0, c0, c0+c1, …, total]
+        # build pointers day-by-day
+        counts = torch.bincount(self.day_id)
         boundaries = torch.cat([
             torch.tensor([0], dtype=torch.long),
             torch.cumsum(counts, dim=0)
         ])
+        self.start = boundaries[:-1]  # inclusive
+        self.end   = boundaries[1:]   # exclusive
 
-        # slice-point arrays for each day window
-        self.start   = boundaries[:-1]  # inclusive start index per day
-        self.end     = boundaries[1:]   # exclusive end index per day
-
-        # flag: do we have raw_close/raw_bid/raw_ask available?
-        self.has_raw = raw_close is not None
-
-    def __len__(self):
-        # number of distinct calendar days in this split
+    def __len__(self) -> int:
+        # one entry per calendar day
         return len(self.start)
 
     def __getitem__(self, idx: int):
-        # map day‐index → global sample range [s:e)
+        # locate this day’s block of windows in the flattened arrays
         s = self.start[idx].item()
         e = self.end[idx].item()
 
-        # slice out this day's feature block and add batch‐dim
-        x_day = self.X[s:e].unsqueeze(0)   # shape: (1, W_i, look_back, F)
+        # slice feature + target windows, add batch dim
+        x_day     = self.X[s:e].unsqueeze(0)   # shape (1, W_i, look_back, F)
+        y_day     = self.y[s:e].unsqueeze(0)   # shape (1, W_i)
+        y_day_cls = (y_day > self.threshold).float()
+        wd        = int(self.weekday[s].item())
 
-        # slice out continuous targets and add batch‐dim
-        y_day = self.y[s:e].unsqueeze(0)   # shape: (1, W_i)
-
-        # create binary spike‐labels via thresholding
-        y_day_cls = (y_day > self.threshold).float()  # shape: (1, W_i)
-
-        # weekday code for this entire window
-        wd = int(self.weekday[s].item())
+        # exact window-end timestamps for this day
+        idxs_day  = self.idxs[s:e]             # np.ndarray length W_i
 
         if self.has_raw:
-            # for test‐time plotting: slice raw price series
-            rc = self.raw_close[s:e]      # (W_i,)
-            rb = self.raw_bid[s:e]        # (W_i,)
-            ra = self.raw_ask[s:e]        # (W_i,)
+            # return raw price slices for test‐time plotting
+            rc = self.raw_close[s:e]
+            rb = self.raw_bid[s:e]
+            ra = self.raw_ask[s:e]
+            return x_day, y_day, y_day_cls, rc, rb, ra, wd, idxs_day
 
-            # return full 7‐tuple for test splits
-            return x_day, y_day, y_day_cls, rc, rb, ra, wd
-
-        # return 4‐tuple for train/val splits
-        return x_day, y_day, y_day_cls, wd
+        # train/val return
+        return x_day, y_day, y_day_cls, wd, idxs_day
 
 
 
 #########################################################################################################
 
+
 # def pad_collate(
 #     batch: List[
 #         Union[
-#             Tuple[torch.Tensor, torch.Tensor, int],
-#             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]
+#             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int],
+#             Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]
 #         ]
 #     ]
 # ) -> Union[
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 # ]:
 #     """
 #     Pads a batch of per-day tensors to the maximum window length within the batch.
-    
+
 #     Supports two element types:
-#       1) (x_day, y_day, weekday)
-#       2) (x_day, y_day, raw_close, raw_bid, raw_ask, weekday)
-    
+#       1) (x_day, y_day, y_day_cls, weekday)
+#       2) (x_day, y_day, y_day_cls, raw_close, raw_bid, raw_ask, weekday)
+
 #     Returns either:
-#       - (batch_x, batch_y, batch_wd)
-#       - (batch_x, batch_y, batch_rc, batch_rb, batch_ra, batch_wd)
-    
-#     All outputs live on CPU. Shapes:
-#       batch_x: (B, W_max, look_back, F)
-#       batch_y: (B, W_max)
-#       batch_wd: (B,)
+#       - (batch_x, batch_y, batch_y_cls, batch_wd)
+#       - (batch_x, batch_y, batch_y_cls, batch_rc, batch_rb, batch_ra, batch_wd)
+
+#     Shapes (on CPU):
+#       batch_x     : (B, W_max, look_back, F)
+#       batch_y     : (B, W_max)
+#       batch_y_cls : (B, W_max)
+#       batch_wd    : (B,)
 #       batch_rc/rb/ra: (B, W_max) if present
 #     """
-    
 #     # 1) Unzip batch into lists
-#     xs, ys, *rest = zip(*batch)
-#     has_raw = len(rest) > 1   # raw_close/bid/ask present if rest holds >1 list
+#     xs, ys, ycls, *rest = zip(*batch)
+#     has_raw = len(rest) > 1   # raw_close/bid/ask present iff rest holds >1 list
 
-#     # 2) Strip the leading “1” dim: now x_i:(W_i,L,F), y_i:(W_i,)
-#     xs = [x.squeeze(0) for x in xs]
-#     ys = [y.squeeze(0) for y in ys]
+#     # 2) Strip the leading “1” dim: now x_i:(W_i,L,F), y_i:(W_i,), ycls_i:(W_i,)
+#     xs   = [x.squeeze(0)    for x in xs]
+#     ys   = [y.squeeze(0)    for y in ys]
+#     ycls = [yc.squeeze(0)   for yc in ycls]
 
-#     # 3) Vectorized pad for X: flatten last two dims → pad → reshape back
+#     # 3) Vectorized pad for X
 #     B = len(xs)
 #     look_back, F = xs[0].shape[1], xs[0].shape[2]
 #     flat_xs   = [x.view(x.size(0), -1) for x in xs]                # (W_i, L*F)
 #     padded_fx = pad_sequence(flat_xs, batch_first=True)            # (B, W_max, L*F)
 #     batch_x   = padded_fx.view(B, padded_fx.size(1), look_back, F) # (B,W_max,L,F)
 
-#     # 4) Vectorized pad for Y: (B, W_max)
-#     batch_y = pad_sequence(ys, batch_first=True)
+#     # 4) Vectorized pad for Y: continuous + class
+#     batch_y     = pad_sequence(ys,   batch_first=True)  # (B, W_max)
+#     batch_y_cls = pad_sequence(ycls, batch_first=True)  # (B, W_max)
 
 #     # 5) Weekdays: always last element of each tuple
 #     batch_wd = torch.tensor([elem[-1] for elem in batch], dtype=torch.int64)
 
 #     # 6) If raw features exist, pad them too
 #     if has_raw:
-#         # rest is [(rc, rb, ra, wd), …]; drop wd and unzip
-#         raw_triplets = [t[:3] for t in rest]
+#         raw_triplets = [t[3:6] for t in batch]  # drop wd and unzip
 #         rc_list, rb_list, ra_list = zip(*raw_triplets)
 #         batch_rc = pad_sequence(rc_list, batch_first=True)
 #         batch_rb = pad_sequence(rb_list, batch_first=True)
 #         batch_ra = pad_sequence(ra_list, batch_first=True)
-#         return batch_x, batch_y, batch_rc, batch_rb, batch_ra, batch_wd
+#         return batch_x, batch_y, batch_y_cls, batch_rc, batch_rb, batch_ra, batch_wd
 
-#     return batch_x, batch_y, batch_wd
+#     return batch_x, batch_y, batch_y_cls, batch_wd
 
 
-def pad_collate(
-    batch: List[
-        Union[
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int],
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]
-        ]
-    ]
-) -> Union[
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-]:
+def pad_collate(batch):
     """
-    Pads a batch of per-day tensors to the maximum window length within the batch.
-
-    Supports two element types:
-      1) (x_day, y_day, y_day_cls, weekday)
-      2) (x_day, y_day, y_day_cls, raw_close, raw_bid, raw_ask, weekday)
-
-    Returns either:
-      - (batch_x, batch_y, batch_y_cls, batch_wd)
-      - (batch_x, batch_y, batch_y_cls, batch_rc, batch_rb, batch_ra, batch_wd)
-
-    Shapes (on CPU):
-      batch_x     : (B, W_max, look_back, F)
-      batch_y     : (B, W_max)
-      batch_y_cls : (B, W_max)
-      batch_wd    : (B,)
-      batch_rc/rb/ra: (B, W_max) if present
+    Collate and pad a batch of day-windows to a common time length.
+    
+    Supports both:
+      - 5-tuples: (x_day, y_day, y_day_cls, weekday, idxs_day)
+      - 8-tuples: (x_day, y_day, y_day_cls, raw_close, raw_bid, raw_ask, weekday, idxs_day)
+    
+    Pads all x/y sequences along the time axis (dim=1) to the maximum W in `batch`,
+    then stacks into tensors. Discards raw-price fields if present.
+    
+    Returns:
+      batch_x     Tensor of shape (B, W_max, look_back, F)
+      batch_y     Tensor of shape (B, W_max)
+      batch_yc    Tensor of shape (B, W_max)
+      batch_wd    Int64Tensor of shape (B,)         — weekday codes
+      batch_idxs  List of length B, each a 1D array of original window-lengths
     """
-    # 1) Unzip batch into lists
-    xs, ys, ycls, *rest = zip(*batch)
-    has_raw = len(rest) > 1   # raw_close/bid/ask present iff rest holds >1 list
+    # 1) find the maximum time-axis length in this batch
+    max_w = max(elem[0].size(1) for elem in batch)
 
-    # 2) Strip the leading “1” dim: now x_i:(W_i,L,F), y_i:(W_i,), ycls_i:(W_i,)
-    xs   = [x.squeeze(0)    for x in xs]
-    ys   = [y.squeeze(0)    for y in ys]
-    ycls = [yc.squeeze(0)   for yc in ycls]
+    xs, ys, ycs, wds, idxs_list = [], [], [], [], []
 
-    # 3) Vectorized pad for X
-    B = len(xs)
-    look_back, F = xs[0].shape[1], xs[0].shape[2]
-    flat_xs   = [x.view(x.size(0), -1) for x in xs]                # (W_i, L*F)
-    padded_fx = pad_sequence(flat_xs, batch_first=True)            # (B, W_max, L*F)
-    batch_x   = padded_fx.view(B, padded_fx.size(1), look_back, F) # (B,W_max,L,F)
+    for elem in batch:
+        # unpack differently depending on tuple-length
+        if len(elem) == 5:
+            x_day, y_day, yc_day, wd, idxs_day = elem
+        else:
+            # ignore raw_close, raw_bid, raw_ask
+            x_day, y_day, yc_day, _, _, _, wd, idxs_day = elem
 
-    # 4) Vectorized pad for Y: continuous + class
-    batch_y     = pad_sequence(ys,   batch_first=True)  # (B, W_max)
-    batch_y_cls = pad_sequence(ycls, batch_first=True)  # (B, W_max)
+        pad_amt = max_w - x_day.size(1)
 
-    # 5) Weekdays: always last element of each tuple
-    batch_wd = torch.tensor([elem[-1] for elem in batch], dtype=torch.int64)
+        # pad on the right of the time axis (dim=1)
+        # x_day shape: (1, W_i, look_back, F)
+        x_p  = Funct.pad(x_day,  (0,0, 0,0, 0, pad_amt))
+        y_p  = Funct.pad(y_day,  (0, pad_amt))
+        yc_p = Funct.pad(yc_day, (0, pad_amt))
 
-    # 6) If raw features exist, pad them too
-    if has_raw:
-        raw_triplets = [t[3:6] for t in batch]  # drop wd and unzip
-        rc_list, rb_list, ra_list = zip(*raw_triplets)
-        batch_rc = pad_sequence(rc_list, batch_first=True)
-        batch_rb = pad_sequence(rb_list, batch_first=True)
-        batch_ra = pad_sequence(ra_list, batch_first=True)
-        return batch_x, batch_y, batch_y_cls, batch_rc, batch_rb, batch_ra, batch_wd
+        # drop singleton batch-dim and collect
+        xs.append(   x_p.squeeze(0))    # → (W_max, look_back, F)
+        ys.append(   y_p.squeeze(0))    # → (W_max,)
+        ycs.append(  yc_p.squeeze(0))   # → (W_max,)
+        wds.append(  wd)                # scalar
+        idxs_list.append(idxs_day)      # array of length W_i
 
-    return batch_x, batch_y, batch_y_cls, batch_wd
+    # 2) stack into batch tensors
+    batch_x     = torch.stack(xs,   dim=0)  
+    batch_y     = torch.stack(ys,   dim=0)  
+    batch_y_cls = torch.stack(ycs,  dim=0)  
+    batch_wd    = torch.tensor(wds, dtype=torch.int64)
 
+    # 3) return variable-length idxs as Python list
+    batch_idxs  = idxs_list
+
+    return batch_x, batch_y, batch_y_cls, batch_wd, batch_idxs
+
+    
 
 ###################
 
 
+# def split_to_day_datasets(
+#     X_tr:         torch.Tensor,
+#     y_tr:         torch.Tensor,
+#     day_id_tr:    torch.Tensor,
+#     X_val:        torch.Tensor,
+#     y_val:        torch.Tensor,
+#     day_id_val:   torch.Tensor,
+#     X_te:         torch.Tensor,
+#     y_te:         torch.Tensor,
+#     day_id_te:    torch.Tensor,
+#     raw_close_te: torch.Tensor,
+#     raw_bid_te:   torch.Tensor,
+#     raw_ask_te:   torch.Tensor,
+#     *,
+#     df:           pd.DataFrame,   # full-minute DataFrame for weekday lookup
+#     train_batch:  int = 32,        # days per training batch
+#     train_workers:int = 0,        # number of background workers
+#     train_prefetch_factor:int = 1,# number of batches pulled by the worker ahead of time
+#     device = torch.device("cpu")
+# ) -> Tuple[DataLoader, DataLoader, DataLoader]:
+#     """
+#     Build three DataLoaders over DayWindowDataset:
+#       - train_loader (batch_size=train_batch days, padded)
+#       - val_loader   (1 day per batch)
+#       - test_loader  (1 day per batch, includes raw prices)
+#     """
+
+#     print("▶️ Entered split_to_day_datasets")
+
+#     # 1) Build weekday‐code tensors for each split
+#     print("1) building weekday arrays")
+#     all_wd = df.index.dayofweek.to_numpy(np.int64)
+#     n_tr   = X_tr.size(0)
+#     n_val  = X_val.size(0)
+#     wd_tr  = torch.from_numpy(all_wd[:n_tr])
+#     wd_val = torch.from_numpy(all_wd[n_tr : n_tr + n_val])
+#     wd_te  = torch.from_numpy(
+#         all_wd[n_tr + n_val : n_tr + n_val + X_te.size(0)]
+#     )
+#     print(f"   Weekdays counts → tr={len(wd_tr)}, val={len(wd_val)}, te={len(wd_te)}")
+
+#     # 2) Move all splits to CPU for fast indexing in the Dataset
+#     print("2) moving all splits to CPU")
+#     X_tr, y_tr, day_id_tr = X_tr.cpu(), y_tr.cpu(), day_id_tr.cpu()
+#     X_val, y_val, day_id_val = X_val.cpu(), y_val.cpu(), day_id_val.cpu()
+#     X_te, y_te, day_id_te = X_te.cpu(), y_te.cpu(), day_id_te.cpu()
+#     rc_te, rb_te, ra_te   = raw_close_te.cpu(), raw_bid_te.cpu(), raw_ask_te.cpu()
+#     print("   CPU casts done")
+
+#     # 3) Zero-base the val/test day IDs so day indices start at 0
+#     #    This shrinks each DayWindowDataset down to exactly the number of days
+#     print("3) zero-bas­ing day_id for val & test")
+#     val_min  = int(day_id_val.min().item())
+#     test_min = int(day_id_te.min().item())
+#     day_id_val = day_id_val - val_min
+#     day_id_te  = day_id_te  - test_min
+#     print(f"   val_day_id ∈ [0..{int(day_id_val.max().item())}], total days={day_id_val.max().item()+1}")
+#     print(f"   te_day_id  ∈ [0..{int(day_id_te.max().item())}], total days={day_id_te.max().item()+1}")
+
+#     # 4) Instantiate your DayWindowDatasets exactly as before
+#     print("4) instantiating DayWindowDatasets")
+#     ds_tr = DayWindowDataset(X_tr, y_tr, day_id_tr, wd_tr)
+#     print("   ds_tr days:", len(ds_tr))
+#     ds_val = DayWindowDataset(X_val, y_val, day_id_val, wd_val)
+#     print("   ds_val days:", len(ds_val))
+#     ds_te = DayWindowDataset(
+#         X_te, y_te, day_id_te, wd_te,
+#         raw_close=rc_te,
+#         raw_bid=rb_te,
+#         raw_ask=ra_te
+#     )
+#     print("   ds_te days:", len(ds_te))
+
+#     # 5) Build DataLoaders with our pad_collate:
+#     print("5) building DataLoaders")
+
+#     # guard flags around persistent_workers and prefetch_factor
+#     use_persistent = train_workers > 0
+#     prefetch_factor = train_prefetch_factor if use_persistent else None
+
+#     train_loader = DataLoader(
+#         ds_tr,
+#         batch_size=train_batch,
+#         shuffle=False,
+#         drop_last=True, # Ensures each training batch has the same number of days → consistent gradient scales
+#         collate_fn=pad_collate,
+
+#         # these three lines were already here,
+#         # but now only turn on persistent if workers>0
+#         num_workers       = train_workers,
+#         pin_memory        = True,
+#         persistent_workers= use_persistent,
+#         prefetch_factor   = prefetch_factor
+#     )
+#     print("   train_loader ready")
+
+#     # For val/test we can also pin_memory to speed up host→GPU
+#     val_loader = DataLoader(
+#         ds_val,
+#         batch_size=1,
+#         shuffle=False,
+#         num_workers=0,
+#         pin_memory=True
+#     )
+#     print("   val_loader ready")
+
+#     test_loader = DataLoader(
+#         ds_te,
+#         batch_size=1,
+#         shuffle=False,
+#         num_workers=0,
+#         pin_memory=True
+#     )
+#     print("   test_loader ready")
+
+#     return train_loader, val_loader, test_loader
+
+
+
 def split_to_day_datasets(
-    X_tr:         torch.Tensor,
-    y_tr:         torch.Tensor,
-    day_id_tr:    torch.Tensor,
-    X_val:        torch.Tensor,
-    y_val:        torch.Tensor,
-    day_id_val:   torch.Tensor,
-    X_te:         torch.Tensor,
-    y_te:         torch.Tensor,
-    day_id_te:    torch.Tensor,
-    raw_close_te: torch.Tensor,
-    raw_bid_te:   torch.Tensor,
-    raw_ask_te:   torch.Tensor,
+    X_tr, y_tr, day_id_tr, idxs_tr,
+    X_val, y_val, day_id_val, idxs_val,
+    X_te,  y_te,  day_id_te,  idxs_te,
+    df: pd.DataFrame,
     *,
-    df:           pd.DataFrame,   # full-minute DataFrame for weekday lookup
-    train_batch:  int = 32,        # days per training batch
-    train_workers:int = 0,        # number of background workers
-    train_prefetch_factor:int = 1,# number of batches pulled by the worker ahead of time
-    device = torch.device("cpu")
-) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    raw_close_te=None,
+    raw_bid_te=None,
+    raw_ask_te=None,
+    train_batch=32,
+    num_workers=0,
+    prefetch_factor=1
+):
     """
-    Build three DataLoaders over DayWindowDataset:
-      - train_loader (batch_size=train_batch days, padded)
-      - val_loader   (1 day per batch)
-      - test_loader  (1 day per batch, includes raw prices)
+    Build DayWindowDatasets and DataLoaders for train/val/test.
+
+    - Extract weekday codes (0=Mon…6=Sun) from df.index.
+    - Instantiate DayWindowDataset for each split.
+    - Filter out any empty day‐windows (length 0) in val/test.
+    - Create train DataLoader with pad_collate & drop_last.
+    - Create val/test DataLoaders (batch_size=1) keeping per-day indices.
     """
-
-    print("▶️ Entered split_to_day_datasets")
-
-    # 1) Build weekday‐code tensors for each split
-    print("1) building weekday arrays")
+    # 1) weekday codes
     all_wd = df.index.dayofweek.to_numpy(np.int64)
-    n_tr   = X_tr.size(0)
-    n_val  = X_val.size(0)
+    n_tr, n_val, n_te = X_tr.size(0), X_val.size(0), X_te.size(0)
     wd_tr  = torch.from_numpy(all_wd[:n_tr])
     wd_val = torch.from_numpy(all_wd[n_tr : n_tr + n_val])
-    wd_te  = torch.from_numpy(
-        all_wd[n_tr + n_val : n_tr + n_val + X_te.size(0)]
-    )
-    print(f"   Weekdays counts → tr={len(wd_tr)}, val={len(wd_val)}, te={len(wd_te)}")
+    wd_te  = torch.from_numpy(all_wd[n_tr + n_val : n_tr + n_val + n_te])
 
-    # 2) Move all splits to CPU for fast indexing in the Dataset
-    print("2) moving all splits to CPU")
-    X_tr, y_tr, day_id_tr = X_tr.cpu(), y_tr.cpu(), day_id_tr.cpu()
-    X_val, y_val, day_id_val = X_val.cpu(), y_val.cpu(), day_id_val.cpu()
-    X_te, y_te, day_id_te = X_te.cpu(), y_te.cpu(), day_id_te.cpu()
-    rc_te, rb_te, ra_te   = raw_close_te.cpu(), raw_bid_te.cpu(), raw_ask_te.cpu()
-    print("   CPU casts done")
+    # 2) build raw datasets
+    ds_tr = DayWindowDataset(X_tr.cpu(), y_tr.cpu(),
+                             day_id_tr.cpu().long(), wd_tr, idxs_tr)
+    ds_val = DayWindowDataset(X_val.cpu(), y_val.cpu(),
+                              day_id_val.cpu().long(), wd_val, idxs_val)
+    ds_te = DayWindowDataset(X_te.cpu(), y_te.cpu(),
+                             day_id_te.cpu().long(), wd_te, idxs_te,
+                             raw_close=raw_close_te.cpu() if raw_close_te is not None else None,
+                             raw_bid=  raw_bid_te.cpu()   if raw_bid_te   is not None else None,
+                             raw_ask=  raw_ask_te.cpu()   if raw_ask_te   is not None else None)
 
-    # 3) Zero-base the val/test day IDs so day indices start at 0
-    #    This shrinks each DayWindowDataset down to exactly the number of days
-    print("3) zero-bas­ing day_id for val & test")
-    val_min  = int(day_id_val.min().item())
-    test_min = int(day_id_te.min().item())
-    day_id_val = day_id_val - val_min
-    day_id_te  = day_id_te  - test_min
-    print(f"   val_day_id ∈ [0..{int(day_id_val.max().item())}], total days={day_id_val.max().item()+1}")
-    print(f"   te_day_id  ∈ [0..{int(day_id_te.max().item())}], total days={day_id_te.max().item()+1}")
+    # 3) drop any empty days in val/test
+    ds_val = [e for e in ds_val if len(e[-1]) > 0]
+    ds_te  = [e for e in ds_te  if len(e[-1]) > 0]
 
-    # 4) Instantiate your DayWindowDatasets exactly as before
-    print("4) instantiating DayWindowDatasets")
-    ds_tr = DayWindowDataset(X_tr, y_tr, day_id_tr, wd_tr)
-    print("   ds_tr days:", len(ds_tr))
-    ds_val = DayWindowDataset(X_val, y_val, day_id_val, wd_val)
-    print("   ds_val days:", len(ds_val))
-    ds_te = DayWindowDataset(
-        X_te, y_te, day_id_te, wd_te,
-        raw_close=rc_te,
-        raw_bid=rb_te,
-        raw_ask=ra_te
-    )
-    print("   ds_te days:", len(ds_te))
-
-    # 5) Build DataLoaders with our pad_collate:
-    print("5) building DataLoaders")
-
-    # guard flags around persistent_workers and prefetch_factor
-    use_persistent = train_workers > 0
-    prefetch_factor = train_prefetch_factor if use_persistent else None
-
+    # 4) train loader
     train_loader = DataLoader(
         ds_tr,
         batch_size=train_batch,
         shuffle=False,
-        drop_last=True, # Ensures each training batch has the same number of days → consistent gradient scales
+        drop_last=True,
         collate_fn=pad_collate,
-
-        # these three lines were already here,
-        # but now only turn on persistent if workers>0
-        num_workers       = train_workers,
-        pin_memory        = True,
-        persistent_workers= use_persistent,
-        prefetch_factor   = prefetch_factor
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=(num_workers > 0),
+        prefetch_factor=(prefetch_factor if num_workers > 0 else None)
     )
-    print("   train_loader ready")
 
-    # For val/test we can also pin_memory to speed up host→GPU
+    # 5) val/test loaders: one “day” per batch
     val_loader = DataLoader(
-        ds_val,
-        batch_size=1,
-        shuffle=False,
-        num_workers=0,
-        pin_memory=True
+        ds_val, batch_size=1, shuffle=False,
+        num_workers=0, pin_memory=True, collate_fn=pad_collate
     )
-    print("   val_loader ready")
-
     test_loader = DataLoader(
-        ds_te,
-        batch_size=1,
-        shuffle=False,
-        num_workers=0,
-        pin_memory=True
+        ds_te, batch_size=1, shuffle=False,
+        num_workers=0, pin_memory=True, collate_fn=pad_collate
     )
-    print("   test_loader ready")
 
     return train_loader, val_loader, test_loader
 
 
+
+
+
+
+
 #########################################################################################################
 
+    
 def naive_rmse(data_loader):
     """
     Zero‐forecast baseline RMSE for any DayDataset loader:
@@ -713,168 +941,6 @@ def naive_rmse(data_loader):
     
 
 #########################################################################################################
-
-
-# class DualMemoryLSTM(nn.Module):
-#     """
-#     Two‐stage, stateful sequence model with:
-#       • One short‐term (daily) LSTM
-#       • One long‐term (weekly) LSTM
-#       • Window‐level self‐attention over each day's LSTM output
-#       • Variational Dropout + LayerNorm after every major block
-#       • Automatic resets of hidden states at day/week boundaries
-#       • Time‐distributed linear head producing one scalar per time‐step
-#     """
-
-#     def __init__(
-#         self,
-#         n_feats: int,
-#         short_units: int,
-#         long_units: int,
-#         dropout_short: float,
-#         dropout_long: float,
-#         att_heads: int,
-#         att_drop: float
-#     ):
-#         super().__init__()
-#         self.n_feats     = n_feats
-#         self.short_units = short_units
-#         self.long_units  = long_units
-
-#         # 1) Daily LSTM (stateful across windows)
-#         self.short_lstm = nn.LSTM(
-#             input_size  = n_feats,
-#             hidden_size = short_units,
-#             batch_first = True,
-#             num_layers  = 1,
-#             dropout     = 0.0
-#         )
-
-#         # 2) Self‐attention on each day's LSTM outputs
-#         self.attn = nn.MultiheadAttention(
-#             embed_dim   = short_units,
-#             num_heads   = att_heads,
-#             dropout     = att_drop,
-#             batch_first = True
-#         )
-
-#         # 3) Dropout + LayerNorm on attended daily features
-#         self.do_short = nn.Dropout(dropout_short)
-#         self.ln_short = nn.LayerNorm(short_units)
-
-#         # 4) Weekly LSTM (stateful across days)
-#         self.long_lstm = nn.LSTM(
-#             input_size  = short_units,
-#             hidden_size = long_units,
-#             batch_first = True,
-#             num_layers  = 1,
-#             dropout     = 0.0
-#         )
-#         self.do_long = nn.Dropout(dropout_long)
-#         self.ln_long = nn.LayerNorm(long_units)
-
-#         # 5) Time‐distributed linear head → one scalar per time‐step
-#         self.pred = nn.Linear(long_units, 1)
-
-#         # 6) Hidden/cell buffers, lazily initialized on first forward
-#         self.h_short = None
-#         self.c_short = None
-#         self.h_long  = None
-#         self.c_long  = None
-
-#     def _init_states(self, B: int, device: torch.device):
-#         """
-#         Allocate zero hidden+cell states for both LSTMs.
-#         Shapes:
-#           (1, B, short_units) and (1, B, long_units)
-#         """
-#         self.h_short = torch.zeros(1, B, self.short_units, device=device)
-#         self.c_short = torch.zeros(1, B, self.short_units, device=device)
-#         self.h_long  = torch.zeros(1, B, self.long_units,  device=device)
-#         self.c_long  = torch.zeros(1, B, self.long_units,  device=device)
-
-#     def reset_short(self):
-#         """
-#         Zero out daily‐LSTM state at each new window/day.
-#         """
-#         if self.h_short is not None:
-#             B, dev = self.h_short.size(1), self.h_short.device
-#             self._init_states(B, dev)
-
-#     def reset_long(self):
-#         """
-#         Zero out weekly‐LSTM state at each new week,
-#         preserving the daily‐LSTM state across the reset.
-#         """
-#         if self.h_long is not None:
-#             B, dev = self.h_long.size(1), self.h_long.device
-#             hs, cs = self.h_short, self.c_short
-#             self._init_states(B, dev)
-#             # restore only the daily‐LSTM state
-#             self.h_short, self.c_short = hs.to(dev), cs.to(dev)
-
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         """
-#         1) daily LSTM → out_short_raw, h_s, c_s
-#         2) detach_() daily state in‐place
-#         3) self‐attention + residual → out_short
-#         4) dropout + layernorm on out_short
-#         5) weekly LSTM → out_long, h_l, c_l
-#         6) detach_() weekly state in‐place
-#         7) dropout + layernorm on out_long
-#         8) linear head → (B, S, 1)
-#         """
-#         # — reshape if extra dims
-#         if x.dim() > 3:
-#             *lead, S, F = x.shape
-#             x = x.view(-1, S, F)
-
-#         # — ensure last dim is features
-#         if x.dim() == 3 and x.size(-1) != self.n_feats:
-#             x = x.transpose(1, 2).contiguous()
-
-#         B, S, _ = x.size()
-#         dev      = x.device
-
-#         # Lazy init or batch‐size change
-#         if self.h_short is None or self.h_short.size(1) != B:
-#             self._init_states(B, dev)
-
-#         # 1) daily LSTM
-#         out_short_raw, (h_s, c_s) = self.short_lstm(
-#             x, (self.h_short, self.c_short)
-#         )
-#         # 2) in‐place detach hidden/cell → no new allocation
-#         h_s.detach_();  c_s.detach_()
-#         self.h_short, self.c_short = h_s, c_s
-
-#         # 3) self‐attention over the day's windows
-#         attn_out, _ = self.attn(out_short_raw,
-#                                 out_short_raw,
-#                                 out_short_raw)
-#         out_short = out_short_raw + attn_out
-
-#         # 4) dropout + layernorm
-#         out_short = self.do_short(out_short)
-#         out_short = self.ln_short(out_short)
-
-#         # 5) weekly LSTM
-#         out_long, (h_l, c_l) = self.long_lstm(
-#             out_short, (self.h_long, self.c_long)
-#         )
-#         # 6) in‐place detach weekly state
-#         h_l.detach_(); c_l.detach_()
-#         self.h_long, self.c_long = h_l, c_l
-
-#         # 7) dropout + layernorm
-#         out_long = self.do_long(out_long)
-#         out_long = self.ln_long(out_long)
-
-#         # 8) linear head → raw output
-#         raw = self.pred(out_long)        # shape: (B, S, 1)
-
-#         return raw
-
 
 
 class DualMemoryLSTM(nn.Module):
@@ -1118,257 +1184,8 @@ def make_optimizer_and_scheduler(
 
 
 
-# def train_step(
-#     model:     nn.Module,
-#     x_day:     torch.Tensor,    # (W, look_back, F), already on device
-#     y_day:     torch.Tensor,    # (W,), already on device
-#     optimizer: torch.optim.Optimizer,
-#     scaler:    GradScaler,
-#     clipnorm:  float,
-# ) -> float:
-#     """
-#     Single‐day step:
-#       1) zero grads
-#       2) mixed-precision forward + loss
-#       3) backward + unscale + clip → step → update scaler
-#       4) return loss.item()
-#     """
-#     optimizer.zero_grad(set_to_none=True)
-#     model.train()
-
-#     # 2) mixed precision forward
-#     device_type = x_day.device.type
-#     with autocast(device_type=device_type):
-#         out  = model(x_day)        # (W, seq_len, 1)
-#         last = out[:, -1, 0]       # extract final time‐step
-#         loss = mse_loss(last, y_day, reduction='mean')
-
-#     # 3) backward + clip + step
-#     scaler.scale(loss).backward()
-#     scaler.unscale_(optimizer)
-#     torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-#     scaler.step(optimizer)
-#     scaler.update()
-
-#     return loss.item()
-
-    
 #########################################################################################################
 
-
-# def custom_stateful_training_loop(
-#     model:         torch.nn.Module,
-#     optimizer:     torch.optim.Optimizer,
-#     cosine_sched:  CosineAnnealingWarmRestarts,
-#     plateau_sched: ReduceLROnPlateau,
-#     scaler:        GradScaler,
-#     train_loader:  torch.utils.data.DataLoader,
-#     val_loader:    torch.utils.data.DataLoader,
-#     *,
-#     max_epochs:          int,
-#     early_stop_patience: int,
-#     baseline_val_rmse:   float,
-#     clipnorm:            float,
-#     device:              torch.device = torch.device("cpu"),
-# ) -> float:
-#     """
-#     • Device and performance setup
-#       – Sends the model to CPU/GPU
-#       – Enables cuDNN benchmarking for dynamic kernel tuning
-#     • Pre-binding of heavy objects
-#       – Caches MSE-loss function
-#       – Compiles regex once for checkpoint filename matching
-#       – Initializes torchmetrics RMSE for train/val on the correct device
-#     • Epoch-wise Python-side garbage collection
-#       – Frees unused objects at the start of each epoch to limit memory churn
-#     • Dual-memory LSTM state management
-#       – Resets short‐term LSTM state on every new slice
-#       – Detects week boundaries via weekday index to reset long‐term memory
-#     • Mixed precision training
-#       – Wraps forward/backward in autocast
-#       – Scales and unscales gradients, clips by norm, steps optimizer & scaler
-#     • Cosine Annealing with Warm Restarts
-#       – Steps the scheduler by fractional epoch to smoothly vary LR
-#       – Logs every restart event with the new LR
-#     • Plateau-based LR reduction
-#       – After warmup epochs, steps ReduceLROnPlateau on validation RMSE
-#       – Re-anchors the cosine scheduler whenever the plateau cuts LR
-#     • Live, real-time plotting
-#       – Streams train/val RMSE by epoch via an IPython or inline draw widget
-#       – Retains full history for a final summary plot
-#     • Uniform RMSE via torchmetrics
-#       – Uses torchmetrics.MeanSquaredError(squared=False) for both train & val
-#       – Resets at epoch start, updates per window, and computes one RMSE
-#     • Early stopping
-#       – Halts training if validation RMSE fails to improve for patience epochs
-#     """
-
-#     # 1) Send model to GPU/CPU and enable cudnn autotuner for speed
-#     model.to(device)
-#     torch.backends.cudnn.benchmark = True
-
-#     # 2) Pre-bind often-used objects outside the epoch loop
-#     loss_fn      = torch.nn.functional.mse_loss
-#     save_pattern = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
-
-#     # initialize torchmetrics RMSE accumulators
-#     train_metric = torchmetrics.MeanSquaredError(squared=False).to(device)
-#     val_metric   = torchmetrics.MeanSquaredError(squared=False).to(device)
-
-#     best_val_rmse = float('inf')   # Best validation RMSE seen so far
-#     best_state    = None           # To store model weights for best RMSE
-#     patience_ctr  = 0              # Counter for early stopping
-#     live_plot     = plots.LiveRMSEPlot()  # Real-time training/validation plot
-
-#     # 3) Main epoch loop
-#     for epoch in range(1, max_epochs + 1):
-#         # a) Single garbage collection at epoch start to free Python objects
-#         gc.collect()
-
-#         # reset train-phase metric and switch to train mode
-#         train_metric.reset()
-#         model.train()
-#         model.h_short = model.h_long = None
-
-#         prev_T_cur = cosine_sched.T_cur  # Track cosine restarts
-
-#         # b) Iterate over training data batches
-#         pbar = tqdm(
-#             enumerate(train_loader),
-#             total=len(train_loader),
-#             desc=f"Epoch {epoch}",
-#             unit="bundle",
-#         )
-#         for batch_idx, (xb_days, yb_days, wd_days) in pbar:
-
-#             xb_days = xb_days.to(device, non_blocking=True)
-#             yb_days = yb_days.to(device, non_blocking=True)
-#             wd_days = wd_days.to(device, non_blocking=True)
-
-#             optimizer.zero_grad(set_to_none=True)
-#             prev_wd = None
-
-#             # c) Inner loop over each “day” slice in the bundle
-#             for di in range(xb_days.size(0)):
-#                 wd = int(wd_days[di].item())
-
-#                 model.reset_short()
-#                 if prev_wd is not None and wd < prev_wd:
-#                     model.reset_long()
-#                 prev_wd = wd
-
-#                 with autocast(device_type=device.type):
-#                     out  = model(xb_days[di])         # (look_back, 1)
-#                     last = out[..., -1, 0]            # final time‐step
-#                     loss = loss_fn(last, yb_days[di], reduction='mean')
-
-#                 scaler.scale(loss).backward()
-
-#                 # update train RMSE uniformly
-#                 train_metric.update(last, yb_days[di])
-
-#                 # detach LSTM states
-#                 model.h_short.detach_()
-#                 model.c_short.detach_()
-#                 model.h_long.detach_()
-#                 model.c_long.detach_()
-
-#             # d) Optimizer step with gradient clipping
-#             scaler.unscale_(optimizer)
-#             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-#             scaler.step(optimizer)
-#             scaler.update()
-
-#             # e) Cosine‐annealing by fractional epoch
-#             frac_epoch = epoch - 1 + batch_idx / len(train_loader)
-#             cosine_sched.step(frac_epoch)
-#             if cosine_sched.T_cur < prev_T_cur:
-#                 lr = optimizer.param_groups[0]['lr']
-#                 print(f"  [Cosine restart] epoch {epoch}, batch {batch_idx}, lr={lr:.2e}")
-#             prev_T_cur = cosine_sched.T_cur
-
-#             # f) Refresh progress bar metrics using torchmetrics RMSE
-#             rmse = train_metric.compute().cpu().item()
-#             lr   = optimizer.param_groups[0]['lr']
-#             pbar.set_postfix(train_rmse=rmse, lr=lr, refresh=False)
-
-#         pbar.close()
-
-#         # 4) Validation phase (no gradients), uniform RMSE
-#         model.eval()
-#         model.h_short = model.h_long = None
-#         prev_wd = None
-#         val_metric.reset()
-
-#         with torch.no_grad():
-#             for xb_day, yb_day, wd in val_loader:
-#                 wd = int(wd.item())
-#                 x  = xb_day[0].to(device, non_blocking=True)
-#                 y  = yb_day.view(-1).to(device, non_blocking=True)
-
-#                 model.reset_short()
-#                 if prev_wd is not None and wd < prev_wd:
-#                     model.reset_long()
-#                 prev_wd = wd
-
-#                 out  = model(x)
-#                 last = out[..., -1, 0]
-
-#                 # update validation RMSE
-#                 val_metric.update(last, y)
-
-#         val_rmse = val_metric.compute().cpu().item()
-
-#         # 5) Live plot update and logging
-#         live_plot.update(rmse, val_rmse)
-#         print(f"Epoch {epoch:03d} • train={rmse:.4f} • val={val_rmse:.4f}"
-#               f" • lr={optimizer.param_groups[0]['lr']:.2e}")
-
-#         # 6) Plateau scheduler after warm-up
-#         pre_lr = optimizer.param_groups[0]['lr']
-#         if epoch > params.hparams['PLAT_EPOCHS_WARMUP']:
-#             plateau_sched.step(val_rmse)
-#         post_lr = optimizer.param_groups[0]['lr']
-#         if post_lr < pre_lr:
-#             print(f"  [Plateau cut] LR {pre_lr:.1e} → {post_lr:.1e} at epoch {epoch}")
-#             cosine_sched.base_lrs = [post_lr for _ in cosine_sched.base_lrs]
-#             cosine_sched.last_epoch = epoch - 1
-
-#         # 7) Early-stopping and checkpointing
-#         if val_rmse >= best_val_rmse:
-#             patience_ctr += 1
-#             if patience_ctr >= early_stop_patience:
-#                 print("Early stopping at epoch", epoch)
-#                 break
-#         else:
-#             best_val_rmse = val_rmse
-#             best_state    = copy.deepcopy(model.state_dict())
-#             patience_ctr  = 0
-#             model.load_state_dict(best_state)
-
-#     # Final conditional save (unchanged) …
-#     rmses = [
-#         float(m.group(1))
-#         for f in params.save_path.glob(f"{params.ticker}_*.pth")
-#         for m in (save_pattern.match(f.name),)
-#         if m
-#     ]
-#     if not rmses or best_val_rmse < max(rmses):
-#         buf = io.BytesIO()
-#         live_plot.fig.savefig(buf, format="png")
-#         buf.seek(0)
-#         plot_png = buf.read()
-
-#         ckpt = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
-#         torch.save({
-#             "model_obj":        model,
-#             "model_state_dict": best_state,
-#             "hparams":          params.hparams,
-#             "train_plot_png":   plot_png,
-#         }, ckpt)
-#         print(f"Saved final best model and training plot: {ckpt.name}")
-
-#     return best_val_rmse
 
 
 def custom_stateful_training_loop(
@@ -1387,138 +1204,115 @@ def custom_stateful_training_loop(
     device:              torch.device = torch.device("cpu"),
 ) -> float:
     """
-    • Device and performance setup
-      – Sends the model to CPU/GPU
-      – Enables cuDNN benchmarking for dynamic kernel tuning
+    Stateful training + validation loop for a dual‐memory LSTM with two heads.
 
-    • Pre-binding of heavy objects
-      – Caches Huber loss for regression and BCEWithLogits for classification
-      – Reads Huber‐delta (β) and classification‐loss weight (α) from hparams
-      – Compiles regex once for checkpoint filename matching
-      – Initializes torchmetrics RMSE for train/val (regression)
-
-    • Epoch‐wise Python‐side garbage collection
-      – Frees unused objects at the start of each epoch to limit memory churn
-
-    • Dual‐memory LSTM state management
-      – Resets short‐term LSTM state on every new slice
-      – Detects week boundaries via weekday index to reset long‐term memory
-
-    • Mixed precision training
-      – Wraps forward/backward in autocast
-      – Scales and unscales gradients, clips by norm, steps optimizer & scaler
-
-    • Cosine Annealing with Warm Restarts
-      – Steps the scheduler by fractional epoch to smoothly vary LR
-      – Logs every restart event with the new LR
-
-    • Plateau‐based LR reduction
-      – After warmup epochs, steps ReduceLROnPlateau on validation RMSE
-      – Re‐anchors the cosine scheduler whenever the plateau cuts LR
-
-    • Live, real‐time plotting
-      – Streams train/val RMSE by epoch via an IPython or inline draw widget
-      – Retains full history for a final summary plot
-
-    • Uniform RMSE via torchmetrics
-      – Uses torchmetrics.MeanSquaredError(squared=False) for regression train & val
-
-    • Early stopping
-      – Halts training if validation RMSE fails to improve for patience epochs
-
-    • Multi‐task learning
-      – Regression head optimized by Huber loss (SmoothL1Loss with β)
-      – Classification head optimized by BCEWithLogits loss
-      – Total loss = Huber + α * BCE
+    • Device & performance setup (cudnn, autocast)  
+    • Pre-binds Huber (regression) & BCEWithLogits (classification) losses  
+    • Resets short‐term/day & long‐term/week LSTM states at the right boundaries  
+    • Mixed‐precision training + gradient clipping + cosine & plateau schedulers  
+    • Live RMSE plotting & early stopping based on val RMSE  
+    • **Multi-task monitoring**: tracks both regression metrics (RMSE, MAE, R2)  
+      and classification metrics (accuracy, precision, recall, F1, AUROC)  
+    • Classification head in the loss (α·BCE) helps bias the shared backbone  
+      to accentuate true spikes in the continuous regression output.
     """
 
-    # 1) Send model to GPU/CPU and enable cudnn autotuner for speed
+    # 1) Send model to device & enable fast convs
     model.to(device)
     torch.backends.cudnn.benchmark = True
 
-    # 2) Pre-bind often-used objects outside the epoch loop
-    beta          = params.hparams["HUBER_BETA"]   # β for Huber
-    huber_loss_fn = torch.nn.SmoothL1Loss(beta=beta)
-    cls_loss_fn   = torch.nn.BCEWithLogitsLoss()
+    # 2) Loss functions & hyper-params
+    beta          = params.hparams["HUBER_BETA"]
+    huber_loss_fn = nn.SmoothL1Loss(beta=beta).to(device)
+    cls_loss_fn   = nn.BCEWithLogitsLoss().to(device)
     alpha         = params.hparams["CLS_LOSS_WEIGHT"]
     save_pattern  = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
 
-    # initialize torchmetrics RMSE accumulators for regression
-    train_metric  = torchmetrics.MeanSquaredError(squared=False).to(device)
-    val_metric    = torchmetrics.MeanSquaredError(squared=False).to(device)
+    # 3) Metrics (regression + classification)
+    train_rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
+    train_mae  = torchmetrics.MeanAbsoluteError().to(device)
+    train_r2   = torchmetrics.R2Score().to(device)
+    train_acc       = torchmetrics.Accuracy(task="binary", threshold=0.5).to(device)
+    train_precision = torchmetrics.Precision(task="binary", threshold=0.5).to(device)
+    train_recall    = torchmetrics.Recall(task="binary", threshold=0.5).to(device)
+    train_f1        = torchmetrics.F1Score(task="binary", threshold=0.5).to(device)
+    train_auroc     = torchmetrics.AUROC(task="binary").to(device)
 
-    best_val_rmse = float('inf')   # Best validation RMSE seen so far
-    best_state    = None           # To store model weights for best RMSE
-    patience_ctr  = 0              # Counter for early stopping
-    live_plot     = plots.LiveRMSEPlot()  # Real-time training/validation plot
+    val_rmse = torchmetrics.MeanSquaredError(squared=False).to(device)
+    val_mae  = torchmetrics.MeanAbsoluteError().to(device)
+    val_r2   = torchmetrics.R2Score().to(device)
+    val_acc       = torchmetrics.Accuracy(task="binary", threshold=0.5).to(device)
+    val_precision = torchmetrics.Precision(task="binary", threshold=0.5).to(device)
+    val_recall    = torchmetrics.Recall(task="binary", threshold=0.5).to(device)
+    val_f1        = torchmetrics.F1Score(task="binary", threshold=0.5).to(device)
+    val_auroc     = torchmetrics.AUROC(task="binary").to(device)
 
-    # 3) Main epoch loop
+    # 4) Early‐stopping & checkpointing state
+    best_val_rmse = float('inf')
+    best_state    = None
+    patience_ctr  = 0
+    live_plot     = plots.LiveRMSEPlot()
+
+    # 5) Epoch loop
     for epoch in range(1, max_epochs + 1):
-        # a) Single garbage collection at epoch start to free Python objects
         gc.collect()
 
-        # reset train-phase metric and switch to train mode
-        train_metric.reset()
+        # 5a) Reset train metrics + set train mode + clear hidden states
+        for m in (train_rmse, train_mae, train_r2,
+                  train_acc, train_precision, train_recall, train_f1, train_auroc):
+            m.reset()
         model.train()
         model.h_short = model.h_long = None
+        prev_wd = None
+        prev_T_cur = cosine_sched.T_cur
 
-        prev_T_cur = cosine_sched.T_cur  # Track cosine restarts
-
-        # b) Iterate over training data batches
         pbar = tqdm(
             enumerate(train_loader),
             total=len(train_loader),
             desc=f"Epoch {epoch}",
-            unit="bundle",
+            unit="bundle"
         )
-        for batch_idx, (xb_days, yb_days, yb_cls_days, wd_days) in pbar:
 
-            xb_days     = xb_days.to(device, non_blocking=True)
-            yb_days     = yb_days.to(device, non_blocking=True)
+        # 5b) Training over day‐bundles
+        for batch_idx, (xb_days, yb_days, yb_cls_days, wd_days) in pbar:
+            xb_days = xb_days.to(device,    non_blocking=True)
+            yb_days = yb_days.to(device,    non_blocking=True)
             yb_cls_days = yb_cls_days.to(device, non_blocking=True)
-            wd_days     = wd_days.to(device, non_blocking=True)
+            wd_days = wd_days.to(device,    non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
-            prev_wd = None
+            prev_inner_wd = None
 
-            # c) Inner loop over each “day” slice in the bundle
             for di in range(xb_days.size(0)):
                 wd = int(wd_days[di].item())
 
                 model.reset_short()
-                if prev_wd is not None and wd < prev_wd:
+                if prev_inner_wd is not None and wd < prev_inner_wd:
                     model.reset_long()
-                prev_wd = wd
+                prev_inner_wd = wd
 
                 with autocast(device_type=device.type):
-                    # multi-head model returns (regression, classification_logits)
                     pred_reg, pred_cls = model(xb_days[di])
                     last_reg = pred_reg[..., -1, 0]
                     last_cls = pred_cls[..., -1, 0]
 
-                    # regression + classification losses
                     loss_reg = huber_loss_fn(last_reg, yb_days[di])
                     loss_cls = cls_loss_fn(last_cls, yb_cls_days[di])
                     loss     = loss_reg + alpha * loss_cls
 
                 scaler.scale(loss).backward()
 
-                # update train RMSE on the regression head
-                train_metric.update(last_reg, yb_days[di])
+                # detach hidden states
+                model.h_short.detach_(); model.c_short.detach_()
+                model.h_long .detach_(); model.c_long .detach_()
 
-                # detach LSTM states
-                model.h_short.detach_()
-                model.c_short.detach_()
-                model.h_long.detach_()
-                model.c_long.detach_()
-
-            # d) Optimizer step with gradient clipping
+            # optimizer step, gradient clipping & scaler update
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer)
             scaler.update()
 
-            # e) Cosine‐annealing by fractional epoch
+            # cosine‐annealing update & restart log
             frac_epoch = epoch - 1 + batch_idx / len(train_loader)
             cosine_sched.step(frac_epoch)
             if cosine_sched.T_cur < prev_T_cur:
@@ -1526,18 +1320,58 @@ def custom_stateful_training_loop(
                 print(f"  [Cosine restart] epoch {epoch}, batch {batch_idx}, lr={lr:.2e}")
             prev_T_cur = cosine_sched.T_cur
 
-            # f) Refresh progress bar metrics using torchmetrics RMSE
-            rmse = train_metric.compute().cpu().item()
-            lr   = optimizer.param_groups[0]['lr']
-            pbar.set_postfix(train_rmse=rmse, lr=lr, refresh=False)
+            pbar.set_postfix(lr=optimizer.param_groups[0]['lr'], refresh=False)
 
         pbar.close()
 
-        # 4) Validation phase (no gradients), uniform RMSE
+        # ——————————————————————————
+        # 5c) Single‐pass TRAIN eval for final‐model metrics
         model.eval()
         model.h_short = model.h_long = None
         prev_wd = None
-        val_metric.reset()
+        for m in (train_rmse, train_mae, train_r2,
+                  train_acc, train_precision, train_recall, train_f1, train_auroc):
+            m.reset()
+
+        with torch.no_grad():
+            for xb_day, yb_day, yb_cls_day, wd in train_loader:
+                wd = int(wd.item())
+                x  = xb_day[0].to(device, non_blocking=True)
+                y  = yb_day.view(-1).to(device, non_blocking=True)
+                yc = yb_cls_day.view(-1).to(device, non_blocking=True)
+
+                model.reset_short()
+                if prev_wd is not None and wd < prev_wd:
+                    model.reset_long()
+                prev_wd = wd
+
+                pred_r, pred_c = model(x)
+                last_r = pred_r[..., -1, 0]
+                last_c = pred_c[..., -1, 0]
+
+                train_rmse.update(last_r, y)
+                train_mae .update(last_r, y)
+                train_r2  .update(last_r, y)
+
+                probs = torch.sigmoid(last_c)
+                preds = (probs > 0.5).long()
+                train_acc       .update(preds, yc.long())
+                train_precision .update(preds, yc.long())
+                train_recall    .update(preds, yc.long())
+                train_f1        .update(preds, yc.long())
+                train_auroc     .update(probs, yc.long())
+
+        tr_rmse = train_rmse.compute().cpu().item()
+        tr_acc  = train_acc.compute().cpu().item()
+        print(f"Epoch {epoch}: train_rmse={tr_rmse:.4f}, train_acc={tr_acc:.4f}")
+
+        # 5d) Validation phase
+        model.eval()
+        model.h_short = model.h_long = None
+        prev_wd = None
+        for m in (val_rmse, val_mae, val_r2,
+                  val_acc, val_precision, val_recall, val_f1, val_auroc):
+            m.reset()
 
         with torch.no_grad():
             for xb_day, yb_day, yb_cls_day, wd in val_loader:
@@ -1553,40 +1387,54 @@ def custom_stateful_training_loop(
 
                 pred_r, pred_c = model(x)
                 last_r = pred_r[..., -1, 0]
+                last_c = pred_c[..., -1, 0]
 
-                # update validation RMSE
-                val_metric.update(last_r, y)
+                val_rmse.update(last_r, y)
+                val_mae .update(last_r, y)
+                val_r2  .update(last_r, y)
 
-        val_rmse = val_metric.compute().cpu().item()
+                probs = torch.sigmoid(last_c)
+                preds = (probs > 0.5).long()
+                val_acc       .update(preds, yc.long())
+                val_precision .update(preds, yc.long())
+                val_recall    .update(preds, yc.long())
+                val_f1        .update(preds, yc.long())
+                val_auroc     .update(probs, yc.long())
 
-        # 5) Live plot update and logging
-        live_plot.update(rmse, val_rmse)
-        print(f"Epoch {epoch:03d} • train={rmse:.4f} • val={val_rmse:.4f}"
-              f" • lr={optimizer.param_groups[0]['lr']:.2e}")
+        val_rmse_val = val_rmse.compute().cpu().item()
+        val_acc_val  = val_acc.compute().cpu().item()
 
-        # 6) Plateau scheduler after warm-up
+        live_plot.update(tr_rmse, val_rmse_val)
+        print(
+            f"Epoch {epoch:03d} • "
+            f"train_rmse={tr_rmse:.4f} • train_acc={tr_acc:.4f} • "
+            f"val_rmse={val_rmse_val:.4f} • val_acc={val_acc_val:.4f} • "
+            f"lr={optimizer.param_groups[0]['lr']:.2e}"
+        )
+    
+        # 6) Plateau scheduler & LR re‐anchor
         pre_lr = optimizer.param_groups[0]['lr']
         if epoch > params.hparams['PLAT_EPOCHS_WARMUP']:
-            plateau_sched.step(val_rmse)
+            plateau_sched.step(val_rmse_val)
         post_lr = optimizer.param_groups[0]['lr']
         if post_lr < pre_lr:
             print(f"  [Plateau cut] LR {pre_lr:.1e} → {post_lr:.1e} at epoch {epoch}")
-            cosine_sched.base_lrs = [post_lr for _ in cosine_sched.base_lrs]
+            cosine_sched.base_lrs = [post_lr] * len(cosine_sched.base_lrs)
             cosine_sched.last_epoch = epoch - 1
-
-        # 7) Early-stopping and checkpointing
-        if val_rmse >= best_val_rmse:
+    
+        # 7) Early stopping & checkpointing 
+        if val_rmse_val >= best_val_rmse:
             patience_ctr += 1
             if patience_ctr >= early_stop_patience:
                 print("Early stopping at epoch", epoch)
                 break
         else:
-            best_val_rmse = val_rmse
+            best_val_rmse = val_rmse_val
             best_state    = copy.deepcopy(model.state_dict())
             patience_ctr  = 0
             model.load_state_dict(best_state)
-
-    # Final conditional save (unchanged) …
+    
+    # final conditional save
     rmses = [
         float(m.group(1))
         for f in params.save_path.glob(f"{params.ticker}_*.pth")
@@ -1598,7 +1446,7 @@ def custom_stateful_training_loop(
         live_plot.fig.savefig(buf, format="png")
         buf.seek(0)
         plot_png = buf.read()
-
+    
         ckpt = params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth"
         torch.save({
             "model_obj":        model,
@@ -1607,11 +1455,12 @@ def custom_stateful_training_loop(
             "train_plot_png":   plot_png,
         }, ckpt)
         print(f"Saved final best model and training plot: {ckpt.name}")
-
+    
     return best_val_rmse
 
 
 #########################################################################################################
+
 
 def feature_engineering(df: pd.DataFrame,
                         features_cols: list,

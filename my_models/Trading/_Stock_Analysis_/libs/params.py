@@ -28,7 +28,8 @@ bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
 feat_csv = save_path / f"{ticker}_3_feat.csv"
-pred_csv = save_path / f"{ticker}_4_pred.csv"
+test_csv = save_path / f"{ticker}_4_test.csv"
+trainval_csv = save_path / f"{ticker}_4_trainval.csv"
 
 label_col = "signal" 
 
@@ -170,10 +171,10 @@ hparams = {
     "ATT_DROPOUT":           0.1,   # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
     "WEIGHT_DECAY":          1e-5,  # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
     "HUBER_BETA":            0.5,   # β Huber loss: ↑ larger β → more MSE-like (sensitive to big errors), ↓ smaller β → more MAE-like (robust to outliers)
-    "CLS_LOSS_WEIGHT":       0.5,   # α classification loss: ↑ emphasize spike/event detection (risk underfitting amplitude), ↓ emphasize regression accuracy (risk smoothing spikes)
+    "CLS_LOSS_WEIGHT":       1,   # α classification loss: ↑ emphasize spike/event detection (risk underfitting amplitude), ↓ emphasize regression accuracy (risk smoothing spikes)
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           16,    # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
+    "TRAIN_BATCH":           32,    # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
     "VAL_BATCH":             1,     # validation batch size; ↑ faster eval but uses more memory, ↓ slower eval but uses less memory
     "NUM_WORKERS":           2,     # DataLoader workers; ↑ parallel loading (bus error risk + overhead), ↓ safer but less parallelism
     "TRAIN_PREFETCH_FACTOR": 1,     # batches to prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
