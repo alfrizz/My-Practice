@@ -15,7 +15,7 @@ import json
 ticker = 'AAPL'
 save_path  = Path("dfs_training")
 
-createCSVsign = False
+createCSVsign = True
 date_to_check = '2024-06' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -164,15 +164,16 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           128,   # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
+    "SHORT_UNITS":           64,   # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
     "LONG_UNITS":            128,   # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
-    "DROPOUT_SHORT":         0.2,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_SHORT":         0.15,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
     "DROPOUT_LONG":          0.2,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
-    "ATT_HEADS":             16,     # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
-    "ATT_DROPOUT":           0.2,   # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "ATT_HEADS":             8,     # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
+    "ATT_DROPOUT":           0.1,   # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
     "WEIGHT_DECAY":          1e-4,  # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
-    "HUBER_BETA":            0.5,   # β Huber loss: ↑ larger β → more MSE-like (sensitive to big errors), ↓ smaller β → more MAE-like (robust to outliers)
-    "CLS_LOSS_WEIGHT":       3,   # α classification loss: ↑ emphasize spike/event detection (risk underfitting amplitude), ↓ emphasize regression accuracy (risk smoothing spikes)
+    "HUBER_BETA":            0.3,   # the δ (or beta) threshold in Huber loss. Lower values → behave more like MAE, making regression heed big errors (spikes) more.
+    "CLS_LOSS_WEIGHT":       5.0,   # scaling on BCEWithLogitsLoss head. Higher → forces the network to align the continuous output jumps with the buy/sell threshold crossings.
+    "TERNARY_LOSS_WEIGHT":   3.0,   # scaling CrossEntropyLoss head for up/down/flat returns. Higher pushes regression head (via shared features) to respect directional “spike” events.
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,    # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
@@ -180,7 +181,7 @@ hparams = {
     "NUM_WORKERS":           2,     # DataLoader workers; ↑ parallel loading (bus error risk + overhead), ↓ safer but less parallelism
     "TRAIN_PREFETCH_FACTOR": 1,     # batches to prefetch per worker; ↑ more overlap (shm↑), ↓ less overlap (GPU may stall)
     "MAX_EPOCHS":            90,    # maximum training epochs; ↑ more training (risk wasted compute), ↓ shorter runs (risk undertraining)
-    "EARLY_STOP_PATIENCE":   15,    # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
+    "EARLY_STOP_PATIENCE":   5,    # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
     "LR_EPOCHS_WARMUP":      15,     # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
