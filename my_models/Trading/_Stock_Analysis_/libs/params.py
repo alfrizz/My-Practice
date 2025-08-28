@@ -31,7 +31,8 @@ feat_csv = save_path / f"{ticker}_3_feat.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
 
-label_col = "signal" 
+label_col  = "signal" 
+return_col = "r_1"
 
 feats_cols_all = [
     "open",             # Opening price
@@ -165,13 +166,13 @@ hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           128,   # hidden size of daily LSTM; ↑ adds capacity (risk overfitting + slower), ↓ reduces capacity (risk underfitting)
     "LONG_UNITS":            128,   # hidden size of weekly LSTM; ↑ more temporal context (slower/increased memory), ↓ less context (may underfit)
-    "DROPOUT_SHORT":         0.1,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
-    "DROPOUT_LONG":          0.1,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
+    "DROPOUT_SHORT":         0.2,   # dropout after residual+attention; ↑ stronger regularization (may underlearn), ↓ lighter regularization (risk overfit)
+    "DROPOUT_LONG":          0.2,   # dropout after weekly LSTM; ↑ reduces co-adaptation (can underfit), ↓ retains more signal (risk overfit)
     "ATT_HEADS":             16,     # number of attention heads; ↑ finer multi-head subspaces (compute↑), ↓ coarser attention (expressivity↓)
-    "ATT_DROPOUT":           0.1,   # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
-    "WEIGHT_DECAY":          1e-5,  # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
+    "ATT_DROPOUT":           0.2,   # dropout inside attention; ↑ more regularization in attention maps, ↓ less regularization (risk overfit)
+    "WEIGHT_DECAY":          1e-4,  # L2 penalty on weights; ↑ stronger shrinkage (better generalization/risk underfit), ↓ lighter shrinkage (risk overfit)
     "HUBER_BETA":            0.5,   # β Huber loss: ↑ larger β → more MSE-like (sensitive to big errors), ↓ smaller β → more MAE-like (robust to outliers)
-    "CLS_LOSS_WEIGHT":       1,   # α classification loss: ↑ emphasize spike/event detection (risk underfitting amplitude), ↓ emphasize regression accuracy (risk smoothing spikes)
+    "CLS_LOSS_WEIGHT":       3,   # α classification loss: ↑ emphasize spike/event detection (risk underfitting amplitude), ↓ emphasize regression accuracy (risk smoothing spikes)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,    # training batch size; ↑ more stable gradients (memory↑, slower per step), ↓ more noisy grads (memory↓, faster per step)
@@ -182,7 +183,7 @@ hparams = {
     "EARLY_STOP_PATIENCE":   15,    # epochs without val-improve before stop; ↑ more patience (risk overtrain), ↓ less patience (may stop too early)
 
     # ── Optimizer Settings ─────────────────────────────────────────────
-    "LR_EPOCHS_WARMUP":      5,     # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
+    "LR_EPOCHS_WARMUP":      15,     # epochs to keep LR constant before decay; ↑ longer warmup (stable start/slower), ↓ shorter warmup (faster ramp/risk overshoot)
     "INITIAL_LR":            1e-3,  # starting learning rate; ↑ speeds convergence (risk divergence), ↓ safer steps (slower training)
     "CLIPNORM":              1.0,  # max-gradient norm; ↑ higher clip threshold (less clipping, risk explosion), ↓ lower threshold (more clipping, risk under-update)
     
