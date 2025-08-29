@@ -774,10 +774,11 @@ def custom_stateful_training_loop(
     
     # 2) Losses & weights
     beta_huber = params.hparams["HUBER_BETA"]
-    huber_loss = nn.SmoothL1Loss(beta=beta_huber)
+    huber_loss   = nn.SmoothL1Loss(beta=beta_huber, reduction='none')
     bce_loss   = nn.BCEWithLogitsLoss()
     alpha_cls  = params.hparams["CLS_LOSS_WEIGHT"]
     alpha_ter  = params.hparams["TERNARY_LOSS_WEIGHT"]
+    spike_weight = params.hparams["SPIKE_LOSS_WEIGHT"] 
     ce_loss    = nn.CrossEntropyLoss()
     save_pat   = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
     live_plot  = plots.LiveRMSEPlot()
@@ -814,37 +815,41 @@ def custom_stateful_training_loop(
     
     best_val_rmse = float("inf")
     patience_ctr  = 0
-    
+
     # 4) Epochs
     for epoch in range(1, max_epochs + 1):
         gc.collect()
         # a) TRAINING
         model.train()
         model.h_short = model.h_long = None
-        for m in (train_rmse, train_mae, train_r2,
-                  train_acc, train_prec, train_rec,
-                  train_f1, train_auc,
-                  train_ter_acc, train_ter_prec,
-                  train_ter_rec, train_ter_f1,
-                  train_ter_auc):
+        for m in (
+            train_rmse, train_mae, train_r2,
+            train_acc, train_prec, train_rec,
+            train_f1, train_auc,
+            train_ter_acc, train_ter_prec,
+            train_ter_rec, train_ter_f1,
+            train_ter_auc
+        ):
             m.reset()
-    
+
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="bundle")
         for batch_idx, batch in enumerate(pbar):
-            (xb_days, y_sig_days, y_sig_cls_days,
-             ret_days, y_ret_ter_days,
-             wd_days, ts_list, lengths) = batch
-    
-            xb   = xb_days.to(device, non_blocking=True)
-            y_sig= y_sig_days.to(device, non_blocking=True)
-            y_cls= y_sig_cls_days.to(device, non_blocking=True)
-            ret  = ret_days.to(device, non_blocking=True)
-            y_ter= y_ret_ter_days.to(device, non_blocking=True)
-            wd   = wd_days.to(device, non_blocking=True)
-    
+            (
+                xb_days, y_sig_days, y_sig_cls_days,
+                ret_days, y_ret_ter_days,
+                wd_days, ts_list, lengths
+            ) = batch
+
+            xb    = xb_days.to(device, non_blocking=True)
+            y_sig = y_sig_days.to(device, non_blocking=True)
+            y_cls = y_sig_cls_days.to(device, non_blocking=True)
+            ret   = ret_days.to(device, non_blocking=True)
+            y_ter = y_ret_ter_days.to(device, non_blocking=True)
+            wd    = wd_days.to(device, non_blocking=True)
+
             optimizer.zero_grad(set_to_none=True)
             prev_day = None
-    
+
             for di in range(xb.size(0)):
                 W       = lengths[di]
                 day_id  = int(wd[di].item())
@@ -852,56 +857,71 @@ def custom_stateful_training_loop(
                 sig_seq = y_sig[di, :W]
                 cls_seq = y_cls[di, :W].view(-1)
                 ter_seq = y_ter[di, :W].view(-1)
-    
+
+                # reset or carry LSTM states on day rollover
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
-    
+
                 with autocast(device_type=device.type):
                     pr, pc, pt = model(x_seq)
-                    lr     = pr[..., -1, 0]  # (W,)
-                    lc     = pc[..., -1, 0]  # (W,)
-                    lt     = pt[..., -1, :]  # (W,3)
-    
-                    loss_r = huber_loss(lr,    sig_seq)
-                    loss_b = bce_loss(  lc,    cls_seq)
-                    loss_t = ce_loss(   lt,    ter_seq)
+
+                    # ← FIX #1: squash regression logits into [0,1]
+                    lr = torch.sigmoid(pr[..., -1, 0])   # (W,)
+
+                    # classification logits unchanged
+                    lc = pc[..., -1, 0]  # (W,)
+                    lt = pt[..., -1, :]  # (W,3)
+
+                    # per-sample Huber weight: bigger true spikes → heavier penalty
+                    w = 1.0 + spike_weight * sig_seq.abs()  # (W,)
+
+                    # compute losses
+                    loss_r = (w * huber_loss(lr, sig_seq)).mean()
+                    loss_b = bce_loss(lc,    cls_seq)
+                    loss_t = ce_loss(lt,     ter_seq)
                     loss   = loss_r + alpha_cls * loss_b + alpha_ter * loss_t
-    
+
                 scaler.scale(loss).backward()
-    
-                # train metrics
+
+                # update train metrics on [0,1] signal
                 train_rmse.update(lr,        sig_seq)
                 train_mae .update(lr,        sig_seq)
                 train_r2  .update(lr,        sig_seq)
-                probs     = torch.sigmoid(lc)
+
+                probs = torch.sigmoid(lc)
                 train_acc .update(probs,     cls_seq)
                 train_prec.update(probs,     cls_seq)
                 train_rec .update(probs,     cls_seq)
                 train_f1  .update(probs,     cls_seq)
                 train_auc .update(probs,     cls_seq)
-    
+
                 probs_ter = torch.softmax(lt, dim=-1)
                 train_ter_acc .update(probs_ter, ter_seq)
                 train_ter_prec.update(probs_ter, ter_seq)
                 train_ter_rec .update(probs_ter, ter_seq)
                 train_ter_f1  .update(probs_ter, ter_seq)
                 train_ter_auc .update(probs_ter, ter_seq)
-    
-                # detach LSTM states
+
+                # detach stateful LSTM hidden/cell tensors
                 model.h_short.detach_(); model.c_short.detach_()
                 model.h_long .detach_(); model.c_long .detach_()
-    
+
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer); scaler.update()
+
+            # step the cosine scheduler continuously
             frac = epoch - 1 + batch_idx / len(train_loader)
             cosine_sched.step(frac)
-            pbar.set_postfix(train_rmse=train_rmse.compute().item(),
-                             lr=optimizer.param_groups[0]['lr'],
-                             refresh=False)
-    
+
+            pbar.set_postfix(
+                train_rmse=train_rmse.compute().item(),
+                lr=optimizer.param_groups[0]['lr'],
+                refresh=False
+            )
+
         # collect train summaries
         tr = {
             "rmse":   train_rmse.compute().item(),
@@ -918,59 +938,69 @@ def custom_stateful_training_loop(
             "t_f1":   train_ter_f1.compute().item(),
             "t_auc":  train_ter_auc.compute().item()
         }
-    
+
         # b) VALIDATION
         model.eval()
         model.h_short = model.h_long = None
-        for m in (val_rmse, val_mae, val_r2,
-                  val_acc, val_prec, val_rec,
-                  val_f1, val_auc,
-                  val_ter_acc, val_ter_prec,
-                  val_ter_rec, val_ter_f1,
-                  val_ter_auc):
+        for m in (
+            val_rmse, val_mae, val_r2,
+            val_acc, val_prec, val_rec,
+            val_f1, val_auc,
+            val_ter_acc, val_ter_prec,
+            val_ter_rec, val_ter_f1,
+            val_ter_auc
+        ):
             m.reset()
-    
+
         with torch.no_grad():
             prev_day = None
             for batch in val_loader:
-                (xb_day, y_sig_day, y_sig_cls_day,
-                 ret_day, y_ret_ter_day,
-                 wd, ts_list, lengths) = batch
-    
-                W      = lengths[0]
-                day_id = int(wd.item())
-                x_seq  = xb_day[0, :W].to(device)
-                sig_seq= y_sig_day[0, :W].to(device)
-                cls_seq= y_sig_cls_day[0, :W].view(-1).to(device)
-                ter_seq= y_ret_ter_day[0, :W].view(-1).to(device)
-    
+                (
+                    xb_day, y_sig_day, y_sig_cls_day,
+                    ret_day, y_ret_ter_day,
+                    wd, ts_list, lengths
+                ) = batch
+
+                W       = lengths[0]
+                day_id  = int(wd.item())
+                x_seq   = xb_day[0, :W].to(device)
+                sig_seq = y_sig_day[0, :W].to(device)
+                cls_seq = y_sig_cls_day[0, :W].view(-1).to(device)
+                ter_seq = y_ret_ter_day[0, :W].view(-1).to(device)
+
+                # reset or carry LSTM states on day rollover
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
-    
+
                 pr, pc, pt = model(x_seq)
-                lr     = pr[..., -1, 0]
-                lc     = pc[..., -1, 0]
-                lt     = pt[..., -1, :]
-    
+
+                # ← FIX #2: apply sigmoid here as well for validation
+                lr = torch.sigmoid(pr[..., -1, 0])
+
+                lc = pc[..., -1, 0]
+                lt = pt[..., -1, :]
+
+                # update val metrics on [0,1] signal
                 val_rmse.update(lr,        sig_seq)
                 val_mae .update(lr,        sig_seq)
                 val_r2  .update(lr,        sig_seq)
-                probs   = torch.sigmoid(lc)
+
+                probs = torch.sigmoid(lc)
                 val_acc .update(probs,     cls_seq)
                 val_prec.update(probs,     cls_seq)
                 val_rec .update(probs,     cls_seq)
                 val_f1  .update(probs,     cls_seq)
                 val_auc .update(probs,     cls_seq)
-    
+
                 probs_ter = torch.softmax(lt, dim=-1)
                 val_ter_acc .update(probs_ter, ter_seq)
                 val_ter_prec.update(probs_ter, ter_seq)
                 val_ter_rec .update(probs_ter, ter_seq)
                 val_ter_f1  .update(probs_ter, ter_seq)
                 val_ter_auc .update(probs_ter, ter_seq)
-    
+
         # collect val summaries
         vl = {
             "rmse":   val_rmse.compute().item(),

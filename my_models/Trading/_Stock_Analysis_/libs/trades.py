@@ -15,6 +15,8 @@ import pytz
 from typing import Optional, Dict, Tuple, List, Sequence, Union
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
+
 #########################################################################################################
 
 def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1):
@@ -227,45 +229,35 @@ def prepare_interpolate_data(
 #########################################################################################################
 
 # B1.1
-def identify_trades(df,                     # DataFrame with a datetime index and a 'close' column.
-                    min_prof_thr,           # Minimum profit required
-                    max_down_prop,          # Maximum allowed retracement (as a fraction of the gain)
-                    gain_tightening_factor, # As the gain increases, the allowed retracement is tightened by this factor
-                    merging_retracement_thr,# Maximum allowed intermediate retracement ratio (relative to the profit range of the first trade) to allow merging.
-                    merging_time_gap_thr):  # Maximum allowed time gap ratio for merging, where the gap is measured relative to the sum of the
-                                            # active durations (buy-to-sell times) of both trades.
+def identify_trades(
+    df,                     # DataFrame with a datetime index and a 'close' column
+    min_prof_thr,           # minimum profit percent to accept a trade
+    max_down_prop,          # base maximum retracement fraction
+    gain_tightening_factor, # factor tightening retracement as gains grow
+    merging_retracement_thr,# max retracement ratio allowed to merge two trades
+    merging_time_gap_thr    # max time‐gap ratio allowed to merge two trades
+):
     """
-    Identifies trades from a one-minute bars DataFrame using a retracement rule and then iteratively merges
-    consecutive trades based on two conditions:
-    
-    Identification Phase:
-      - A buy candidate is a local minimum (the price is lower than its immediate neighbors).
-      - For a candidate buy, the algorithm scans forward, updating the highest price encountered (candidate sell).
-      - If the price later retraces by more than max_down_prop (adjusted via gain_tightening_factor according to
-        the overall gain from buy to the high), the trade is closed immediately, with the sell point taken from
-        the highest price seen.
-      - The trade is recorded only if the profit percentage exceeds min_prof_thr.
-    
-    Merging Phase (Iterative):
-      - Two consecutive trades are eligible for merging only if the second trade's peak (sell price) exceeds that
-        of the first.
-      - Minimal Intermediate Retracement:
-            (first_trade_sell_price - second_trade_buy_price) / (first_trade_sell_price - first_trade_buy_price)
-        must be <= merging_retracement_thr.  
-        (In other words, the drop from the peak of the first trade to the entry of the second trade must be limited.)
-      - Short Time Gap Between Trades:
-            (second_trade_buy_date - first_trade_sell_date) /
-            (active_duration_trade1 + active_duration_trade2)
-        must be <= merging_time_gap_thr, where each active duration is the time from trade buy to trade sell.
-      
-      - If both conditions are met, the trades are merged by using the buy data from the first trade and 
-        the sell data from the second trade. After merging, the trade’s profit is recalculated.
-      - The merging is performed iteratively until no further merges can be done.
-    
-    Returns:
-      merged_trades : list
-         A list of tuples, each trade represented as:
-           ((buy_date, sell_date), (buy_price, sell_price), profit_pc)
+    Detect and merge intraday trades using a dynamic retracement rule.
+
+    Identification Phase
+      • Buy at each local minimum in the 'close' series.
+      • Track the highest subsequent price; if price falls
+        by more than max_down_prop/(1+gain_tightening_factor·gain%)
+        from that peak, close the trade at the peak.
+      • Record trades whose profit ≥ min_prof_thr.
+
+     Merging Phase (repeat until no changes)
+          • Only consider merging when the second trade’s peak > first trade’s peak.
+          • Compute intermediate retracement:
+              (first_peak – second_buy) / (first_peak – first_buy)
+            and require ≤ merging_retracement_thr.
+          • Compute time-gap ratio:
+              (second_buy_time – first_sell_time) /
+              (duration1 + duration2)
+            and require ≤ merging_time_gap_thr.
+          • If both conditions hold, merge into one trade from the first buy to the second sell,
+            then recalculate profit.
     """
     trades = []
     # Extract the close prices and timestamps.
@@ -492,31 +484,31 @@ def compute_continuous_signal(
 
 # B2.2
 def generate_trade_actions(
-    df,
-    col_signal,
-    col_action,
-    buy_threshold,
-    trailing_stop_pct,
-    sess_start
+    df,                     # DataFrame w/ DatetimeIndex and a 'close' column
+    col_signal,             # name of the input signal column
+    col_action,             # name for the output action column
+    buy_threshold,          # signal cutoff to enter a trade
+    trailing_stop_pct,      # trailing stop distance in percent (e.g. 0.5 for 0.5%)
+    sess_start              # earliest time to allow entries (datetime.time or "HH:MM" string)
 ):
     """
-    Generates per-bar trade actions for one day:
+    Generate per-bar trade actions (+1=buy, 0=hold, -1=sell) for one trading day
+    using a fixed entry threshold and a simple trailing-stop exit rule.
 
-    - Buy when signal ≥ buy_threshold (only after sess_start time).
-    - Update highest price since entry.
-    - Compute stop_level = max_price * (1 - trailing_stop_thresh).
-    - Sell when price < stop_level or at end of day.
-
-    Parameters:
-      df: pd.DataFrame with DatetimeIndex and 'close' column
-      col_signal: str, name of signal column
-      col_action: str, name for output action column
-      buy_threshold: float, entry cutoff (signal domain)
-      trailing_stop_pct: percent, decimal stop distance (eg 0.05% conservative minimum threshold)
-      sess_start: time or "HH:MM" string to begin new trades
-
-    Returns:
-      pd.DataFrame with new col_action: +1=buy, 0=hold, -1=sell
+    Functionality:
+      1) Work on a copy, initialize action column to 0.
+      2) Convert trailing_stop_pct to a decimal stop threshold.
+      3) Normalize sess_start to a time object if passed as string.
+      4) Loop through each bar:
+         - If not in a trade:
+             • If signal ≥ buy_threshold AND time ≥ sess_start → mark buy (+1),
+               set in_trade=True, record entry price as max_price.
+         - If in a trade:
+             • Update max_price to the highest close since entry.
+             • Compute stop_level = max_price * (1 - trailing_stop_thresh).
+             • If close < stop_level AND signal < buy_threshold → mark sell (-1),
+               set in_trade=False.
+      5) At end of day, if still in_trade, force a sell on the last bar.
     """
     
     # Work on a copy to avoid side-effects
@@ -578,23 +570,33 @@ def generate_trade_actions(
 
 # B2
 def add_trade_signal_to_results(
-    results_by_day_trad: Dict[dt.date, Tuple[pd.DataFrame, any]],
-    col_signal: str,
-    col_action: str,
-    min_prof_thr: float,
-    sess_start: dt.time,
-    pre_entry_decay: float,
-    short_penal_decay: float,
-    trailing_stop_pct: float,
-    buy_threshold: float,
-    top_percentile: float = 1,
-    smoothing_window: Optional[int] = False
-) -> Dict[dt.date, Tuple[pd.DataFrame, any]]:
+    results_by_day_trad,    # dict(day -> (day_df, trades)) from identify_trades
+    col_signal,             # name for the continuous signal column to add
+    col_action,             # name for the trade-action column to add
+    min_prof_thr,           # minimum profit % (unused here, kept for API consistency)
+    sess_start,             # session start time for generate_trade_actions
+    pre_entry_decay,        # decay rate applied before trade entry
+    short_penal_decay,      # decay rate penalizing missed early entries
+    trailing_stop_pct,      # trailing stop distance in percent
+    buy_threshold,          # signal threshold to enter trades in generate_trade_actions
+    top_percentile=1,       # percentile of bars to cap at signal=1.0
+    smoothing_window=False  # optional window size to smooth raw signal
+):
     """
-    1) First pass: compute raw signals (with smoothing if set), collect all signal values.
-    2) Compute threshold = (100 - top_percentile)th percentile of all raw signals.
-    3) Second pass: scale each day’s signal by a single factor and cap at 1.0,
-       so that exactly top_percentile% of minute‐bars become 1.0.
+    Compute continuous trading signals and generate discrete actions for each day.
+
+    Functionality:
+      1) First pass: for each day in results_by_day_trad
+         - Call compute_continuous_signal(day_df, trades, pre_entry_decay,
+           short_penal_decay, smoothing_window) to produce df_sig with 'signal'.
+         - Accumulate all df_sig["signal"] values across days.
+      2) Determine a global cutoff = (100 - top_percentile)th percentile of all signals.
+         Compute scale = 1.0 / cutoff (zero if cutoff=0).
+      3) Second pass: for each day
+         - Multiply df_sig['signal'] by scale, cap at 1.0, store in col_signal.
+         - Call generate_trade_actions(df_sig, col_signal, col_action,
+           buy_threshold, trailing_stop_pct, sess_start) to get df_actions.
+      4) Return a new dict mapping each day to (df_actions, trades).
     """
     # First pass: compute & gather raw signals
     raw_results: Dict[dt.date, Tuple[pd.DataFrame, any]] = {}
@@ -644,51 +646,28 @@ def add_trade_signal_to_results(
 
 
 
-
-
-
-
 #########################################################################################################
 
 # B3
 def simulate_trading(
-    results_by_day_sign: Union[Dict[pd.Timestamp, Tuple[pd.DataFrame, List]], pd.DataFrame],
-    col_action: str,
-    sess_start: dt.time,
-    sess_end: dt.time,
-    ticker: str
+    results_by_day_sign: Union[Dict[pd.Timestamp, Tuple[pd.DataFrame, List]], pd.DataFrame], # Either a dict mapping each date → (day_df, trades_list[, perf_stats]),
+                                                                                             # or a single DataFrame with a DatetimeIndex and signal column.
+    col_action: str,      # Column name holding discrete trading signals: +1=buy, ‑1=sell, 0=hold.
+    sess_start: dt.time,  # Inclusive start of regular session.
+    sess_end: dt.time,    # Exclusive end of regular session.
+    ticker: str           # Asset symbol (only for logging/extensibility).
 ) -> Dict[pd.Timestamp, Tuple[pd.DataFrame, List, Dict[str, object]]]:
     """
-    Simulate minute-level trading P&L driven by a discrete signal.
-
-    Parameters
-    ----------
-    results_by_day_sign : dict or DataFrame
-        Either a dict mapping each date → (day_df, trades_list[, perf_stats]),
-        or a single DataFrame with a DatetimeIndex and signal column.
-    col_action : str
-        Column name holding discrete trading signals: +1=buy, ‑1=sell, 0=hold.
-    sess_start : datetime.time
-        Inclusive start of regular session.
-    sess_end   : datetime.time
-        Exclusive end of regular session.
-    ticker : str
-        Asset symbol (only for logging/extensibility).
-
-    Returns
-    -------
-    updated_results : dict
-        Maps date → (
-          df_sim: minute-level DataFrame with Position, Cash, NetValue, etc.,
-          trades: list of ((buy_ts, sell_ts), (buy_price, sell_price), pct_return),
-          performance_stats: {
-            'Strategy Return ($)'   : final P&L,
-            'Buy & Hold Return ($)' : baseline P&L,
-            'Trades Returns ($)'    : list of dollar gains per trade
-          }
-        )
+    Simulate minute-level trading performance driven by discrete signals.
+    Splits a DataFrame by calendar date if needed, then for each day:
+      - Initializes position and cash state.
+      - Iterates through minute bars within session hours, applies buy/sell/hold signals.
+      - Tracks per-bar position, cash, net value, actions, traded amounts,
+        and running P&L versus buy-and-hold.
+      - Builds a simulation DataFrame with those metrics.
+      - Identifies round-trip trades and computes their percent returns.
+      - Computes daily performance stats comparing strategy and buy-and-hold.
     """
-
     # 1) If user passed one big DataFrame, split it by calendar date
     if isinstance(results_by_day_sign, pd.DataFrame):
         df_all = results_by_day_sign.sort_index()
@@ -699,8 +678,8 @@ def simulate_trading(
 
     updated_results = {}
 
-    # 2) Process each day in isolation
-    for day, val in results_by_day_sign.items():
+    # 2) Process each day in isolation, with a progress bar
+    for day, val in tqdm(results_by_day_sign.items(), desc="Simulating trading days", unit="day"):
         # Unpack: (day_df, trades_list[, perf_stats])
         if len(val) == 2:
             session_df, prior_trades = val
@@ -784,7 +763,7 @@ def simulate_trading(
         df_sim['StrategyEarning'] = st_running
         df_sim['EarningDiff']     = df_sim['StrategyEarning'] - df_sim['BuyHoldEarning']
 
-        # 4) Compute per-trade round-trip results with timestamps & % return
+        # 4) Compute per-trade round-trip results
         trades = []
         entry_price = None
         entry_ts    = None
