@@ -33,7 +33,7 @@ torch.backends.cuda.matmul.allow_tf32   = True
 torch.backends.cudnn.allow_tf32         = True
 torch.backends.cudnn.benchmark          = True
 
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.decomposition import PCA
 
 from tqdm.auto import tqdm
@@ -42,126 +42,282 @@ from tqdm.auto import tqdm
 #########################################################################################################
 
 
+# def build_lstm_tensors(
+#     df: pd.DataFrame,
+#     *,
+#     look_back:     int,
+#     features_cols: Sequence[str],
+#     label_col:     str,        # name of the continuous “signal” column
+#     return_col:    str,        # name of the bar‐to‐bar return column (e.g. "r_1")
+#     tmpdir:        str = None,
+#     device:        torch.device = torch.device("cpu"),
+#     sess_start:    time
+# ) -> Tuple[
+#     torch.Tensor,           # X:      (N, look_back, F)
+#     torch.Tensor,           # y_sig:  (N,) regression target
+#     torch.Tensor,           # y_ret:  (N,) return signal
+#     torch.Tensor,           # raw_close: (N,)
+#     torch.Tensor,           # raw_bid:   (N,)
+#     torch.Tensor,           # raw_ask:   (N,)
+#     np.ndarray              # end_times: (N,) of dtype datetime64[ns]
+# ]:
+#     """
+#     Build sliding‐window tensors for LSTM:
+#       • X       = look_back‐length feature windows
+#       • y_sig   = true “signal” per window (for regression + binary head)
+#       • y_ret   = bar‐to‐bar returns per window (for ternary head)
+#       • raw_*   = raw close/bid/ask at end‐of‐window
+#       • end_times = timestamps of each window’s last bar
+
+#     Steps:
+#       1) Count valid windows ending ≥ sess_start each day.
+#       2) Create on‐disk memmaps for all arrays (X, y_sig, y_ret, raw_*, timestamps).
+#       3) Slide windows, align next‐step labels, mask by session start, fill memmaps.
+#       4) Wrap memmaps with torch.from_numpy and return tensors + end_times array.
+#     """
+#     # 0) Prepare temp directory
+#     if tmpdir is None:
+#         tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
+#     else:
+#         os.makedirs(tmpdir, exist_ok=True)
+
+#     # 1) Count total valid windows
+#     N = 0
+#     F = len(features_cols)
+#     day_groups = df.groupby(df.index.normalize(), sort=False)
+#     for _, day in tqdm(day_groups, desc="Counting windows", leave=False):
+#         T = len(day)
+#         if T <= look_back:
+#             continue
+#         ends = day.index[look_back:]
+#         mask = np.array([ts.time() >= sess_start for ts in ends])
+#         N += int(mask.sum())
+
+#     # 2) Allocate memmaps
+#     X_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "X.npy"),
+#                mode="w+", dtype=np.float32, shape=(N, look_back, F))
+#     y_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "y_sig.npy"),
+#                mode="w+", dtype=np.float32, shape=(N,))
+#     r_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "y_ret.npy"),
+#                mode="w+", dtype=np.float32, shape=(N,))
+#     c_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "c.npy"),
+#                mode="w+", dtype=np.float32, shape=(N,))
+#     b_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "b.npy"),
+#                mode="w+", dtype=np.float32, shape=(N,))
+#     a_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "a.npy"),
+#                mode="w+", dtype=np.float32, shape=(N,))
+#     t_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "t.npy"),
+#                mode="w+", dtype="datetime64[ns]", shape=(N,))
+
+#     # 3) Fill memmaps per day
+#     idx = 0
+#     for day, day_df in tqdm(day_groups, desc="Writing memmaps", leave=False):
+#         day_df = day_df.sort_index()
+#         T = len(day_df)
+#         if T <= look_back:
+#             continue
+
+#         feats_np  = day_df[features_cols].to_numpy(np.float32)
+#         sig_np    = day_df[label_col].to_numpy(np.float32)
+#         ret_np    = day_df[return_col].to_numpy(np.float32)
+#         close_np  = day_df["close"].to_numpy(np.float32)
+#         bid_np    = day_df["bid"].to_numpy(np.float32)
+#         ask_np    = day_df["ask"].to_numpy(np.float32)
+#         times_np  = day_df.index.to_numpy()  # datetime64[ns]
+
+#         # sliding windows shape: (T-look_back+1, look_back, F)
+#         wins = np.lib.stride_tricks.sliding_window_view(
+#             feats_np, window_shape=(look_back, F)
+#         ).reshape(T - look_back + 1, look_back, F)
+#         wins = wins[:-1]         # drop last to align next‐step labels
+#         lab_sig = sig_np[look_back:]
+#         lab_ret = ret_np[look_back:]
+#         c_pts   = close_np[look_back:]
+#         b_pts   = bid_np[look_back:]
+#         a_pts   = ask_np[look_back:]
+#         e_ts    = times_np[look_back:]  # end‐of‐window timestamps
+
+#         # mask by session‐start
+#         mask = np.array([pd.Timestamp(ts).time() >= sess_start for ts in e_ts])
+#         if not mask.any():
+#             continue
+
+#         m = int(mask.sum())
+#         X_mm  [idx:idx+m] = wins[mask]
+#         y_mm  [idx:idx+m] = lab_sig[mask]
+#         r_mm  [idx:idx+m] = lab_ret[mask]
+#         c_mm  [idx:idx+m] = c_pts[mask]
+#         b_mm  [idx:idx+m] = b_pts[mask]
+#         a_mm  [idx:idx+m] = a_pts[mask]
+#         t_mm  [idx:idx+m] = e_ts[mask]
+#         idx += m
+
+#     # 4) Wrap memmaps as torch Tensors
+#     X         = torch.from_numpy(X_mm).to(device, non_blocking=True)
+#     y_sig     = torch.from_numpy(y_mm).to(device, non_blocking=True)
+#     y_ret     = torch.from_numpy(r_mm).to(device, non_blocking=True)
+#     raw_close = torch.from_numpy(c_mm).to(device, non_blocking=True)
+#     raw_bid   = torch.from_numpy(b_mm).to(device, non_blocking=True)
+#     raw_ask   = torch.from_numpy(a_mm).to(device, non_blocking=True)
+#     end_times = t_mm.copy()  # NumPy array, dtype datetime64[ns]
+
+#     # cleanup
+#     gc.collect()
+#     if device.type == "cuda":
+#         torch.cuda.empty_cache()
+
+#     return X, y_sig, y_ret, raw_close, raw_bid, raw_ask, end_times
+
+
 def build_lstm_tensors(
     df: pd.DataFrame,
     *,
-    look_back:     int,
-    features_cols: Sequence[str],
-    label_col:     str,        # name of the continuous “signal” column
-    return_col:    str,        # name of the bar‐to‐bar return column (e.g. "r_1")
-    tmpdir:        str = None,
-    device:        torch.device = torch.device("cpu"),
-    sess_start:    time
-) -> Tuple[
-    torch.Tensor,           # X:      (N, look_back, F)
-    torch.Tensor,           # y_sig:  (N,) regression target
-    torch.Tensor,           # y_ret:  (N,) return signal
-    torch.Tensor,           # raw_close: (N,)
-    torch.Tensor,           # raw_bid:   (N,)
-    torch.Tensor,           # raw_ask:   (N,)
-    np.ndarray              # end_times: (N,) of dtype datetime64[ns]
+    look_back:  int = params.look_back_tick, # number of past bars in each window
+    tmpdir:     str = None,             # where to write memmaps (auto‐created if None)
+    device:     torch.device = torch.device("cpu"),
+    sess_start: time                    # only include windows ending at/after this time
+) -> tuple[
+    torch.Tensor,  # X         shape=(N, look_back, F)
+    torch.Tensor,  # y_sig     shape=(N,)
+    torch.Tensor,  # y_ret     shape=(N,)
+    torch.Tensor,  # raw_close shape=(N,)
+    torch.Tensor,  # raw_bid   shape=(N,)
+    torch.Tensor,  # raw_ask   shape=(N,)
+    np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
 ]:
     """
-    Build sliding‐window tensors for LSTM:
-      • X       = look_back‐length feature windows
-      • y_sig   = true “signal” per window (for regression + binary head)
-      • y_ret   = bar‐to‐bar returns per window (for ternary head)
-      • raw_*   = raw close/bid/ask at end‐of‐window
-      • end_times = timestamps of each window’s last bar
+    Build sliding‐window tensors for LSTM from a full‐day DataFrame.
 
-    Steps:
-      1) Count valid windows ending ≥ sess_start each day.
-      2) Create on‐disk memmaps for all arrays (X, y_sig, y_ret, raw_*, timestamps).
-      3) Slide windows, align next‐step labels, mask by session start, fill memmaps.
-      4) Wrap memmaps with torch.from_numpy and return tensors + end_times array.
+    1) Automatically select ALL columns except {label_col, 'bid','ask'} as features.
+    2) Split data by calendar‐day; count how many windows end ≥ sess_start each day.
+    3) Allocate on‐disk numpy memmaps for:
+         X       = feature windows         (N, look_back, F)
+         y_sig   = next‐bar smoothed signal (N,)
+         y_ret   = next‐bar log‐return      (N,)
+         raw_*   = bid/mid/ask at window end (N,)
+         end_times = timestamp of each window end (N,)
+    4) For each day:
+       a) extract feature array and target signal
+       b) reconstruct mid‐price = (bid + ask)/2 and compute bar‐to‐bar log‐returns
+       c) form sliding windows of features (drop last to align labels)
+       d) align next‐bar labels y_sig, y_ret, raw_* and timestamps
+       e) mask out windows ending before sess_start and write slices to memmaps
+    5) Wrap each memmap with torch.from_numpy, free CPU memory, and return tensors + end_times.
     """
-    # 0) Prepare temp directory
+    # copy df so we don’t modify user’s DataFrame
+    df = df.copy()
+
+    # 1) Automatically derive features_cols
+    exclude = {params.label_col, "bid", "ask"}
+    features_cols = [c for c in df.columns if c not in exclude]
+    F = len(features_cols)
+
+    # group by calendar day
+    day_groups = df.groupby(df.index.normalize(), sort=False)
+
+    # 2) Count total valid windows across all days
+    N = 0
+    for _, day_df in tqdm(day_groups, desc="Counting windows", leave=False):
+        T = len(day_df)
+        if T <= look_back:
+            continue
+        ends = day_df.index[look_back:]
+        mask = np.array([ts.time() >= sess_start for ts in ends])
+        N += int(mask.sum())
+
+    # 3) Allocate numpy memmaps on disk
     if tmpdir is None:
         tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
     else:
         os.makedirs(tmpdir, exist_ok=True)
 
-    # 1) Count total valid windows
-    N = 0
-    F = len(features_cols)
-    day_groups = df.groupby(df.index.normalize(), sort=False)
-    for _, day in tqdm(day_groups, desc="Counting windows", leave=False):
-        T = len(day)
-        if T <= look_back:
-            continue
-        ends = day.index[look_back:]
-        mask = np.array([ts.time() >= sess_start for ts in ends])
-        N += int(mask.sum())
+    X_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "X.npy"), mode="w+",
+        dtype=np.float32, shape=(N, look_back, F)
+    )
+    y_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "y_sig.npy"), mode="w+",
+        dtype=np.float32, shape=(N,)
+    )
+    r_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "y_ret.npy"), mode="w+",
+        dtype=np.float32, shape=(N,)
+    )
+    c_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "c.npy"), mode="w+",
+        dtype=np.float32, shape=(N,)
+    )
+    b_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "b.npy"), mode="w+",
+        dtype=np.float32, shape=(N,)
+    )
+    a_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "a.npy"), mode="w+",
+        dtype=np.float32, shape=(N,)
+    )
+    t_mm = np.lib.format.open_memmap(
+        os.path.join(tmpdir, "t.npy"), mode="w+",
+        dtype="datetime64[ns]", shape=(N,)
+    )
 
-    # 2) Allocate memmaps
-    X_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "X.npy"),
-               mode="w+", dtype=np.float32, shape=(N, look_back, F))
-    y_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "y_sig.npy"),
-               mode="w+", dtype=np.float32, shape=(N,))
-    r_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "y_ret.npy"),
-               mode="w+", dtype=np.float32, shape=(N,))
-    c_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "c.npy"),
-               mode="w+", dtype=np.float32, shape=(N,))
-    b_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "b.npy"),
-               mode="w+", dtype=np.float32, shape=(N,))
-    a_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "a.npy"),
-               mode="w+", dtype=np.float32, shape=(N,))
-    t_mm   = np.lib.format.open_memmap(os.path.join(tmpdir, "t.npy"),
-               mode="w+", dtype="datetime64[ns]", shape=(N,))
-
-    # 3) Fill memmaps per day
+    # 4) Fill memmaps
     idx = 0
-    for day, day_df in tqdm(day_groups, desc="Writing memmaps", leave=False):
+    for _, day_df in tqdm(day_groups, desc="Writing memmaps", leave=False):
         day_df = day_df.sort_index()
         T = len(day_df)
         if T <= look_back:
             continue
 
-        feats_np  = day_df[features_cols].to_numpy(np.float32)
-        sig_np    = day_df[label_col].to_numpy(np.float32)
-        ret_np    = day_df[return_col].to_numpy(np.float32)
-        close_np  = day_df["close"].to_numpy(np.float32)
-        bid_np    = day_df["bid"].to_numpy(np.float32)
-        ask_np    = day_df["ask"].to_numpy(np.float32)
-        times_np  = day_df.index.to_numpy()  # datetime64[ns]
+        # a) extract features and signal
+        feats_np = day_df[features_cols].to_numpy(np.float32)
+        sig_np   = day_df[params.label_col]    .to_numpy(np.float32)
 
-        # sliding windows shape: (T-look_back+1, look_back, F)
+        # b) reconstruct mid-price and compute log-returns
+        bid_np   = day_df["bid"]        .to_numpy(np.float32)
+        ask_np   = day_df["ask"]        .to_numpy(np.float32)
+        mid_np   = ((bid_np + ask_np)/2).astype(np.float32)
+        ret_full = np.zeros_like(mid_np, dtype=np.float32)
+        ret_full[1:] = np.log(mid_np[1:] / mid_np[:-1])
+
+        # c) build sliding windows of features
         wins = np.lib.stride_tricks.sliding_window_view(
             feats_np, window_shape=(look_back, F)
         ).reshape(T - look_back + 1, look_back, F)
-        wins = wins[:-1]         # drop last to align next‐step labels
+        wins = wins[:-1]  # drop last window to align next-step labels
+
+        # d) align next-bar labels & raw prices
         lab_sig = sig_np[look_back:]
-        lab_ret = ret_np[look_back:]
-        c_pts   = close_np[look_back:]
+        lab_ret = ret_full[look_back:]
+        c_pts   = mid_np[look_back:]
         b_pts   = bid_np[look_back:]
         a_pts   = ask_np[look_back:]
-        e_ts    = times_np[look_back:]  # end‐of‐window timestamps
+        times   = day_df.index.to_numpy()[look_back:]
 
-        # mask by session‐start
-        mask = np.array([pd.Timestamp(ts).time() >= sess_start for ts in e_ts])
+        # e) mask by session start and write
+        mask = np.array([pd.Timestamp(ts).time() >= sess_start for ts in times])
         if not mask.any():
             continue
 
-        m = int(mask.sum())
-        X_mm  [idx:idx+m] = wins[mask]
-        y_mm  [idx:idx+m] = lab_sig[mask]
-        r_mm  [idx:idx+m] = lab_ret[mask]
-        c_mm  [idx:idx+m] = c_pts[mask]
-        b_mm  [idx:idx+m] = b_pts[mask]
-        a_mm  [idx:idx+m] = a_pts[mask]
-        t_mm  [idx:idx+m] = e_ts[mask]
+        m = mask.sum()
+        X_mm [idx:idx+m] = wins[mask]
+        y_mm [idx:idx+m] = lab_sig[mask]
+        r_mm [idx:idx+m] = lab_ret[mask]
+        c_mm [idx:idx+m] = c_pts[mask]
+        b_mm [idx:idx+m] = b_pts[mask]
+        a_mm [idx:idx+m] = a_pts[mask]
+        t_mm [idx:idx+m] = times[mask]
         idx += m
 
-    # 4) Wrap memmaps as torch Tensors
+    # 5) Wrap memmaps as torch Tensors
     X         = torch.from_numpy(X_mm).to(device, non_blocking=True)
     y_sig     = torch.from_numpy(y_mm).to(device, non_blocking=True)
     y_ret     = torch.from_numpy(r_mm).to(device, non_blocking=True)
     raw_close = torch.from_numpy(c_mm).to(device, non_blocking=True)
     raw_bid   = torch.from_numpy(b_mm).to(device, non_blocking=True)
     raw_ask   = torch.from_numpy(a_mm).to(device, non_blocking=True)
-    end_times = t_mm.copy()  # NumPy array, dtype datetime64[ns]
+    end_times = t_mm.copy()  # numpy datetime64 array
 
-    # cleanup
+    # cleanup temporary buffers
     gc.collect()
     if device.type == "cuda":
         torch.cuda.empty_cache()
@@ -408,94 +564,189 @@ def pad_collate(batch):
 ###################
 
 
+# def split_to_day_datasets(
+#     # train split: X, original signal y, bar-return signal y_ret, end timestamps
+#     X_tr,   y_sig_tr,  y_ret_tr,  end_times_tr,
+#     # val split:
+#     X_val,  y_sig_val, y_ret_val, end_times_val,
+#     # test split:
+#     X_te,   y_sig_te,  y_ret_te,  end_times_te,
+#     # raw‐price arrays for test only
+#     raw_close_te, raw_bid_te, raw_ask_te,
+#     *,
+#     sess_start_time: time,    # time-of-day cutoff for live session
+#     signal_thresh:  float,    # buy_threshold for binary head
+#     return_thresh:  float,    # dead-zone threshold for ternary head
+#     train_batch:           int = 32,
+#     train_workers:         int = 0,
+#     train_prefetch_factor: int = 1
+# ) -> Tuple[DataLoader, DataLoader, DataLoader]:
+#     """
+#     Build three DataLoaders that batch sliding windows by calendar day:
+#       - train_loader uses X_tr, y_sig_tr (regression), y_ret_tr (bar returns),
+#         groups by day, filters by sess_start_time, and yields padded
+#         (x_day, y_day, y_sig_cls, ret_day, y_ret_ter, weekday, ts_list, lengths).
+#       - val_loader is identical but batch_size=1 for exact-day eval.
+#       - test_loader adds raw_close_te, raw_bid_te, raw_ask_te into each batch.
+
+#     Each DayWindowDataset will:
+#       • Filter out windows before sess_start_time
+#       • Group windows by calendar-day
+#       • Produce:
+#          – y_sig_cls = (y_signal > signal_thresh)
+#          – y_ret_ter = {-1,0,1} by comparing y_return to ±return_thresh
+#       • pad_collate will pad these sequences to the daily max length
+#     """
+#     # instantiate datasets
+#     ds_tr = DayWindowDataset(
+#         X=X_tr,
+#         y_signal=y_sig_tr,
+#         y_return=y_ret_tr,
+#         raw_close=None,
+#         raw_bid=None,
+#         raw_ask=None,
+#         end_times=end_times_tr,
+#         sess_start_time=sess_start_time,
+#         signal_thresh=signal_thresh,
+#         return_thresh=return_thresh
+#     )
+#     ds_val = DayWindowDataset(
+#         X=X_val,
+#         y_signal=y_sig_val,
+#         y_return=y_ret_val,
+#         raw_close=None,
+#         raw_bid=None,
+#         raw_ask=None,
+#         end_times=end_times_val,
+#         sess_start_time=sess_start_time,
+#         signal_thresh=signal_thresh,
+#         return_thresh=return_thresh
+#     )
+#     ds_te = DayWindowDataset(
+#         X=X_te,
+#         y_signal=y_sig_te,
+#         y_return=y_ret_te,
+#         raw_close=raw_close_te,
+#         raw_bid=raw_bid_te,
+#         raw_ask=raw_ask_te,
+#         end_times=end_times_te,
+#         sess_start_time=sess_start_time,
+#         signal_thresh=signal_thresh,
+#         return_thresh=return_thresh
+#     )
+
+#     # train DataLoader: batch several days, drop_last=False to include partials
+#     use_persistent = train_workers > 0
+#     train_loader = DataLoader(
+#         ds_tr,
+#         batch_size=train_batch,
+#         shuffle=False,
+#         drop_last=False,
+#         collate_fn=pad_collate,
+#         num_workers=train_workers,
+#         pin_memory=True,
+#         persistent_workers=use_persistent,
+#         prefetch_factor=(train_prefetch_factor if use_persistent else None)
+#     )
+
+#     # val DataLoader: one day per batch for exact metrics
+#     val_loader = DataLoader(
+#         ds_val,
+#         batch_size=1,
+#         shuffle=False,
+#         collate_fn=pad_collate,
+#         num_workers=0,
+#         pin_memory=True
+#     )
+
+#     # test DataLoader: one day + raw prices
+#     test_loader = DataLoader(
+#         ds_te,
+#         batch_size=1,
+#         shuffle=False,
+#         collate_fn=pad_collate,
+#         num_workers=0,
+#         pin_memory=True
+#     )
+
+#     return train_loader, val_loader, test_loader
+
+
 def split_to_day_datasets(
-    # train split: X, original signal y, bar-return signal y_ret, end timestamps
+    # train split tensors + times
     X_tr,   y_sig_tr,  y_ret_tr,  end_times_tr,
-    # val split:
+    # val split
     X_val,  y_sig_val, y_ret_val, end_times_val,
-    # test split:
+    # test split + raw-price arrays
     X_te,   y_sig_te,  y_ret_te,  end_times_te,
-    # raw‐price arrays for test only
     raw_close_te, raw_bid_te, raw_ask_te,
     *,
-    sess_start_time: time,    # time-of-day cutoff for live session
-    signal_thresh:  float,    # buy_threshold for binary head
-    return_thresh:  float,    # dead-zone threshold for ternary head
+    sess_start_time: time,    # session cutoff
+    signal_thresh:  float,    # threshold for binary signal head
+    return_thresh:  float,    # dead-zone threshold for ternary return head
     train_batch:           int = 32,
     train_workers:         int = 0,
     train_prefetch_factor: int = 1
-) -> Tuple[DataLoader, DataLoader, DataLoader]:
+) -> tuple[DataLoader, DataLoader, DataLoader]:
     """
-    Build three DataLoaders that batch sliding windows by calendar day:
-      - train_loader uses X_tr, y_sig_tr (regression), y_ret_tr (bar returns),
-        groups by day, filters by sess_start_time, and yields padded
-        (x_day, y_day, y_sig_cls, ret_day, y_ret_ter, weekday, ts_list, lengths).
-      - val_loader is identical but batch_size=1 for exact-day eval.
-      - test_loader adds raw_close_te, raw_bid_te, raw_ask_te into each batch.
+    Build three DataLoaders that yield *per‐day* batches of your LSTM windows:
+    
+      1) Instantiate DayWindowDataset for train, val, test.  
+         - train/val: raw_close/raw_bid/raw_ask = None  
+         - test:    raw_close/raw_bid/raw_ask = real price arrays  
+         Each dataset filters windows before sess_start_time and computes:
+           • y_sig_cls (binary from y_signal > signal_thresh)  
+           • y_ret_ter (ternary from y_return vs ±return_thresh)  
 
-    Each DayWindowDataset will:
-      • Filter out windows before sess_start_time
-      • Group windows by calendar-day
-      • Produce:
-         – y_sig_cls = (y_signal > signal_thresh)
-         – y_ret_ter = {-1,0,1} by comparing y_return to ±return_thresh
-      • pad_collate will pad these sequences to the daily max length
+      2) Wrap each dataset in a DataLoader:
+         - train_loader: batch_size=train_batch, shuffle=False, pad_collate,
+           num_workers=train_workers, pin_memory=True,
+           persistent_workers=(train_workers>0), prefetch_factor=...
+         - val_loader:   batch_size=1, shuffle=False, pad_collate
+         - test_loader:  batch_size=1, shuffle=False, pad_collate
+
+    Returns:
+      (train_loader, val_loader, test_loader)
     """
-    # instantiate datasets
-    ds_tr = DayWindowDataset(
-        X=X_tr,
-        y_signal=y_sig_tr,
-        y_return=y_ret_tr,
-        raw_close=None,
-        raw_bid=None,
-        raw_ask=None,
-        end_times=end_times_tr,
-        sess_start_time=sess_start_time,
-        signal_thresh=signal_thresh,
-        return_thresh=return_thresh
-    )
-    ds_val = DayWindowDataset(
-        X=X_val,
-        y_signal=y_sig_val,
-        y_return=y_ret_val,
-        raw_close=None,
-        raw_bid=None,
-        raw_ask=None,
-        end_times=end_times_val,
-        sess_start_time=sess_start_time,
-        signal_thresh=signal_thresh,
-        return_thresh=return_thresh
-    )
-    ds_te = DayWindowDataset(
-        X=X_te,
-        y_signal=y_sig_te,
-        y_return=y_ret_te,
-        raw_close=raw_close_te,
-        raw_bid=raw_bid_te,
-        raw_ask=raw_ask_te,
-        end_times=end_times_te,
-        sess_start_time=sess_start_time,
-        signal_thresh=signal_thresh,
-        return_thresh=return_thresh
-    )
+    # 1) Build the three DayWindowDatasets with a brief progress bar
+    splits = [
+        ("train", X_tr, y_sig_tr, y_ret_tr, end_times_tr, None, None, None),
+        ("val",   X_val, y_sig_val, y_ret_val, end_times_val,   None, None, None),
+        ("test",  X_te,  y_sig_te,  y_ret_te,  end_times_te,  raw_close_te, raw_bid_te, raw_ask_te)
+    ]
 
-    # train DataLoader: batch several days, drop_last=False to include partials
-    use_persistent = train_workers > 0
+    datasets = {}
+    for name, Xd, ys, yr, et, rc, rb, ra in tqdm(
+        splits, desc="Creating DayWindowDatasets", unit="split"
+    ):
+        datasets[name] = DayWindowDataset(
+            X=Xd,
+            y_signal=ys,
+            y_return=yr,
+            raw_close=rc,
+            raw_bid=rb,
+            raw_ask=ra,
+            end_times=et,
+            sess_start_time=sess_start_time,
+            signal_thresh=signal_thresh,
+            return_thresh=return_thresh
+        )
+
+    # 2) Wrap in DataLoaders
     train_loader = DataLoader(
-        ds_tr,
+        datasets["train"],
         batch_size=train_batch,
         shuffle=False,
         drop_last=False,
         collate_fn=pad_collate,
         num_workers=train_workers,
         pin_memory=True,
-        persistent_workers=use_persistent,
-        prefetch_factor=(train_prefetch_factor if use_persistent else None)
+        persistent_workers=(train_workers > 0),
+        prefetch_factor=(train_prefetch_factor if train_workers > 0 else None)
     )
 
-    # val DataLoader: one day per batch for exact metrics
     val_loader = DataLoader(
-        ds_val,
+        datasets["val"],
         batch_size=1,
         shuffle=False,
         collate_fn=pad_collate,
@@ -503,9 +754,8 @@ def split_to_day_datasets(
         pin_memory=True
     )
 
-    # test DataLoader: one day + raw prices
     test_loader = DataLoader(
-        ds_te,
+        datasets["test"],
         batch_size=1,
         shuffle=False,
         collate_fn=pad_collate,
@@ -514,7 +764,6 @@ def split_to_day_datasets(
     )
 
     return train_loader, val_loader, test_loader
-
 
 #########################################################################################################
 
@@ -699,6 +948,145 @@ class DualMemoryLSTM(nn.Module):
         return raw_reg, raw_cls, raw_ter
 
 
+# class DualMemoryLSTM(nn.Module):
+#     """
+#     Stateful Bi‐LSTM over two time‐scales with three heads (regression, binary, ternary).
+
+#     Functional steps:
+#       1) Bidirectional short‐term (daily) LSTM
+#       2) Window‐level self‐attention + residual on daily outputs
+#       3) Dropout + LayerNorm on daily features
+#       4) Bidirectional long‐term (weekly) LSTM
+#       5) Dropout + LayerNorm on weekly features
+#       6) Three time‐distributed heads:
+#          • pred      → regression (smoothed signal)
+#          • cls_head  → binary signal logit
+#          • cls_ter   → ternary return logits
+#       7) Hidden/cell states auto‐reset at day/week boundaries
+#     """
+#     def __init__(
+#         self,
+#         n_feats: int,
+#         short_units: int,
+#         long_units: int,
+#         dropout_short: float,
+#         dropout_long: float,
+#         att_heads: int,
+#         att_drop: float
+#     ):
+#         super().__init__()
+#         self.n_feats     = n_feats
+#         self.short_units = short_units
+#         self.long_units  = long_units
+
+#         # 1) Short-term daily Bi-LSTM
+#         assert short_units % 2 == 0
+#         self.short_lstm = nn.LSTM(
+#             input_size    = n_feats,
+#             hidden_size   = short_units // 2,
+#             batch_first   = True,
+#             bidirectional = True
+#         )
+
+#         # 2) Self-attention over daily LSTM output
+#         self.attn = nn.MultiheadAttention(
+#             embed_dim    = short_units,
+#             num_heads    = att_heads,
+#             dropout      = att_drop,
+#             batch_first  = True
+#         )
+
+#         # 3) Dropout + LayerNorm on daily features
+#         self.do_short = nn.Dropout(dropout_short)
+#         self.ln_short = nn.LayerNorm(short_units)
+
+#         # 4) Long-term weekly Bi-LSTM
+#         assert long_units % 2 == 0
+#         self.long_lstm = nn.LSTM(
+#             input_size    = short_units,
+#             hidden_size   = long_units // 2,
+#             batch_first   = True,
+#             bidirectional = True
+#         )
+#         self.do_long  = nn.Dropout(dropout_long)
+#         self.ln_long  = nn.LayerNorm(long_units)
+
+#         # 5) Three time-distributed heads
+#         self.pred     = nn.Linear(long_units, 1)  # regression
+#         self.cls_head = nn.Linear(long_units, 1)  # binary
+#         self.cls_ter  = nn.Linear(long_units, 3)  # ternary
+
+#         # 6) Hidden/cell states (initialized lazily)
+#         self.h_short = None
+#         self.c_short = None
+#         self.h_long  = None
+#         self.c_long  = None
+
+#     def _init_states(self, B: int, device: torch.device):
+#         # two directions × one layer = 2
+#         self.h_short = torch.zeros(2, B, self.short_units // 2, device=device)
+#         self.c_short = torch.zeros(2, B, self.short_units // 2, device=device)
+#         self.h_long  = torch.zeros(2, B, self.long_units  // 2, device=device)
+#         self.c_long  = torch.zeros(2, B, self.long_units  // 2, device=device)
+
+#     def reset_short(self):
+#         if self.h_short is not None:
+#             B, dev = self.h_short.size(1), self.h_short.device
+#             self._init_states(B, dev)
+
+#     def reset_long(self):
+#         if self.h_long is not None:
+#             B, dev = self.h_long.size(1), self.h_long.device
+#             hs, cs = self.h_short, self.c_short
+#             self._init_states(B, dev)
+#             # carry over daily state
+#             self.h_short, self.c_short = hs.to(dev), cs.to(dev)
+
+#     def forward(self, x: torch.Tensor):
+#         # flatten extra dims: (..., S, F) → (B, S, F)
+#         if x.dim() > 3:
+#             *lead, S, F = x.shape
+#             x = x.view(-1, S, F)
+
+#         # ensure last dim is features
+#         if x.dim() == 3 and x.size(-1) != self.n_feats:
+#             x = x.transpose(1, 2).contiguous()
+
+#         B, S, _ = x.size()
+#         dev     = x.device
+
+#         # init states if first pass or batch‐size changed
+#         if self.h_short is None or self.h_short.size(1) != B:
+#             self._init_states(B, dev)
+
+#         # 1) daily Bi-LSTM
+#         out_short, (h_s, c_s) = self.short_lstm(x, (self.h_short, self.c_short))
+#         h_s.detach_(); c_s.detach_()
+#         self.h_short, self.c_short = h_s, c_s
+
+#         # 2) self-attention + residual
+#         attn_out, _ = self.attn(out_short, out_short, out_short)
+#         out_short   = out_short + attn_out
+
+#         # 3) dropout + layernorm daily
+#         out_short = self.do_short(out_short)
+#         out_short = self.ln_short(out_short)
+
+#         # 4) weekly Bi-LSTM
+#         out_long, (h_l, c_l) = self.long_lstm(out_short, (self.h_long, self.c_long))
+#         h_l.detach_(); c_l.detach_()
+#         self.h_long, self.c_long = h_l, c_l
+
+#         # 5) dropout + layernorm weekly
+#         out_long = self.do_long(out_long)
+#         out_long = self.ln_long(out_long)
+
+#         # 6) heads
+#         raw_reg = self.pred(out_long)      # regression
+#         raw_cls = self.cls_head(out_long)  # binary
+#         raw_ter = self.cls_ter(out_long)   # ternary
+
+#         return raw_reg, raw_cls, raw_ter
 
 #########################################################################################################
 
@@ -760,159 +1148,151 @@ def custom_stateful_training_loop(
     device:              torch.device = torch.device("cpu"),
 ) -> float:
     """
-    Train+validate a stateful CNN→BiLSTM→Attention→BiLSTM model with three heads:
-      • regression head     → continuous signal
-      • binary head         → signal > buy_threshold
-      • ternary head        → return down/flat/up
-    Tracks RMSE/MAE/R2 and binary & multiclass metrics, live‐plots RMSE,
-    does early stopping and only saves a final model if its val RMSE
-    beats all existing saved checkpoint RMSEs.
+    Train and validate a stateful CNN→BiLSTM→Attention→BiLSTM model with two heads:
+      • regression head → continuous (smoothed) signal  
+      • binary head     → buy/sell threshold indicator  
+
+    Functionality:
+      1) Move model to device, enable CuDNN benchmark for speed.
+      2) Define Huber loss for regression and BCEWithLogits for the binary head.
+      3) Instantiate regression metrics (RMSE, MAE, R²) and binary metrics
+         (Accuracy, Precision, Recall, F1, AUROC).
+      4) For each epoch:
+         a) Reset model’s LSTM states and all training metrics.
+         b) Loop over train_loader (with tqdm progress bar):
+            – Unpack a batch of sequences (multiple “days”) and their targets.
+            – Zero gradients, track a single prev_day to reset “long” LSTM on day rollover.
+            – For each sequence in the batch:
+               • Slice the true signal and binary target up to its valid length.
+               • Reset or carry the LSTM short/long states on day rollover.
+               • Forward pass → get regression logits and binary logits.
+               • Sigmoid‐activate regression logits into [0,1].
+               • Compute Huber(regression) + α·BCE(binary) loss.
+               • Backward (mixed precision), clip grads, step optimizer, update cosine schedule.
+               • Detach hidden states to prevent backprop through time.
+               • Update regression and binary metrics on that sequence.
+         c) At epoch end, collect train‐metric summaries into a dict.
+      5) (Validation loop and checkpointing follow unchanged.)
     """
-    # 1) Device & reproducibility
+    # 1) Device setup
     model.to(device)
     torch.backends.cudnn.benchmark = True
-    
+
     # 2) Losses & weights
     beta_huber = params.hparams["HUBER_BETA"]
-    huber_loss   = nn.SmoothL1Loss(beta=beta_huber, reduction='none')
+    huber_loss = nn.SmoothL1Loss(beta=beta_huber)      # mean reduction
     bce_loss   = nn.BCEWithLogitsLoss()
     alpha_cls  = params.hparams["CLS_LOSS_WEIGHT"]
-    alpha_ter  = params.hparams["TERNARY_LOSS_WEIGHT"]
-    spike_weight = params.hparams["SPIKE_LOSS_WEIGHT"] 
-    ce_loss    = nn.CrossEntropyLoss()
-    save_pat   = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
-    live_plot  = plots.LiveRMSEPlot()
-    
-    # 3) Metrics @ threshold=0.5 for binary head + ternary metrics
-    thr             = 0.5
-    train_rmse      = torchmetrics.MeanSquaredError(squared=False).to(device)
-    train_mae       = torchmetrics.MeanAbsoluteError().to(device)
-    train_r2        = torchmetrics.R2Score().to(device)
-    train_acc       = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
-    train_prec      = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
-    train_rec       = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
-    train_f1        = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
-    train_auc       = torchmetrics.classification.BinaryAUROC().to(device)
-    train_ter_acc   = torchmetrics.classification.MulticlassAccuracy(num_classes=3).to(device)
-    train_ter_prec  = torchmetrics.classification.MulticlassPrecision(num_classes=3, average="macro").to(device)
-    train_ter_rec   = torchmetrics.classification.MulticlassRecall(num_classes=3, average="macro").to(device)
-    train_ter_f1    = torchmetrics.classification.MulticlassF1Score(num_classes=3, average="macro").to(device)
-    train_ter_auc   = torchmetrics.classification.MulticlassAUROC(num_classes=3, average="macro").to(device)
-    
-    val_rmse        = torchmetrics.MeanSquaredError(squared=False).to(device)
-    val_mae         = torchmetrics.MeanAbsoluteError().to(device)
-    val_r2          = torchmetrics.R2Score().to(device)
-    val_acc         = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
-    val_prec        = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
-    val_rec         = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
-    val_f1          = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
-    val_auc         = torchmetrics.classification.BinaryAUROC().to(device)
-    val_ter_acc     = torchmetrics.classification.MulticlassAccuracy(num_classes=3).to(device)
-    val_ter_prec    = torchmetrics.classification.MulticlassPrecision(num_classes=3, average="macro").to(device)
-    val_ter_rec     = torchmetrics.classification.MulticlassRecall(num_classes=3, average="macro").to(device)
-    val_ter_f1      = torchmetrics.classification.MulticlassF1Score(num_classes=3, average="macro").to(device)
-    val_ter_auc     = torchmetrics.classification.MulticlassAUROC(num_classes=3, average="macro").to(device)
-    
+    # trinary‐head loss and spike/derivative weighting removed
+
+    save_pat  = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
+    live_plot = plots.LiveRMSEPlot()
+
+    # 3) Metrics (regression + binary classification)
+    thr         = 0.5
+    train_rmse  = torchmetrics.MeanSquaredError(squared=False).to(device)
+    train_mae   = torchmetrics.MeanAbsoluteError().to(device)
+    train_r2    = torchmetrics.R2Score().to(device)
+    train_acc   = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
+    train_prec  = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
+    train_rec   = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
+    train_f1    = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
+    train_auc   = torchmetrics.classification.BinaryAUROC().to(device)
+    # ternary‐head metrics removed
+
+    val_rmse  = torchmetrics.MeanSquaredError(squared=False).to(device)
+    val_mae   = torchmetrics.MeanAbsoluteError().to(device)
+    val_r2    = torchmetrics.R2Score().to(device)
+    val_acc   = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
+    val_prec  = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
+    val_rec   = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
+    val_f1    = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
+    val_auc   = torchmetrics.classification.BinaryAUROC().to(device)
+    # ternary‐head metrics removed
+
     best_val_rmse = float("inf")
     patience_ctr  = 0
 
     # 4) Epochs
     for epoch in range(1, max_epochs + 1):
         gc.collect()
-        # a) TRAINING
+
+        # a) Training pass
         model.train()
         model.h_short = model.h_long = None
-        for m in (
-            train_rmse, train_mae, train_r2,
-            train_acc, train_prec, train_rec,
-            train_f1, train_auc,
-            train_ter_acc, train_ter_prec,
-            train_ter_rec, train_ter_f1,
-            train_ter_auc
-        ):
+        for m in (train_rmse, train_mae, train_r2,
+                  train_acc, train_prec, train_rec,
+                  train_f1, train_auc):
             m.reset()
 
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="bundle")
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
         for batch_idx, batch in enumerate(pbar):
-            (
-                xb_days, y_sig_days, y_sig_cls_days,
-                ret_days, y_ret_ter_days,
-                wd_days, ts_list, lengths
-            ) = batch
+            # Unpack: drop ternary‐head targets but still load them
+            xb_days, y_sig_days, y_sig_cls_days, ret_days, y_ret_ter_days, wd_days, ts_list, lengths = batch
 
             xb    = xb_days.to(device, non_blocking=True)
             y_sig = y_sig_days.to(device, non_blocking=True)
             y_cls = y_sig_cls_days.to(device, non_blocking=True)
-            ret   = ret_days.to(device, non_blocking=True)
-            y_ter = y_ret_ter_days.to(device, non_blocking=True)
             wd    = wd_days.to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
             prev_day = None
 
+            # Process each sequence (“day”) in the batch
             for di in range(xb.size(0)):
-                W       = lengths[di]
-                day_id  = int(wd[di].item())
+                W      = lengths[di]
+                day_id = int(wd[di].item())
+
                 x_seq   = xb[di, :W]
                 sig_seq = y_sig[di, :W]
                 cls_seq = y_cls[di, :W].view(-1)
-                ter_seq = y_ter[di, :W].view(-1)
 
-                # reset or carry LSTM states on day rollover
+                # Reset or carry LSTM states on day rollover
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
 
+                # 1) Full-precision forward
+                pr, pc, _ = model(x_seq)
+                
+                # 2) Inside autocast, build only the loss & backward
                 with autocast(device_type=device.type):
-                    pr, pc, pt = model(x_seq)
-
-                    # ← FIX #1: squash regression logits into [0,1]
+                    # Sigmoid/reg logits
                     lr = torch.sigmoid(pr[..., -1, 0])   # (W,)
-
-                    # classification logits unchanged
-                    lc = pc[..., -1, 0]  # (W,)
-                    lt = pt[..., -1, :]  # (W,3)
-
-                    # per-sample Huber weight: bigger true spikes → heavier penalty
-                    w = 1.0 + spike_weight * sig_seq.abs()  # (W,)
-
-                    # compute losses
-                    loss_r = (w * huber_loss(lr, sig_seq)).mean()
-                    loss_b = bce_loss(lc,    cls_seq)
-                    loss_t = ce_loss(lt,     ter_seq)
-                    loss   = loss_r + alpha_cls * loss_b + alpha_ter * loss_t
-
+                    lc = pc[...,    -1, 0]               # (W,)
+                
+                    # Loss = Huber(regression) + α·BCE(binary)
+                    loss_r = huber_loss(lr, sig_seq)
+                    loss_b = bce_loss(lc, cls_seq)
+                    loss   = loss_r + alpha_cls * loss_b
+                
                 scaler.scale(loss).backward()
+                
 
-                # update train metrics on [0,1] signal
-                train_rmse.update(lr,        sig_seq)
-                train_mae .update(lr,        sig_seq)
-                train_r2  .update(lr,        sig_seq)
+                # Update regression metrics
+                train_rmse.update(lr, sig_seq)
+                train_mae .update(lr, sig_seq)
+                train_r2  .update(lr, sig_seq)
 
+                # Update binary‐classification metrics
                 probs = torch.sigmoid(lc)
-                train_acc .update(probs,     cls_seq)
-                train_prec.update(probs,     cls_seq)
-                train_rec .update(probs,     cls_seq)
-                train_f1  .update(probs,     cls_seq)
-                train_auc .update(probs,     cls_seq)
+                train_acc .update(probs, cls_seq)
+                train_prec.update(probs, cls_seq)
+                train_rec .update(probs, cls_seq)
+                train_f1  .update(probs, cls_seq)
+                train_auc .update(probs, cls_seq)
 
-                probs_ter = torch.softmax(lt, dim=-1)
-                train_ter_acc .update(probs_ter, ter_seq)
-                train_ter_prec.update(probs_ter, ter_seq)
-                train_ter_rec .update(probs_ter, ter_seq)
-                train_ter_f1  .update(probs_ter, ter_seq)
-                train_ter_auc .update(probs_ter, ter_seq)
-
-                # detach stateful LSTM hidden/cell tensors
+                # Truncate backprop through states
                 model.h_short.detach_(); model.c_short.detach_()
                 model.h_long .detach_(); model.c_long .detach_()
 
+            # Gradient clipping & optimizer step
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer); scaler.update()
 
-            # step the cosine scheduler continuously
+            # Cosine learning‐rate update
             frac = epoch - 1 + batch_idx / len(train_loader)
             cosine_sched.step(frac)
 
@@ -922,21 +1302,16 @@ def custom_stateful_training_loop(
                 refresh=False
             )
 
-        # collect train summaries
+        # ——— collect training metrics ———
         tr = {
-            "rmse":   train_rmse.compute().item(),
-            "mae":    train_mae.compute().item(),
-            "r2":     train_r2.compute().item(),
-            "acc":    train_acc.compute().item(),
-            "prec":   train_prec.compute().item(),
-            "rec":    train_rec.compute().item(),
-            "f1":     train_f1.compute().item(),
-            "auroc":  train_auc.compute().item(),
-            "t_acc":  train_ter_acc.compute().item(),
-            "t_prec": train_ter_prec.compute().item(),
-            "t_rec":  train_ter_rec.compute().item(),
-            "t_f1":   train_ter_f1.compute().item(),
-            "t_auc":  train_ter_auc.compute().item()
+            "rmse":  train_rmse.compute().item(),
+            "mae":   train_mae.compute().item(),
+            "r2":    train_r2.compute().item(),
+            "acc":   train_acc.compute().item(),
+            "prec":  train_prec.compute().item(),
+            "rec":   train_rec.compute().item(),
+            "f1":    train_f1.compute().item(),
+            "auroc": train_auc.compute().item(),
         }
 
         # b) VALIDATION
@@ -944,80 +1319,62 @@ def custom_stateful_training_loop(
         model.h_short = model.h_long = None
         for m in (
             val_rmse, val_mae, val_r2,
-            val_acc, val_prec, val_rec,
-            val_f1, val_auc,
-            val_ter_acc, val_ter_prec,
-            val_ter_rec, val_ter_f1,
-            val_ter_auc
+            val_acc,  val_prec, val_rec,
+            val_f1,   val_auc
         ):
             m.reset()
 
         with torch.no_grad():
             prev_day = None
             for batch in val_loader:
-                (
-                    xb_day, y_sig_day, y_sig_cls_day,
-                    ret_day, y_ret_ter_day,
-                    wd, ts_list, lengths
-                ) = batch
+                xb_day, y_sig_day, y_sig_cls_day, ret_day, y_ret_ter_day, wd, ts_list, lengths = batch
 
-                W       = lengths[0]
-                day_id  = int(wd.item())
+                W      = lengths[0]
+                day_id = int(wd.item())
+
                 x_seq   = xb_day[0, :W].to(device)
                 sig_seq = y_sig_day[0, :W].to(device)
                 cls_seq = y_sig_cls_day[0, :W].view(-1).to(device)
-                ter_seq = y_ret_ter_day[0, :W].view(-1).to(device)
 
-                # reset or carry LSTM states on day rollover
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
 
+                # Forward pass (drop ternary head)
                 pr, pc, pt = model(x_seq)
 
-                # ← FIX #2: apply sigmoid here as well for validation
+                # sigmoid regression output
                 lr = torch.sigmoid(pr[..., -1, 0])
 
+                # binary logits
                 lc = pc[..., -1, 0]
-                lt = pt[..., -1, :]
 
-                # update val metrics on [0,1] signal
-                val_rmse.update(lr,        sig_seq)
-                val_mae .update(lr,        sig_seq)
-                val_r2  .update(lr,        sig_seq)
+                # update regression metrics
+                val_rmse.update(lr,      sig_seq)
+                val_mae .update(lr,      sig_seq)
+                val_r2  .update(lr,      sig_seq)
 
+                # update binary‐classification metrics
                 probs = torch.sigmoid(lc)
-                val_acc .update(probs,     cls_seq)
-                val_prec.update(probs,     cls_seq)
-                val_rec .update(probs,     cls_seq)
-                val_f1  .update(probs,     cls_seq)
-                val_auc .update(probs,     cls_seq)
+                val_acc .update(probs, cls_seq)
+                val_prec.update(probs, cls_seq)
+                val_rec .update(probs, cls_seq)
+                val_f1  .update(probs, cls_seq)
+                val_auc .update(probs, cls_seq)
 
-                probs_ter = torch.softmax(lt, dim=-1)
-                val_ter_acc .update(probs_ter, ter_seq)
-                val_ter_prec.update(probs_ter, ter_seq)
-                val_ter_rec .update(probs_ter, ter_seq)
-                val_ter_f1  .update(probs_ter, ter_seq)
-                val_ter_auc .update(probs_ter, ter_seq)
-
-        # collect val summaries
+        # ——— collect validation metrics ———
         vl = {
-            "rmse":   val_rmse.compute().item(),
-            "mae":    val_mae.compute().item(),
-            "r2":     val_r2.compute().item(),
-            "acc":    val_acc.compute().item(),
-            "prec":   val_prec.compute().item(),
-            "rec":    val_rec.compute().item(),
-            "f1":     val_f1.compute().item(),
-            "auroc":  val_auc.compute().item(),
-            "t_acc":  val_ter_acc.compute().item(),
-            "t_prec": val_ter_prec.compute().item(),
-            "t_rec":  val_ter_rec.compute().item(),
-            "t_f1":   val_ter_f1.compute().item(),
-            "t_auc":  val_ter_auc.compute().item()
+            "rmse":  val_rmse.compute().item(),
+            "mae":   val_mae.compute().item(),
+            "r2":    val_r2.compute().item(),
+            "acc":   val_acc.compute().item(),
+            "prec":  val_prec.compute().item(),
+            "rec":   val_rec.compute().item(),
+            "f1":    val_f1.compute().item(),
+            "auroc": val_auc.compute().item(),
         }
-    
+
         # c) live plot & print
         live_plot.update(tr["rmse"], vl["rmse"])
         print(f"Epoch {epoch:03d}")
@@ -1025,21 +1382,16 @@ def custom_stateful_training_loop(
             f'TRAIN→ '
             f'"R": RMSE={tr["rmse"]:.4f} MAE={tr["mae"]:.4f} R2={tr["r2"]:.4f} | '
             f'"B": Acc={tr["acc"]:.4f} Prec={tr["prec"]:.4f} Rec={tr["rec"]:.4f} '
-            f'F1={tr["f1"]:.4f} AUROC={tr["auroc"]:.4f} | '
-            f'"T": Acc={tr["t_acc"]:.4f} Prec={tr["t_prec"]:.4f} Rec={tr["t_rec"]:.4f} '
-            f'F1={tr["t_f1"]:.4f} AUROC={tr["t_auc"]:.4f}'
+            f'F1={tr["f1"]:.4f} AUROC={tr["auroc"]:.4f}'
         )
         print(
             f'VALID→ '
             f'"R": RMSE={vl["rmse"]:.4f} MAE={vl["mae"]:.4f} R2={vl["r2"]:.4f} | '
             f'"B": Acc={vl["acc"]:.4f} Prec={vl["prec"]:.4f} Rec={vl["rec"]:.4f} '
-            f'F1={vl["f1"]:.4f} AUROC={vl["auroc"]:.4f} | '
-            f'"T": Acc={vl["t_acc"]:.4f} Prec={vl["t_prec"]:.4f} Rec={vl["t_rec"]:.4f} '
-            f'F1={vl["t_f1"]:.4f} AUROC={vl["t_auc"]:.4f}'
+            f'F1={vl["f1"]:.4f} AUROC={vl["auroc"]:.4f}'
         )
 
-
-        # plateau & checkpoint
+        # plateau & checkpoint (unchanged) …
         if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
             plateau_sched.step(vl["rmse"])
         if vl["rmse"] < best_val_rmse:
@@ -1209,6 +1561,150 @@ def feature_engineering(df: pd.DataFrame,
 #########################################################################################################
 
 
+# def scale_with_splits(
+#     df: pd.DataFrame,
+#     features_cols: list[str],
+#     label_col: str,
+#     train_prop: float = 0.70,
+#     val_prop: float   = 0.15
+# ) -> pd.DataFrame:
+#     """
+#      Split a time-indexed DataFrame into train/validation/test by row order.
+#      Encode hour, day_of_week, month as single cyclic PCA features.
+#      Scale feature groups WITHOUT LEAKAGE:
+#        - Price–volume features: per-day robust scaling
+#        - Ratio/indicator features: global StandardScaler on train only
+#        - Binary flags: passthrough {0,1}
+#        - Cyclical time features (hour, day_of_week, month): PCA→1D passthrough
+#      Return a single DataFrame, preserving original feature names and the label_col.
+#     """
+
+#     df = df.copy()
+
+#     # 1) Split into train/val/test
+#     n       = len(df)
+#     n_train = int(n * train_prop)
+#     n_val   = int(n * val_prop)
+#     if n_train + n_val >= n:
+#         raise ValueError("train_prop + val_prop must sum to < 1.0")
+
+#     df_tr = df.iloc[:n_train].copy()
+#     df_v  = df.iloc[n_train : n_train + n_val].copy()
+#     df_te = df.iloc[n_train + n_val :].copy()
+
+#     # 2) Generate sin & cos for each cyclic feature
+#     for sub in (df_tr, df_v, df_te):
+#         # hour
+#         h = sub["hour"]
+#         sub["hour_sin"] = np.sin(2 * np.pi * h / 24)
+#         sub["hour_cos"] = np.cos(2 * np.pi * h / 24)
+#         # day_of_week
+#         d = sub["day_of_week"]
+#         sub["day_of_week_sin"] = np.sin(2 * np.pi * d / 7)
+#         sub["day_of_week_cos"] = np.cos(2 * np.pi * d / 7)
+#         # month
+#         m = sub["month"]
+#         sub["month_sin"] = np.sin(2 * np.pi * m / 12)
+#         sub["month_cos"] = np.cos(2 * np.pi * m / 12)
+
+#     # 3) Define feature groups
+#     price_feats = [
+#         "open", "high", "low", "close", "volume",
+#         "atr_14", "ma_5", "ma_20", "ma_diff",
+#         "macd_12_26", "macd_signal_9", "obv"
+#     ]
+#     ratio_feats = [
+#         "r_1", "r_5", "r_15",
+#         "vol_15", "volume_spike", "vwap_dev",
+#         "rsi_14", "bb_width_20", "stoch_k_14", "stoch_d_3"
+#     ]
+#     binary_feats = ["in_trading"]
+#     cyclic_feats  = ["hour", "day_of_week", "month"]
+
+#     price_feats  = [f for f in price_feats  if f in features_cols]
+#     ratio_feats  = [f for f in ratio_feats  if f in features_cols]
+#     binary_feats = [f for f in binary_feats if f in features_cols]
+#     # note: cyclic_feats will be re‐added post-PCA
+
+#     # 4) Fit global scaler on ratio/indicator features
+#     ratio_scaler = StandardScaler()
+#     if ratio_feats:
+#         ratio_scaler.fit(df_tr[ratio_feats])
+
+#     # 5) Per-day robust scaler for price features
+#     def scale_price_per_day(sub: pd.DataFrame, desc: str) -> pd.DataFrame:
+#         out = sub.copy()
+#         days = out.index.normalize().unique()
+#         for day in tqdm(days, desc=f"Scaling price per day ({desc})", unit="day"):
+#             mask  = out.index.normalize() == day
+#             block = out.loc[mask, price_feats]
+#             med   = block.median(axis=0)
+#             iqr   = block.quantile(0.75, axis=0) - block.quantile(0.25, axis=0)
+#             iqr[iqr == 0] = 1e-6
+#             out.loc[mask, price_feats] = (block - med) / iqr
+#         return out
+
+#     # 6) Transform splits (price + ratio)
+#     def transform(sub: pd.DataFrame, split_name: str) -> pd.DataFrame:
+#         out = sub.copy()
+#         if price_feats:
+#             out = scale_price_per_day(out, split_name)
+#         if ratio_feats:
+#             out[ratio_feats] = ratio_scaler.transform(sub[ratio_feats])
+#         return out
+
+#     df_tr_s  = transform(df_tr,  "train")
+#     df_val_s = transform(df_v,   "val")
+#     df_te_s  = transform(df_te,  "test")
+
+#     # 7) Fit PCA on train‐only sin/cos pairs
+#     pca_hour = PCA(n_components=1).fit(df_tr_s[["hour_sin","hour_cos"]])
+#     pca_dow  = PCA(n_components=1).fit(df_tr_s[["day_of_week_sin","day_of_week_cos"]])
+#     pca_mo   = PCA(n_components=1).fit(df_tr_s[["month_sin","month_cos"]])
+
+#     # 8) Apply PCA → 1D, round, drop sin/cos, reattach original names
+#     def apply_cyclic_pca(sub: pd.DataFrame) -> pd.DataFrame:
+#         # hour
+#         h_pc1 = pca_hour.transform(sub[["hour_sin","hour_cos"]])[:,0]
+#         sub["hour"] = np.round(h_pc1, 3)
+#         # day_of_week
+#         d_pc1 = pca_dow.transform(sub[["day_of_week_sin","day_of_week_cos"]])[:,0]
+#         sub["day_of_week"] = np.round(d_pc1, 3)
+#         # month
+#         m_pc1 = pca_mo.transform(sub[["month_sin","month_cos"]])[:,0]
+#         sub["month"] = np.round(m_pc1, 3)
+
+#         # drop the intermediate columns
+#         sub.drop([
+#             "hour_sin","hour_cos",
+#             "day_of_week_sin","day_of_week_cos",
+#             "month_sin","month_cos"
+#         ], axis=1, inplace=True)
+
+#         return sub
+
+#     df_tr_s  = apply_cyclic_pca(df_tr_s)
+#     df_val_s = apply_cyclic_pca(df_val_s)
+#     df_te_s  = apply_cyclic_pca(df_te_s)
+
+#     # 9) Reattach label and recombine
+#     for subset in (df_tr_s, df_val_s, df_te_s):
+#         subset[label_col] = df.loc[subset.index, label_col]
+
+#     df_final = pd.concat([df_tr_s, df_val_s, df_te_s]).sort_index()
+
+#     # 10) Select final columns
+#     final_cols = (
+#         price_feats
+#         + ratio_feats
+#         + binary_feats
+#         + cyclic_feats      # now holds the PCA‐1D values
+#         + ["bid", "ask"]
+#         + [label_col]
+#     )
+#     return df_final[final_cols]
+
+
 def scale_with_splits(
     df: pd.DataFrame,
     features_cols: list[str],
@@ -1217,16 +1713,22 @@ def scale_with_splits(
     val_prop: float   = 0.15
 ) -> pd.DataFrame:
     """
-     Split a time-indexed DataFrame into train/validation/test by row order.
-     Encode hour, day_of_week, month as single cyclic PCA features.
-     Scale feature groups WITHOUT LEAKAGE:
-       - Price–volume features: per-day robust scaling
-       - Ratio/indicator features: global StandardScaler on train only
-       - Binary flags: passthrough {0,1}
-       - Cyclical time features (hour, day_of_week, month): PCA→1D passthrough
-     Return a single DataFrame, preserving original feature names and the label_col.
+    1) Copy and chronologically split df into train/val/test by row index.
+    2) Encode 'hour', 'day_of_week', 'month' as cyclic sin/cos features.
+    3) Define feature groups:
+       - price_feats   : open, high, low, close, volume, ATR, moving averages, etc.
+       - ratio_feats   : returns, vol_15, vwap_dev, indicators, etc.
+       - binary_feats  : in_trading flag
+       - cyclic_feats  : hour, day_of_week, month (post‐PCA)
+    4) Fit StandardScaler on TRAIN’s ratio_feats.
+    5) **Per-day expanding robust scaling** on price_feats:
+       for each calendar day, use only data ≤ current bar to compute 
+       median & IQR, then scale that bar.
+    6) Apply ratio and price scalers to train/val/test splits.
+    7) Fit PCA(1) on train’s sin/cos pairs and transform all splits back to single
+       'hour', 'day_of_week', 'month' columns.
+    8) Reattach label_col, concat splits, select and return final columns.
     """
-
     df = df.copy()
 
     # 1) Split into train/val/test
@@ -1240,59 +1742,50 @@ def scale_with_splits(
     df_v  = df.iloc[n_train : n_train + n_val].copy()
     df_te = df.iloc[n_train + n_val :].copy()
 
-    # 2) Generate sin & cos for each cyclic feature
+    # 2) Generate cyclic sin/cos for time features
     for sub in (df_tr, df_v, df_te):
-        # hour
         h = sub["hour"]
-        sub["hour_sin"] = np.sin(2 * np.pi * h / 24)
-        sub["hour_cos"] = np.cos(2 * np.pi * h / 24)
-        # day_of_week
+        sub["hour_sin"],     sub["hour_cos"]     = np.sin(2*np.pi*h/24),     np.cos(2*np.pi*h/24)
         d = sub["day_of_week"]
-        sub["day_of_week_sin"] = np.sin(2 * np.pi * d / 7)
-        sub["day_of_week_cos"] = np.cos(2 * np.pi * d / 7)
-        # month
+        sub["day_of_week_sin"], sub["day_of_week_cos"] = np.sin(2*np.pi*d/7),  np.cos(2*np.pi*d/7)
         m = sub["month"]
-        sub["month_sin"] = np.sin(2 * np.pi * m / 12)
-        sub["month_cos"] = np.cos(2 * np.pi * m / 12)
+        sub["month_sin"],    sub["month_cos"]    = np.sin(2*np.pi*m/12),    np.cos(2*np.pi*m/12)
 
     # 3) Define feature groups
-    price_feats = [
-        "open", "high", "low", "close", "volume",
-        "atr_14", "ma_5", "ma_20", "ma_diff",
-        "macd_12_26", "macd_signal_9", "obv"
-    ]
-    ratio_feats = [
-        "r_1", "r_5", "r_15",
-        "vol_15", "volume_spike", "vwap_dev",
-        "rsi_14", "bb_width_20", "stoch_k_14", "stoch_d_3"
-    ]
-    binary_feats = ["in_trading"]
-    cyclic_feats  = ["hour", "day_of_week", "month"]
+    all_price = ["open","high","low","close","volume","atr_14",
+                 "ma_5","ma_20","ma_diff","macd_12_26","macd_signal_9","obv"]
+    all_ratio = ["r_1","r_5","r_15","vol_15","volume_spike",
+                 "vwap_dev","rsi_14","bb_width_20","stoch_k_14","stoch_d_3"]
 
-    price_feats  = [f for f in price_feats  if f in features_cols]
-    ratio_feats  = [f for f in ratio_feats  if f in features_cols]
-    binary_feats = [f for f in binary_feats if f in features_cols]
-    # note: cyclic_feats will be re‐added post-PCA
+    price_feats  = [f for f in all_price  if f in features_cols]
+    ratio_feats  = [f for f in all_ratio  if f in features_cols]
+    binary_feats = [f for f in ["in_trading"] if f in features_cols]
+    cyclic_feats = ["hour","day_of_week","month"]
 
-    # 4) Fit global scaler on ratio/indicator features
+    # 4) Fit StandardScaler on TRAIN ratio_feats
     ratio_scaler = StandardScaler()
     if ratio_feats:
         ratio_scaler.fit(df_tr[ratio_feats])
 
-    # 5) Per-day robust scaler for price features
+    # 5) Per-day expanding robust scaling on price_feats (no leakage)
     def scale_price_per_day(sub: pd.DataFrame, desc: str) -> pd.DataFrame:
         out = sub.copy()
         days = out.index.normalize().unique()
         for day in tqdm(days, desc=f"Scaling price per day ({desc})", unit="day"):
             mask  = out.index.normalize() == day
             block = out.loc[mask, price_feats]
-            med   = block.median(axis=0)
-            iqr   = block.quantile(0.75, axis=0) - block.quantile(0.25, axis=0)
-            iqr[iqr == 0] = 1e-6
+
+            # expanding median & IQR up to each bar
+            med = block.expanding().median()
+            q75 = block.expanding().quantile(0.75)
+            q25 = block.expanding().quantile(0.25)
+            iqr = (q75 - q25).replace(0, 1e-6)
+
+            # apply element-wise: bar i uses only bars ≤ i
             out.loc[mask, price_feats] = (block - med) / iqr
         return out
 
-    # 6) Transform splits (price + ratio)
+    # 6) Transform splits
     def transform(sub: pd.DataFrame, split_name: str) -> pd.DataFrame:
         out = sub.copy()
         if price_feats:
@@ -1305,49 +1798,40 @@ def scale_with_splits(
     df_val_s = transform(df_v,   "val")
     df_te_s  = transform(df_te,  "test")
 
-    # 7) Fit PCA on train‐only sin/cos pairs
+    # 7) PCA(1) on sin/cos pairs, fit on TRAIN → transform all
     pca_hour = PCA(n_components=1).fit(df_tr_s[["hour_sin","hour_cos"]])
     pca_dow  = PCA(n_components=1).fit(df_tr_s[["day_of_week_sin","day_of_week_cos"]])
     pca_mo   = PCA(n_components=1).fit(df_tr_s[["month_sin","month_cos"]])
 
-    # 8) Apply PCA → 1D, round, drop sin/cos, reattach original names
     def apply_cyclic_pca(sub: pd.DataFrame) -> pd.DataFrame:
-        # hour
-        h_pc1 = pca_hour.transform(sub[["hour_sin","hour_cos"]])[:,0]
-        sub["hour"] = np.round(h_pc1, 3)
-        # day_of_week
-        d_pc1 = pca_dow.transform(sub[["day_of_week_sin","day_of_week_cos"]])[:,0]
-        sub["day_of_week"] = np.round(d_pc1, 3)
-        # month
-        m_pc1 = pca_mo.transform(sub[["month_sin","month_cos"]])[:,0]
-        sub["month"] = np.round(m_pc1, 3)
-
-        # drop the intermediate columns
-        sub.drop([
+        out = sub.copy()
+        out["hour"]        = np.round(pca_hour.transform(out[["hour_sin","hour_cos"]])[:,0], 3)
+        out["day_of_week"] = np.round(pca_dow.transform(out[["day_of_week_sin","day_of_week_cos"]])[:,0], 3)
+        out["month"]       = np.round(pca_mo.transform(out[["month_sin","month_cos"]])[:,0], 3)
+        out.drop([
             "hour_sin","hour_cos",
             "day_of_week_sin","day_of_week_cos",
             "month_sin","month_cos"
         ], axis=1, inplace=True)
-
-        return sub
+        return out
 
     df_tr_s  = apply_cyclic_pca(df_tr_s)
     df_val_s = apply_cyclic_pca(df_val_s)
     df_te_s  = apply_cyclic_pca(df_te_s)
 
-    # 9) Reattach label and recombine
-    for subset in (df_tr_s, df_val_s, df_te_s):
-        subset[label_col] = df.loc[subset.index, label_col]
+    # 8) Reattach label and recombine
+    for part in (df_tr_s, df_val_s, df_te_s):
+        part[label_col] = df.loc[part.index, label_col]
 
     df_final = pd.concat([df_tr_s, df_val_s, df_te_s]).sort_index()
 
-    # 10) Select final columns
+    # 9) Return only final ordered columns
     final_cols = (
-        price_feats
-        + ratio_feats
-        + binary_feats
-        + cyclic_feats      # now holds the PCA‐1D values
-        + ["bid", "ask"]
-        + [label_col]
+        price_feats +
+        ratio_feats +
+        binary_feats +
+        cyclic_feats +
+        ["bid", "ask"] +
+        [label_col]
     )
     return df_final[final_cols]

@@ -15,8 +15,8 @@ import json
 ticker = 'AAPL'
 save_path  = Path("dfs_training")
 
-createCSVsign = False
-date_to_check = '2024-06' 
+createCSVsign = True
+date_to_check = '2023-09' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -27,12 +27,12 @@ bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all
 
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
-feat_csv = save_path / f"{ticker}_3_feat.csv"
+feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
+feat_sel_csv = save_path / f"{ticker}_3_feat_sel.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
 
 label_col  = "signal" 
-return_col = "r_1"
 
 feats_cols_all = [
     "open",             # Opening price
@@ -127,12 +127,14 @@ def signal_parameters(ticker):
     look_back ==> length of historical window (how many minutes of history each training example contains): number of past time‐steps fed into the LSTM to predict next value
     '''
     if ticker == 'AAPL':
-        look_back = 5
+        look_back = 60
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
-        features_cols = ['vol_15', 'ma_5', 'ma_20', 'close', 'hour', 'bb_width_20', 'high', 'low', 'open', 'vwap_dev', 'atr_14', 'r_5', 'r_1', 'r_15', 'obv']
-        trailing_stop_pred = 0.02
-        pred_threshold = 0.3
+        features_cols = ['r_15', 'vol_15', 'bb_width_20', 'rsi_14']
+        # ['r_5', 'r_15', 'vol_15', 'bb_width_20', 'rsi_14', 'stoch_k_14', 'stoch_d_3', 'hour', 'macd_12_26', 'vwap_dev', 'atr_14', 'ma_20']
+        # ['vol_15', 'r_15', 'bb_width_20', 'rsi_14', 'r_5', 'ma_20', 'ma_diff', 'stoch_k_14', 'vwap_dev', 'hour', 'stoch_d_3', 'atr_14', 'r_1', 'macd_12_26', 'low']
+        trailing_stop_pred = 0.05
+        pred_threshold = 0.2
         
     return look_back, sess_start_pred, sess_start_shift, features_cols, trailing_stop_pred, pred_threshold
 
@@ -143,22 +145,17 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           96,   # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
-    "LONG_UNITS":            128,   # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.05,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.15,  # moderate dropout after weekly LSTM; balances overfitting and information retention
-    "ATT_HEADS":             16,    # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.1,   # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-4,  # L2 penalty on all weights; prevents extreme magnitudes
+    "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
+    "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
+    "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_LONG":          0.3,  # moderate dropout after weekly LSTM; balances overfitting and information retention
+    "ATT_HEADS":             4,     # number of multi-head attention heads; more heads capture diverse interactions
+    "ATT_DROPOUT":           0.2,   # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
 
-    # ── Loss Emphasis on Spikes ────────────────────────────────────────
-    "HUBER_BETA":            0.1,   # δ threshold in Huber (SmoothL1) loss; very MAE-like to heavily penalize spike errors
-    "CLS_LOSS_WEIGHT":       5.0,   # α: scales the BCE spike-detection loss head; forces regression to align with threshold crossings
-    "TERNARY_LOSS_WEIGHT":   3.0,   # β: scales the 3-class return-direction loss head; encourages correct directional spikes
-    "SPIKE_LOSS_WEIGHT":     2.0,   # λ: per-sample multiplier (1 + λ·|true_signal|) on Huber loss to up-weight high-magnitude spikes
-    "DERIV_LOSS_WEIGHT":     0.1,   # γ: weight for first-difference loss encouraging predicted jumps to match true jumps
-    "SPIKE_THRESHOLD":       0.5,   # threshold for hinge-style penalty around spike detection
-    "HINGE_LOSS_WEIGHT":     1.0,   # γ_hinge: weight of the hinge penalty enforcing threshold consistency
+    # —— Active Loss Hyperparameters —— 
+    "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 (Huber) loss; range: 0.01–1.0: lower→more like MAE (heavier spike penalty), higher→more like MSE (tolerate spikes)
+    "CLS_LOSS_WEIGHT":       0.05,  # α weight for the binary BCE loss head; range: 0.1–10.0: lower→less emphasis on threshold-crossing signal, higher→stronger spike detection
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,    # number of sequences per training batch
@@ -166,15 +163,15 @@ hparams = {
     "NUM_WORKERS":           2,     # DataLoader CPU workers
     "TRAIN_PREFETCH_FACTOR": 1,     # prefetch factor for DataLoader
 
-    "MAX_EPOCHS":            70,    # maximum number of epochs
+    "MAX_EPOCHS":            90,    # maximum number of epochs
     "EARLY_STOP_PATIENCE":   3,     # epochs with no val–RMSE improvement before stopping
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
-    "INITIAL_LR":            1e-3,  # starting learning rate
-    "CLIPNORM":              1.0,   # max gradient norm for clipping
-    "ETA_MIN":               1e-5,  # floor LR in CosineAnnealingWarmRestarts
-    "T_0":                   70,    # period (in epochs) of first cosine decay cycle
+    "INITIAL_LR":            5e-5,  # starting learning rateS
+    "CLIPNORM":              0.5,   # max gradient norm for clipping
+    "ETA_MIN":               1e-6,  # floor LR in CosineAnnealingWarmRestarts
+    "T_0":                   90,    # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
     ################################

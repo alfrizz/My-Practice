@@ -140,6 +140,7 @@ def plot_trades(df,
                 col_signal1, col_signal2, col_action, 
                 trades, buy_threshold, performance_stats, 
                 start_plot=params.sess_start_pred_tick, 
+                close_price='close',
                 trade_color="green"):
     """
     Plots the overall close-price series plus trade intervals and two continuous signals,
@@ -179,7 +180,7 @@ def plot_trades(df,
     # Trace 0: Base close-price trace.
     fig.add_trace(go.Scatter(
         x=df.index,
-        y=df['close'],
+        y=df[close_price],
         mode='lines',
         line=dict(color='grey', width=1),
         name='Close Price',
@@ -194,7 +195,7 @@ def plot_trades(df,
         trade_df = df.loc[buy_date:sell_date]
         fig.add_trace(go.Scatter(
             x=trade_df.index,
-            y=trade_df['close'],
+            y=trade_df[close_price],
             mode='lines+markers',
             line=dict(color=trade_color, width=3),
             marker=dict(size=4, color=trade_color),
