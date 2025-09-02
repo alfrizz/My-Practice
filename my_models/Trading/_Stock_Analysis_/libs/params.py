@@ -15,7 +15,7 @@ import json
 ticker = 'AAPL'
 save_path  = Path("dfs_training")
 
-createCSVsign = True
+createCSVsign = False
 date_to_check = '2023-09' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -131,6 +131,7 @@ def signal_parameters(ticker):
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
         features_cols = ['r_15', 'vol_15', 'bb_width_20', 'rsi_14']
+        # ['open', 'high', 'low', 'close']
         # ['r_5', 'r_15', 'vol_15', 'bb_width_20', 'rsi_14', 'stoch_k_14', 'stoch_d_3', 'hour', 'macd_12_26', 'vwap_dev', 'atr_14', 'ma_20']
         # ['vol_15', 'r_15', 'bb_width_20', 'rsi_14', 'r_5', 'ma_20', 'ma_diff', 'stoch_k_14', 'vwap_dev', 'hour', 'stoch_d_3', 'atr_14', 'r_1', 'macd_12_26', 'low']
         trailing_stop_pred = 0.05

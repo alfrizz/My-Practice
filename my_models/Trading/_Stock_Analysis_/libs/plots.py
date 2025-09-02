@@ -135,184 +135,159 @@ class LiveRMSEPlot:
 
 #########################################################################################################
 
-
-def plot_trades(df, 
-                col_signal1, col_signal2, col_action, 
-                trades, buy_threshold, performance_stats, 
-                start_plot=params.sess_start_pred_tick, 
-                close_price='close',
-                trade_color="green"):
+def plot_trades(
+    df,
+    col_signal1,
+    col_signal2,
+    col_action,
+    trades,
+    buy_threshold,
+    performance_stats,
+    start_plot=params.sess_start_pred_tick,
+    col_close='close',
+    features=None
+):
     """
-    Plots the overall close-price series plus trade intervals and two continuous signals,
-    with the signals shown on a secondary y-axis.
+    Plot price, signals, trades, and optional features with interval shading.
 
-    • The base trace (grey) plots the close-price series on the primary y-axis.
-    • Trade traces (green by default) indicate the intervals for each trade from the original trade list.
-    • A dotted blue line shows the"signal" on a secondary y-axis.
-    • A dashed red line shows the predicted signal on the secondary y-axis.
-    • A horizontal dotted line is drawn at the buy_threshold.
-    • Additionally, areas between each buy and sell event determined by the new 
-      col_action field (buy=+1, sell=-1) are highlighted (in orange).
-    • An update menu is added with two buttons:
-         - "Hide Trades": Hides only the trade-specific traces.
-         - "Show Trades": Makes all traces visible.
-
-    Parameters:
-      df : pd.DataFrame
-          DataFrame with a datetime index and at least the columns "close", col_signal1, col_signal2, col_action,.
-      trades : list
-          A list of tuples, each in the form:
-            ((buy_date, sell_date), (buy_price, sell_price), profit_pc).
-      buy_threshold : float
-          The threshold used for candidate buy detection (shown as a horizontal dotted line on the 
-          secondary y-axis).
-      performance_stats : dict, optional
-          Dictionary containing performance metrics. If provided and if it contains keys
-          "Trade Gains ($)" (each a list), they will be added to the trade annotations. 
-      trade_color : str, optional
-          The color to use for the original trade traces.
+    This function:
+      - Filters data to session hours ≥ start_plot.
+      - Computes buy-to-sell intervals and shades them full-height, toggled by “Trades.”
+      - Plots Close Price (primary y-axis), Target Signal, and optional Pred. Signal (secondary y-axis).
+      - Adds optional feature lines on the signal axis, hidden by default.
+      - Overlays trade segments in green with hover showing Return$ & Return%.
+      - Draws a togglable threshold line on the signal axis.
+      - Uses x unified hover for a single timestamp tooltip.
+      - Compresses legend spacing, increases fonts, and sets a taller figure height.
     """
+    # 1) Restrict to session hours
+    df = df.loc[df.index.time >= start_plot]
+
+    # 2) Compute buy→sell intervals
+    events = df[df[col_action] != 0][col_action]
+    intervals, last_buy = [], None
+    for ts, act in events.items():
+        if act == 1:
+            last_buy = ts
+        elif act == -1 and last_buy is not None:
+            intervals.append((last_buy, ts))
+            last_buy = None
+
     fig = go.Figure()
 
-    # only plot from start_plot
-    df = df.loc[df.index.time >= start_plot]
-    
-    # Trace 0: Base close-price trace.
-    fig.add_trace(go.Scatter(
-        x=df.index,
-        y=df[close_price],
-        mode='lines',
-        line=dict(color='grey', width=1),
-        name='Close Price',
-        hoverinfo='x+y',
-        hovertemplate="Date: %{x}<br>Close: %{y:.2f}<extra></extra>",
-    ))
-    
-    # Trade traces: one per original trade.
-    for i, trade in enumerate(trades):
-        # Unpack the trade tuple: ((buy_date, sell_date), (buy_price, sell_price), profit_pc)
-        (buy_date, sell_date), (_, _), trade_return = trade
-        trade_df = df.loc[buy_date:sell_date]
-        fig.add_trace(go.Scatter(
-            x=trade_df.index,
-            y=trade_df[close_price],
-            mode='lines+markers',
-            line=dict(color=trade_color, width=3),
-            marker=dict(size=4, color=trade_color),
-            name=f"Trade {i+1}",
-            hoveron='points',
-            hovertemplate=f"Trade {i+1}: Return: {trade_return:.2f}%<extra></extra>",
-            visible=True
-        ))
-        
-    # --------------------------------------------------------------------
-    # New Trade Action Highlights: using the col_action field.
-    # Extract rows where col_action is not zero.
-    trade_events = df[df[col_action] != 0][col_action]
-    pairs = []
-    prev_buy = None
-    for timestamp, action in trade_events.items():
-        if action == 1:   # Buy signal
-            prev_buy = timestamp
-        elif action == -1 and prev_buy is not None:
-            pairs.append((prev_buy, timestamp))
-            prev_buy = None
-
-    # For each buy-sell pair, add a vertical shaded region with annotation.
-    for j, (buy_ts, sell_ts) in enumerate(pairs):
-        if (performance_stats is not None and 
-            "Trades Returns ($)" in performance_stats and 
-            len(performance_stats["Trades Returns ($)"]) > j):  
-            ann_text = (f"TA Trade {j+1}<br>$: {performance_stats['Trades Returns ($)'][j]}<br>")
-        else:
-            ann_text = f"TA Trade {j+1}"
-            
-        fig.add_vrect(
-            x0=buy_ts, x1=sell_ts,
-            fillcolor="orange", opacity=0.25,
-            line_width=0,
-            annotation_text=ann_text,
-            annotation_position="top left",
-            annotation_font_color="orange"
-        )
-    # --------------------------------------------------------------------
-    
-    # Signal1 trace on a secondary y-axis.
-    fig.add_trace(go.Scatter(
-        x=df.index,
-        y=df[col_signal1],
-        mode='lines',
-        line=dict(color='blue', width=2, dash='dot'),
-        name=col_signal1,
-        hovertemplate="Date: %{x}<br>Signal: %{y:.2f}<extra></extra>",
-        visible=True,
-        yaxis="y2"
-    ))
-
-    if col_signal2:
-        # Signal2 trace on a secondary y-axis.
-        fig.add_trace(go.Scatter(
-            x=df.index,
-            y=df[col_signal2],
-            mode='lines',
-            line=dict(color='red', width=2, dash='dash'),
-            name=col_signal2,
-            hovertemplate="Date: %{x}<br>Pred Signal: %{y:.2f}<extra></extra>",
-            visible=True,
-            yaxis="y2"
-        ))
-    
-    # Add a horizontal dotted line for the buy_threshold (on secondary y-axis).
-    fig.add_hline(y=buy_threshold, line=dict(color="purple", dash="dot"),
-                  annotation_text="Buy Threshold", annotation_position="top left", yref="y2")
-    
-    # Total traces: 1 Base + n_trades (original trades) + 2 (for the signal traces).
-    n_trades = len(trades)
-    total_traces = 1 + n_trades + 2
-    vis_show = [True] * total_traces  
-    vis_hide = [True] + ["legendonly"] * n_trades + [True, True]
-    
+    # 3) Define a full-height “paper-scale” axis y3
     fig.update_layout(
-        updatemenus=[
-            {
-                "type": "buttons",
-                "direction": "left",
-                "buttons": [
-                    {
-                        "label": "Hide Trades",
-                        "method": "update",
-                        "args": [{"visible": vis_hide}],
-                    },
-                    {
-                        "label": "Show Trades",
-                        "method": "update",
-                        "args": [{"visible": vis_show}],
-                    },
-                ],
-                "pad": {"r": 10, "t": 10},
-                "showactive": True,
-                "x": 0.9,
-                "xanchor": "left",
-                "y": 1.1,
-                "yanchor": "top",
-            }
-        ],
-        hovermode="x unified",
-        template="plotly_white",
-        title="Close Price, Trade Intervals, and Signals",
-        xaxis_title="Datetime",
-        yaxis_title="Close Price",
-        height=700,
-        yaxis2=dict(
-            title="Signals",
-            overlaying="y",
-            side="right",
-            showgrid=False,
-        )
+        yaxis3=dict(domain=[0,1], anchor='x', overlaying='y', visible=False)
     )
-    
-    fig.show()
 
+    # 4) Draw orange bands on y3, grouped under "<br>Trades"
+    for idx, (b0, b1) in enumerate(intervals):
+        fig.add_trace(go.Scatter(
+            x=[b0, b1, b1, b0, b0],
+            y=[0,    0,    1,    1,    0],
+            mode='none',
+            fill='toself',
+            fillcolor='rgba(255,165,0,0.25)',
+            legendgroup='Trades',
+            name='<br>Trades' if idx == 0 else None,
+            showlegend=(idx == 0),
+            hoverinfo='skip',
+            yaxis='y3'
+        ))
+
+    # 5a) Close Price (primary y-axis)
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df[col_close], mode='lines',
+        line=dict(color='grey', width=1),
+        name='<br>Close Price',
+        hovertemplate='Close Price: %{y:.3f}<extra></extra>'
+    ))
+
+    # 5b) Target Signal (secondary y-axis)
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df[col_signal1], mode='lines',
+        line=dict(color='blue', width=2, dash='dot'),
+        name='<br>Targ. Signal',
+        hovertemplate='Targ. Signal: %{y:.3f}<extra></extra>',
+        yaxis='y2'
+    ))
+
+    # 5c) Optional Predicted Signal (secondary y-axis)
+    if col_signal2:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df[col_signal2], mode='lines',
+            line=dict(color='darkred', width=2, dash='dot'),
+            name='<br>Pred. Signal',
+            hovertemplate='Pred. Signal: %{y:.3f}<extra></extra>',
+            yaxis='y2'
+        ))
+
+    # 6) Optional feature traces (secondary y-axis), hidden by default,
+    #    check that features is non-null and non-empty even if it's an Index
+    if features is not None and len(features) > 0:
+        for feat in features:
+            fig.add_trace(go.Scatter(
+                x=df.index, y=df[feat], mode='lines',
+                line=dict(width=1),
+                name=f'<br>{feat}',
+                hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>',
+                yaxis='y2',
+                visible='legendonly'
+            ))
+
+    # 7) Overlay trades (green), grouped under "Trades"
+    abs_key = "Trades Returns ($)"
+    for i, ((b_dt, s_dt), _, ret_pc) in enumerate(trades, start=1):
+        seg = df.loc[b_dt:s_dt]
+        abs_gain = None
+        if performance_stats and abs_key in performance_stats:
+            abs_gain = performance_stats[abs_key][i-1]
+
+        hover_txt = (
+            f"Return$: {abs_gain:.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
+            if abs_gain is not None else
+            f"Return%: {ret_pc:.3f}%<extra></extra>"
+        )
+
+        fig.add_trace(go.Scatter(
+            x=seg.index, y=seg[col_close],
+            mode='lines+markers',
+            line=dict(color='green', width=1),
+            marker=dict(size=3, color='green'),
+            legendgroup='Trades',
+            name=None,
+            showlegend=False,
+            hovertemplate=hover_txt
+        ))
+
+    # 8) Threshold line toggle (secondary y-axis)
+    fig.add_trace(go.Scatter(
+        x=[df.index[0], df.index[-1]],
+        y=[buy_threshold, buy_threshold],
+        mode='lines',
+        line=dict(color='purple', dash='dot', width=1),
+        name='<br>Threshold',
+        hovertemplate=f"Threshold: {buy_threshold:.3f}<extra></extra>",
+        yaxis='y2'
+    ))
+
+    # 9 & 10) Layout: unified hover, compressed legend, bump fonts, increase height
+    fig.update_layout(
+        hovermode='x unified',
+        hoverlabel=dict(font_size=12),
+        template='plotly_white',
+        xaxis_title='Time',
+        yaxis_title='Price',
+        height=900,
+        legend=dict(
+            font=dict(size=12),
+            itemsizing='constant',
+            tracegroupgap=0
+        ),
+        yaxis2=dict(title='Signals', overlaying='y', side='right', showgrid=False)
+    )
+
+    fig.show()
 
 #########################################################################################################
 
