@@ -16,6 +16,8 @@ ticker = 'AAPL'
 save_path  = Path("dfs_training")
 
 createCSVsign = False
+feat_sel = 'man' # 'auto' or 'man'
+
 date_to_check = '2023-09' 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -28,7 +30,8 @@ bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
-feat_sel_csv = save_path / f"{ticker}_3_feat_sel.csv"
+feat_sel_auto_csv = save_path / f"{ticker}_3_feat_sel_auto.csv"
+feat_sel_man_csv = save_path / f"{ticker}_3_feat_sel_man.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
 
