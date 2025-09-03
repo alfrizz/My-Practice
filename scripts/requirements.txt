@@ -5,6 +5,7 @@ jupyterlab>=4.0.0
 numpy
 optuna==4.4.0
 pandas==2.2.3
+pandas_ta==0.3.14b0
 plotly
 seaborn
 shap==0.48.0

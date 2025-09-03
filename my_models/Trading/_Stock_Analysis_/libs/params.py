@@ -12,21 +12,21 @@ import glob
 import json
 
 #########################################################################################################
-ticker = 'AAPL'
-save_path  = Path("dfs_training")
 
-createCSVsign = False
+ticker = 'AAPL'
+label_col  = "signal" 
+createCSVsign = True
 feat_sel = 'man' # 'auto' or 'man'
 
 date_to_check = '2023-09' 
+train_prop, val_prop = 0.70, 0.15 # dataset split proportions
+bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
 optuna_folder = "optuna_results" 
 
-train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one
-
+save_path  = Path("dfs_training")
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
@@ -34,37 +34,6 @@ feat_sel_auto_csv = save_path / f"{ticker}_3_feat_sel_auto.csv"
 feat_sel_man_csv = save_path / f"{ticker}_3_feat_sel_man.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
-
-label_col  = "signal" 
-
-feats_cols_all = [
-    "open",             # Opening price
-    "high",             # Highest price
-    "low",              # Lowest price
-    "close",            # Closing price
-    "volume",           # Traded volume
-    "r_1",              # 1-period log return
-    "r_5",              # 5-period log return
-    "r_15",             # 15-period log return
-    "vol_15",           # Rolling 15-period volatility of r_1
-    "volume_spike",     # Current volume / avg volume over 15
-    "atr_14",           # 14-period Average True Range
-    "vwap_dev",         # (close – VWAP) / VWAP
-    "rsi_14",           # 14-period Relative Strength Index
-    "bb_width_20",      # (BB upper – BB lower) / MA20
-    "stoch_k_14",       # %K of 14-period Stochastic
-    "stoch_d_3",        # 3-period SMA of %K
-    "ma_5",             # 5-period simple moving average
-    "ma_20",            # 20-period simple moving average
-    "ma_diff",          # ma_5 – ma_20
-    "macd_12_26",       # EMA12 – EMA26
-    "macd_signal_9",    # 9-period EMA of MACD
-    "obv",              # On-Balance Volume
-    "in_trading",       # Within regular trading time
-    "hour",             # Hour of the day (0–23)
-    "day_of_week",      # Day of week (0=Mon…6=Sun)
-    "month",            # Month (1–12)
-]
 
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
 # Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
@@ -74,7 +43,6 @@ feats_cols_all = [
 sess_start         = datetime.strptime('14:30', '%H:%M').time()  
 sess_premark       = datetime.strptime('09:00' , '%H:%M').time()  
 sess_end           = datetime.strptime('21:00' , '%H:%M').time() 
-
 
 #########################################################################################################
 
@@ -133,10 +101,7 @@ def signal_parameters(ticker):
         look_back = 60
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
-        features_cols = ['r_15', 'vol_15', 'bb_width_20', 'rsi_14']
-        # ['open', 'high', 'low', 'close']
-        # ['r_5', 'r_15', 'vol_15', 'bb_width_20', 'rsi_14', 'stoch_k_14', 'stoch_d_3', 'hour', 'macd_12_26', 'vwap_dev', 'atr_14', 'ma_20']
-        # ['vol_15', 'r_15', 'bb_width_20', 'rsi_14', 'r_5', 'ma_20', 'ma_diff', 'stoch_k_14', 'vwap_dev', 'hour', 'stoch_d_3', 'atr_14', 'r_1', 'macd_12_26', 'low']
+        features_cols = ['feat_main_atr_ratio', 'feat_main_vol_15', 'feat_main_atr_ratio_sma', 'feat_main_bb_width_20','feat_main_r_15', 'feat_main_stoch_k_14', 'feat_eng_obv', 'hour']
         trailing_stop_pred = 0.05
         pred_threshold = 0.2
         
@@ -151,11 +116,11 @@ hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
     "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.3,  # moderate dropout after weekly LSTM; balances overfitting and information retention
-    "ATT_HEADS":             4,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.2,   # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
+    "DROPOUT_SHORT":         0.1,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_LONG":          0.15,  # moderate dropout after weekly LSTM; balances overfitting and information retention
+    "ATT_HEADS":             8,     # number of multi-head attention heads; more heads capture diverse interactions
+    "ATT_DROPOUT":           0.05,   # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          5e-5,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # —— Active Loss Hyperparameters —— 
     "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 (Huber) loss; range: 0.01–1.0: lower→more like MAE (heavier spike penalty), higher→more like MSE (tolerate spikes)
@@ -167,15 +132,15 @@ hparams = {
     "NUM_WORKERS":           2,     # DataLoader CPU workers
     "TRAIN_PREFETCH_FACTOR": 1,     # prefetch factor for DataLoader
 
-    "MAX_EPOCHS":            90,    # maximum number of epochs
-    "EARLY_STOP_PATIENCE":   3,     # epochs with no val–RMSE improvement before stopping
+    "MAX_EPOCHS":            500,    # maximum number of epochs
+    "EARLY_STOP_PATIENCE":   10,     # epochs with no val–RMSE improvement before stopping
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
-    "INITIAL_LR":            5e-5,  # starting learning rateS
-    "CLIPNORM":              0.5,   # max gradient norm for clipping
+    "INITIAL_LR":            1e-5,  # starting learning rateS
+    "CLIPNORM":              1,   # max gradient norm for clipping
     "ETA_MIN":               1e-6,  # floor LR in CosineAnnealingWarmRestarts
-    "T_0":                   90,    # period (in epochs) of first cosine decay cycle
+    "T_0":                   500,    # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
     ################################
