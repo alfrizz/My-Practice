@@ -25,8 +25,9 @@ bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
 optuna_folder = "optuna_results" 
+models_folder = "trainings" 
 
-save_path  = Path("dfs_training")
+save_path  = Path("dfs")
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
@@ -101,7 +102,7 @@ def signal_parameters(ticker):
         look_back = 60
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
-        features_cols = ['feat_main_atr_ratio', 'feat_main_vol_15', 'feat_main_atr_ratio_sma', 'feat_main_bb_width_20','feat_main_r_15', 'feat_main_stoch_k_14', 'feat_eng_obv', 'hour']
+        features_cols = ['atr_ratio', 'atr_ratio_sma', 'vol_15',  'bb_width_20', 'r_15', 'rsi', 'stoch_k_14', 'eng_ma']
         trailing_stop_pred = 0.05
         pred_threshold = 0.2
         
@@ -114,17 +115,13 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
+    "SHORT_UNITS":           128,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
     "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.1,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_SHORT":         0.15,  # light dropout after daily LSTM+attention; preserves spike information
     "DROPOUT_LONG":          0.15,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             8,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.05,   # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          5e-5,  # L2 penalty on all weights; prevents extreme magnitudes
-
-    # —— Active Loss Hyperparameters —— 
-    "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 (Huber) loss; range: 0.01–1.0: lower→more like MAE (heavier spike penalty), higher→more like MSE (tolerate spikes)
-    "CLS_LOSS_WEIGHT":       0.05,  # α weight for the binary BCE loss head; range: 0.1–10.0: lower→less emphasis on threshold-crossing signal, higher→stronger spike detection
+    "ATT_DROPOUT":           0.1,   # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          1e-5,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,    # number of sequences per training batch
@@ -132,19 +129,23 @@ hparams = {
     "NUM_WORKERS":           2,     # DataLoader CPU workers
     "TRAIN_PREFETCH_FACTOR": 1,     # prefetch factor for DataLoader
 
-    "MAX_EPOCHS":            500,    # maximum number of epochs
-    "EARLY_STOP_PATIENCE":   10,     # epochs with no val–RMSE improvement before stopping
+    "MAX_EPOCHS":            90,    # maximum number of epochs
+    "EARLY_STOP_PATIENCE":   6,     # epochs with no val–RMSE improvement before stopping
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
-    "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
-    "INITIAL_LR":            1e-5,  # starting learning rateS
-    "CLIPNORM":              1,   # max gradient norm for clipping
-    "ETA_MIN":               1e-6,  # floor LR in CosineAnnealingWarmRestarts
-    "T_0":                   500,    # period (in epochs) of first cosine decay cycle
+    "LR_EPOCHS_WARMUP":      5,     # epochs to keep LR constant before cosine decay
+    "INITIAL_LR":            1e-4,  # starting learning rateS
+    "CLIPNORM":              0.8,   # max gradient norm for clipping
+    "ETA_MIN":               5e-6,  # floor LR in CosineAnnealingWarmRestarts
+    "T_0":                   90,    # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
-    ################################
-    # ── ReduceLROnPlateau Scheduler ──────────────────NOT USED────────────────
+    ############################───────────────NOT USED────────────────###################################
+    # —— Active Loss Hyperparameters —— 
+    "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 (Huber) loss; range: 0.01–1.0: lower→more like MAE (heavier spike penalty), higher→more like MSE (tolerate spikes)
+    "CLS_LOSS_WEIGHT":       0.05,  # α weight for the binary BCE loss head; range: 0.1–10.0: lower→less emphasis on threshold-crossing signal, higher→stronger spike detection
+    
+    # ── ReduceLROnPlateau Scheduler ───
     "PLATEAU_FACTOR":        0.9,   # multiply LR by this factor on plateau
     "PLATEAU_PATIENCE":      0,     # epochs with no val-improve before LR cut
     "MIN_LR":                1e-6,  # lower bound on LR after reductions

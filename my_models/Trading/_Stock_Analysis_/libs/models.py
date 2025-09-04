@@ -528,30 +528,30 @@ def split_to_day_datasets(
 
     return train_loader, val_loader, test_loader
 
-#########################################################################################################
+# #########################################################################################################
 
 
-def naive_rmse(data_loader):
-    """
-    Zero‐forecast baseline RMSE for any DayDataset loader:
-      – always predicts 0
-      – works for val_loader (xb, yb, wd)
-      – and test_loader (xb, yb, raw_close, raw_bid, raw_ask, wd)
-    """
-    total_se = 0.0
-    total_n  = 0
+# def naive_rmse(data_loader):
+#     """
+#     Zero‐forecast baseline RMSE for any DayDataset loader:
+#       – always predicts 0
+#       – works for val_loader (xb, yb, wd)
+#       – and test_loader (xb, yb, raw_close, raw_bid, raw_ask, wd)
+#     """
+#     total_se = 0.0
+#     total_n  = 0
 
-    for batch in data_loader:
-        # batch[1] is always y_day regardless of extra fields
-        y_day = batch[1]  
-        # y_day: shape (1, W) → squeeze→ (W,)
-        y = y_day.squeeze(0).view(-1)
+#     for batch in data_loader:
+#         # batch[1] is always y_day regardless of extra fields
+#         y_day = batch[1]  
+#         # y_day: shape (1, W) → squeeze→ (W,)
+#         y = y_day.squeeze(0).view(-1)
 
-        # accumulate (0 - y)^2 = y^2
-        total_se += float((y ** 2).sum().item())
-        total_n  += y.numel()
+#         # accumulate (0 - y)^2 = y^2
+#         total_se += float((y ** 2).sum().item())
+#         total_n  += y.numel()
 
-    return math.sqrt(total_se / total_n)
+#     return math.sqrt(total_se / total_n)
     
 
 #########################################################################################################
@@ -766,7 +766,6 @@ def custom_stateful_training_loop(
     *,
     max_epochs:          int,
     early_stop_patience: int,
-    baseline_val_rmse:   float,
     clipnorm:            float,
     device:              torch.device = torch.device("cpu"),
 ) -> float:
@@ -797,20 +796,161 @@ def custom_stateful_training_loop(
          c) At epoch end, collect train‐metric summaries into a dict.
       5) Validation loop and checkpointing.
     """
+    # # 1) Device setup
+    # model.to(device)
+    # torch.backends.cudnn.benchmark = True
+
+    # # 2) Losses & weights
+    # beta_huber = params.hparams["HUBER_BETA"]
+    # huber_loss = nn.SmoothL1Loss(beta=beta_huber)      # mean reduction
+    # bce_loss   = nn.BCEWithLogitsLoss()
+    # alpha_cls  = params.hparams["CLS_LOSS_WEIGHT"]
+    # # trinary‐head loss and spike/derivative weighting removed
+
+    # save_pat  = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
+    # live_plot = plots.LiveRMSEPlot()
+
+    # # 3) Metrics (regression + binary classification)
+    # thr         = 0.5
+    # train_rmse  = torchmetrics.MeanSquaredError(squared=False).to(device)
+    # train_mae   = torchmetrics.MeanAbsoluteError().to(device)
+    # train_r2    = torchmetrics.R2Score().to(device)
+    # train_acc   = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
+    # train_prec  = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
+    # train_rec   = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
+    # train_f1    = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
+    # train_auc   = torchmetrics.classification.BinaryAUROC().to(device)
+    # # ternary‐head metrics removed
+
+    # val_rmse  = torchmetrics.MeanSquaredError(squared=False).to(device)
+    # val_mae   = torchmetrics.MeanAbsoluteError().to(device)
+    # val_r2    = torchmetrics.R2Score().to(device)
+    # val_acc   = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
+    # val_prec  = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
+    # val_rec   = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
+    # val_f1    = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
+    # val_auc   = torchmetrics.classification.BinaryAUROC().to(device)
+    # # ternary‐head metrics removed
+
+    # best_val_rmse = float("inf")
+    # patience_ctr  = 0
+
+    # # 4) Epochs
+    # for epoch in range(1, max_epochs + 1):
+    #     gc.collect()
+
+    #     # a) Training pass
+    #     model.train()
+    #     model.h_short = model.h_long = None
+    #     for m in (train_rmse, train_mae, train_r2,
+    #               train_acc, train_prec, train_rec,
+    #               train_f1, train_auc):
+    #         m.reset()
+
+    #     pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
+    #     for batch_idx, batch in enumerate(pbar):
+    #         # Unpack: drop ternary‐head targets but still load them
+    #         xb_days, y_sig_days, y_sig_cls_days, ret_days, y_ret_ter_days, wd_days, ts_list, lengths = batch
+
+    #         xb    = xb_days.to(device, non_blocking=True)
+    #         y_sig = y_sig_days.to(device, non_blocking=True)
+    #         y_cls = y_sig_cls_days.to(device, non_blocking=True)
+    #         wd    = wd_days.to(device, non_blocking=True)
+
+    #         optimizer.zero_grad(set_to_none=True)
+    #         prev_day = None
+
+    #         # Process each sequence (“day”) in the batch
+    #         for di in range(xb.size(0)):
+    #             W      = lengths[di]
+    #             day_id = int(wd[di].item())
+
+    #             x_seq   = xb[di, :W]
+    #             sig_seq = y_sig[di, :W]
+    #             cls_seq = y_cls[di, :W].view(-1)
+
+    #             # Reset or carry LSTM states on day rollover
+    #             model.reset_short()
+    #             if prev_day is not None and day_id < prev_day:
+    #                 model.reset_long()
+    #             prev_day = day_id
+
+    #             # 1) Full-precision forward
+    #             pr, pc, _ = model(x_seq)
+                
+    #             # 2) Inside autocast, build only the loss & backward
+    #             with autocast(device_type=device.type):
+    #                 # Sigmoid/reg logits
+    #                 lr = torch.sigmoid(pr[..., -1, 0])   # (W,)
+    #                 lc = pc[...,    -1, 0]               # (W,)
+                
+    #                 # Loss = Huber(regression) + α·BCE(binary)
+    #                 loss_r = huber_loss(lr, sig_seq)
+    #                 loss_b = bce_loss(lc, cls_seq)
+    #                 loss   = loss_r + alpha_cls * loss_b
+                
+    #             scaler.scale(loss).backward()
+                
+
+    #             # Update regression metrics
+    #             train_rmse.update(lr, sig_seq)
+    #             train_mae .update(lr, sig_seq)
+    #             train_r2  .update(lr, sig_seq)
+
+    #             # Update binary‐classification metrics
+    #             probs = torch.sigmoid(lc)
+    #             train_acc .update(probs, cls_seq)
+    #             train_prec.update(probs, cls_seq)
+    #             train_rec .update(probs, cls_seq)
+    #             train_f1  .update(probs, cls_seq)
+    #             train_auc .update(probs, cls_seq)
+
+    #             # Truncate backprop through states
+    #             model.h_short.detach_(); model.c_short.detach_()
+    #             model.h_long .detach_(); model.c_long .detach_()
+
+    #         # Gradient clipping & optimizer step
+    #         scaler.unscale_(optimizer)
+    #         torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+    #         scaler.step(optimizer); scaler.update()
+
+    #         # Cosine learning‐rate update
+    #         frac = epoch - 1 + batch_idx / len(train_loader)
+    #         cosine_sched.step(frac)
+
+    #         pbar.set_postfix(
+    #             train_rmse=train_rmse.compute().item(),
+    #             lr=optimizer.param_groups[0]['lr'],
+    #             refresh=False
+    #         )
+
+    #     # ——— collect training metrics ———
+    #     tr = {
+    #         "rmse":  train_rmse.compute().item(),
+    #         "mae":   train_mae.compute().item(),
+    #         "r2":    train_r2.compute().item(),
+    #         "acc":   train_acc.compute().item(),
+    #         "prec":  train_prec.compute().item(),
+    #         "rec":   train_rec.compute().item(),
+    #         "f1":    train_f1.compute().item(),
+    #         "auroc": train_auc.compute().item(),
+    #     }
+
     # 1) Device setup
     model.to(device)
     torch.backends.cudnn.benchmark = True
-
+    
     # 2) Losses & weights
     beta_huber = params.hparams["HUBER_BETA"]
-    huber_loss = nn.SmoothL1Loss(beta=beta_huber)      # mean reduction
-    bce_loss   = nn.BCEWithLogitsLoss()
-    alpha_cls  = params.hparams["CLS_LOSS_WEIGHT"]
-    # trinary‐head loss and spike/derivative weighting removed
-
+    huber_loss = nn.SmoothL1Loss(beta=beta_huber)      # still defined, but unused
+    bce_loss   = nn.BCEWithLogitsLoss()                # still defined, but unused
+    alpha_cls  = params.hparams["CLS_LOSS_WEIGHT"]     # still defined, but unused
+    
+    mse_loss   = nn.MSELoss()
+    
     save_pat  = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)\.pth")
     live_plot = plots.LiveRMSEPlot()
-
+    
     # 3) Metrics (regression + binary classification)
     thr         = 0.5
     train_rmse  = torchmetrics.MeanSquaredError(squared=False).to(device)
@@ -821,25 +961,23 @@ def custom_stateful_training_loop(
     train_rec   = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
     train_f1    = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
     train_auc   = torchmetrics.classification.BinaryAUROC().to(device)
-    # ternary‐head metrics removed
-
-    val_rmse  = torchmetrics.MeanSquaredError(squared=False).to(device)
-    val_mae   = torchmetrics.MeanAbsoluteError().to(device)
-    val_r2    = torchmetrics.R2Score().to(device)
-    val_acc   = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
-    val_prec  = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
-    val_rec   = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
-    val_f1    = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
-    val_auc   = torchmetrics.classification.BinaryAUROC().to(device)
-    # ternary‐head metrics removed
-
+    
+    val_rmse    = torchmetrics.MeanSquaredError(squared=False).to(device)
+    val_mae     = torchmetrics.MeanAbsoluteError().to(device)
+    val_r2      = torchmetrics.R2Score().to(device)
+    val_acc     = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
+    val_prec    = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
+    val_rec     = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
+    val_f1      = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
+    val_auc     = torchmetrics.classification.BinaryAUROC().to(device)
+    
     best_val_rmse = float("inf")
     patience_ctr  = 0
 
     # 4) Epochs
     for epoch in range(1, max_epochs + 1):
         gc.collect()
-
+    
         # a) Training pass
         model.train()
         model.h_short = model.h_long = None
@@ -847,84 +985,75 @@ def custom_stateful_training_loop(
                   train_acc, train_prec, train_rec,
                   train_f1, train_auc):
             m.reset()
-
+    
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
         for batch_idx, batch in enumerate(pbar):
-            # Unpack: drop ternary‐head targets but still load them
             xb_days, y_sig_days, y_sig_cls_days, ret_days, y_ret_ter_days, wd_days, ts_list, lengths = batch
-
+    
             xb    = xb_days.to(device, non_blocking=True)
             y_sig = y_sig_days.to(device, non_blocking=True)
             y_cls = y_sig_cls_days.to(device, non_blocking=True)
             wd    = wd_days.to(device, non_blocking=True)
-
+    
             optimizer.zero_grad(set_to_none=True)
             prev_day = None
-
-            # Process each sequence (“day”) in the batch
+    
             for di in range(xb.size(0)):
                 W      = lengths[di]
                 day_id = int(wd[di].item())
-
+    
                 x_seq   = xb[di, :W]
                 sig_seq = y_sig[di, :W]
                 cls_seq = y_cls[di, :W].view(-1)
-
-                # Reset or carry LSTM states on day rollover
+    
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
-
-                # 1) Full-precision forward
+    
+                # Forward
                 pr, pc, _ = model(x_seq)
-                
-                # 2) Inside autocast, build only the loss & backward
+    
                 with autocast(device_type=device.type):
-                    # Sigmoid/reg logits
+                    # Regression logits → probability
                     lr = torch.sigmoid(pr[..., -1, 0])   # (W,)
-                    lc = pc[...,    -1, 0]               # (W,)
-                
-                    # Loss = Huber(regression) + α·BCE(binary)
-                    loss_r = huber_loss(lr, sig_seq)
-                    loss_b = bce_loss(lc, cls_seq)
-                    loss   = loss_r + alpha_cls * loss_b
-                
+    
+                    # ONLY optimize MSE
+                    loss = mse_loss(lr, sig_seq)
+    
                 scaler.scale(loss).backward()
-                
-
+    
                 # Update regression metrics
                 train_rmse.update(lr, sig_seq)
                 train_mae .update(lr, sig_seq)
                 train_r2  .update(lr, sig_seq)
-
-                # Update binary‐classification metrics
-                probs = torch.sigmoid(lc)
+    
+                # Update binary metrics (still tracked but NOT in loss)
+                probs = torch.sigmoid(pc[..., -1, 0])
                 train_acc .update(probs, cls_seq)
                 train_prec.update(probs, cls_seq)
                 train_rec .update(probs, cls_seq)
                 train_f1  .update(probs, cls_seq)
                 train_auc .update(probs, cls_seq)
-
-                # Truncate backprop through states
+    
                 model.h_short.detach_(); model.c_short.detach_()
                 model.h_long .detach_(); model.c_long .detach_()
-
-            # Gradient clipping & optimizer step
+    
+            # Clip & step
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-            scaler.step(optimizer); scaler.update()
-
-            # Cosine learning‐rate update
+            scaler.step(optimizer)
+            scaler.update()
+    
             frac = epoch - 1 + batch_idx / len(train_loader)
             cosine_sched.step(frac)
-
+    
             pbar.set_postfix(
                 train_rmse=train_rmse.compute().item(),
                 lr=optimizer.param_groups[0]['lr'],
                 refresh=False
             )
-
+    
         # ——— collect training metrics ———
         tr = {
             "rmse":  train_rmse.compute().item(),
@@ -935,7 +1064,7 @@ def custom_stateful_training_loop(
             "rec":   train_rec.compute().item(),
             "f1":    train_f1.compute().item(),
             "auroc": train_auc.compute().item(),
-        }
+        }        
 
         # b) VALIDATION
         model.eval()
@@ -1028,25 +1157,37 @@ def custom_stateful_training_loop(
                 print("Early stopping at epoch", epoch)
                 break
 
-    # 5) Final save if improved
-    existing = [
-        float(m.group(1))
-        for f in params.save_path.glob(f"{params.ticker}_*.pth")
-        for m in (save_pat.match(f.name),) if m
-    ]
-    best_existing = min(existing) if existing else float("inf")
-    if best_val_rmse < best_existing:
-        buf = io.BytesIO()
-        live_plot.fig.savefig(buf, format="png")
-        buf.seek(0)
-        torch.save({
-            "model_obj":        model,
-            "model_state_dict": best_state,
-            "hparams":          params.hparams,
-            "train_plot_png":   buf.read(),
-            "train_metrics":      tr,
-            "val_metrics":        vl,
-        }, params.save_path / f"{params.ticker}_{best_val_rmse:.4f}.pth")
+        # ——— checkpointing at each epoch if it's the best so far **in the folder** ———
+        # pattern to extract RMSE from existing filenames
+        save_pat = re.compile(rf"{params.ticker}_(\d+\.\d+)\.pth")
+        
+        # list all existing checkpoint files
+        models_dir = Path(params.models_folder)
+        models_dir.mkdir(exist_ok=True)  # ensure directory exists
+        
+        existing_rmses = [
+            float(m.group(1))
+            for f in models_dir.glob(f"{params.ticker}_*.pth")
+            for m in (save_pat.match(f.name),) if m
+        ]
+        best_existing = min(existing_rmses) if existing_rmses else float("inf")
+        
+        # if current validation RMSE is strictly better, save a new checkpoint
+        if vl["rmse"] < best_existing:
+            buf = io.BytesIO()
+            live_plot.fig.savefig(buf, format="png")
+            buf.seek(0)
+        
+            ckpt = {
+                "model_obj":        model,
+                "model_state_dict": best_state,
+                "hparams":          params.hparams,
+                "train_plot_png":   buf.read(),
+                "train_metrics":    tr,
+                "val_metrics":      vl,
+            }
+            filepath = models_dir / f"{params.ticker}_{vl['rmse']:.4f}.pth"
+            torch.save(ckpt, filepath)
 
     return best_val_rmse
 

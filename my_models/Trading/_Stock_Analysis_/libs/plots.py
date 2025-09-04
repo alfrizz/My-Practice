@@ -708,7 +708,7 @@ def plot_dual_histograms(
     clip_pct: tuple[float, float] = (0.02, 0.98),
 ):
     """
-    For each engineered feature column (those starting with "feat_"), plot how its
+    For each feature column, plot how its
     distribution changes before vs. after scaling/transformation.
 
     Functionality:
@@ -725,10 +725,10 @@ def plot_dual_histograms(
     # 1) identify all feat_… columns present in both DataFrames
     feat_cols = [
         col for col in df_before.columns
-        if col.startswith("feat_") and col in df_after.columns
+        if col in df_after.columns
     ]
     if not feat_cols:
-        raise ValueError("No overlapping 'feat_' columns found in the two DataFrames.")
+        raise ValueError("No overlapping features columns found in the two DataFrames.")
 
     # 2) optional random sampling to limit plotting cost
     if sample:
