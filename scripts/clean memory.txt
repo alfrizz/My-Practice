@@ -1,83 +1,47 @@
 With the docker ON:
-PS C:\Users\alfri> docker ps -s
-CONTAINER ID   IMAGE           COMMAND                  CREATED      STATUS         PORTS                                         NAMES     SIZE
-587bedebe93f   gpu-jl:latest   "/usr/local/bin/entr…"   4 days ago   Up 4 seconds   0.0.0.0:8888->8888/tcp, [::]:8888->8888/tcp   gpu-jl    589GB (virtual 615GB)
 
-PS C:\Users\alfri> docker system df -v
-Images space usage:
+alfrizz@alfrizz:~$ docker ps -s
+CONTAINER ID   IMAGE           COMMAND                  CREATED      STATUS      PORTS                                       NAMES     SIZE
+0f1f6423cb43   gpu-jl:latest   "/usr/local/bin/entr…"   8 days ago   Up 6 days   0.0.0.0:8888->8888/tcp, :::8888->8888/tcp   gpu-jl    593GB (virtual 619GB)
 
-REPOSITORY   TAG       IMAGE ID       CREATED       SIZE      SHARED SIZE   UNIQUE SIZE   CONTAINERS
-gpu-jl       latest    55e2255d6d8c   2 weeks ago   37.8GB    0B            37.84GB       1
+alfrizz@alfrizz:~$  docker exec -it 0f1f6423cb43 bash
+root@0f1f6423cb43:/workspace#
 
-Containers space usage:
-
-CONTAINER ID   IMAGE           COMMAND                  LOCAL VOLUMES   SIZE      CREATED      STATUS          NAMES
-587bedebe93f   gpu-jl:latest   "/usr/local/bin/entr…"   0               589GB     4 days ago   Up 18 seconds   gpu-jl
-
-Local Volumes space usage:
-
-VOLUME NAME   LINKS     SIZE
-
-Build cache usage: 0B
-
-CACHE ID   CACHE TYPE   SIZE      CREATED   LAST USED   USAGE     SHARED
-
-Use the container ID here below:
-PS C:\Users\alfri> docker exec -it 587bedebe93f bash
-
-root@587bedebe93f:/workspace# du -xh / \
+alfrizz@alfrizz:~$  docker exec -it 0f1f6423cb43 bash
+root@0f1f6423cb43:/workspace# du -xh / \
   | sort -hr \
-  | head -n 20
+  | head -n 2
 
-573G    /
-549G    /tmp
-22G     /usr
-18G     /tmp/lstm_memmap_vdtu8o3b
-18G     /tmp/lstm_memmap_elpjfz01
-18G     /tmp/lstm_memmap_3agob_zq
-15G     /usr/local
-13G     /tmp/lstm_memmap_ujcd00i4
-13G     /tmp/lstm_memmap_8que7fna
-11G     /usr/local/lib
-8.8G    /usr/local/lib/python3.12/dist-packages
-8.8G    /usr/local/lib/python3.12
-8.2G    /tmp/lstm_memmap_b69h1v4a
-8.2G    /tmp/lstm_memmap_1rzxdnfy
-6.5G    /usr/lib
-4.7G    /usr/lib/x86_64-linux-gnu
-4.1G    /usr/local/cuda-12.8
-3.9G    /tmp/lstm_memmap_ztf4i85f
-3.9G    /tmp/lstm_memmap_zlwdjg1z
-3.9G    /tmp/lstm_memmap_zbm99i8u
+576G    /
+552G    /tmp
 
-Remove the temp folder:
-root@587bedebe93f:/workspace# rm -rf /tmp/*
-root@587bedebe93f:/workspace# exit
 
-------------------------------------------------
+# Remove the temp folder (still inside the container)
+rm -rf /tmp/*
+du -sh /tmp 
+exit
 
-Open PowerShell as Administrator.
-
-Inspect where your Docker disk‐usage really lives
-
-docker system df
-
-docker system prune -a --volumes --force
-
-wsl --list --all --verbose
-
-wsl -d docker-desktop -- fstrim -v /
+Check again outside the container:
+docker ps -s
 
 wsl --shutdown
 
 Stop-Process -Name "Docker Desktop","vmmem","wslhost" -Force -ErrorAction SilentlyContinue
 
+# in WSL:
+sudo dd if=/dev/zero of=/zero.fill bs=50M status=progress || true
+sudo sync
+sudo rm /zero.fill
+sudo sync
 
-# turn off WSL2 subsystem
+df -h /
+
+# in Powershell:
+dism.exe /online /disable-feature /featurename:VirtualMachinePlatform     /norestart
 dism.exe /online /disable-feature /featurename:Microsoft-Windows-Subsystem-Linux /norestart
-# turn off the VM platform
-dism.exe /online /disable-feature /featurename:VirtualMachinePlatform /norestart
-Restart-Computer ?
+bcdedit /set hypervisorlaunchtype off
+
+# Then REBOOT Windows
 
 diskpart
 
@@ -87,40 +51,15 @@ compact vdisk
 detach vdisk
 exit
 
-# re‐enable WSL2 and the VM platform:
-dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-Restart-Computer ?
+# restart them in Powershell
+dism.exe /online /enable-feature  /featurename:Microsoft-Windows-Subsystem-Linux  /all /norestart
+dism.exe /online /enable-feature  /featurename:VirtualMachinePlatform          /all /norestart
+bcdedit /set hypervisorlaunchtype auto
 
-Start Docker Desktop and check the file size
-Get-Item "C:\Users\alfri\AppData\Local\Docker\wsl\disk\docker_data.vhdx" |
-  Select-Object Name,@{n='SizeGB';e={[math]::Round($_.Length/1GB,2)}}
+# Then REBOOT Windows
 
 
-
------------------------------------------------
-
-mkdir C:\Users\alfri\jupyter-backup
-docker cp gpu-jl:/workspace C:\Users\alfri\jupyter-backup
-
-wsl --shutdown
-Stop-Process -Name "vmmem","wslhost" -Force -ErrorAction SilentlyContinue
-
-wsl --list --all --verbose
-
-wsl --export docker-desktop-data D:\docker-data.tar
-
-wsl --unregister docker-desktop-data
-	
-wsl --import docker-desktop-data `
-    "C:\Users\alfri\AppData\Local\Docker\wsl\docker-desktop-data" `
-    D:\docker-data.tar --version 2
-
-Remove-Item D:\docker-data.tar
-Start-Process "Docker Desktop"
-
-
--------------- or uninstall and reinstall docker desktop-------------------
+-------------- or uninstall and reinstall docker desktop (only as last option) -------------------
 
 Rebuild Your Exact gpu-jl Image from Your Saved Configs
 You’ve got everything you need under \\wsl$\Ubuntu\home\alfrizz\my_practice\scripts. Here’s the 100 % safe, step‐by‐step to restore the exact same Docker image and run Jupyter Lab just like before.

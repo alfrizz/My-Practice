@@ -115,13 +115,13 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
-    "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
+    "SHORT_UNITS":           48,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
+    "LONG_UNITS":            64,    # hidden size of weekly LSTM; large context window for long-term trends
     "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
     "DROPOUT_LONG":          0.3,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             8,     # number of multi-head attention heads; more heads capture diverse interactions
     "ATT_DROPOUT":           0.2,   # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-4,  # L2 penalty on all weights; prevents extreme magnitudes
+    "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,    # number of sequences per training batch

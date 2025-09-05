@@ -31,3 +31,6 @@ services:
       - --ip=0.0.0.0
       - --allow-root
       - --NotebookApp.token=
+
+    tmpfs:
+      - /tmp:rw,size=300G

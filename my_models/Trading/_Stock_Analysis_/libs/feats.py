@@ -18,8 +18,11 @@ from sklearn.decomposition import PCA
 from tqdm.auto import tqdm
 import pandas_ta as ta
 
-from sklearn.preprocessing import StandardScaler, RobustScaler
+import torch
+import torch.backends.cudnn as cudnn
 
+
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from captum.attr import IntegratedGradients
 
 #########################################################################################################
@@ -30,42 +33,45 @@ def features_creation(
     ma_window: int = 20
 ) -> pd.DataFrame:
     """
-    1) Ensure DateTimeIndex.
-    2) Compute base technical indicators on close, high, low, volume:
-       - ema(12), sma(26)
-       - macd line/signal/diff
-       - bollinger bands (lband, hband, width)
-       - rsi(14)
-       - +DI, -DI, adx(14)
-       - atr(14) and rolling atr_sma
-       - atr_ratio and rolling atr_ratio_sma
-       - obv and rolling obv_sma
-       - vwap deviation
-       - log‐returns r_1, r_5, r_15 and vol_15
-       - volume_spike
-       - stoch_k_14, stoch_d_3
-       - calendar flags: hour, day_of_week, month
-    3) Copy raw open/high/low/close/volume.
-    4) Drop initial NaNs and return all features + bid, ask, label.
+    Build a rich feature set for time-series bars in three stages:
+      1) Ensure the index is a DateTimeIndex.
+      2) Compute core technical indicators on OHLCV:
+         • EMA(12), SMA(26)
+         • MACD (line, signal, diff)
+         • Bollinger Bands (lower, upper, width) via positional unpack
+         • RSI(14)
+         • +DI, –DI, ADX(14)
+         • ATR(14) and rolling ATR average
+         • ATR ratio and its rolling average
+         • OBV and its rolling average
+         • VWAP deviation
+         • Log returns r_1, r_5, r_15 and vol_15
+         • Volume spike
+         • Stochastic %K(14,3) and %D(14,3)
+         • Calendar flags (hour, weekday, month)
+      3) Copy through raw open/high/low/close/volume, then drop initial NaNs.
+    Returns a DataFrame of features plus bid, ask, and the label column.
     """
-    # 1) enforce datetime index
+    # 1) Enforce DateTimeIndex
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
     out = df.copy()
 
-    # 2) base indicators
-    out["ema"]        = ta.ema(df["close"], length=12)
-    out["sma"]        = ta.sma(df["close"], length=26)
+    # 2) Compute base indicators
+    out["ema"] = ta.ema(df["close"], length=12)
+    out["sma"] = ta.sma(df["close"], length=26)
 
     macd = ta.macd(df["close"], fast=12, slow=26, signal=9)
     out["macd_line"]   = macd["MACD_12_26_9"]
     out["macd_signal"] = macd["MACDs_12_26_9"]
     out["macd_diff"]   = macd["MACDh_12_26_9"]
 
-    bb = ta.bbands(df["close"], length=20, std=2)
-    out["bb_lband"]    = bb["BBL_20_2.0"]
-    out["bb_hband"]    = bb["BBU_20_2.0"]
-    out["bb_width_20"] = (bb["BBU_20_2.0"] - bb["BBL_20_2.0"]) / bb["BBM_20_2.0"]
+    # Bollinger Bands via positional unpack (robust to column names)
+    bb = ta.bbands(df["close"], length=20, std=2.0)
+    lower_band, mid_band, upper_band = bb.iloc[:, 0], bb.iloc[:, 1], bb.iloc[:, 2]
+    out["bb_lband"]    = lower_band
+    out["bb_hband"]    = upper_band
+    out["bb_width_20"] = (upper_band - lower_band) / mid_band
 
     out["rsi"] = ta.rsi(df["close"], length=14)
 
@@ -74,17 +80,17 @@ def features_creation(
     out["minus_di"] = adx["DMN_14"]
     out["adx"]      = adx["ADX_14"]
 
-    out["atr_14"]     = ta.atr(df["high"], df["low"], df["close"], length=14)
-    out["atr_sma"]    = out["atr_14"].rolling(ma_window).mean()
+    out["atr_14"]  = ta.atr(df["high"], df["low"], df["close"], length=14)
+    out["atr_sma"] = out["atr_14"].rolling(ma_window).mean()
 
-    out["atr_ratio"]        = out["atr_14"] / df["close"]
-    out["atr_ratio_sma"]    = out["atr_ratio"].rolling(ma_window).mean()
+    out["atr_ratio"]     = out["atr_14"] / df["close"]
+    out["atr_ratio_sma"] = out["atr_ratio"].rolling(ma_window).mean()
 
-    out["obv"]        = ta.obv(df["close"], df["volume"])
-    out["obv_sma"]    = out["obv"].rolling(ma_window).mean()
+    out["obv"]     = ta.obv(df["close"], df["volume"])
+    out["obv_sma"] = out["obv"].rolling(ma_window).mean()
 
     vwap = ta.vwap(df["high"], df["low"], df["close"], df["volume"])
-    out["vwap_dev"]   = (df["close"] - vwap) / vwap
+    out["vwap_dev"] = (df["close"] - vwap) / vwap
 
     for n in (1, 5, 15):
         out[f"r_{n}"] = np.log(df["close"] / df["close"].shift(n))
@@ -92,35 +98,32 @@ def features_creation(
 
     out["volume_spike"] = df["volume"] / df["volume"].rolling(ma_window).mean()
 
-    st = ta.stoch(df["high"], df["low"], df["close"], k=14, d=3)
-    out["stoch_k_14"] = st["STOCHk_14_3_3"]
-    out["stoch_d_3"]  = st["STOCHd_14_3_3"]
+    stoch = ta.stoch(df["high"], df["low"], df["close"], k=14, d=3)
+    out["stoch_k_14"] = stoch["STOCHk_14_3_3"]
+    out["stoch_d_3"]  = stoch["STOCHd_14_3_3"]
 
-    # calendar flags
+    # Calendar flags
     out["hour"]        = df.index.hour
     out["day_of_week"] = df.index.dayofweek
     out["month"]       = df.index.month
 
-    # 3) raw OHLCV
-    out["open"]   = df["open"]
-    out["high"]   = df["high"]
-    out["low"]    = df["low"]
-    out["close"]  = df["close"]
-    out["volume"] = df["volume"]
+    # 3) Copy raw OHLCV through
+    for col in ["open", "high", "low", "close", "volume"]:
+        out[col] = df[col]
 
-    # 4) select & drop NaNs
+    # 4) Select features, drop rows with any NaN, return
     keep = [
-        "ema","sma",
-        "macd_line","macd_signal","macd_diff",
-        "bb_lband","bb_hband","bb_width_20",
-        "rsi","plus_di","minus_di","adx",
-        "atr_14","atr_sma","atr_ratio","atr_ratio_sma",
-        "obv","obv_sma","vwap_dev",
-        "r_1","r_5","r_15","vol_15","volume_spike",
-        "stoch_k_14","stoch_d_3",
-        "hour","day_of_week","month",
-        "open","high","low","close","volume",
-        "bid","ask", params.label_col
+        "ema", "sma",
+        "macd_line", "macd_signal", "macd_diff",
+        "bb_lband", "bb_hband", "bb_width_20",
+        "rsi", "plus_di", "minus_di", "adx",
+        "atr_14", "atr_sma", "atr_ratio", "atr_ratio_sma",
+        "obv", "obv_sma", "vwap_dev",
+        "r_1", "r_5", "r_15", "vol_15", "volume_spike",
+        "stoch_k_14", "stoch_d_3",
+        "hour", "day_of_week", "month",
+        "open", "high", "low", "close", "volume",
+        "bid", "ask", params.label_col
     ]
     return out.loc[:, keep].dropna()
 
