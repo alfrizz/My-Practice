@@ -115,13 +115,13 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           128,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
+    "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
     "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.15,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.15,  # moderate dropout after weekly LSTM; balances overfitting and information retention
+    "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_LONG":          0.3,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             8,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.1,   # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-5,  # L2 penalty on all weights; prevents extreme magnitudes
+    "ATT_DROPOUT":           0.2,   # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          1e-4,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,    # number of sequences per training batch
@@ -133,9 +133,9 @@ hparams = {
     "EARLY_STOP_PATIENCE":   6,     # epochs with no val–RMSE improvement before stopping
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
-    "LR_EPOCHS_WARMUP":      5,     # epochs to keep LR constant before cosine decay
+    "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
     "INITIAL_LR":            1e-4,  # starting learning rateS
-    "CLIPNORM":              0.8,   # max gradient norm for clipping
+    "CLIPNORM":              1,   # max gradient norm for clipping
     "ETA_MIN":               5e-6,  # floor LR in CosineAnnealingWarmRestarts
     "T_0":                   90,    # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
