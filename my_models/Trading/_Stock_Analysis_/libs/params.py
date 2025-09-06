@@ -15,10 +15,11 @@ import json
 
 ticker = 'AAPL'
 label_col  = "signal" 
-createCSVsign = True
 feat_sel = 'man' # 'auto' or 'man'
 
-date_to_check = '2023-09' 
+month_to_check = '2023-10'
+createCSVsign = True
+
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidasktoclose_pct = 0.075 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one
 
@@ -104,7 +105,7 @@ def signal_parameters(ticker):
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
         features_cols = ['atr_ratio', 'atr_ratio_sma', 'vol_15',  'bb_width_20', 'r_15', 'rsi', 'stoch_k_14', 'eng_ma']
         trailing_stop_pred = 0.05
-        pred_threshold = 0.2
+        pred_threshold = 0.35
         
     return look_back, sess_start_pred, sess_start_shift, features_cols, trailing_stop_pred, pred_threshold
 

@@ -361,7 +361,7 @@ def aggregate_performance(
     end_bid = df.loc[mask_end, "bid"].iloc[-1]
 
     # Print overall summary
-    print(f"\n=============================================================================================================")
+    print(f"\n===========================================================================================================================================================")
     print(f"Overall Summary ({first_day.date()} = {start_ask:.4f} → {last_day.date()} = {end_bid:.4f})")
     print(f"\nOne-time buy&hold gain: {end_bid - start_ask:.3f}")
     strategy_sum = aggregated.get("Strategy Return ($)", 0.0)

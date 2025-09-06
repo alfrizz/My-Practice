@@ -5,9 +5,7 @@ CONTAINER ID   IMAGE           COMMAND                  CREATED      STATUS     
 0f1f6423cb43   gpu-jl:latest   "/usr/local/bin/entr…"   8 days ago   Up 6 days   0.0.0.0:8888->8888/tcp, :::8888->8888/tcp   gpu-jl    593GB (virtual 619GB)
 
 alfrizz@alfrizz:~$  docker exec -it 0f1f6423cb43 bash
-root@0f1f6423cb43:/workspace#
 
-alfrizz@alfrizz:~$  docker exec -it 0f1f6423cb43 bash
 root@0f1f6423cb43:/workspace# du -xh / \
   | sort -hr \
   | head -n 2
