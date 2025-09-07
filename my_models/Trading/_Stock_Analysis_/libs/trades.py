@@ -874,8 +874,7 @@ def run_trading_pipeline(
     signaled = {}
     for day, (df_sig, trades) in raw_signals.items():
         # multiply raw signal by scale, cap at 1.0
-        # df_sig[col_signal] = np.minimum(df_sig[col_signal] * scale, 1.0)
-        df_sig[col_signal] = df_sig[col_signal] * scale ##########################################
+        df_sig[col_signal] = np.minimum(df_sig[col_signal] * scale, 1.0)
 
         # discrete buy/hold/sell actions
         df_act = generate_trade_actions(
