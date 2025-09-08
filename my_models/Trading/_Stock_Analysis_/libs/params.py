@@ -103,7 +103,7 @@ def signal_parameters(ticker):
         look_back = 60
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
-        features_cols = ['atr_ratio', 'atr_ratio_sma', 'vol_15',  'bb_width_20', 'r_15', 'rsi', 'stoch_k_14', 'eng_ma']
+        features_cols = ['atr_ratio', 'atr_ratio_sma', 'vol_15',  'bb_width_20', 'r_5', 'r_15', 'rsi', 'stoch_d_3', 'stoch_k_14', 'hour', 'eng_adx', 'eng_obv', 'eng_ma']
         trailing_stop_pred = 0.05
         pred_threshold = 0.35
         

@@ -371,124 +371,139 @@ def identify_trades_by_day(
 
 
 # def compute_continuous_signal(
-#     day_df: pd.DataFrame,
+#     day_df: pd.DataFrame,  
 #     trades: List[Tuple[Tuple[dt.datetime, dt.datetime],
 #                        Tuple[float, float],
 #                        float]],
-#     pre_entry_decay: float,
-#     short_penal_decay: float,
-#     smoothing_window: Optional[int] = None
+#     tau_time: float,        # time‐decay constant (minutes) for temporal fade of past scores
+#     tau_dur: float,         # duration‐decay constant (minutes) controlling short-trade penalty
+#     smoothing_window: Optional[int] = None  # window size for centered rolling‐mean smoothing
 # ) -> pd.DataFrame:
 #     """
-#     Build a continuous per-minute signal based on past trades.
+#     Build a continuous per-minute “signal” series from past trades.
 
-#     1) Initialize zero signal array over day_df index.
-#     2) For each trade (buy→sell):
-#        • Mask minutes up to exit time.
-#        • Compute price gap to exit and exponential decay by time-to-exit.
-#        • Apply a duration-based penalty factor.
-#        • Keep the maximum contribution per minute.
-#     3) (Optional) Smooth the series with a centered rolling mean.
-#     Returns a copy of day_df with a new 'signal' column.
+#     For each trade:
+#       1) gap[t]            = (sell_price - close[t]) / sell_price
+#       2) decay_time[t]     = exp(- mins_to_exit[t] / tau_time) 
+#                             # decays from 1→0 as minutes before sell increase; in (0,1]
+#       3) duration_factor   = 1 - exp(- trade_duration / tau_dur)
+#                             # grows from 0→1 as trade duration increases; in [0,1)
+#       4) score[t]          = gap[t] * decay_time[t] * duration_factor
+#       5) signal[t]         = max(previous_signal[t], score[t])
+
+#     After processing all trades, optionally smooth the signal with a centered
+#     rolling mean of length `smoothing_window`. Returns a copy of `day_df`
+#     with a new `"signal"` column.
 #     """
+#     # copy input dataframe to avoid side-effects
 #     df = day_df.copy()
-#     n = len(df)
+#     n  = len(df)
+#     # initialize zero signal array
 #     signal = np.zeros(n, dtype=float)
+#     # get numpy array of timestamps for vectorized masking
 #     times = df.index.to_numpy()
 
 #     for (buy_dt, sell_dt), (_, sell_price), _ in trades:
+#         # build mask: all minutes up to and including the sell bar
 #         exit_ts = np.datetime64(sell_dt)
-#         mask = times <= exit_ts
+#         mask    = times <= exit_ts
 #         if not mask.any():
 #             continue
 
+#         # 1) compute gap vector
 #         closes = df["close"].to_numpy()[mask]
+#         gap    = (sell_price - closes) / sell_price
+#         # (can be negative if close>sell; leave as-is or clip if you prefer)
+
+#         # 2) compute temporal decay vector in (0,1]
 #         mins_to_exit = (exit_ts - times[mask]) / np.timedelta64(1, "m")
-#         decay_time = np.exp(-pre_entry_decay * mins_to_exit)
+#         decay_time   = np.exp(- mins_to_exit / tau_time)
 
-#         dur_min = max((sell_dt - buy_dt).total_seconds() / 60.0, 1.0)
-#         decay_dur = np.exp(-short_penal_decay / dur_min)
+#         # 3) compute duration factor scalar in [0,1)
+#         dur_minutes      = (sell_dt - buy_dt).total_seconds() / 60.0
+#         duration_factor  = 1 - np.exp(- dur_minutes / tau_dur)
 
-#         gap = np.maximum((sell_price - closes) / sell_price, 0.0)
-#         score = gap * decay_time * decay_dur
+#         # 4) elementwise score for this trade
+#         score = gap * decay_time * duration_factor
 
+#         # 5) update signal: keep the maximum score per minute
 #         signal[mask] = np.maximum(signal[mask], score)
 
+#     # assign the computed signal series
 #     df["signal"] = signal
 
+#     # optional smoothing step
 #     if smoothing_window:
 #         df["signal"] = (
 #             df["signal"]
-#             .rolling(window=smoothing_window, center=True, min_periods=1)
-#             .mean()
+#               .rolling(window=smoothing_window, center=True, min_periods=1)
+#               .mean()
 #         )
 
 #     return df
 
 
 def compute_continuous_signal(
-    day_df: pd.DataFrame,  
+    day_df: pd.DataFrame,
     trades: List[Tuple[Tuple[dt.datetime, dt.datetime],
                        Tuple[float, float],
                        float]],
-    tau_time: float,        # time‐decay constant (minutes) for temporal fade of past scores
-    tau_dur: float,         # duration‐decay constant (minutes) controlling short-trade penalty
-    smoothing_window: Optional[int] = None  # window size for centered rolling‐mean smoothing
+    tau_time: float,        # minutes “half‐life” for temporal decay of past scores
+    tau_dur: float,         # minutes “half‐life” for duration‐based trade boost
+    smoothing_window: Optional[int] = None  # size of centered rolling window to smooth final signal
 ) -> pd.DataFrame:
     """
-    Build a continuous per-minute “signal” series from past trades.
+    Build raw and smoothed per‐minute signal from past trades.
 
-    For each trade:
-      1) gap[t]            = (sell_price - close[t]) / sell_price
-      2) decay_time[t]     = exp(- mins_to_exit[t] / tau_time) 
-                            # decays from 1→0 as minutes before sell increase; in (0,1]
-      3) duration_factor   = 1 - exp(- trade_duration / tau_dur)
-                            # grows from 0→1 as trade duration increases; in [0,1)
-      4) score[t]          = gap[t] * decay_time[t] * duration_factor
-      5) signal[t]         = max(previous_signal[t], score[t])
-
-    After processing all trades, optionally smooth the signal with a centered
-    rolling mean of length `smoothing_window`. Returns a copy of `day_df`
-    with a new `"signal"` column.
+    1) For each trade:
+       a) gap[t]          = (sell_price – close[t]) / sell_price
+       b) decay_time[t]   = exp(– mins_to_exit[t] / tau_time)     # in (0,1]
+       c) duration_boost  = 1 – exp(– trade_duration_min / tau_dur) # in [0,1)
+       d) raw_score[t]    = gap[t] * decay_time[t] * duration_boost
+       e) signal_raw[t]   = max(prev_signal_raw[t], raw_score[t])
+    2) Copy signal_raw → “signal” column, then optionally smooth “signal” with
+       a centered rolling mean of width smoothing_window.
+    Returns a copy of day_df with two new columns:
+      • signal_raw  – unsmoothed raw per‐minute scores
+      • signal      – optionally smoothed series used for downstream actions
     """
-    # copy input dataframe to avoid side-effects
     df = day_df.copy()
     n  = len(df)
-    # initialize zero signal array
-    signal = np.zeros(n, dtype=float)
-    # get numpy array of timestamps for vectorized masking
-    times = df.index.to_numpy()
+    # initialize raw‐score array
+    signal_raw = np.zeros(n, dtype=float)
+    times      = df.index.to_numpy()
 
     for (buy_dt, sell_dt), (_, sell_price), _ in trades:
-        # build mask: all minutes up to and including the sell bar
-        exit_ts = np.datetime64(sell_dt)
-        mask    = times <= exit_ts
+        exit_ts      = np.datetime64(sell_dt)
+        mask         = times <= exit_ts
         if not mask.any():
             continue
 
-        # 1) compute gap vector
-        closes = df["close"].to_numpy()[mask]
-        gap    = (sell_price - closes) / sell_price
-        # (can be negative if close>sell; leave as-is or clip if you prefer)
+        closes       = df["close"].to_numpy()[mask]
+        # a) gap vector
+        gap          = (sell_price - closes) / sell_price
 
-        # 2) compute temporal decay vector in (0,1]
+        # b) temporal decay vector
         mins_to_exit = (exit_ts - times[mask]) / np.timedelta64(1, "m")
         decay_time   = np.exp(- mins_to_exit / tau_time)
 
-        # 3) compute duration factor scalar in [0,1)
-        dur_minutes      = (sell_dt - buy_dt).total_seconds() / 60.0
-        duration_factor  = 1 - np.exp(- dur_minutes / tau_dur)
+        # c) duration‐boost scalar
+        dur_min      = (sell_dt - buy_dt).total_seconds() / 60.0
+        boost_dur    = 1 - np.exp(- dur_min / tau_dur)
 
-        # 4) elementwise score for this trade
-        score = gap * decay_time * duration_factor
+        # d) raw score for this trade
+        score        = gap * decay_time * boost_dur
 
-        # 5) update signal: keep the maximum score per minute
-        signal[mask] = np.maximum(signal[mask], score)
+        # e) keep the maximum raw score per minute
+        signal_raw[mask] = np.maximum(signal_raw[mask], score)
 
-    # assign the computed signal series
-    df["signal"] = signal
+    # assign raw signal series
+    df["signal_raw"] = signal_raw
 
-    # optional smoothing step
+    # copy raw → final signal
+    df["signal"] = df["signal_raw"]
+
+    # 2) optional smoothing of the final signal
     if smoothing_window:
         df["signal"] = (
             df["signal"]
@@ -498,6 +513,7 @@ def compute_continuous_signal(
 
     return df
 
+    
 #########################################################################################################
 
 
@@ -713,35 +729,38 @@ def simulate_trading(
 
 
 # def run_trading_pipeline(
-#     df: pd.DataFrame,               # minute‐level OHLCV DataFrame with datetime index
-#     col_signal: str,                # name for the continuous “signal” column to produce
-#     col_action: str,                # name for the discrete trade‐action column (+1/0/–1)
-#     min_prof_thr: float,            # minimum profit % filter for candidate trades
-#     max_down_prop: float,           # base max retracement fraction before exiting a trade
-#     gain_tightening_factor: float,  # factor that tightens max_down_prop as profit % grows
-#     merging_retracement_thr: float, # retracement ratio threshold to merge adjacent trades
-#     merging_time_gap_thr: float,    # time‐gap ratio threshold to merge adjacent trades
-#     tau_time: float,                # time‐decay constant (minutes) for temporal fade of past scores
-#     tau_dur: float,                 # duration‐decay constant (minutes) controlling short-trade penalty
-#     trailing_stop_pct: float,       # trailing‐stop distance as a percent (e.g. 0.5 → 0.5%)
-#     buy_threshold: float,           # normalized signal threshold ∈[0,1] required to enter
-#     top_percentile: float,          # percentile percent to cap raw signals at 1.0 (e.g. 1.0 for top 1%)
-#     smoothing_window: int = None,   # window size for optional centered rolling smoothing
-#     col_close: str = 'close'        # name for the continuous close price column
-# ) -> Optional[Dict]:
+#     df: pd.DataFrame,               
+#     col_signal: str,                
+#     col_action: str,                
+#     min_prof_thr: float,            
+#     max_down_prop: float,           
+#     gain_tightening_factor: float,  
+#     merging_retracement_thr: float, 
+#     merging_time_gap_thr: float,    
+#     tau_time: float,                
+#     tau_dur: float,                 
+#     trailing_stop_pct: float,       
+#     buy_threshold: float,           
+#     smoothing_window: Optional[int] = None,  
+#     col_close: str = "close"        
+# ) -> Optional[Dict[dt.date, tuple]]:
 #     """
-#     Execute a full end-to-end trading simulation pipeline:
+#     Full end-to-end trading pipeline:
 
-#     1) Identify, filter, and merge trades per day over session hours.
-#     2) Compute continuous per-minute signals from those merged trades.
-#     3) Collect all raw signals, compute a global scale factor by top_percentile.
-#     4) Scale and cap each day's signal, then generate discrete trade actions.
-#     5) Simulate trades across days using the generated actions.
-#     Returns the simulation summary for the first (or only) ticker.
+#     1) Identify and merge candidate trades per day within session hours.
+#     2) Compute a continuous per-minute signal for each day’s trades.
+#     3) Gather all raw signal values, compute the fraction of zeros in that array,
+#        and set the same percentile as the upper clamp so that exactly that share 
+#        of highest non-zero scores is scaled to 1.0.
+#     4) Scale and cap each day’s signal, then generate discrete trade actions.
+#     5) Simulate P&L over all days using those actions.
+    
+#     Returns a dict mapping each trading date to
+#       (simulated_df, trades_list, performance_stats).
 #     """
 
-#     # 1) Detect and merge trades by day
-#     print("exec funct: 'identify_trades_by_day' (Detect and merge trades by day) ...")
+#     # 1) Detect & merge trades by day
+#     print("Detecting & merging trades by day …")
 #     trades_by_day = identify_trades_by_day(
 #         df,
 #         min_prof_thr,
@@ -750,11 +769,11 @@ def simulate_trading(
 #         merging_retracement_thr,
 #         merging_time_gap_thr,
 #         params.sess_premark,
-#         params.sess_end
+#         params.sess_end,
 #     )
 
-#     # 2) Compute raw signals and aggregate for scaling
-#     print("exec funct: 'compute_continuous_signal' (Compute raw signals and aggregate for scaling) ...")
+#     # 2) Build raw signals and collect for scaling
+#     print("Computing raw continuous signals …")
 #     raw_signals = {}
 #     all_values = []
 #     for day, (day_df, trades) in trades_by_day.items():
@@ -763,23 +782,26 @@ def simulate_trading(
 #             trades,
 #             tau_time,
 #             tau_dur,
-#             smoothing_window
+#             smoothing_window,
 #         )
 #         raw_signals[day] = (df_sig, trades)
 #         all_values.append(df_sig[col_signal].to_numpy())
 
-#     if not all_values:
-#         return None
+#     # 3) Determine clamp based on zero fraction in raw signals
+#     flat       = np.concatenate(all_values)
+#     zero_frac  = float((flat == 0.0).sum()) / len(flat)  # e.g. 0.1 if 10% are zero
+#     top_pct    = zero_frac * 100.0                       # clamp same share at top
+#     cutoff     = np.percentile(flat, 100.0 - top_pct)
+#     scale      = 1.0 / cutoff
 
-#     flat = np.concatenate(all_values)
-#     cutoff = np.percentile(flat, 100.0 - top_percentile)
-#     scale = (1.0 / cutoff) 
-
-#     # 3) Scale signals, generate actions, build final day-wise results
-#     print("exec funct: 'generate_trade_actions' (Scale signals, generate actions, build final day-wise results) ...")
+#     # 4) Scale, cap, then generate discrete actions
+#     print("Scaling signals ( top & bottom percentiles set at", round(top_pct,3) ,") & generating trade actions …")
 #     signaled = {}
 #     for day, (df_sig, trades) in raw_signals.items():
+#         # multiply raw signal by scale, cap at 1.0
 #         df_sig[col_signal] = np.minimum(df_sig[col_signal] * scale, 1.0)
+
+#         # discrete buy/hold/sell actions
 #         df_act = generate_trade_actions(
 #             df_sig,
 #             col_signal,
@@ -787,26 +809,26 @@ def simulate_trading(
 #             buy_threshold,
 #             trailing_stop_pct,
 #             params.sess_start,
-#             col_close
+#             col_close,
 #         )
 #         signaled[day] = (df_act, trades)
 
-#     # 4) Run the simulation over all days
-#     print("exec funct: 'simulate_trading' (Run the simulation over all days) ...")
+#     # 5) Simulate P&L across days
+#     print("Simulating P&L over all days …")
 #     sim_results = simulate_trading(
-#         results_by_day_sign = signaled,
-#         col_action          = col_action,
-#         sess_start          = params.sess_start,
-#         sess_end            = params.sess_end
+#         results_by_day_sign=signaled,
+#         col_action=col_action,
+#         sess_start=params.sess_start,
+#         sess_end=params.sess_end,
 #     )
-    
+
 #     return sim_results
 
 
 def run_trading_pipeline(
     df: pd.DataFrame,               
-    col_signal: str,                
-    col_action: str,                
+    col_signal: str,                # e.g. "signal"
+    col_action: str,                # e.g. "signal_action"
     min_prof_thr: float,            
     max_down_prop: float,           
     gain_tightening_factor: float,  
@@ -818,23 +840,23 @@ def run_trading_pipeline(
     buy_threshold: float,           
     smoothing_window: Optional[int] = None,  
     col_close: str = "close"        
-) -> Optional[Dict[dt.date, tuple]]:
+) -> Optional[Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, Any]]]]:
     """
-    Full end-to-end trading pipeline:
+    End-to-end trading pipeline:
 
-    1) Identify and merge candidate trades per day within session hours.
-    2) Compute a continuous per-minute signal for each day’s trades.
-    3) Gather all raw signal values, compute the fraction of zeros in that array,
-       and set the same percentile as the upper clamp so that exactly that share 
-       of highest non-zero scores is scaled to 1.0.
-    4) Scale and cap each day’s signal, then generate discrete trade actions.
-    5) Simulate P&L over all days using those actions.
-    
-    Returns a dict mapping each trading date to
-      (simulated_df, trades_list, performance_stats).
+    1) Detect and merge candidate trades per day in session hours.
+    2) Compute per‐day raw & smoothed continuous signals.
+    3) Build a global cutoff using the UNSMOOTHED 'signal_raw' series:
+       - zero_frac = fraction of all raw values == 0
+       - top_pct   = zero_frac * 100
+       - cutoff    = percentile(flat_raw, 100 - top_pct)
+       - scale     = 1 / cutoff
+    4) Scale and cap the SMOOTHED 'signal' series per day.
+    5) Generate discrete trade actions and simulate P&L over all days.
+    Returns mapping day → (sim_df, trades, perf_stats).
     """
 
-    # 1) Detect & merge trades by day
+    # 1) detect & merge
     print("Detecting & merging trades by day …")
     trades_by_day = identify_trades_by_day(
         df,
@@ -847,10 +869,10 @@ def run_trading_pipeline(
         params.sess_end,
     )
 
-    # 2) Build raw signals and collect for scaling
+    # 2) compute signals
     print("Computing raw continuous signals …")
     raw_signals = {}
-    all_values = []
+    all_raw     = []
     for day, (day_df, trades) in trades_by_day.items():
         df_sig = compute_continuous_signal(
             day_df,
@@ -860,23 +882,27 @@ def run_trading_pipeline(
             smoothing_window,
         )
         raw_signals[day] = (df_sig, trades)
-        all_values.append(df_sig[col_signal].to_numpy())
+        # collect unsmoothed values for global cutoff
+        all_raw.append(df_sig["signal_raw"].to_numpy())
 
-    # 3) Determine clamp based on zero fraction in raw signals
-    flat       = np.concatenate(all_values)
-    zero_frac  = float((flat == 0.0).sum()) / len(flat)  # e.g. 0.1 if 10% are zero
-    top_pct    = zero_frac * 100.0                       # clamp same share at top
-    cutoff     = np.percentile(flat, 100.0 - top_pct)
-    scale      = 1.0 / cutoff
+    if not all_raw:
+        return None
 
-    # 4) Scale, cap, then generate discrete actions
-    print("Scaling signals ( top & bottom percentiles set at", round(top_pct,3) ,") & generating trade actions …")
+    # 3) global cutoff & scale on raw distribution
+    flat      = np.concatenate(all_raw)
+    zero_frac = float((flat == 0.0).sum()) / len(flat)
+    top_pct   = zero_frac * 100.0
+    cutoff    = np.percentile(flat, 100.0 - top_pct)
+    scale     = 1.0 / cutoff if cutoff > 0 else 0.0
+
+    # 4) scale & cap the smoothed signal, then generate actions
+    print("Scale & cap the smoothed signal ( top & bottom percentiles set at", round(top_pct,3) ,") & generating trade actions …")
     signaled = {}
     for day, (df_sig, trades) in raw_signals.items():
-        # multiply raw signal by scale, cap at 1.0
-        df_sig[col_signal] = np.minimum(df_sig[col_signal] * scale, 1.0)
+        # apply scaling to the SMOOTHED 'signal' column
+        df_sig[col_signal] = np.minimum(df_sig["signal"] * scale, 1.0)
 
-        # discrete buy/hold/sell actions
+        # discrete actions
         df_act = generate_trade_actions(
             df_sig,
             col_signal,
@@ -888,8 +914,7 @@ def run_trading_pipeline(
         )
         signaled[day] = (df_act, trades)
 
-    # 5) Simulate P&L across days
-    print("Simulating P&L over all days …")
+    # 5) simulate P&L
     sim_results = simulate_trading(
         results_by_day_sign=signaled,
         col_action=col_action,
