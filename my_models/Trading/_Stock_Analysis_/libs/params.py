@@ -11,11 +11,12 @@ import os
 import glob
 import json
 
+
 #########################################################################################################
+
 
 ticker = 'AAPL'
 label_col  = "signal" 
-feat_sel = 'man' # 'auto' or 'man'
 
 month_to_check = '2023-10'
 createCSVsign = True
@@ -32,8 +33,6 @@ save_path  = Path("dfs")
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
-feat_sel_auto_csv = save_path / f"{ticker}_3_feat_sel_auto.csv"
-feat_sel_man_csv = save_path / f"{ticker}_3_feat_sel_man.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
 
@@ -46,7 +45,9 @@ sess_start         = datetime.strptime('14:30', '%H:%M').time()
 sess_premark       = datetime.strptime('09:00' , '%H:%M').time()  
 sess_end           = datetime.strptime('21:00' , '%H:%M').time() 
 
+
 #########################################################################################################
+
 
 def load_best_optuna_record(optuna_folder=optuna_folder, ticker=ticker):
     """
@@ -93,7 +94,9 @@ def load_best_optuna_record(optuna_folder=optuna_folder, ticker=ticker):
 # automatically executed function to get the optuna values and parameters
 best_optuna_value, best_optuna_params = load_best_optuna_record()
 
+
 #########################################################################################################
+
 
 def signal_parameters(ticker):
     '''
@@ -112,17 +115,19 @@ def signal_parameters(ticker):
 # automatically executed function to get the parameters for the selected ticker
 look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick, trailing_stop_pred_tick, pred_threshold_tick = signal_parameters(ticker)
 
+
 #########################################################################################################
+
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
-    "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.2,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.25,  # moderate dropout after weekly LSTM; balances overfitting and information retention
+    "LONG_UNITS":            128,   # hidden size of weekly LSTM; large context window for long-term trends
+    "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_LONG":          0.30,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             8,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.15,   # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-4,  # L2 penalty on all weights; prevents extreme magnitudes
+    "ATT_DROPOUT":           0.20,  # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          5e-4,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           32,    # number of sequences per training batch
@@ -135,13 +140,13 @@ hparams = {
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
-    "INITIAL_LR":            1e-4,  # starting learning rateS
+    "INITIAL_LR":            2e-4,  # starting learning rateS
     "CLIPNORM":              1,   # max gradient norm for clipping
     "ETA_MIN":               1e-5,  # floor LR in CosineAnnealingWarmRestarts
     "T_0":                   90,    # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
-    ############################───────────────NOT USED────────────────###################################
+    # ───────────────NOT USED──────────────── #
     # —— Active Loss Hyperparameters —— 
     "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 (Huber) loss; range: 0.01–1.0: lower→more like MAE (heavier spike penalty), higher→more like MSE (tolerate spikes)
     "CLS_LOSS_WEIGHT":       0.05,  # α weight for the binary BCE loss head; range: 0.1–10.0: lower→less emphasis on threshold-crossing signal, higher→stronger spike detection

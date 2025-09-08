@@ -450,254 +450,9 @@ def aggregate_performance(
 
     plt.tight_layout()
     plt.show()
-    
-
-#########################################################################################################
-
-def make_live_plot_callback(fig, ax, line, handle):
-    """
-    Build an Optuna callback that will update *this* fig/ax/line/handle.
-    Returns: callback(study, frozen_trial)
-    """
-    def live_plot_callback(study, _trial):
-        # only use fully completed trials, sorted by index
-        complete = sorted(
-            (t for t in study.trials if t.state == TrialState.COMPLETE),
-            key=lambda t: t.number
-        )
-        if not complete:
-            return
-
-        xs = [t.number for t in complete]
-        ys = [t.value  for t in complete]
-
-        # update line data
-        line.set_data(xs, ys)
-
-        # recompute axis limits + small padding
-        x_min, x_max = xs[0], xs[-1]
-        x_pad = max(1, (x_max - x_min) * 0.05)
-        ax.set_xlim(x_min - x_pad, x_max + x_pad)
-
-        y_min, y_max = min(ys), max(ys)
-        y_pad = (y_max - y_min) * 0.1 or 0.1
-        ax.set_ylim(y_min - y_pad, y_max + y_pad)
-
-        # re-draw in place
-        update_display(fig, display_id=handle.display_id)
-
-    return live_plot_callback
-
-
-
-def lightweight_plot_callback(study, trial):
-    """
-    Live-update a small Matplotlib line chart of trial.value vs. trial.number.
-    `state` lives across calls and holds the figure, axes and data lists.
-    """
-    # 1) Initialize a single persistent state dict
-    if not hasattr(lightweight_plot_callback, "state"):
-        lightweight_plot_callback.state = {
-            "initialized": False,
-            "fig": None, "ax": None, "line": None, "handle": None,
-            "x": [], "y": []
-        }
-    state = lightweight_plot_callback.state
-
-    # 2) Skip pruned or errored trials
-    if trial.value is None:
-        return state
-
-    # 3) One-time figure setup
-    if not state["initialized"]:
-        import matplotlib.pyplot as plt
-        plt.ioff()
-        fig, ax = plt.subplots(figsize=(7, 3))
-        line, = ax.plot([], [], "bo-", markersize=3, linewidth=1)
-        ax.set(xlabel="Trial #", ylabel="Avg Daily P&L", title="Optuna Progress")
-        ax.grid(True)
-        handle = display(fig, display_id=True)
-        state.update(fig=fig, ax=ax, line=line, handle=handle, initialized=True)
-
-    # 4) Append new point and redraw
-    state["x"].append(trial.number)
-    state["y"].append(float(trial.value))
-    state["line"].set_data(state["x"], state["y"])
-    state["ax"].relim()
-    state["ax"].autoscale_view()
-    state["handle"].update(state["fig"])
-
-    # 5) Close the figure to free memory—but keep the display alive
-    import matplotlib.pyplot as plt
-    plt.close(state["fig"])
-
-    return state
-
-
-
-def save_best_trial_callback(study, trial):
-    # only act when this trial just became the study’s best
-    if study.best_trial != trial:
-        return
-
-    best_value  = trial.value
-    best_params = trial.params
-
-    # scan the folder for existing JSONs for this ticker
-    pattern = os.path.join(params.optuna_folder, f"{params.ticker}_*.json")
-    files   = glob.glob(pattern)
-
-    # extract the float values out of the filenames
-    existing = []
-    prefix   = f"{params.ticker}_"
-    for fn in files:
-        name = os.path.basename(fn)
-        # name looks like "AAPL_0.6036.json"
-        try:
-            val = float(name[len(prefix):-5])
-            existing.append(val)
-        except ValueError:
-            continue
-
-    # only save if our new best_value beats all on disk
-    min_existing = min(existing) if existing else float("-inf")
-    if best_value <= min_existing:
-        return
-
-    # dump to a new file
-    fname = f"{params.ticker}_{best_value:.4f}.json"
-    path  = os.path.join(params.optuna_folder, fname)
-    with open(path, "w") as fp:
-        json.dump(
-            {"value":  best_value,
-             "params": best_params},
-            fp,
-            indent=2
-        )
-
-
-
-def cleanup_callback(study, trial):
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
     
 #########################################################################################################
-
-
-# def plot_dual_histograms(
-#     df_before: pd.DataFrame,
-#     df_after:  pd.DataFrame,
-#     features:  list[str],
-#     sample:    int | None        = 50000,
-#     bins:      int               = 40,
-#     clip_pct:  tuple[float,float] = (0.02, 0.98),
-# ):
-#     # 1) figure out which features we can plot
-#     common = [f for f in features if f in df_before and f in df_after]
-#     if not common:
-#         raise ValueError("No overlapping features.")
-
-#     # 2) optional sampling
-#     if sample:
-#         dfb = df_before.sample(min(len(df_before), sample), random_state=0)
-#         dfa = df_after .sample(min(len(df_after),  sample), random_state=0)
-#     else:
-#         dfb, dfa = df_before, df_after
-
-#     # 3) layout
-#     cols = 2
-#     rows = math.ceil(len(common) / cols)
-#     fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4))
-#     axes = axes.flatten()
-
-#     for ax, feat in zip(axes, common):
-#         before = dfb[feat].dropna()
-#         after  = dfa[feat].dropna()
-
-#         # only numeric, high‐cardinality fields get overlaid histograms
-#         if pd.api.types.is_numeric_dtype(before) and before.nunique() > 10:
-#             # compute clipped ranges
-#             lo_b, hi_b = np.quantile(before, clip_pct)
-#             lo_a, hi_a = np.quantile(after,  clip_pct)
-
-#             # bin edges for each
-#             edges_b = np.linspace(lo_b, hi_b, bins + 1)
-#             edges_a = np.linspace(lo_a, hi_a, bins + 1)
-
-#             # --- BLUE histogram on primary ax ---
-#             ax.hist(before, bins=edges_b, color="C0", alpha=0.6, edgecolor="C0")
-#             ax.set_xlim(lo_b, hi_b)
-#             ax.margins(x=0)
-
-#             # style blue spines & ticks
-#             ax.spines["top"].set_visible(False)
-#             ax.spines["right"].set_visible(False)
-#             ax.spines["bottom"].set_color("C0")
-#             ax.spines["left"].set_color("C0")
-#             ax.tick_params(axis="x", colors="C0", rotation=45)
-#             ax.tick_params(axis="y", colors="C0")
-
-#             # --- ORANGE histogram on top‐x + right‐y twin axes ---
-#             ax_top = ax.twiny()        # new x-axis on top, shares y with ax
-#             ax_orange = ax_top.twinx() # new y-axis on right, shares x with ax_top
-
-#             # draw orange bars onto the right‐y axis
-#             ax_orange.hist(after, bins=edges_a, color="C1", alpha=0.6, edgecolor="C1")
-
-#             # set the orange x‐range (this also applies to ax_orange, since x is shared)
-#             ax_top.set_xlim(lo_a, hi_a)
-#             ax_top.margins(x=0)
-
-#             # style top x-axis
-#             ax_top.spines["bottom"].set_visible(False)
-#             ax_top.spines["left"].set_visible(False)
-#             ax_top.spines["right"].set_visible(False)
-#             ax_top.spines["top"].set_color("C1")
-#             ax_top.xaxis.set_ticks_position("top")
-#             ax_top.xaxis.set_label_position("top")
-#             ax_top.tick_params(axis="x", colors="C1", rotation=45)
-
-#             # style right y-axis
-#             ax_orange.spines["bottom"].set_visible(False)
-#             ax_orange.spines["left"].set_visible(False)
-#             ax_orange.spines["top"].set_visible(False)
-#             ax_orange.spines["right"].set_color("C1")
-#             ax_orange.yaxis.set_ticks_position("right")
-#             ax_orange.yaxis.set_label_position("right")
-#             ax_orange.tick_params(axis="y", colors="C1", labelright=True)
-
-#         else:
-#             # fallback: side-by-side bars for categorical or low-cardinality
-#             bd = before.value_counts(normalize=True).sort_index()
-#             ad = after .value_counts(normalize=True).sort_index()
-#             cats = sorted(set(bd.index) | set(ad.index))
-#             x = np.arange(len(cats))
-#             w = 0.4
-
-#             ax.bar(x - w/2, [bd.get(c, 0) for c in cats],
-#                    w, color="C0", alpha=0.6)
-#             ax.bar(x + w/2, [ad.get(c, 0) for c in cats],
-#                    w, color="C1", alpha=0.6)
-
-#             ax.spines["top"].set_visible(False)
-#             ax.spines["right"].set_visible(False)
-#             ax.spines["bottom"].set_color("black")
-#             ax.spines["left"].set_color("C0")
-
-#             ax.set_xticks(x)
-#             ax.set_xticklabels(cats, rotation=45)
-#             ax.tick_params(axis="y", colors="C0")
-
-#         ax.set_title(feat, color="black")
-
-#     # disable any unused subplots
-#     for extra in axes[len(common):]:
-#         extra.axis("off")
-
-#     plt.tight_layout()
-#     plt.show()
 
 
 def plot_dual_histograms(
@@ -824,3 +579,167 @@ def plot_dual_histograms(
 
     plt.tight_layout()
     plt.show()
+
+
+#########################################################################################################
+
+
+def make_live_plot_callback(fig, ax, line, handle):
+    """
+    Build an Optuna callback that will update *this* fig/ax/line/handle.
+    Returns: callback(study, frozen_trial)
+    """
+    def live_plot_callback(study, _trial):
+        # only use fully completed trials, sorted by index
+        complete = sorted(
+            (t for t in study.trials if t.state == TrialState.COMPLETE),
+            key=lambda t: t.number
+        )
+        if not complete:
+            return
+
+        xs = [t.number for t in complete]
+        ys = [t.value  for t in complete]
+
+        # update line data
+        line.set_data(xs, ys)
+
+        # recompute axis limits + small padding
+        x_min, x_max = xs[0], xs[-1]
+        x_pad = max(1, (x_max - x_min) * 0.05)
+        ax.set_xlim(x_min - x_pad, x_max + x_pad)
+
+        y_min, y_max = min(ys), max(ys)
+        y_pad = (y_max - y_min) * 0.1 or 0.1
+        ax.set_ylim(y_min - y_pad, y_max + y_pad)
+
+        # re-draw in place
+        update_display(fig, display_id=handle.display_id)
+
+        # free all of the Figure’s memory on disk/UI
+        plt.close(fig)
+
+    return live_plot_callback
+
+##########################
+
+def lightweight_plot_callback(study, trial):
+    """
+    Live-update a small Matplotlib line chart of trial.value vs. trial.number.
+    `state` lives across calls and holds the figure, axes and data lists.
+    """
+    # 1) Initialize a single persistent state dict
+    if not hasattr(lightweight_plot_callback, "state"):
+        lightweight_plot_callback.state = {
+            "initialized": False,
+            "fig": None, "ax": None, "line": None, "handle": None,
+            "x": [], "y": []
+        }
+    state = lightweight_plot_callback.state
+
+    # 2) Skip pruned or errored trials
+    if trial.value is None:
+        return state
+
+    # 3) One-time figure setup
+    if not state["initialized"]:
+        import matplotlib.pyplot as plt
+        plt.ioff()
+        fig, ax = plt.subplots(figsize=(7, 3))
+        line, = ax.plot([], [], "bo-", markersize=3, linewidth=1)
+        ax.set(xlabel="Trial #", ylabel="Avg Daily P&L", title="Optuna Progress")
+        ax.grid(True)
+        handle = display(fig, display_id=True)
+        state.update(fig=fig, ax=ax, line=line, handle=handle, initialized=True)
+
+    # 4) Append new point and redraw
+    state["x"].append(trial.number)
+    state["y"].append(float(trial.value))
+    state["line"].set_data(state["x"], state["y"])
+    state["ax"].relim()
+    state["ax"].autoscale_view()
+    state["handle"].update(state["fig"])
+
+    # 5) Close the figure to free memory—but keep the display alive
+    import matplotlib.pyplot as plt
+    plt.close(state["fig"])
+
+    return state
+
+##########################
+
+def save_best_trial_callback(study, trial):
+    # only act when this trial just became the study’s best
+    if study.best_trial != trial:
+        return
+
+    best_value  = trial.value
+    best_params = trial.params
+
+    # scan the folder for existing JSONs for this ticker
+    pattern = os.path.join(params.optuna_folder, f"{params.ticker}_*.json")
+    files   = glob.glob(pattern)
+
+    # extract the float values out of the filenames
+    existing = []
+    prefix   = f"{params.ticker}_"
+    for fn in files:
+        name = os.path.basename(fn)
+        # name looks like "AAPL_0.6036.json"
+        try:
+            val = float(name[len(prefix):-5])
+            existing.append(val)
+        except ValueError:
+            continue
+
+    # only save if our new best_value beats all on disk
+    min_existing = min(existing) if existing else float("-inf")
+    if best_value <= min_existing:
+        return
+
+    # dump to a new file
+    fname = f"{params.ticker}_{best_value:.4f}.json"
+    path  = os.path.join(params.optuna_folder, fname)
+    with open(path, "w") as fp:
+        json.dump(
+            {"value":  best_value,
+             "params": best_params},
+            fp,
+            indent=2
+        )
+
+########################## 
+
+_results: list[dict] = []
+
+def save_results_callback(study, trial):
+    """
+    After each trial, pull out the three tuned params and the objective value
+    (avg_daily_pnl), append as a dict to _results, then write a CSV sorted
+    by avg_daily_pnl descending—overwriting on each trial.
+    """
+    # extract parameter values and trial value
+    entry = {
+        "pred_threshold"     : round(trial.params["pred_threshold"], 5),
+        "trailing_stop_pred" : round(trial.params["trailing_stop_pred"], 5),
+        "smoothing_window"   : round(trial.params["smoothing_window"], 5),
+        "avg_daily_pnl"      : trial.value,
+    }
+    _results.append(entry)
+
+    # build DataFrame, sort, write out
+    df = pd.DataFrame(_results)
+    df = df.sort_values("avg_daily_pnl", ascending=False)
+
+    out_path = os.path.join(params.optuna_folder, f"{params.ticker}_pred_sign_params.csv")
+    df.to_csv(out_path, index=False)
+    
+########################## 
+
+def cleanup_callback(study, trial):
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+

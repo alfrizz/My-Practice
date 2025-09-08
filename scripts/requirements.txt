@@ -3,11 +3,10 @@ Scrapy==2.13.3
 captum==0.8.0
 ipywidgets==8.1.7
 jupyterlab>=4.0.0
-numpy
+numpy==2.3.2
 optuna==4.4.0
 pandas-ta==0.4.67b0
 pandas==2.2.3
-pandas_ta==0.3.14b0
 plotly
 seaborn
 shap==0.48.0

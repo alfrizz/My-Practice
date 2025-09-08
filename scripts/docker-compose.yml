@@ -11,13 +11,14 @@ services:
 
     gpus: all
     cpus: "16.0"
-    mem_limit: "24g"
-    shm_size: 16g      # to comfortably fit num_workers × prefetch_factor × batch_size
+    mem_limit: "28g"
+    shm_size: 24g      # to fit num_workers × prefetch_factor × batch_size
 
     ports:
       - "8888:8888"
 
-    volumes:
+    volumes:        
+      - "/mnt/c/Users/alfri/docker_tmp:/tmp"    # ← bind‐mount host dir for tmp (to free space: rm -rf ~/docker_tmp/*)
       - ${HOME}/my_practice:/workspace
 
     working_dir: /workspace
@@ -31,6 +32,3 @@ services:
       - --ip=0.0.0.0
       - --allow-root
       - --NotebookApp.token=
-
-    tmpfs:
-      - /tmp:rw,size=300G
