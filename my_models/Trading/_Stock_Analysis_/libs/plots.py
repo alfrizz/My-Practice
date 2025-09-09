@@ -3,6 +3,7 @@ from libs import params, trades
 import pandas as pd
 import numpy  as np
 import gc
+
 import math
 import os
 import json
@@ -628,6 +629,9 @@ def lightweight_plot_callback(study, trial):
     Live-update a small Matplotlib line chart of trial.value vs. trial.number.
     `state` lives across calls and holds the figure, axes and data lists.
     """
+    if trial.state != TrialState.COMPLETE:
+        return    # skip pruned or errored trials
+        
     # 1) Initialize a single persistent state dict
     if not hasattr(lightweight_plot_callback, "state"):
         lightweight_plot_callback.state = {
@@ -710,16 +714,32 @@ def save_best_trial_callback(study, trial):
 
 ########################## 
 
+# in-memory accumulator for completed trial results
 _results: list[dict] = []
 
 def save_results_callback(study, trial):
     """
-    After each trial, pull out the three tuned params and the objective value
-    (avg_daily_pnl), append as a dict to _results, then write a CSV sorted
-    by avg_daily_pnl descending—overwriting on each trial.
+    Optuna callback to persist completed trials to a CSV whose name
+    matches the JSON filename produced by a different Optuna run.
+
+    What this function does:
+    1) Skips any trial that was pruned or errored.
+    2) Extracts the three hyperparameters plus the average daily PnL.
+    3) Appends that data as a dict into the module‐level `_results` list.
+    4) Builds a pandas DataFrame from `_results`, sorts it descending by avg_daily_pnl.
+    5) Finds the most recent JSON file in params.optuna_folder matching
+       '{ticker}_*.json', pulls its numeric suffix.
+    6) Writes out the sorted DataFrame to:
+         '{ticker}_{that_same_suffix}_pred_sign_params.csv'
     """
-    # extract parameter values and trial value
+
+    # 1) Only process trials that ran to completion
+    if trial.state != TrialState.COMPLETE:
+        return
+
+    # 2) Extract trial number, params, and objective value
     entry = {
+        "trial"              : trial.number,
         "pred_threshold"     : round(trial.params["pred_threshold"], 5),
         "trailing_stop_pred" : round(trial.params["trailing_stop_pred"], 5),
         "smoothing_window"   : round(trial.params["smoothing_window"], 5),
@@ -727,12 +747,32 @@ def save_results_callback(study, trial):
     }
     _results.append(entry)
 
-    # build DataFrame, sort, write out
+    # 3) Build & sort DataFrame of all completed trials so far
     df = pd.DataFrame(_results)
     df = df.sort_values("avg_daily_pnl", ascending=False)
 
-    out_path = os.path.join(params.optuna_folder, f"{params.ticker}_pred_sign_params.csv")
+    # 4) Locate the matching JSON file to copy its suffix
+    pattern = os.path.join(
+        params.optuna_folder,
+        f"{params.ticker}_*.json"
+    )
+    json_files = glob.glob(pattern)
+    if not json_files:
+        raise FileNotFoundError(
+            f"No JSON found matching pattern: {pattern}"
+        )
+
+    # Pick the most recently modified JSON
+    latest_json = max(json_files, key=os.path.getmtime)
+    base = os.path.splitext(os.path.basename(latest_json))[0]
+    # base looks like 'AAPL_0.4329'; split off the ticker_ prefix
+    suffix = base.split(f"{params.ticker}_", 1)[-1]
+
+    # 5) Construct the CSV filename & write it
+    csv_name = f"{params.ticker}_{suffix}_pred_sign_params.csv"
+    out_path = os.path.join(params.optuna_folder, csv_name)
     df.to_csv(out_path, index=False)
+
     
 ########################## 
 

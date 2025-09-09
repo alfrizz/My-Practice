@@ -12,14 +12,14 @@ services:
     gpus: all
     cpus: "16.0"
     mem_limit: "28g"
-    shm_size: 24g      # to fit num_workers × prefetch_factor × batch_size
-
+    shm_size: 24g     
     ports:
       - "8888:8888"
 
     volumes:        
-      - "/mnt/c/Users/alfri/docker_tmp:/tmp"    # ← bind‐mount host dir for tmp (to free space: rm -rf ~/docker_tmp/*)
+      - "/home/alfrizz/docker_tmp:/tmp"
       - ${HOME}/my_practice:/workspace
+      - ${HOME}/my_practice/scripts/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
 
     working_dir: /workspace
 
@@ -32,3 +32,10 @@ services:
       - --ip=0.0.0.0
       - --allow-root
       - --NotebookApp.token=
+
+
+
+#### after changes ####
+# docker-compose down
+# docker-compose up -d
+# docker-compose logs -f jupyter
