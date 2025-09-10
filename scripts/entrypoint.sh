@@ -12,8 +12,8 @@ export TEMP=/tmp
 export TMP=/tmp
 mkdir -p /tmp
 
-# 1.a) Delete anything in /tmp older than one week (60*24*7 minutes)
-find /tmp -mindepth 1 -mmin +10080 -delete
+# 1.a) Delete anything in /tmp older than one day (60*24 minutes)
+find /tmp -mindepth 1 -mmin +1440 -delete
 
 # 2) Hand off to the real NVIDIA entrypoint (preserves CLI args)
 exec /opt/nvidia/nvidia_entrypoint.sh "$@"
@@ -21,4 +21,5 @@ exec /opt/nvidia/nvidia_entrypoint.sh "$@"
 
 
 #### after changes ####
+# chmod +x entrypoint.sh
 # rebuild container

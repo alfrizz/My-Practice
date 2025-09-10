@@ -11,7 +11,7 @@ services:
 
     gpus: all
     cpus: "16.0"
-    mem_limit: "28g"
+    mem_limit: "26g"
     shm_size: 24g     
     ports:
       - "8888:8888"
