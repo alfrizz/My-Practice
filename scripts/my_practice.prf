@@ -20,3 +20,6 @@ ignore = Name *.sw?
 ignore = Path scripts/*.sw?
 ignore = Name *~
 ignore = Name .DS_Store
+ignore = Path .Trash-0
+ignore = Name sync-practice.log
+

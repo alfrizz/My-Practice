@@ -125,11 +125,11 @@ hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
     "LONG_UNITS":            96,    # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.25,  # moderate dropout after weekly LSTM; balances overfitting and information retention
+    "DROPOUT_SHORT":         0.30,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_LONG":          0.30,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             6,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.25,  # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-4,  # L2 penalty on all weights; prevents extreme magnitudes
+    "ATT_DROPOUT":           0.30,  # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          9e-5,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,    # number of sequences per training batch

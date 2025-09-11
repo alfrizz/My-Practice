@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- Config
-LOG="$HOME/sync-practice.log"
 LOCK="/tmp/sync-practice.lock"
+
 TARGET="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
+LOG="$TARGET/scripts/sync-practice.log"
 
 # --- Single instance lock
 exec 9>"$LOCK"
@@ -19,16 +19,24 @@ export TMPDIR="$UNISON_TMPDIR"
 export UNISON_NUMBACKUPS=1
 mkdir -p "$UNISON_TMPDIR"
 
+# ONE-TIME cleanup of any leftover Unison scratch files
+rm -rf "${UNISON_TMPDIR}/"*
+
+#   suppress “Permission denied” so find can’t kill the script
+find "$HOME/my_practice" "$TARGET" \
+  -type f -name '.unison.*.unison.tmp' -delete \
+  2>/dev/null || true
+
 echo "=== [$(date '+%F %T')] Boot trigger: starting Unison ===" >> "$LOG"
 
-# --- Wait for Windows drive to be ready (up to 60s)
-for i in {1..60}; do
+# --- Wait for Windows drive to be ready (up to 30sec)
+for i in {1..30}; do
   if mountpoint -q /mnt/g && [ -d "$TARGET" ]; then
     echo "[$(date '+%F %T')] G: ready and target exists." >> "$LOG"
     break
   fi
   (( i % 5 == 0 )) && echo "[$(date '+%F %T')] Waiting for G:... (${i}s)" >> "$LOG"
-  if (( i == 60 )); then
+  if (( i == 30 )); then
     echo "[$(date '+%F %T')] Timeout: G: not ready. Exiting." >> "$LOG"
     exit 1
   fi
@@ -45,18 +53,6 @@ done
   -prefer newer \
   -links true \
   -fastcheck true \
-  -repeat 70 \
+  -repeat 30 \
   -logfile "$LOG" \
   my_practice
-
-echo "[$(date '+%F %T')] Unison exited." >> "$LOG"
-
-# --- Cleanup Unison temp files
-TMP_CLEAN_COUNT=$(find "$TARGET" -type f -name '*.unison.tmp' | wc -l)
-if (( TMP_CLEAN_COUNT > 0 )); then
-  echo "[$(date '+%F %T')] Cleaning $TMP_CLEAN_COUNT temp files..." >> "$LOG"
-  find "$TARGET" -type f -name '*.unison.tmp' -delete
-  echo "[$(date '+%F %T')] Temp cleanup complete." >> "$LOG"
-else
-  echo "[$(date '+%F %T')] No temp files to clean." >> "$LOG"
-fi
