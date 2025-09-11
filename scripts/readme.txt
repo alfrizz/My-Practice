@@ -13,6 +13,8 @@ my_practice.prf		Unison profile defining two sync roots (~/my_practice and the m
 docker-compose.yml	Orchestrates the gpu-jl Jupyter service: builds from Dockerfile, mounts the workspace, assigns GPUs, CPU/memory limits, ports.
 .docker_ignore		Lists files/folders to exclude from Docker build context, while preserving only the necessary scripts/ assets for image build.
 requirements.txt	Pinned Python dependencies for reproducible builds: Jupyter Lab, torchmetrics, pandas, plotly, Optuna, and more.
+shrink-wsl.ps1	        PowerShell script to stop Docker Desktop, shut down WSL, compact the Ubuntu ext4.vhdx, detach the VHDX, restart WSL, and log each step (scheduled in taskschd.msc)
+shrink-wsl.log         	Timestamped log file capturing the output and free-space before/after each shrink-and-recovery run
 
 
 -------------

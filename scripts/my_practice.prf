@@ -12,7 +12,6 @@ perms = 0
 ignore = Path .git
 ignore = Name build
 ignore = Path **/dist/**
-ignore = Path **/*.log
 ignore = Regex .*[Cc]heckpoint.*
 ignore = Path **/.ipynb_checkpoints/**
 ignore = Name __pycache__
