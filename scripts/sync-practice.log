@@ -3259,3 +3259,159 @@ has been modified during synchronization.  Transfer aborted.
 Unison 2.53.7 (ocaml 4.14.2) finished propagating changes at 19:40:18.10 on 12 Sep 2025, 15.855 s
 Synchronization incomplete at 19:40:18  (1 item transferred, 0 skipped, 1 failed)
   failed: my_models/Trading/_Stock_Analysis_/dfs/AAPL_3_feat_all.csv
+=== [2025-09-13 09:40:42] Boot trigger: starting Unison ===
+[2025-09-13 09:40:42] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at  9:40:42
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+
+1 items will be synced, 0 skipped
+0 B to be synced from my_practice to My-Practice
+122 KiB to be synced from My-Practice to my_practice
+Unison 2.53.7 (ocaml 4.14.2) started propagating changes at 09:40:46.64 on 13 Sep 2025
+[BGN] Updating file scripts/shrink-wsl.log from /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice to /home/alfrizz/my_practice
+[END] Updating file scripts/shrink-wsl.log
+Unison 2.53.7 (ocaml 4.14.2) finished propagating changes at 09:40:46.65 on 13 Sep 2025, 0.011 s
+Synchronization complete at 09:40:46  (1 item transferred, 0 skipped, 0 failed)
+=== [2025-09-13 09:41:46] Boot trigger: starting Unison ===
+[2025-09-13 09:41:46] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at  9:41:46
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+=== [2025-09-13 09:42:40] Boot trigger: starting Unison ===
+[2025-09-13 09:42:40] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at  9:42:40
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+=== [2025-09-13 09:44:05] Boot trigger: starting Unison ===
+[2025-09-13 09:44:05] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at  9:44:05
+
+=== [2025-09-13 09:48:20] Boot trigger: starting Unison ===
+[2025-09-13 09:48:21] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at  9:48:21
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+=== [2025-09-13 09:54:39] Boot trigger: starting Unison ===
+[2025-09-13 09:54:39] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at  9:54:39
+
+=== [2025-09-13 09:58:50] Boot trigger: starting Unison ===
+[2025-09-13 09:58:50] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at  9:58:50
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+=== [2025-09-13 10:02:48] Boot trigger: starting Unison ===
+[2025-09-13 10:02:48] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at 10:02:48
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+
+1 items will be synced, 0 skipped
+0 B to be synced from my_practice to My-Practice
+150 KiB to be synced from My-Practice to my_practice
+Unison 2.53.7 (ocaml 4.14.2) started propagating changes at 10:02:52.41 on 13 Sep 2025
+[BGN] Updating file scripts/shrink-wsl.log from /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice to /home/alfrizz/my_practice
+[END] Updating file scripts/shrink-wsl.log
+Unison 2.53.7 (ocaml 4.14.2) finished propagating changes at 10:02:52.42 on 13 Sep 2025, 0.009 s
+Synchronization complete at 10:02:52  (1 item transferred, 0 skipped, 0 failed)
+=== [2025-09-13 10:04:55] Boot trigger: starting Unison ===
+[2025-09-13 10:04:55] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at 10:04:55
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+=== [2025-09-13 10:38:45] Boot trigger: starting Unison ===
+[2025-09-13 10:38:45] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-13 at 10:38:45
+
+=== [2025-09-14 09:38:13] Boot trigger: starting Unison ===
+[2025-09-14 09:38:13] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-14 at  9:38:13
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+Error: End_of_file exception raised in loading archive (this indicates a bug!)
+=== [2025-09-14 09:39:20] Boot trigger: starting Unison ===
+[2025-09-14 09:39:20] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-14 at  9:39:20
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+Error: End_of_file exception raised in loading archive (this indicates a bug!)
+=== [2025-09-14 09:39:41] Boot trigger: starting Unison ===
+[2025-09-14 09:39:41] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-14 at  9:39:41
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+Error: End_of_file exception raised in loading archive (this indicates a bug!)
+=== [2025-09-14 09:40:07] Boot trigger: starting Unison ===
+[2025-09-14 09:40:07] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-14 at  9:40:07
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+Error: End_of_file exception raised in loading archive (this indicates a bug!)
+=== [2025-09-14 12:04:15] Boot trigger: starting Unison ===
+[2025-09-14 12:04:15] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-14 at 12:04:15
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+Error: End_of_file exception raised in loading archive (this indicates a bug!)
+=== [2025-09-14 12:08:53] Boot trigger: starting Unison ===
+[2025-09-14 12:08:53] G: ready and target exists.
+
+Unison 2.53.7 (ocaml 4.14.2) log started at 2025-09-14 at 12:08:54
+
+Roots:
+  /home/alfrizz/my_practice
+  /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+
+Error: End_of_file exception raised in loading archive (this indicates a bug!)
