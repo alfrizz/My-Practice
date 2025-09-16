@@ -440,64 +440,69 @@ def lstm_training_loop(
             f'F1={vl["f1"]:.4f} AUROC={vl["auroc"]:.4f}'
         )
 
-        # plateau & checkpoint 
+        # d) adjust LR scheduler after warmup
         if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
             plateau_sched.step(vl["rmse"])
+
+        # e) early‐stop + update run‐best
         if vl["rmse"] < best_val_rmse:
             best_val_rmse = vl["rmse"]
             best_state    = model.state_dict()
+            best_tr       = tr.copy()
+            best_vl       = vl.copy()
             patience_ctr  = 0
-            model.load_state_dict(best_state)
+
+            # cache the run‐best plot
+            buf = io.BytesIO()
+            live_plot.fig.savefig(buf, format="png")
+            buf.seek(0)
+            best_plot = buf.read()
         else:
             patience_ctr += 1
             if patience_ctr >= early_stop_patience:
                 print("Early stopping at epoch", epoch)
                 break
 
-        # ——— checkpointing at each epoch if it's the best so far **in the folder** ———
-        # pattern to extract RMSE from existing filenames
-        save_pat = re.compile(rf"{params.ticker}_(\d+\.\d+)\.pth")
-        
+        # f) folder‐best checkpoint (→ `_chp`)
+        save_pat = re.compile(rf"{params.ticker}_(\d+\.\d+)_chp\.pth")
         # list all existing checkpoint files
         models_dir = Path(params.models_folder)
-        models_dir.mkdir(exist_ok=True)  # ensure directory exists
-        
+        models_dir.mkdir(exist_ok=True)
+
         existing_rmses = [
             float(m.group(1))
-            for f in models_dir.glob(f"{params.ticker}_*.pth")
+            for f in models_dir.glob(f"{params.ticker}_*_chp.pth")
             for m in (save_pat.match(f.name),) if m
         ]
         best_existing = min(existing_rmses) if existing_rmses else float("inf")
-        
-        # if current validation RMSE is strictly better, save a new checkpoint
-        if vl["rmse"] < best_existing:
-            buf = io.BytesIO()
-            live_plot.fig.savefig(buf, format="png")
-            buf.seek(0)
-        
+
+        if best_val_rmse < best_existing:
             ckpt = {
-                "model_obj":        model,
                 "model_state_dict": best_state,
                 "hparams":          params.hparams,
-                "train_plot_png":   buf.read(),
-                "train_metrics":    tr,
-                "val_metrics":      vl,
+                "train_metrics":    best_tr,
+                "val_metrics":      best_vl,
+                "train_plot_png":   best_plot,
             }
-            
-            fname = f"{params.ticker}_{vl['rmse']:.5f}.pth"
-            path  = models_dir / fname
-            torch.save(ckpt, path)
-            best_ckpt = (path, ckpt) # stash it for the final write
+            chp_name = f"{params.ticker}_{best_val_rmse:.5f}_chp.pth"
+            torch.save(ckpt, models_dir / chp_name)
+            print(f"🔖 Saved folder‐best checkpoint (_chp): {chp_name}")
 
-    # ── ALWAYS SAVE AFTER THE EPOCH LOOP ──
-    final_path, final_dict = best_ckpt
-    # REGENERATE the plot so it spans all epochs, not just the last best one
+    # ── after the epoch loop ends: always write final‐run best (_fin) ──
     buf = io.BytesIO()
     live_plot.fig.savefig(buf, format="png")
     buf.seek(0)
-    final_dict["train_plot_png"] = buf.read()
-    torch.save(final_dict, final_path)
-    print(f"✅ Final best model saved to {final_path.name}")
+    final_plot = buf.read()
+
+    final_ckpt = {
+        "model_state_dict": best_state,
+        "hparams":          params.hparams,
+        "train_metrics":    best_tr,
+        "val_metrics":      best_vl,
+        "train_plot_png":   final_plot,
+    }
+    fin_name = f"{params.ticker}_{best_val_rmse:.5f}_fin.pth"
+    torch.save(final_ckpt, models_dir / fin_name)
+    print(f"✅ Final best model (_fin) saved: {fin_name}")
 
     return best_val_rmse
-
