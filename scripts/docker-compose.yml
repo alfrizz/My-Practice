@@ -19,7 +19,7 @@ services:
     volumes:        
       - "/home/alfrizz/docker_tmp:/tmp"
       - ${HOME}/my_practice:/workspace
-      - ${HOME}/my_practice/scripts/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
+      # - ${HOME}/my_practice/scripts/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
 
     working_dir: /workspace
 
@@ -35,7 +35,7 @@ services:
 
 
 
-#### after changes ####
+##### after changes #####
 # docker-compose down
 # docker-compose up -d
 # docker-compose logs -f jupyter

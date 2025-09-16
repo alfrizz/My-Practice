@@ -103,11 +103,67 @@ def signal_parameters(ticker):
     look_back ==> length of historical window (how many minutes of history each training example contains): number of past time‐steps fed into the LSTM to predict next value
     '''
     if ticker == 'AAPL':
-        look_back = 60
+        look_back = 90
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
         smooth_sign_win = 15
-        features_cols = ['rsi_14', 'minus_di_15', 'eng_adx', 'eng_atr_div', 'adx_14', 'sma_100', 'vol_spike_14', 'macd_line_12_26_9', 'sma_20']
+        # features_cols = ['rsi_14', 'minus_di_15', 'eng_adx', 'eng_atr_div', 'adx_14', 'sma_100', 'vol_spike_14', 'macd_line_12_26_9', 'sma_20']
+        features_cols = ['rsi_14',
+                         'macd_line_12_26_9',
+                         'macd_signal_12_26_9',
+                         'macd_diff_12_26_9',
+                         'sma_20',
+                         'sma_100',
+                         'atr_14',
+                         'bb_lband_20',
+                         'bb_hband_20',
+                         'bb_width_20',
+                         'plus_di_14',
+                         'minus_di_14',
+                         'adx_14',
+                         'obv',
+                         'obv_sma_14',
+                         'vwap_20',
+                         'vol_spike_14',
+                         'vwap_dev_20',
+                         'ema_7',
+                         'sma_7',
+                         'sma_15',
+                         'sma_30',
+                         'macd_diff_7_15_3',
+                         'atr_15',
+                         'atr_30',
+                         'bb_lband_15',
+                         'bb_hband_15',
+                         'bb_width_15',
+                         'rsi_15',
+                         'stoch_k_15',
+                         'stoch_d_3',
+                         'plus_di_15',
+                         'minus_di_15',
+                         'adx_15',
+                         'obv_sma_15',
+                         'vwap_dev_15',
+                         'vol_spike_15',
+                         'r_1',
+                         'r_15',
+                         'r_30',
+                         'vol_15',
+                         'eng_ma',
+                         'eng_macd',
+                         'eng_bb',
+                         'eng_rsi',
+                         'eng_adx',
+                         'eng_obv',
+                         'eng_atr_div',
+                         'open',
+                         'high',
+                         'low',
+                         'close',
+                         'volume',
+                         'hour',
+                         'day_of_week',
+                         'month']
         trailing_stop_pred = 0.05
         pred_threshold = 0.5
         
@@ -122,13 +178,13 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
-    "LONG_UNITS":            128,   # hidden size of weekly LSTM; large context window for long-term trends
+    "SHORT_UNITS":           64,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
+    "LONG_UNITS":            96,    # hidden size of weekly LSTM; large context window for long-term trends
     "DROPOUT_SHORT":         0.15,  # light dropout after daily LSTM+attention; preserves spike information
     "DROPOUT_LONG":          0.15,  # moderate dropout after weekly LSTM; balances overfitting and information retention
-    "ATT_HEADS":             6,     # number of multi-head attention heads; more heads capture diverse interactions
+    "ATT_HEADS":             4,     # number of multi-head attention heads; more heads capture diverse interactions
     "ATT_DROPOUT":           0.15,  # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
+    "WEIGHT_DECAY":          3e-5,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,    # number of sequences per training batch
@@ -141,8 +197,8 @@ hparams = {
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
-    "INITIAL_LR":            7e-5,  # starting learning rateS
-    "CLIPNORM":              0.5,   # max gradient norm for clipping
+    "INITIAL_LR":            9e-5,  # starting learning rateS
+    "CLIPNORM":              3,     # max gradient norm for clipping
     "ETA_MIN":               1e-6,  # floor LR in CosineAnnealingWarmRestarts
     "T_0":                   90,    # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
