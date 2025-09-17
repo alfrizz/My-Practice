@@ -443,27 +443,8 @@ def lstm_training_loop(
         # d) adjust LR scheduler after warmup
         if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
             plateau_sched.step(vl["rmse"])
-
-        # e) early‐stop + update run‐best
-        if vl["rmse"] < best_val_rmse:
-            best_val_rmse = vl["rmse"]
-            best_state    = model.state_dict()
-            best_tr       = tr.copy()
-            best_vl       = vl.copy()
-            patience_ctr  = 0
-
-            # cache the run‐best plot
-            buf = io.BytesIO()
-            live_plot.fig.savefig(buf, format="png")
-            buf.seek(0)
-            best_plot = buf.read()
-        else:
-            patience_ctr += 1
-            if patience_ctr >= early_stop_patience:
-                print("Early stopping at epoch", epoch)
-                break
-
-        # f) folder‐best checkpoint (→ `_chp`)
+            
+        # e) folder‐best checkpoint (→ `_chp`)
         save_pat = re.compile(rf"{params.ticker}_(\d+\.\d+)_chp\.pth")
         # list all existing checkpoint files
         models_dir = Path(params.models_folder)
@@ -476,17 +457,37 @@ def lstm_training_loop(
         ]
         best_existing = min(existing_rmses) if existing_rmses else float("inf")
 
-        if best_val_rmse < best_existing:
-            ckpt = {
-                "model_state_dict": best_state,
-                "hparams":          params.hparams,
-                "train_metrics":    best_tr,
-                "val_metrics":      best_vl,
-                "train_plot_png":   best_plot,
-            }
-            chp_name = f"{params.ticker}_{best_val_rmse:.5f}_chp.pth"
-            torch.save(ckpt, models_dir / chp_name)
-            print(f"🔖 Saved folder‐best checkpoint (_chp): {chp_name}")
+        # f) early‐stop + update run‐best
+        if vl["rmse"] < best_val_rmse:
+            best_val_rmse = vl["rmse"]
+            best_state    = model.state_dict()
+            best_tr       = tr.copy()
+            best_vl       = vl.copy()
+            patience_ctr  = 0
+
+            # cache the run‐best plot
+            buf = io.BytesIO()
+            live_plot.fig.savefig(buf, format="png")
+            buf.seek(0)
+            best_plot = buf.read()
+
+            if best_val_rmse < best_existing:
+                ckpt = {
+                    "model_state_dict": best_state,
+                    "hparams":          params.hparams,
+                    "train_metrics":    best_tr,
+                    "val_metrics":      best_vl,
+                    "train_plot_png":   best_plot,
+                }
+                chp_name = f"{params.ticker}_{best_val_rmse:.5f}_chp.pth"
+                torch.save(ckpt, models_dir / chp_name)
+                print(f"🔖 Saved folder‐best checkpoint (_chp): {chp_name}")
+                
+        else:
+            patience_ctr += 1
+            if patience_ctr >= early_stop_patience:
+                print("Early stopping at epoch", epoch)
+                break
 
     # ── after the epoch loop ends: always write final‐run best (_fin) ──
     buf = io.BytesIO()

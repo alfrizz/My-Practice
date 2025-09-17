@@ -19,7 +19,7 @@ ticker = 'AAPL'
 label_col  = "signal" 
 
 month_to_check = '2023-10'
-createCSVsign = True
+createCSVsign = False
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidasktoclose_pct = 0.05 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one

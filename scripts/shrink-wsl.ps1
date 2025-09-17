@@ -1,114 +1,146 @@
-# -------------------------------------------
-# shrink-wsl.ps1
-# --------------------------------------------
+<#
+.SYNOPSIS
+  One-click, fully-logged WSL shrink + cleanup.
 
-# Remap G: so elevated session can write logs
-net use G: \\localhost\g$ /persistent:no 2>$null
+.DESCRIPTION
+  Deletes only:
+    • /tmp entries older than 3h  
+    • .ipynb_checkpoints dirs under ~/my_practice  
+  Then runs fstrim, quiesces WSL, stops LxssManager+VMCompute, compacts ext4.vhdx,
+  restarts services, warms up Ubuntu, and logs BEFORE/AFTER sizes + all outputs.
+#>
 
-# Paths & Distro
-$log    = 'G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts\shrink-wsl.log'
-$distro = 'Ubuntu-22.04'
-$vdPath = 'C:\WSL\Staging\old-ext4.vhdx'    # ← standalone VHDX
-
-# UTF-8 logging helper
-function Log($msg) {
-  $entry = "$(Get-Date -Format o)    $msg"
-  Write-Host $entry
-  $entry | Out-File -FilePath $log -Append -Encoding utf8 -Force
-}
-
-# Elevation check
-if (-not (
-    [Security.Principal.WindowsPrincipal] `
-      [Security.Principal.WindowsIdentity]::GetCurrent()
-  ).IsInRole(
-    [Security.Principal.WindowsBuiltInRole] "Administrator"
-  )) {
-  Write-Host "ERROR: Please re-run via an elevated PowerShell prompt." -ForegroundColor Red
+#── 0) REFUSE UNC -----------------------------------------------------------
+if ($PSScriptRoot -like '\\wsl.localhost\*') {
+  Write-Error 'Run from Windows PowerShell on a local drive (e.g. G:), not \\wsl.localhost.' 
   exit 1
 }
 
-# Start fresh log
-Remove-Item $log -ErrorAction SilentlyContinue
-Log "===== Shrink + Recovery run started ====="
+#── 1) ELEVATION ------------------------------------------------------------
+if (-not ([Security.Principal.WindowsPrincipal] `
+      ([Security.Principal.WindowsIdentity]::GetCurrent())
+     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  Write-Error 'Please rerun As Administrator.'; exit 1
+}
+$ErrorActionPreference = 'Stop'
 
-# 1) Free space before
-$before = (Get-PSDrive C).Free / 1GB
-Log ("Free space before: {0:N2} GB" -f $before)
+#── 2) LOG SETUP & CWD ------------------------------------------------------
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $scriptDir
 
-# 2) Stop Docker Desktop
-Log "Stopping Docker Desktop…"
-Stop-Process -Name 'Docker Desktop','com.docker.backend' -Force -ErrorAction SilentlyContinue
-Log "Docker Desktop stopped."
+$logFile = Join-Path $scriptDir 'shrink-wsl.log'
+'' | Out-File -FilePath $logFile -Encoding ascii
 
-# 3) Mount the VHDX in-place (no copy) so we can purge and fstrim
-Log "Mounting VHDX via WSL…"
-wsl --mount $vdPath --partition 1 --type ext4 2>&1 |
-  ForEach-Object { Log "WSL mount: $_" }
-
-# 4) Purge /tmp inside that mount, then fstrim it
-Log "Purging /tmp in mounted image and running fstrim…"
-wsl -d $distro -u root -- bash -lc @'
-set -euo pipefail
-echo "Deleting /mnt/wsl/tmp/*…"
-rm -rf /mnt/wsl/tmp/*
-echo "Running fstrim on /mnt/wsl…"
-fstrim -v /mnt/wsl
-'@ 2>&1 |
-  ForEach-Object { Log "WSL purge+fstrim: $_" }
-
-# 5) Unmount the VHDX so Windows can compact it
-Log "Unmounting VHDX…"
-wsl --unmount $vdPath 2>&1 |
-  ForEach-Object { Log "WSL unmount: $_" }
-
-# 6) Shutdown WSL so DiskPart can access the idle VHDX
-Log "Shutting down WSL…"
-wsl --shutdown 2>&1 |
-  ForEach-Object { Log "WSL: $_" }
-for ($i = 0; $i -lt 15; $i++) {
-  if (-not (Get-Process vmmem -ErrorAction SilentlyContinue)) {
-    Log "vmmem exited."
-    break
-  }
-  Start-Sleep -Seconds 2
-  Log "Waiting for vmmem to exit…"
+function Write-Log($m) {
+  "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))  $m" |
+    Out-File -FilePath $logFile -Encoding ascii -Append
 }
 
-# 7) DiskPart compact (select before attach)
-$dp = @"
-select vdisk file=""$vdPath""
+Write-Log '===== Shrink-WSL run started ====='
+Write-Log "Script folder: $scriptDir"
+
+#── 3) PATCH wsl.conf (remove invalid networkDrives) ------------------------
+Write-Log 'Patching /etc/wsl.conf to drop invalid networkDrives key…'
+wsl -d Ubuntu-22.04 --cd / -u root -- bash -c "sed -i '/^\s*networkDrives/d' /etc/wsl.conf" 2>$null
+
+#── 4) LOCATE VHDX & LOG BEFORE ---------------------------------------------
+$vhdx = "$env:LOCALAPPDATA\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx"
+Write-Log "VHDX path: $vhdx"
+if (-not (Test-Path $vhdx)) {
+  Write-Log "ERROR: ext4.vhdx not found"; throw 'Missing VHDX'
+}
+
+function Log-Metrics($label) {
+  $free = (Get-PSDrive C).Free  /1GB
+  $size = (Get-Item $vhdx).Length /1GB
+  Write-Log ("{0}: C free={1:N2} GB; ext4.vhdx={2:N2} GB" -f $label, $free, $size)
+}
+Log-Metrics 'BEFORE'
+
+#── 5) STOP DOCKER DESKTOP (if running) -------------------------------------
+Write-Log 'Stopping Docker Desktop…'
+Stop-Process -Name 'Docker Desktop','com.docker.backend' `
+  -Force -ErrorAction SilentlyContinue
+Write-Log 'Docker Desktop stopped (if present)'
+
+#── 6) SHUTDOWN WSL & WAIT vmmem -------------------------------------------
+Write-Log 'Shutting down WSL…'
+wsl --shutdown 2>$null
+for ($i=0; $i -lt 10; $i++) {
+  if (-not (Get-Process vmmem -ErrorAction SilentlyContinue)) {
+    Write-Log 'vmmem exited'; break
+  }
+  Start-Sleep -Seconds 1
+  Write-Log 'Waiting 1s for vmmem…'
+}
+
+#── 7) LIST & DELETE /tmp >3h ----------------------------------------------
+Write-Log 'Listing /tmp items >3h…'
+$tmpList = wsl -d Ubuntu-22.04 --cd / -u root -- bash -c 'find /tmp -mindepth 1 -mmin +180 -print' 2>$null
+foreach ($p in $tmpList) { Write-Log "  [DEL] /tmp$p" }
+
+Write-Log 'Deleting /tmp items…'
+wsl -d Ubuntu-22.04 --cd / -u root -- bash -c 'find /tmp -mindepth 1 -mmin +180 -exec rm -rf {} + || true' 2>$null
+Write-Log '/tmp cleanup done'
+
+#── 8) LIST & DELETE .ipynb_checkpoints ------------------------------------
+Write-Log 'Listing .ipynb_checkpoints dirs…'
+$cpList = wsl -d Ubuntu-22.04 --cd / -u root -- bash -c `
+  'find /home/alfrizz/my_practice -type d -name ".ipynb_checkpoints" -prune -print' 2>$null
+foreach ($p in $cpList) { Write-Log "  [DEL] chkpt$p" }
+
+Write-Log 'Deleting .ipynb_checkpoints…'
+wsl -d Ubuntu-22.04 --cd / -u root -- bash -c `
+  'find /home/alfrizz/my_practice -type d -name ".ipynb_checkpoints" -prune -exec rm -rf {} + || true' 2>$null
+Write-Log 'Checkpoints cleanup done'
+
+#── 9) FSTRIM --------------------------------------------------------------
+Write-Log 'Running fstrim…'
+$fOut = wsl -d Ubuntu-22.04 --cd / -u root -- fstrim -v / 2>$null
+foreach ($l in $fOut) { Write-Log "  fstrim: $l" }
+
+#── 10) SHUTDOWN WSL AGAIN -----------------------------------------------
+Write-Log 'Shutting down WSL (for compaction)…'
+wsl --shutdown 2>$null
+Start-Sleep -Seconds 1
+Write-Log 'WSL VM stopped'
+
+#── 11) STOP HOST SERVICES -----------------------------------------------
+Write-Log 'Stopping LxssManager & VMCompute…'
+Stop-Service LxssManager,VMCompute `
+  -Force -ErrorAction SilentlyContinue
+Write-Log 'Host services stopped'
+
+#── 12) COMPACT ext4.vhdx via DiskPart ------------------------------------
+Write-Log "Compacting VHDX: $vhdx"
+$tmpDp = [IO.Path]::GetTempFileName()
+@"
+select vdisk file="$vhdx"
 attach vdisk readonly
 compact vdisk
 detach vdisk
 exit
-"@
-Log "Running DiskPart compact on VHDX…"
-$dp |
-  diskpart 2>&1 |
-  Where-Object { $_ -and ($_ -notmatch 'percent completed') } |
-  ForEach-Object { Log "DiskPart: $_" }
+"@ | Set-Content -LiteralPath $tmpDp -Encoding ASCII
 
-# 8) Restart WSL service
-Log "Restarting LxssManager…"
-Stop-Service LxssManager -Force -ErrorAction SilentlyContinue
-Start-Service LxssManager -ErrorAction SilentlyContinue
-Log "LxssManager restarted."
+$dpLines = diskpart /s $tmpDp | Select-Object -Unique
+foreach ($l in $dpLines) { Write-Log "  DiskPart: $l" }
+Remove-Item $tmpDp -Force
+Write-Log 'DiskPart compaction done'
 
-# 9) Health-check
-Log "Health-check: starting WSL $distro…"
+#── 13) RESTART HOST SERVICES --------------------------------------------
+Write-Log 'Restarting VMCompute & LxssManager…'
+Start-Service VMCompute,LxssManager -ErrorAction SilentlyContinue
+Write-Log 'Host services restarted'
+
+#── 14) WARM-UP UBUNTU ---------------------------------------------------
+Write-Log 'Verifying Ubuntu…'
 try {
-  wsl -d $distro -u root -- echo "WSL is healthy" 2>&1 |
-    ForEach-Object { Log "WSL: $_" }
-  Log "$distro started successfully."
+  $chk = wsl -d Ubuntu-22.04 --cd / -u root -- echo OK 2>$null
+  Write-Log "  Ubuntu echo: $chk"
 } catch {
-  Log "Health-check error: $_"
+  Write-Log "  Ubuntu start error: $_"
 }
 
-# 10) Free space after
-$after = (Get-PSDrive C).Free / 1GB
-Log ("Free space after:  {0:N2} GB" -f $after)
-Log "===== Shrink + Recovery run ended =====`n"
-
-# Cleanup mapping
-net use G: /delete 2>$null
+#── 15) AFTER metrics & COMPLETE -----------------------------------------
+Log-Metrics 'AFTER'
+Write-Log '===== Shrink-WSL run complete ====='
