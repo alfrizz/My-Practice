@@ -30,284 +30,648 @@ from sklearn.decomposition import PCA
 ##########################################################################################################
 
 
+# def create_features(
+#     df: pd.DataFrame,
+#     sma_short:   int = 20,
+#     sma_long:    int = 100,
+#     rsi_window:  int = 14,
+#     macd_fast:   int = 12,
+#     macd_slow:   int = 26,
+#     macd_sig:    int = 9,
+#     atr_window:  int = 14,
+#     bb_window:   int = 20,
+#     obv_sma:     int = 14,
+#     vwap_window: int = 20,
+#     base_w:      int | None = None
+# ) -> pd.DataFrame:
+#     """
+#     1) Compute raw OHLCV + bid/ask + label.
+#     2) Compute standard textbook indicators at 1m:
+#        • rsi_{rsi_window}
+#        • macd_line_{macd_fast}_{macd_slow}_{macd_sig}, macd_signal_…, macd_diff_…
+#        • sma_{sma_short}, sma_{sma_long}
+#        • atr_{atr_window}
+#        • bb_lband_{bb_window}, bb_hband_{bb_window}, bb_width_{bb_window}
+#        • plus_di_{atr_window}, minus_di_{atr_window}, adx_{atr_window}
+#        • obv, obv_sma_{obv_sma}
+#        • vwap_{vwap_window}, vol_spike_{obv_sma}
+#        • hour, day_of_week, month
+#     3) If base_w > 1, compute custom-window versions at half/base/double—
+#        skipping any that would collide with standard-window names.
+#     4) Prevent division-by-zero by adding eps to every denominator.
+#     """
+#     df = df.copy()
+#     if not isinstance(df.index, pd.DatetimeIndex):
+#         df.index = pd.to_datetime(df.index)
+
+#     eps = 1e-8
+#     out = df[["open","high","low","close","volume","bid","ask", params.label_col]].copy()
+
+#     # 1) STANDARD WINDOWS
+
+#     # RSI
+#     out[f"rsi_{rsi_window}"] = (
+#         ta.momentum.RSIIndicator(out["close"], window=rsi_window)
+#           .rsi().round(3)
+#     )
+
+#     # MACD
+#     macd = ta.trend.MACD(
+#         close=out["close"],
+#         window_fast=macd_fast,
+#         window_slow=macd_slow,
+#         window_sign=macd_sig
+#     )
+#     out[f"macd_line_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd().round(3)
+#     out[f"macd_signal_{macd_fast}_{macd_slow}_{macd_sig}"] = macd.macd_signal().round(3)
+#     out[f"macd_diff_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd_diff().round(3)
+
+#     # SMAs
+#     out[f"sma_{sma_short}"] = out["close"].rolling(sma_short, min_periods=1).mean().round(3)
+#     out[f"sma_{sma_long}"]  = out["close"].rolling(sma_long,  min_periods=1).mean().round(3)
+
+#     # ATR
+#     out[f"atr_{atr_window}"] = (
+#         ta.volatility.AverageTrueRange(
+#             high=out["high"], low=out["low"], close=out["close"],
+#             window=atr_window
+#         ).average_true_range().round(3)
+#     )
+
+#     # Bollinger Bands
+#     bb = ta.volatility.BollingerBands(out["close"], window=bb_window, window_dev=2)
+#     out[f"bb_lband_{bb_window}"] = bb.bollinger_lband().round(3)
+#     out[f"bb_hband_{bb_window}"] = bb.bollinger_hband().round(3)
+#     m = bb.bollinger_mavg()
+#     out[f"bb_width_{bb_window}"] = ((out[f"bb_hband_{bb_window}"]
+#                                      - out[f"bb_lband_{bb_window}"]) / (m + eps)
+#                                    ).round(3)
+
+#     # Directional Movement
+#     adx = ta.trend.ADXIndicator(
+#         high=out["high"], low=out["low"],
+#         close=out["close"], window=atr_window
+#     )
+#     out[f"plus_di_{atr_window}"]  = adx.adx_pos().round(3)
+#     out[f"minus_di_{atr_window}"] = adx.adx_neg().round(3)
+#     out[f"adx_{atr_window}"]      = adx.adx().round(3)
+
+#     # OBV
+#     out["obv"] = (
+#         ta.volume.OnBalanceVolumeIndicator(
+#             close=out["close"], volume=out["volume"]
+#         ).on_balance_volume().round(3)
+#     )
+#     out[f"obv_sma_{obv_sma}"] = (
+#         out["obv"].rolling(obv_sma, min_periods=1).mean().round(3)
+#     )
+
+#     # VWAP & vol_spike
+#     vwap = ta.volume.VolumeWeightedAveragePrice(
+#         high=out["high"], low=out["low"],
+#         close=out["close"], volume=out["volume"],
+#         window=vwap_window
+#     ).volume_weighted_average_price().round(6)
+#     out[f"vwap_{vwap_window}"] = vwap
+#     vol_roll = out["volume"].rolling(obv_sma, min_periods=1).mean()
+#     out[f"vol_spike_{obv_sma}"] = (out["volume"] / (vol_roll + eps)).round(3)
+#     out[f"vwap_dev_{vwap_window}"] = ((out["close"] - vwap) / (vwap + eps)).round(6)
+
+#     # Calendar
+#     out["hour"]        = out.index.hour
+#     out["day_of_week"] = out.index.dayofweek
+#     out["month"]       = out.index.month
+
+#     # 2) CUSTOM-WINDOW EXTRAS
+#     if base_w and base_w > 1:
+#         half, double = max(2, base_w // 2), base_w * 2
+#         sig = max(1, base_w // 4)
+#         skip_sma     = {sma_short, sma_long}
+#         skip_rsi     = {rsi_window}
+#         skip_atr     = {atr_window}
+#         skip_bb      = {bb_window}
+#         skip_obv_sma = {obv_sma}
+
+#         cust = pd.DataFrame(index=out.index)
+
+#         # EMA at half
+#         cust[f"ema_{half}"] = (
+#             ta.trend.EMAIndicator(out["close"], window=half)
+#               .ema_indicator().round(3)
+#         )
+
+#         # SMAs at half, base, double
+#         for w in (half, base_w, double):
+#             if w not in skip_sma:
+#                 cust[f"sma_{w}"] = out["close"].rolling(w, min_periods=1).mean().round(3)
+
+#         # MACD diff at half/base/sig
+#         macd2 = ta.trend.MACD(out["close"], window_fast=half,
+#                               window_slow=base_w, window_sign=sig)
+#         cust[f"macd_diff_{half}_{base_w}_{sig}"] = macd2.macd_diff().round(3)
+
+#         # ATR at base & double
+#         for w in (base_w, double):
+#             if w not in skip_atr:
+#                 cust[f"atr_{w}"] = (
+#                     ta.volatility.AverageTrueRange(
+#                         high=out["high"], low=out["low"],
+#                         close=out["close"], window=w
+#                     ).average_true_range().round(3)
+#                 )
+
+#         # BBands at base
+#         if base_w not in skip_bb:
+#             bb2 = ta.volatility.BollingerBands(out["close"],
+#                                                window=base_w, window_dev=2)
+#             cust[f"bb_lband_{base_w}"] = bb2.bollinger_lband().round(3)
+#             cust[f"bb_hband_{base_w}"] = bb2.bollinger_hband().round(3)
+#             m2 = bb2.bollinger_mavg()
+#             cust[f"bb_width_{base_w}"] = ((cust[f"bb_hband_{base_w}"]
+#                                            - cust[f"bb_lband_{base_w}"]) / (m2 + eps)
+#                                          ).round(3)
+
+#         # RSI at base
+#         if base_w not in skip_rsi:
+#             cust[f"rsi_{base_w}"] = (
+#                 ta.momentum.RSIIndicator(out["close"], window=base_w)
+#                   .rsi().round(3)
+#             )
+
+#         # Stochastic
+#         st = ta.momentum.StochasticOscillator(
+#             high=out["high"], low=out["low"], close=out["close"],
+#             window=base_w, smooth_window=sig
+#         )
+#         cust[f"stoch_k_{base_w}"] = st.stoch().round(3)
+#         cust[f"stoch_d_{sig}"]     = st.stoch_signal().round(3)
+
+#         # DI/ADX at base
+#         if base_w not in skip_atr:
+#             adx2 = ta.trend.ADXIndicator(out["high"], out["low"],
+#                                          out["close"], window=base_w)
+#             cust[f"plus_di_{base_w}"]  = adx2.adx_pos().round(3)
+#             cust[f"minus_di_{base_w}"] = adx2.adx_neg().round(3)
+#             cust[f"adx_{base_w}"]      = adx2.adx().round(3)
+
+#         # OBV_SMA at base
+#         if base_w not in skip_obv_sma:
+#             cust[f"obv_sma_{base_w}"] = (
+#                 out["obv"].rolling(base_w, min_periods=1).mean().round(3)
+#             )
+
+#         # VWAP_dev & vol_spike at base
+#         v2 = ta.volume.VolumeWeightedAveragePrice(
+#                 high=out["high"], low=out["low"],
+#                 close=out["close"], volume=out["volume"],
+#                 window=base_w
+#             ).volume_weighted_average_price().round(6)
+#         cust[f"vwap_dev_{base_w}"]  = ((out["close"] - v2) / (v2 + eps)).round(6)
+#         roll2 = out["volume"].rolling(base_w, min_periods=1).mean()
+#         cust[f"vol_spike_{base_w}"] = (out["volume"] / (roll2 + eps)).round(3)
+
+#         # Returns & rolling vol at 1, base, double
+#         for p in (1, base_w, double):
+#             cust[f"r_{p}"] = np.log(out["close"] / out["close"].shift(p)).round(6)
+#         cust[f"vol_{base_w}"] = cust["r_1"].rolling(base_w, min_periods=1).std().round(6)
+
+#         out = pd.concat([out, cust], axis=1)
+
+#     return out.dropna()
+
+
 def create_features(
     df: pd.DataFrame,
-    sma_short:   int = 20,
-    sma_long:    int = 100,
-    rsi_window:  int = 14,
-    macd_fast:   int = 12,
-    macd_slow:   int = 26,
-    macd_sig:    int = 9,
-    atr_window:  int = 14,
-    bb_window:   int = 20,
-    obv_sma:     int = 14,
-    vwap_window: int = 20,
-    base_w:      int | None = None
+    window_multiplier: float = 1.0,
+    sma_short:   int         = 14,
+    sma_long:    int         = 28,
+    rsi_window:  int         = 14,
+    macd_fast:   int         = 12,
+    macd_slow:   int         = 26,
+    macd_sig:    int         = 9,
+    atr_window:  int         = 14,
+    bb_window:   int         = 20,
+    obv_sma:     int         = 14,
+    vwap_window: int         = 14
 ) -> pd.DataFrame:
     """
-    1) Compute raw OHLCV + bid/ask + label.
-    2) Compute standard textbook indicators at 1m:
-       • rsi_{rsi_window}
-       • macd_line_{macd_fast}_{macd_slow}_{macd_sig}, macd_signal_…, macd_diff_…
-       • sma_{sma_short}, sma_{sma_long}
-       • atr_{atr_window}
-       • bb_lband_{bb_window}, bb_hband_{bb_window}, bb_width_{bb_window}
-       • plus_di_{atr_window}, minus_di_{atr_window}, adx_{atr_window}
-       • obv, obv_sma_{obv_sma}
-       • vwap_{vwap_window}, vol_spike_{obv_sma}
-       • hour, day_of_week, month
-    3) If base_w > 1, compute custom-window versions at half/base/double—
-       skipping any that would collide with standard-window names.
-    4) Prevent division-by-zero by adding eps to every denominator.
+    Vectorized generation of OHLCV‐derived and candlestick‐geometry features.
+
+    1) Scale all base‐window parameters by window_multiplier.
+    2) Compute candlestick geometry: 
+       - body, body_pct, upper_shad, lower_shad, range_pct
+    3) Compute popular indicators:
+       - RSI(w_rsi)
+       - MACD(line, signal, diff)
+       - SMA(short/long) + sma_pct deviations
+       - ATR(w_atr) + atr_pct
+       - Bollinger Bands(w_bb) + bb_width
+       - +DI, –DI, ADX(w_atr)
+       - OBV + obv_sma(w_obv) + obv_pct
+       - VWAP(w_vwap) + vwap_dev
+       - vol_spike ratio
+    4) Append calendar columns: hour, day_of_week, month
+    5) Return DataFrame of original columns + all new features, dropping any NaNs.
+
+    Everything is computed in one go—no per-day loops here.
     """
     df = df.copy()
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df.index = pd.to_datetime(df.index)
+    df.index = pd.to_datetime(df.index)
 
-    eps = 1e-8
-    out = df[["open","high","low","close","volume","bid","ask", params.label_col]].copy()
+    # helper to scale a window size, min 1
+    def WM(x): 
+        return max(1, int(round(x * window_multiplier)))
 
-    # 1) STANDARD WINDOWS
+    # derive actual window lengths
+    w_sma_s = WM(sma_short)
+    w_sma_l = WM(sma_long)
+    w_rsi   = WM(rsi_window)
+    w_atr   = WM(atr_window)
+    w_bb    = WM(bb_window)
+    w_obv   = WM(obv_sma)
+    w_vwap  = WM(vwap_window)
 
-    # RSI
-    out[f"rsi_{rsi_window}"] = (
-        ta.momentum.RSIIndicator(out["close"], window=rsi_window)
-          .rsi().round(3)
-    )
+    # pick up only the input columns
+    cols_in = ["open","high","low","close","volume","bid","ask", params.label_col]
+    out     = df[cols_in].copy()
 
-    # MACD
+    # 1) Candlestick geometry
+    o, c, h, l = out.open, out.close, out.high, out.low
+    out["body"]       = c - o
+    out["body_pct"]   = (c - o) / (o + 1e-8)
+    out["upper_shad"] = h - out[["open","close"]].max(axis=1)
+    out["lower_shad"] = out[["open","close"]].min(axis=1) - l
+    out["range_pct"]  = (h - l) / (c + 1e-8)
+
+    # 2) RSI
+    out[f"rsi_{w_rsi}"] = ta.momentum.RSIIndicator(
+        close=c, window=w_rsi
+    ).rsi()
+
+    # 3) MACD line, signal & diff
     macd = ta.trend.MACD(
-        close=out["close"],
+        close=c,
         window_fast=macd_fast,
         window_slow=macd_slow,
         window_sign=macd_sig
     )
-    out[f"macd_line_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd().round(3)
-    out[f"macd_signal_{macd_fast}_{macd_slow}_{macd_sig}"] = macd.macd_signal().round(3)
-    out[f"macd_diff_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd_diff().round(3)
+    out[f"macd_line_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd()
+    out[f"macd_signal_{macd_fast}_{macd_slow}_{macd_sig}"] = macd.macd_signal()
+    out[f"macd_diff_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd_diff()
 
-    # SMAs
-    out[f"sma_{sma_short}"] = out["close"].rolling(sma_short, min_periods=1).mean().round(3)
-    out[f"sma_{sma_long}"]  = out["close"].rolling(sma_long,  min_periods=1).mean().round(3)
+    # 4) SMA(short/long) + percent deviation
+    sma_s = c.rolling(w_sma_s, min_periods=1).mean()
+    sma_l = c.rolling(w_sma_l, min_periods=1).mean()
+    out[f"sma_{w_sma_s}"]     = sma_s
+    out[f"sma_{w_sma_l}"]     = sma_l
+    out[f"sma_pct_{w_sma_s}"] = (c - sma_s) / (sma_s + 1e-8)
+    out[f"sma_pct_{w_sma_l}"] = (c - sma_l) / (sma_l + 1e-8)
 
-    # ATR
-    out[f"atr_{atr_window}"] = (
-        ta.volatility.AverageTrueRange(
-            high=out["high"], low=out["low"], close=out["close"],
-            window=atr_window
-        ).average_true_range().round(3)
-    )
+    # 5) ATR + percent ATR
+    atr = ta.volatility.AverageTrueRange(
+        high=h, low=l, close=c, window=w_atr
+    ).average_true_range()
+    out[f"atr_{w_atr}"]     = atr
+    out[f"atr_pct_{w_atr}"] = atr / (c + 1e-8)
 
-    # Bollinger Bands
-    bb = ta.volatility.BollingerBands(out["close"], window=bb_window, window_dev=2)
-    out[f"bb_lband_{bb_window}"] = bb.bollinger_lband().round(3)
-    out[f"bb_hband_{bb_window}"] = bb.bollinger_hband().round(3)
-    m = bb.bollinger_mavg()
-    out[f"bb_width_{bb_window}"] = ((out[f"bb_hband_{bb_window}"]
-                                     - out[f"bb_lband_{bb_window}"]) / (m + eps)
-                                   ).round(3)
+    # 6) Bollinger Bands + width
+    bb    = ta.volatility.BollingerBands(close=c, window=w_bb, window_dev=2)
+    lband = bb.bollinger_lband()
+    hband = bb.bollinger_hband()
+    mavg  = bb.bollinger_mavg()
+    out[f"bb_lband_{w_bb}"] = lband
+    out[f"bb_hband_{w_bb}"] = hband
+    out[f"bb_w_{w_bb}"]     = (hband - lband) / (mavg + 1e-8)
 
-    # Directional Movement
-    adx = ta.trend.ADXIndicator(
-        high=out["high"], low=out["low"],
-        close=out["close"], window=atr_window
-    )
-    out[f"plus_di_{atr_window}"]  = adx.adx_pos().round(3)
-    out[f"minus_di_{atr_window}"] = adx.adx_neg().round(3)
-    out[f"adx_{atr_window}"]      = adx.adx().round(3)
+    # 7) ADX + Directional Indexes
+    adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w_atr)
+    out[f"plus_di_{w_atr}"]  = adx.adx_pos()
+    out[f"minus_di_{w_atr}"] = adx.adx_neg()
+    out[f"adx_{w_atr}"]      = adx.adx()
 
-    # OBV
-    out["obv"] = (
-        ta.volume.OnBalanceVolumeIndicator(
-            close=out["close"], volume=out["volume"]
-        ).on_balance_volume().round(3)
-    )
-    out[f"obv_sma_{obv_sma}"] = (
-        out["obv"].rolling(obv_sma, min_periods=1).mean().round(3)
-    )
+    # 8) OBV + its SMA + percent OBV
+    obv = ta.volume.OnBalanceVolumeIndicator(
+        close=c, volume=out.volume
+    ).on_balance_volume()
+    out["obv"]             = obv
+    out[f"obv_sma_{w_obv}"] = obv.rolling(w_obv, min_periods=1).mean()
+    out[f"obv_pct_{w_obv}"] = obv / (out.volume + 1e-8)
 
-    # VWAP & vol_spike
+    # 9) VWAP + deviation percent
     vwap = ta.volume.VolumeWeightedAveragePrice(
-        high=out["high"], low=out["low"],
-        close=out["close"], volume=out["volume"],
-        window=vwap_window
-    ).volume_weighted_average_price().round(6)
-    out[f"vwap_{vwap_window}"] = vwap
-    vol_roll = out["volume"].rolling(obv_sma, min_periods=1).mean()
-    out[f"vol_spike_{obv_sma}"] = (out["volume"] / (vol_roll + eps)).round(3)
-    out[f"vwap_dev_{vwap_window}"] = ((out["close"] - vwap) / (vwap + eps)).round(6)
+        high=h, low=l, close=c, volume=out.volume, window=w_vwap
+    ).volume_weighted_average_price()
+    out[f"vwap_{w_vwap}"]     = vwap
+    out[f"vwap_dev_{w_vwap}"] = (c - vwap) / (vwap + 1e-8)
 
-    # Calendar
+    # 10) Volume spike ratio
+    vol_roll = out.volume.rolling(w_obv, min_periods=1).mean()
+    out[f"vol_spike_{w_obv}"] = out.volume / (vol_roll + 1e-8)
+
+    # 11) Calendar fields
     out["hour"]        = out.index.hour
     out["day_of_week"] = out.index.dayofweek
     out["month"]       = out.index.month
 
-    # 2) CUSTOM-WINDOW EXTRAS
-    if base_w and base_w > 1:
-        half, double = max(2, base_w // 2), base_w * 2
-        sig = max(1, base_w // 4)
-        skip_sma     = {sma_short, sma_long}
-        skip_rsi     = {rsi_window}
-        skip_atr     = {atr_window}
-        skip_bb      = {bb_window}
-        skip_obv_sma = {obv_sma}
-
-        cust = pd.DataFrame(index=out.index)
-
-        # EMA at half
-        cust[f"ema_{half}"] = (
-            ta.trend.EMAIndicator(out["close"], window=half)
-              .ema_indicator().round(3)
-        )
-
-        # SMAs at half, base, double
-        for w in (half, base_w, double):
-            if w not in skip_sma:
-                cust[f"sma_{w}"] = out["close"].rolling(w, min_periods=1).mean().round(3)
-
-        # MACD diff at half/base/sig
-        macd2 = ta.trend.MACD(out["close"], window_fast=half,
-                              window_slow=base_w, window_sign=sig)
-        cust[f"macd_diff_{half}_{base_w}_{sig}"] = macd2.macd_diff().round(3)
-
-        # ATR at base & double
-        for w in (base_w, double):
-            if w not in skip_atr:
-                cust[f"atr_{w}"] = (
-                    ta.volatility.AverageTrueRange(
-                        high=out["high"], low=out["low"],
-                        close=out["close"], window=w
-                    ).average_true_range().round(3)
-                )
-
-        # BBands at base
-        if base_w not in skip_bb:
-            bb2 = ta.volatility.BollingerBands(out["close"],
-                                               window=base_w, window_dev=2)
-            cust[f"bb_lband_{base_w}"] = bb2.bollinger_lband().round(3)
-            cust[f"bb_hband_{base_w}"] = bb2.bollinger_hband().round(3)
-            m2 = bb2.bollinger_mavg()
-            cust[f"bb_width_{base_w}"] = ((cust[f"bb_hband_{base_w}"]
-                                           - cust[f"bb_lband_{base_w}"]) / (m2 + eps)
-                                         ).round(3)
-
-        # RSI at base
-        if base_w not in skip_rsi:
-            cust[f"rsi_{base_w}"] = (
-                ta.momentum.RSIIndicator(out["close"], window=base_w)
-                  .rsi().round(3)
-            )
-
-        # Stochastic
-        st = ta.momentum.StochasticOscillator(
-            high=out["high"], low=out["low"], close=out["close"],
-            window=base_w, smooth_window=sig
-        )
-        cust[f"stoch_k_{base_w}"] = st.stoch().round(3)
-        cust[f"stoch_d_{sig}"]     = st.stoch_signal().round(3)
-
-        # DI/ADX at base
-        if base_w not in skip_atr:
-            adx2 = ta.trend.ADXIndicator(out["high"], out["low"],
-                                         out["close"], window=base_w)
-            cust[f"plus_di_{base_w}"]  = adx2.adx_pos().round(3)
-            cust[f"minus_di_{base_w}"] = adx2.adx_neg().round(3)
-            cust[f"adx_{base_w}"]      = adx2.adx().round(3)
-
-        # OBV_SMA at base
-        if base_w not in skip_obv_sma:
-            cust[f"obv_sma_{base_w}"] = (
-                out["obv"].rolling(base_w, min_periods=1).mean().round(3)
-            )
-
-        # VWAP_dev & vol_spike at base
-        v2 = ta.volume.VolumeWeightedAveragePrice(
-                high=out["high"], low=out["low"],
-                close=out["close"], volume=out["volume"],
-                window=base_w
-            ).volume_weighted_average_price().round(6)
-        cust[f"vwap_dev_{base_w}"]  = ((out["close"] - v2) / (v2 + eps)).round(6)
-        roll2 = out["volume"].rolling(base_w, min_periods=1).mean()
-        cust[f"vol_spike_{base_w}"] = (out["volume"] / (roll2 + eps)).round(3)
-
-        # Returns & rolling vol at 1, base, double
-        for p in (1, base_w, double):
-            cust[f"r_{p}"] = np.log(out["close"] / out["close"].shift(p)).round(6)
-        cust[f"vol_{base_w}"] = cust["r_1"].rolling(base_w, min_periods=1).std().round(6)
-
-        out = pd.concat([out, cust], axis=1)
-
     return out.dropna()
 
 
+
 ##########################################################################################################
+
+
+# def features_engineering(
+#     df: pd.DataFrame,
+#     rsi_low:  float = 30.0,
+#     rsi_high: float = 70.0,
+#     adx_thr:  float = 20.0,
+#     mult_w:   int   = 14,
+#     eps:      float = 1e-8
+# ) -> pd.DataFrame:
+#     """
+#     Build seven eng_* signals as stationary ratios or deviations:
+#       1) eng_ma      = (sma_short – sma_long)  / sma_long
+#       2) eng_macd    = macd_diff               / sma_long
+#       3) eng_bb      = distance outside BBands / bb_width
+#       4) eng_rsi     = threshold distance      / 100
+#       5) eng_adx     = sign(DI+–DI–)/100 × (ADX–thr)/100
+#       6) eng_obv     = (obv – obv_sma)        / obv_sma
+#       7) eng_atr_div = 10 000×[(atr/close) – roll_mean(atr/close)]
+#     All divisions protect against zero by adding eps to denominators.
+#     """
+#     out = pd.DataFrame(index=df.index)
+
+#     # detect short/long SMA columns
+#     sma_cols = sorted([c for c in df if c.startswith("sma_")],
+#                       key=lambda x: int(x.split("_")[-1]))
+#     short, long = sma_cols[0], sma_cols[1]
+
+#     # 1) MA spread ratio
+#     out["eng_ma"] = ((df[short] - df[long]) / (df[long] + eps)).round(3)
+
+#     # 2) MACD diff ratio
+#     out["eng_macd"] = (df["macd_diff_12_26_9"] / (df[long] + eps)).round(3)
+
+#     # 3) Bollinger deviation ratio
+#     lo, hi, bw = df["bb_lband_20"], df["bb_hband_20"], df["bb_width_20"]
+#     dev = np.where(df["close"] < lo, lo - df["close"],
+#           np.where(df["close"] > hi, df["close"] - hi, 0.0))
+#     out["eng_bb"] = (dev / (bw + eps)).round(3)
+
+#     # 4) RSI threshold ratio
+#     rsi = df["rsi_14"]
+#     low_dev  = np.clip((rsi_low - rsi),   0, None) / 100.0
+#     high_dev = np.clip((rsi - rsi_high), 0, None) / 100.0
+#     out["eng_rsi"] = np.where(rsi < rsi_low, low_dev,
+#                        np.where(rsi > rsi_high, high_dev, 0.0)).round(3)
+
+#     # 5) ADX-weighted DI spread
+#     plus, minus, adx = df["plus_di_14"], df["minus_di_14"], df["adx_14"]
+#     diff = (plus - minus).abs() / 100.0
+#     ex   = np.clip((adx - adx_thr) / 100.0, 0, None)
+#     out["eng_adx"] = (np.sign(plus - minus) * diff * ex).round(3)
+
+#     # 6) OBV divergence ratio
+#     out["eng_obv"] = (
+#         (df["obv"] - df["obv_sma_14"]) / (df["obv_sma_14"] + eps)
+#     ).round(3)
+
+#     # 7) ATR/price stationary deviation
+#     ratio = df["atr_14"] / (df["close"] + eps)
+#     rm    = ratio.rolling(mult_w, min_periods=1).mean()
+#     out["eng_atr_div"] = ((ratio - rm) * 10_000).round(1)
+
+#     return out
 
 
 def features_engineering(
     df: pd.DataFrame,
-    rsi_low:  float = 30.0,
-    rsi_high: float = 70.0,
-    adx_thr:  float = 20.0,
-    mult_w:   int   = 14,
-    eps:      float = 1e-8
+    rsi_low:   float = 30.0,
+    rsi_high:  float = 70.0,
+    adx_thr:   float = 20.0,
+    mult_w:    int   = 14,
+    eps:       float = 1e-8
 ) -> pd.DataFrame:
     """
-    Build seven eng_* signals as stationary ratios or deviations:
-      1) eng_ma      = (sma_short – sma_long)  / sma_long
-      2) eng_macd    = macd_diff               / sma_long
-      3) eng_bb      = distance outside BBands / bb_width
-      4) eng_rsi     = threshold distance      / 100
-      5) eng_adx     = sign(DI+–DI–)/100 × (ADX–thr)/100
-      6) eng_obv     = (obv – obv_sma)        / obv_sma
-      7) eng_atr_div = 10 000×[(atr/close) – roll_mean(atr/close)]
-    All divisions protect against zero by adding eps to denominators.
+    Build seven continuous “eng_” signals by comparing core indicators to thresholds
+    or to their own moving baselines.
+
+    1) eng_ma      = (SMA_short – SMA_long)    / (SMA_long + eps)
+    2) eng_macd    = MACD_diff                  / (SMA_long + eps)
+    3) eng_bb      = distance outside BollBands / (BB_width + eps)
+    4) eng_rsi     = distance beyond [rsi_low, rsi_high] / 100
+    5) eng_adx     = sign(+DI––DI–)×(|+DI––DI–|/100)×max(ADX–adx_thr,0)/100
+    6) eng_obv     = (OBV – OBV_SMA)           / (OBV_SMA + eps)
+    7) eng_atr_div = 10000×[(ATR/Close) – rolling_mean(ATR/Close, mult_w)]
+
+    All denominators add eps to avoid division‐by‐zero.  
+    Returns a DataFrame of these seven engineered columns, indexed as df.
     """
     out = pd.DataFrame(index=df.index)
 
-    # detect short/long SMA columns
-    sma_cols = sorted([c for c in df if c.startswith("sma_")],
-                      key=lambda x: int(x.split("_")[-1]))
-    short, long = sma_cols[0], sma_cols[1]
+    # 1) detect the two SMA columns (exclude sma_pct_)
+    sma_cols = [c for c in df.columns 
+                if c.startswith("sma_") and not c.startswith("sma_pct")]
+    sma_cols = sorted(sma_cols, key=lambda c: int(c.split("_")[1]))
+    sma_short_col, sma_long_col = sma_cols[:2]
+
+    # 2) detect MACD diff
+    macd_diff_col = next(c for c in df.columns if c.startswith("macd_diff_"))
+
+    # 3) detect Bollinger bands & width
+    bb_l_col   = next(c for c in df.columns if c.startswith("bb_lband_"))
+    bb_h_col   = next(c for c in df.columns if c.startswith("bb_hband_"))
+    bb_w_col   = next(c for c in df.columns if c.startswith("bb_w_"))
+
+    # 4) detect RSI column
+    rsi_col    = next(c for c in df.columns if c.startswith("rsi_"))
+
+    # 5) detect DI & ADX
+    plus_di_col  = next(c for c in df.columns if c.startswith("plus_di_"))
+    minus_di_col = next(c for c in df.columns if c.startswith("minus_di_"))
+    adx_col      = next(c for c in df.columns if c.startswith("adx_"))
+
+    # 6) detect OBV & its SMA
+    obv_col      = "obv"
+    obv_sma_col  = next(c for c in df.columns if c.startswith("obv_sma_"))
+
+    # 7) detect ATR/Close pct
+    atr_pct_col  = next(c for c in df.columns if c.startswith("atr_pct_"))
 
     # 1) MA spread ratio
-    out["eng_ma"] = ((df[short] - df[long]) / (df[long] + eps)).round(3)
+    out["eng_ma"] = (
+        (df[sma_short_col] - df[sma_long_col])
+        / (df[sma_long_col] + eps)
+    ).round(3)
 
     # 2) MACD diff ratio
-    out["eng_macd"] = (df["macd_diff_12_26_9"] / (df[long] + eps)).round(3)
+    out["eng_macd"] = (
+        df[macd_diff_col] / (df[sma_long_col] + eps)
+    ).round(3)
 
     # 3) Bollinger deviation ratio
-    lo, hi, bw = df["bb_lband_20"], df["bb_hband_20"], df["bb_width_20"]
-    dev = np.where(df["close"] < lo, lo - df["close"],
-          np.where(df["close"] > hi, df["close"] - hi, 0.0))
+    close = df["close"]
+    lo, hi, bw = df[bb_l_col], df[bb_h_col], df[bb_w_col]
+    dev = np.where(close < lo, lo - close,
+           np.where(close > hi, close - hi, 0.0))
     out["eng_bb"] = (dev / (bw + eps)).round(3)
 
     # 4) RSI threshold ratio
-    rsi = df["rsi_14"]
-    low_dev  = np.clip((rsi_low - rsi),   0, None) / 100.0
-    high_dev = np.clip((rsi - rsi_high), 0, None) / 100.0
-    out["eng_rsi"] = np.where(rsi < rsi_low, low_dev,
-                       np.where(rsi > rsi_high, high_dev, 0.0)).round(3)
+    rsi = df[rsi_col]
+    low_dev  = np.clip((rsi_low  - rsi), 0, None) / 100.0
+    high_dev = np.clip((rsi       - rsi_high), 0, None) / 100.0
+    out["eng_rsi"] = np.where(
+        rsi < rsi_low, low_dev,
+        np.where(rsi > rsi_high, high_dev, 0.0)
+    ).round(3)
 
-    # 5) ADX-weighted DI spread
-    plus, minus, adx = df["plus_di_14"], df["minus_di_14"], df["adx_14"]
-    diff = (plus - minus).abs() / 100.0
-    ex   = np.clip((adx - adx_thr) / 100.0, 0, None)
-    out["eng_adx"] = (np.sign(plus - minus) * diff * ex).round(3)
+    # 5) ADX‐weighted DI spread
+    plus, minus, adx = df[plus_di_col], df[minus_di_col], df[adx_col]
+    di_diff = (plus - minus)
+    diff_abs = di_diff.abs() / 100.0
+    ex = np.clip((adx - adx_thr) / 100.0, 0, None)
+    out["eng_adx"] = (np.sign(di_diff) * diff_abs * ex).round(3)
 
     # 6) OBV divergence ratio
     out["eng_obv"] = (
-        (df["obv"] - df["obv_sma_14"]) / (df["obv_sma_14"] + eps)
+        (df[obv_col] - df[obv_sma_col])
+        / (df[obv_sma_col] + eps)
     ).round(3)
 
-    # 7) ATR/price stationary deviation
-    ratio = df["atr_14"] / (df["close"] + eps)
-    rm    = ratio.rolling(mult_w, min_periods=1).mean()
+    # 7) ATR/Close stationary deviation
+    ratio = df[atr_pct_col]  # ATR/Close
+    rm = ratio.rolling(mult_w, min_periods=1).mean()
     out["eng_atr_div"] = ((ratio - rm) * 10_000).round(1)
 
     return out
 
-
 ##########################################################################################################
+
+
+# def scale_with_splits(
+#     df: pd.DataFrame,
+#     train_prop: float = params.train_prop,
+#     val_prop:   float = params.val_prop
+# ) -> pd.DataFrame:
+#     """
+#     Split, encode time, PCA‐compress, and scale indicator features without leaking future info.
+
+#     1) Chronologically split df → train / val / test.
+#     2) In each split:
+#        a) encode hour, day_of_week, month as sin/cos;
+#        b) immediately PCA‐compress each sin/cos pair back to a single 'hour', 'day_of_week', 'month'.
+#     3) Identify `indicator_cols` = all columns except:
+#        - raw price (open, high, low, close, volume),
+#        - bid, ask, label,
+#        - calendar dims (hour, day_of_week, month).
+#        Those raw / label / calendar fields pass through unchanged.
+#     4) On TRAIN[indicator_cols], fit a ColumnTransformer:
+#        - bounded_inds (RSI/Stoch/+DI/-DI/ADX)       → divide by 100  
+#        - ratio_inds (returns, vol_spike, vwap_dev, bb_width, eng_*) → MinMaxScaler(0,1)  
+#        - unbounded  (EMA/SMA/MACD/ATR/BB midbands/OBV/VWAP)       → RobustScaler(5–95%) → StandardScaler → MinMaxScaler(0,1)
+#     5) For each split & each calendar day (tqdm):
+#        transform only `indicator_cols`, reattach raw/label/calendar.
+#     6) Concatenate train/val/test, sort by index, return.
+#     """
+#     # 1) Chronological split
+#     df = df.copy()
+#     N     = len(df)
+#     n_tr  = int(N * train_prop)
+#     n_val = int(N * val_prop)
+#     if n_tr + n_val >= N:
+#         raise ValueError("train_prop + val_prop must sum to <1.0")
+#     df_tr = df.iloc[:n_tr].copy()
+#     df_v  = df.iloc[n_tr : n_tr + n_val].copy()
+#     df_te = df.iloc[n_tr + n_val :].copy()
+
+#     # 2) Encode sin/cos and PCA‐compress in each split
+#     for split_name, split_df in zip(
+#         ["train","val","test"], [df_tr, df_v, df_te]
+#     ):
+#         # 2a) encode cyclic time
+#         h   = split_df["hour"]
+#         dow = split_df["day_of_week"]
+#         m   = split_df["month"]
+#         split_df["hour_sin"], split_df["hour_cos"] = (
+#             np.sin(2*np.pi*h/24), np.cos(2*np.pi*h/24)
+#         )
+#         split_df["dow_sin"],  split_df["dow_cos"]  = (
+#             np.sin(2*np.pi*dow/7), np.cos(2*np.pi*dow/7)
+#         )
+#         split_df["mo_sin"],   split_df["mo_cos"]   = (
+#             np.sin(2*np.pi*m/12), np.cos(2*np.pi*m/12)
+#         )
+
+#         # 2b) PCA‐compress each pair back to one calendar dim
+#         for feat, (c1, c2) in zip(
+#                 ["hour","day_of_week","month"],
+#                 [("hour_sin","hour_cos"),
+#                  ("dow_sin","dow_cos"),
+#                  ("mo_sin","mo_cos")]):
+#             pca_vals = split_df[[c1, c2]].values
+#             comp     = PCA(n_components=1).fit_transform(pca_vals).ravel().round(3)
+#             split_df[feat] = comp
+#             split_df.drop([c1, c2], axis=1, inplace=True)
+
+#     # 3) Identify indicator columns to scale, excluding the 'reserved'
+#     reserved = {
+#         "open","high","low","close","volume",  # we don´t need the raw ohlcv
+#         "bid","ask", params.label_col,         # we need them raw
+#         "hour","day_of_week","month"           # already PCA‐compressed calendar, no need to rescale them
+#     }
+#     indicator_cols = [c for c in df.columns if c not in reserved]
+
+#     # 4) Domain‐aware scaling on TRAIN[indicators]
+#     bounded   = [c for c in indicator_cols
+#                  if c.startswith(("rsi_","stoch_","plus_di_","minus_di_","adx_"))]
+#     ratio     = [c for c in indicator_cols
+#                  if c.startswith("r_")
+#                  or "vol_spike" in c
+#                  or "vwap_dev"  in c
+#                  or c.endswith("_width")
+#                  or c.startswith("eng_")]
+#     unbounded = [c for c in indicator_cols if c not in bounded + ratio]
+
+#     ct = ColumnTransformer([
+#         ("bnd", FunctionTransformer(lambda X: X / 100.0), bounded),
+#         ("rat", MinMaxScaler(feature_range=(0,1)),       ratio),
+#         ("unb", Pipeline([
+#             ("robust", RobustScaler(quantile_range=(5,95))),
+#             ("std",    StandardScaler()),
+#             ("mm",     MinMaxScaler(feature_range=(0,1))),
+#         ]),                                           unbounded),
+#     ], remainder="drop")
+
+#     # fit on TRAIN indicators only
+#     ct.fit(df_tr[indicator_cols])
+
+#     # 5) Per‐day transform & reattach
+#     def transform_per_day(split_df, split_name):
+#         arr = np.empty((len(split_df), len(indicator_cols)), dtype=float)
+#         for day, block in tqdm(
+#             split_df.groupby(split_df.index.normalize()),
+#             desc=f"{split_name} days", unit="day"
+#         ):
+#             arr[split_df.index.normalize() == day] = ct.transform(block[indicator_cols])
+
+#         # build scaled DataFrame
+#         scal_cols = [c for c in indicator_cols]
+#         df_scaled = pd.DataFrame(arr, index=split_df.index, columns=scal_cols)
+
+#         # reattach raw, bid/ask, label, calendar dims
+#         for c in split_df.columns:
+#             if c not in indicator_cols:
+#                 df_scaled[c] = split_df[c]
+#         return df_scaled
+
+#     df_tr_s = transform_per_day(df_tr, "train")
+#     df_v_s  = transform_per_day(df_v,  "val")
+#     df_te_s = transform_per_day(df_te, "test")
+
+#     # 6) Concatenate splits and return
+#     df_all = pd.concat([df_tr_s, df_v_s, df_te_s])
+#     df_all.drop(["open", "high", "low", "close", "volume"], axis=1, inplace=False)
+#     return df_all.sort_index()
 
 
 def scale_with_splits(
@@ -316,124 +680,110 @@ def scale_with_splits(
     val_prop:   float = params.val_prop
 ) -> pd.DataFrame:
     """
-    Split, encode time, PCA‐compress, and scale indicator features without leaking future info.
+    1) Build cyclical calendar features (hour, day_of_week, month) as sin/cos on the full df.
+    2) Split contiguously into train/val/test by proportions.
+    3) Fit PCA(1) on train’s sin/cos pairs → compress back to hour/day_of_week/month.
+    4) Identify indicator cols vs reserved cols *after* PCA (so sin/cos are gone).
+    5) Fit a ColumnTransformer on train indicators:
+         - bounded    (/100)
+         - ratio      (MinMax[0,1])
+         - unbounded  (Robust → Standard → MinMax[0,1])
+    6) Transform each split *per calendar day* with tqdm bars, reassemble features + reserved.
+    7) Concat train/val/test, drop raw OHLCV, return full scaled DataFrame.
 
-    1) Chronologically split df → train / val / test.
-    2) In each split:
-       a) encode hour, day_of_week, month as sin/cos;
-       b) immediately PCA‐compress each sin/cos pair back to a single 'hour', 'day_of_week', 'month'.
-    3) Identify `indicator_cols` = all columns except:
-       - raw price (open, high, low, close, volume),
-       - bid, ask, label,
-       - calendar dims (hour, day_of_week, month).
-       Those raw / label / calendar fields pass through unchanged.
-    4) On TRAIN[indicator_cols], fit a ColumnTransformer:
-       - bounded_inds (RSI/Stoch/+DI/-DI/ADX)       → divide by 100  
-       - ratio_inds (returns, vol_spike, vwap_dev, bb_width, eng_*) → MinMaxScaler(0,1)  
-       - unbounded  (EMA/SMA/MACD/ATR/BB midbands/OBV/VWAP)       → RobustScaler(5–95%) → StandardScaler → MinMaxScaler(0,1)
-    5) For each split & each calendar day (tqdm):
-       transform only `indicator_cols`, reattach raw/label/calendar.
-    6) Concatenate train/val/test, sort by index, return.
+    This guarantees:
+      - No future leakage (PCA & scalers trained on train only).
+      - All indicator features reside in [0,1].
+      - Inter-day rolling continuity is preserved.
     """
-    # 1) Chronological split
     df = df.copy()
+    df.index = pd.to_datetime(df.index)
+
+    # 1) Add calendar sin/cos to full df
+    df["hour"]        = df.index.hour
+    df["day_of_week"] = df.index.dayofweek
+    df["month"]       = df.index.month
+
+    for name, period in [("hour",24), ("day_of_week",7), ("month",12)]:
+        vals = df[name]
+        df[f"{name}_sin"] = np.sin(2*np.pi * vals / period)
+        df[f"{name}_cos"] = np.cos(2*np.pi * vals / period)
+
+    # 2) Split contiguously
     N     = len(df)
     n_tr  = int(N * train_prop)
     n_val = int(N * val_prop)
     if n_tr + n_val >= N:
         raise ValueError("train_prop + val_prop must sum to <1.0")
+
     df_tr = df.iloc[:n_tr].copy()
-    df_v  = df.iloc[n_tr : n_tr + n_val].copy()
-    df_te = df.iloc[n_tr + n_val :].copy()
+    df_v  = df.iloc[n_tr : n_tr+n_val].copy()
+    df_te = df.iloc[n_tr+n_val :].copy()
 
-    # 2) Encode sin/cos and PCA‐compress in each split
-    for split_name, split_df in zip(
-        ["train","val","test"], [df_tr, df_v, df_te]
-    ):
-        # 2a) encode cyclic time
-        h   = split_df["hour"]
-        dow = split_df["day_of_week"]
-        m   = split_df["month"]
-        split_df["hour_sin"], split_df["hour_cos"] = (
-            np.sin(2*np.pi*h/24), np.cos(2*np.pi*h/24)
-        )
-        split_df["dow_sin"],  split_df["dow_cos"]  = (
-            np.sin(2*np.pi*dow/7), np.cos(2*np.pi*dow/7)
-        )
-        split_df["mo_sin"],   split_df["mo_cos"]   = (
-            np.sin(2*np.pi*m/12), np.cos(2*np.pi*m/12)
-        )
+    # 3) PCA compress sin/cos → keep only the scalar cal features
+    for cal in ("hour","day_of_week","month"):
+        cols = [f"{cal}_sin", f"{cal}_cos"]
+        pca  = PCA(n_components=1)
+        pca.fit(df_tr[cols])
+        for split in (df_tr, df_v, df_te):
+            split[cal] = pca.transform(split[cols])
+            split.drop(cols, axis=1, inplace=True)
 
-        # 2b) PCA‐compress each pair back to one calendar dim
-        for feat, (c1, c2) in zip(
-                ["hour","day_of_week","month"],
-                [("hour_sin","hour_cos"),
-                 ("dow_sin","dow_cos"),
-                 ("mo_sin","mo_cos")]):
-            pca_vals = split_df[[c1, c2]].values
-            comp     = PCA(n_components=1).fit_transform(pca_vals).ravel().round(3)
-            split_df[feat] = comp
-            split_df.drop([c1, c2], axis=1, inplace=True)
-
-    # 3) Identify indicator columns to scale, excluding the 'reserved'
+    # 4) Now identify reserved vs indicator after PCA drop
     reserved = {
-        "open","high","low","close","volume",  # we don´t need the raw ohlcv
-        "bid","ask", params.label_col,         # we need them raw
-        "hour","day_of_week","month"           # already PCA‐compressed calendar, no need to rescale them
+        "open","high","low","close","volume",
+        "bid","ask", params.label_col,
+        "hour","day_of_week","month"
     }
-    indicator_cols = [c for c in df.columns if c not in reserved]
+    feat_cols = [c for c in df_tr.columns if c not in reserved]
 
-    # 4) Domain‐aware scaling on TRAIN[indicators]
-    bounded   = [c for c in indicator_cols
-                 if c.startswith(("rsi_","stoch_","plus_di_","minus_di_","adx_"))]
-    ratio     = [c for c in indicator_cols
-                 if c.startswith("r_")
-                 or "vol_spike" in c
-                 or "vwap_dev"  in c
-                 or c.endswith("_width")
-                 or c.startswith("eng_")]
-    unbounded = [c for c in indicator_cols if c not in bounded + ratio]
+    # group features by type
+    bounded   = [c for c in feat_cols if c.startswith(("rsi_","adx_","plus_di_","minus_di_","stoch_"))]
+    ratio     = [c for c in feat_cols if c.startswith("r_")
+                               or "vol_spike" in c
+                               or "vwap_dev" in c
+                               or c.endswith("_w")]
+    unbounded = [c for c in feat_cols if c not in bounded + ratio]
 
+    # 5) Build a ColumnTransformer ending each branch in MinMax([0,1])
     ct = ColumnTransformer([
-        ("bnd", FunctionTransformer(lambda X: X / 100.0), bounded),
-        ("rat", MinMaxScaler(feature_range=(0,1)),       ratio),
+        ("bnd", FunctionTransformer(lambda X: X / 100.0),        bounded),
+        ("rat", MinMaxScaler(feature_range=(0,1)),              ratio),
         ("unb", Pipeline([
             ("robust", RobustScaler(quantile_range=(5,95))),
             ("std",    StandardScaler()),
             ("mm",     MinMaxScaler(feature_range=(0,1))),
-        ]),                                           unbounded),
+        ]),                                                    unbounded),
     ], remainder="drop")
 
-    # fit on TRAIN indicators only
-    ct.fit(df_tr[indicator_cols])
+    # fit only on train indicators
+    ct.fit(df_tr[feat_cols])
 
-    # 5) Per‐day transform & reattach
-    def transform_per_day(split_df, split_name):
-        arr = np.empty((len(split_df), len(indicator_cols)), dtype=float)
+    # 6) Transform each split per-day with tqdm
+    def transform_split(split_df, label):
+        arr = np.empty((len(split_df), len(feat_cols)), dtype=float)
         for day, block in tqdm(
             split_df.groupby(split_df.index.normalize()),
-            desc=f"{split_name} days", unit="day"
+            desc=f"{label} days", unit="day"
         ):
-            arr[split_df.index.normalize() == day] = ct.transform(block[indicator_cols])
+            mask        = split_df.index.normalize() == day
+            arr[mask,:] = ct.transform(block[feat_cols])
 
-        # build scaled DataFrame
-        scal_cols = [c for c in indicator_cols]
-        df_scaled = pd.DataFrame(arr, index=split_df.index, columns=scal_cols)
+        # rebuild DataFrame: features + reserved
+        df_feats    = pd.DataFrame(arr, index=split_df.index, columns=feat_cols)
+        df_reserved = split_df[list(reserved)]
+        df_scaled   = pd.concat([df_feats, df_reserved], axis=1)
+        return df_scaled[split_df.columns]
 
-        # reattach raw, bid/ask, label, calendar dims
-        for c in split_df.columns:
-            if c not in indicator_cols:
-                df_scaled[c] = split_df[c]
-        return df_scaled
+    df_tr_s = transform_split(df_tr, "train")
+    df_v_s  = transform_split(df_v,  "val")
+    df_te_s = transform_split(df_te, "test")
 
-    df_tr_s = transform_per_day(df_tr, "train")
-    df_v_s  = transform_per_day(df_v,  "val")
-    df_te_s = transform_per_day(df_te, "test")
+    # 7) Concat & drop raw OHLCV if desired
+    df_all = pd.concat([df_tr_s, df_v_s, df_te_s]).sort_index()
+    return df_all.drop(columns=["open","high","low","close","volume"], errors="ignore")
 
-    # 6) Concatenate splits and return
-    df_all = pd.concat([df_tr_s, df_v_s, df_te_s])
-    df_all.drop(["open", "high", "low", "close", "volume"], axis=1, inplace=False)
-    return df_all.sort_index()
+
 
 
 #########################################################################################################

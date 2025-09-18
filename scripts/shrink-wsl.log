@@ -1,50 +1,55 @@
 
-2025-09-17 14:01:21  ===== Shrink-WSL run started =====
-2025-09-17 14:01:21  Script folder: G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts
-2025-09-17 14:01:21  Patching /etc/wsl.conf to drop invalid networkDrives key???
-2025-09-17 14:01:21  VHDX path: C:\Users\alfri\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx
-2025-09-17 14:01:22  BEFORE: C free=672.04 GB; ext4.vhdx=61.29 GB
-2025-09-17 14:01:22  Stopping Docker Desktop???
-2025-09-17 14:01:22  Docker Desktop stopped (if present)
-2025-09-17 14:01:22  Shutting down WSL???
-2025-09-17 14:01:32  vmmem exited
-2025-09-17 14:01:32  Listing /tmp items >3h???
-2025-09-17 14:01:34    [DEL] /tmp/tmp/sync-practice.lock
-2025-09-17 14:01:34    [DEL] /tmp/tmp/unison-tmp
-2025-09-17 14:01:34  Deleting /tmp items???
-2025-09-17 14:01:34  /tmp cleanup done
-2025-09-17 14:01:34  Listing .ipynb_checkpoints dirs???
-2025-09-17 14:01:34    [DEL] chkpt/home/alfrizz/my_practice/my_models/Trading/_Stock_Analysis_/trainings/.ipynb_checkpoints
-2025-09-17 14:01:34    [DEL] chkpt/home/alfrizz/my_practice/my_models/Trading/_Stock_Analysis_/libs/models/.ipynb_checkpoints
-2025-09-17 14:01:34    [DEL] chkpt/home/alfrizz/my_practice/my_models/Trading/_Stock_Analysis_/.ipynb_checkpoints
-2025-09-17 14:01:34  Deleting .ipynb_checkpoints???
-2025-09-17 14:01:34  Checkpoints cleanup done
-2025-09-17 14:01:34  Running fstrim???
-2025-09-17 14:01:35    fstrim: /: 946.1 GiB (1015904198656 bytes) trimmed
-2025-09-17 14:01:35  Shutting down WSL (for compaction)???
-2025-09-17 14:01:37  WSL VM stopped
-2025-09-17 14:01:37  Stopping LxssManager & VMCompute???
-2025-09-17 14:01:37  Host services stopped
-2025-09-17 14:01:37  Compacting VHDX: C:\Users\alfri\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx
-2025-09-17 14:02:10    DiskPart: 
-2025-09-17 14:02:10    DiskPart: Microsoft DiskPart version 10.0.26100.1150
-2025-09-17 14:02:10    DiskPart: Copyright (C) Microsoft Corporation.
-2025-09-17 14:02:10    DiskPart: On computer: ALFRIZZ
-2025-09-17 14:02:10    DiskPart: DiskPart successfully selected the virtual disk file.
-2025-09-17 14:02:10    DiskPart:   100 percent completed
-2025-09-17 14:02:10    DiskPart: DiskPart successfully attached the virtual disk file.
-2025-09-17 14:02:10    DiskPart:     0 percent completed
-2025-09-17 14:02:10    DiskPart:    17 percent completed
-2025-09-17 14:02:10    DiskPart:    19 percent completed
-2025-09-17 14:02:10    DiskPart:    28 percent completed
-2025-09-17 14:02:10    DiskPart:    29 percent completed
-2025-09-17 14:02:10    DiskPart: DiskPart successfully compacted the virtual disk file.
-2025-09-17 14:02:10    DiskPart: DiskPart successfully detached the virtual disk file.
-2025-09-17 14:02:10    DiskPart: Leaving DiskPart...
-2025-09-17 14:02:10  DiskPart compaction done
-2025-09-17 14:02:10  Restarting VMCompute & LxssManager???
-2025-09-17 14:02:10  Host services restarted
-2025-09-17 14:02:10  Verifying Ubuntu???
-2025-09-17 14:02:12    Ubuntu echo: OK
-2025-09-17 14:02:12  AFTER: C free=672.07 GB; ext4.vhdx=61.29 GB
-2025-09-17 14:02:12  ===== Shrink-WSL run complete =====
+2025-09-17 19:17:54  ===== Shrink-WSL run started =====
+2025-09-17 19:17:54  Script folder: G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts
+2025-09-17 19:17:54  Patching /etc/wsl.conf to drop invalid networkDrives key???
+2025-09-17 19:17:55  VHDX path: C:\Users\alfri\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx
+2025-09-17 19:17:55  BEFORE: C free=629.13 GB; ext4.vhdx=77.01 GB
+2025-09-17 19:17:55  Stopping Docker Desktop???
+2025-09-17 19:17:55  Docker Desktop stopped (if present)
+2025-09-17 19:17:55  Shutting down WSL???
+2025-09-17 19:18:00  vmmem exited
+2025-09-17 19:18:00  Listing /tmp items >3h???
+2025-09-17 19:18:02    [DEL] /tmp/tmp/sync-practice.lock
+2025-09-17 19:18:02    [DEL] /tmp/tmp/unison-tmp
+2025-09-17 19:18:02  Deleting /tmp items???
+2025-09-17 19:18:02  /tmp cleanup done
+2025-09-17 19:18:02  Listing .ipynb_checkpoints dirs???
+2025-09-17 19:18:02    [DEL] chkpt/home/alfrizz/my_practice/my_models/Trading/_Stock_Analysis_/trainings/.ipynb_checkpoints
+2025-09-17 19:18:02    [DEL] chkpt/home/alfrizz/my_practice/my_models/Trading/_Stock_Analysis_/libs/models/.ipynb_checkpoints
+2025-09-17 19:18:02    [DEL] chkpt/home/alfrizz/my_practice/my_models/Trading/_Stock_Analysis_/libs/.ipynb_checkpoints
+2025-09-17 19:18:02    [DEL] chkpt/home/alfrizz/my_practice/my_models/Trading/_Stock_Analysis_/.ipynb_checkpoints
+2025-09-17 19:18:03  Deleting .ipynb_checkpoints???
+2025-09-17 19:18:03  Checkpoints cleanup done
+2025-09-17 19:18:03  Running fstrim???
+2025-09-17 19:18:03    fstrim: /: 931.3 GiB (999966756864 bytes) trimmed
+2025-09-17 19:18:03  Shutting down WSL (for compaction)???
+2025-09-17 19:18:05  WSL VM stopped
+2025-09-17 19:18:05  Stopping LxssManager & VMCompute???
+2025-09-17 19:18:05  Host services stopped
+2025-09-17 19:18:05  Compacting VHDX: C:\Users\alfri\AppData\Local\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx
+2025-09-17 19:19:00    DiskPart: 
+2025-09-17 19:19:00    DiskPart: Microsoft DiskPart version 10.0.26100.1150
+2025-09-17 19:19:00    DiskPart: Copyright (C) Microsoft Corporation.
+2025-09-17 19:19:00    DiskPart: On computer: ALFRIZZ
+2025-09-17 19:19:00    DiskPart: DiskPart successfully selected the virtual disk file.
+2025-09-17 19:19:00    DiskPart:   100 percent completed
+2025-09-17 19:19:00    DiskPart: DiskPart successfully attached the virtual disk file.
+2025-09-17 19:19:00    DiskPart:     0 percent completed
+2025-09-17 19:19:00    DiskPart:    17 percent completed
+2025-09-17 19:19:00    DiskPart:    18 percent completed
+2025-09-17 19:19:00    DiskPart:    19 percent completed
+2025-09-17 19:19:00    DiskPart:    20 percent completed
+2025-09-17 19:19:00    DiskPart:    26 percent completed
+2025-09-17 19:19:00    DiskPart:    28 percent completed
+2025-09-17 19:19:00    DiskPart:    29 percent completed
+2025-09-17 19:19:00    DiskPart:    44 percent completed
+2025-09-17 19:19:00    DiskPart: DiskPart successfully compacted the virtual disk file.
+2025-09-17 19:19:00    DiskPart: DiskPart successfully detached the virtual disk file.
+2025-09-17 19:19:00    DiskPart: Leaving DiskPart...
+2025-09-17 19:19:00  DiskPart compaction done
+2025-09-17 19:19:00  Restarting VMCompute & LxssManager???
+2025-09-17 19:19:00  Host services restarted
+2025-09-17 19:19:00  Verifying Ubuntu???
+2025-09-17 19:19:02    Ubuntu echo: OK
+2025-09-17 19:19:02  AFTER: C free=630.00 GB; ext4.vhdx=76.20 GB
+2025-09-17 19:19:02  ===== Shrink-WSL run complete =====
