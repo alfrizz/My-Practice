@@ -16,6 +16,7 @@ from IPython.display import display, update_display, HTML
 import seaborn as sns
 sns.set_style("white")
 
+from tqdm.auto import tqdm
 from optuna.trial import TrialState
 import torch
 
@@ -447,6 +448,133 @@ def aggregate_performance(
 #########################################################################################################
 
 
+# def plot_dual_histograms(
+#     df_before: pd.DataFrame,
+#     df_after: pd.DataFrame,
+#     sample: int | None = 50000,
+#     bins: int = 40,
+#     clip_pct: tuple[float, float] = (0.02, 0.98),
+# ):
+#     """
+#     For each feature column, plot how its
+#     distribution changes before vs. after scaling/transformation.
+
+#     Functionality:
+#       1) Auto-discover common feat_… columns in df_before & df_after.
+#       2) Optionally sample up to `sample` rows for speed.
+#       3) For numeric, high-cardinality features:
+#          - Compute clipped [pct lower, pct upper] ranges.
+#          - Overlay “before” histogram in blue (bottom x / left y).
+#          - Overlay “after” histogram in orange (top x / right y).
+#       4) For categorical or low-card features:
+#          - Draw side-by-side bar charts of value frequencies.
+#       5) Arrange subplots in a grid and clean up unused axes.
+#     """
+#     # 1) identify all feat_… columns present in both DataFrames
+#     feat_cols = [
+#         col for col in df_before.columns
+#         if col in df_after.columns
+#     ]
+#     if not feat_cols:
+#         raise ValueError("No overlapping features columns found in the two DataFrames.")
+
+#     # 2) optional random sampling to limit plotting cost
+#     if sample:
+#         n = min(len(df_before), len(df_after), sample)
+#         dfb = df_before.sample(n, random_state=0)
+#         dfa = df_after.sample(n, random_state=0)
+#     else:
+#         dfb, dfa = df_before, df_after
+
+#     # 3) prepare a grid of subplots
+#     cols = 2
+#     rows = math.ceil(len(feat_cols) / cols)
+#     fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4))
+#     axes = axes.flatten()
+
+#     # 4) loop over each feature and draw its before/after visualization
+#     for ax, feat in zip(axes, feat_cols):
+#         before = dfb[feat].dropna()
+#         after  = dfa[feat].dropna()
+
+#         # numeric & high-cardinality: dual overlaid histograms
+#         if pd.api.types.is_numeric_dtype(before) and before.nunique() > 10:
+#             # compute clipping bounds for each
+#             lo_b, hi_b = np.quantile(before, clip_pct)
+#             lo_a, hi_a = np.quantile(after,  clip_pct)
+
+#             edges_b = np.linspace(lo_b, hi_b, bins + 1)
+#             edges_a = np.linspace(lo_a, hi_a, bins + 1)
+
+#             # blue histogram on bottom x / left y
+#             ax.hist(before, bins=edges_b, color="C0", alpha=0.6, edgecolor="C0")
+#             ax.set_xlim(lo_b, hi_b)
+#             ax.margins(x=0)
+#             ax.spines["top"].set_visible(False)
+#             ax.spines["right"].set_visible(False)
+#             ax.spines["bottom"].set_color("C0")
+#             ax.spines["left"].set_color("C0")
+#             ax.tick_params(axis="x", colors="C0", rotation=45)
+#             ax.tick_params(axis="y", colors="C0")
+
+#             # orange histogram on top x / right y
+#             ax_top    = ax.twiny()
+#             ax_orange = ax_top.twinx()
+
+#             ax_orange.hist(after, bins=edges_a, color="C1", alpha=0.6, edgecolor="C1")
+#             ax_top.set_xlim(lo_a, hi_a)
+#             ax_top.margins(x=0)
+
+#             # style top x-axis
+#             ax_top.spines["bottom"].set_visible(False)
+#             ax_top.spines["left"].set_visible(False)
+#             ax_top.spines["right"].set_visible(False)
+#             ax_top.spines["top"].set_color("C1")
+#             ax_top.xaxis.set_ticks_position("top")
+#             ax_top.xaxis.set_label_position("top")
+#             ax_top.tick_params(axis="x", colors="C1", rotation=45)
+
+#             # style right y-axis
+#             ax_orange.spines["bottom"].set_visible(False)
+#             ax_orange.spines["left"].set_visible(False)
+#             ax_orange.spines["top"].set_visible(False)
+#             ax_orange.spines["right"].set_color("C1")
+#             ax_orange.yaxis.set_ticks_position("right")
+#             ax_orange.yaxis.set_label_position("right")
+#             ax_orange.tick_params(axis="y", colors="C1", labelright=True)
+
+#         else:
+#             # categorical or low-cardinality: side-by-side frequency bars
+#             bd = before.value_counts(normalize=True).sort_index()
+#             ad = after .value_counts(normalize=True).sort_index()
+#             cats = sorted(set(bd.index) | set(ad.index))
+#             x = np.arange(len(cats))
+#             w = 0.4
+
+#             ax.bar(x - w/2, [bd.get(c, 0) for c in cats], w,
+#                    color="C0", alpha=0.6)
+#             ax.bar(x + w/2, [ad.get(c, 0) for c in cats], w,
+#                    color="C1", alpha=0.6)
+
+#             ax.spines["top"].set_visible(False)
+#             ax.spines["right"].set_visible(False)
+#             ax.spines["bottom"].set_color("black")
+#             ax.spines["left"].set_color("C0")
+#             ax.set_xticks(x)
+#             ax.set_xticklabels(cats, rotation=45)
+#             ax.tick_params(axis="y", colors="C0")
+
+#         ax.set_title(feat, color="black")
+
+#     # 5) hide any unused subplots
+#     for extra_ax in axes[len(feat_cols):]:
+#         extra_ax.axis("off")
+
+#     plt.tight_layout()
+#     plt.show()
+
+
+
 def plot_dual_histograms(
     df_before: pd.DataFrame,
     df_after: pd.DataFrame,
@@ -468,6 +596,7 @@ def plot_dual_histograms(
       4) For categorical or low-card features:
          - Draw side-by-side bar charts of value frequencies.
       5) Arrange subplots in a grid and clean up unused axes.
+      6) Show a tqdm progress bar per feature.
     """
     # 1) identify all feat_… columns present in both DataFrames
     feat_cols = [
@@ -491,8 +620,10 @@ def plot_dual_histograms(
     fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4))
     axes = axes.flatten()
 
-    # 4) loop over each feature and draw its before/after visualization
-    for ax, feat in zip(axes, feat_cols):
+    # 4) loop over each feature with a tqdm progress bar
+    for ax, feat in tqdm(zip(axes, feat_cols),
+                         total=len(feat_cols),
+                         desc="Plotting features"):
         before = dfb[feat].dropna()
         after  = dfa[feat].dropna()
 
@@ -571,7 +702,6 @@ def plot_dual_histograms(
 
     plt.tight_layout()
     plt.show()
-
 
 #########################################################################################################
 
