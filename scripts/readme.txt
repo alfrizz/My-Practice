@@ -6,6 +6,8 @@ pipreq			Bash helper to install Python packages into the running gpu-jl containe
 
 Dockerfile		Defines the Docker image: starts from an NVIDIA PyTorch base, installs Python deps, and sets up the Jupyter Lab entrypoint.
 
+sysctl.conf             This file tweaks Linux memory and swap behavior.
+                        (Additionally: Win + R, SystemPropertiesAdvanced.exe → System Properties → Advanced → Performance → Settings → Change Virtual Memory [Initial = 32768 MB, Maximum = 65536 MB])
 .wslconfig		WSL2 global settings: caps RAM/CPU, configures swap size & location, and enables localhost forwarding.
 wsl.conf		WSL2 per-distro automount and boot-time commands; mounts Windows drives with metadata and launches sync-practice.sh at boot 
                         (it´s executed when wsl runs, eg when docker desktop invokes it "Enable integration with additional distros: Ubuntu-22.04")
@@ -19,7 +21,7 @@ docker-compose.yml	Orchestrates the gpu-jl Jupyter service: builds from Dockerfi
 requirements.txt	Pinned Python dependencies for reproducible builds: Jupyter Lab, torchmetrics, pandas, plotly, Optuna, and more.
 
 shrink-wsl.ps1          WSL maintenance: prunes old `/tmp` files and Jupyter checkpoints, runs fstrim, compacts Ubuntu `ext4.vhdx`and logs each step along with C: free-space and VHDX size 
-                        Manually execute on an elevated Powershell: PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts\shrink-wsl.ps1"
+                        Manually execute on an elevated Powershell, run: PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts\shrink-wsl.ps1"
 shrink-wsl.log          Timestamped record of every action, disk-free and VHDX-size before/after maintenance, and compaction output.  
 
 sync-practice.sh	Bash script run at WSL boot: waits for G: drive, then runs Unison in batch mode to sync /home/alfrizz/my_practice ↔ G: folder.
@@ -28,7 +30,6 @@ sync-practice.log       Logs of syncs between wsl and G:
 -----------------------------------------------
 C:\Users\alfri\.wslconfig
 -----------------------------------------------
-
 [wsl2]
 # Maximum RAM WSL2 can consume (leave the rest GB for Windows)
 memory=26GB
@@ -49,7 +50,6 @@ localhostForwarding=true
 -----------------------------------------------
 \\wsl.localhost\Ubuntu-22.04\etc\wsl.conf
 -----------------------------------------------
-
 [automount]
 enabled       = true
 root          = /mnt/
@@ -64,8 +64,18 @@ command = su - alfrizz -c "/home/alfrizz/my_practice/scripts/sync-practice.sh >>
 -----------------------------------------------
 \\wsl.localhost\Ubuntu-22.04\etc\fstab
 -----------------------------------------------
-
 G: /mnt/g drvfs metadata,uid=1000,gid=1000,umask=022,fmask=111 0 0
+
+
+-----------------------------------------------
+\\wsl.localhost\Ubuntu-22.04\etc\sysctl.conf
+-----------------------------------------------
+# Delays swapping until RAM is under heavy pressure.
+vm.swappiness = 20
+# Disables heuristic overcommit; enforces allocation limits.
+vm.overcommit_memory = 2
+# Allows processes to allocate up to 80 % of total RAM + swap.
+vm.overcommit_ratio = 80
 
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
