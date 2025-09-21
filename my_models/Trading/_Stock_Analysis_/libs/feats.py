@@ -32,141 +32,6 @@ from scipy.stats import spearmanr, skew, kurtosis
 ##########################################################################################################
 
 
-# def create_features(
-#     df: pd.DataFrame,
-#     window_multiplier: float = 1.0,
-#     sma_short:   int         = 14,
-#     sma_long:    int         = 28,
-#     rsi_window:  int         = 14,
-#     macd_fast:   int         = 12,
-#     macd_slow:   int         = 26,
-#     macd_sig:    int         = 9,
-#     atr_window:  int         = 14,
-#     bb_window:   int         = 20,
-#     obv_sma:     int         = 14,
-#     vwap_window: int         = 14
-# ) -> pd.DataFrame:
-#     """
-#     Vectorized generation of OHLCV‐derived features, including returns:
-
-#     1) Scale all window sizes by window_multiplier.
-#     2) Compute price‐change channels:
-#          • ret     = simple return
-#          • log_ret = log‐return
-#     3) Candlestick geometry: body, body_pct, upper_shad, lower_shad, range_pct.
-#     4) Popular indicators:
-#          • RSI(rsi_window)
-#          • MACD(line, signal, diff)
-#          • SMA(short/long) + pct deviations
-#          • ATR(atr_window) + atr_pct
-#          • Bollinger Bands(bb_window) + bb_width
-#          • +DI, –DI, ADX(atr_window)
-#          • OBV + obv_sma(obv_sma) + obv_pct
-#          • VWAP(vwap_window) + vwap_dev
-#          • vol_spike ratio
-#     5) Calendar: hour, day_of_week, month.
-#     6) Drop NaNs and return full DataFrame.
-#     """
-#     df = df.copy()
-#     df.index = pd.to_datetime(df.index)
-
-#     def WM(x):
-#         return max(1, int(round(x * window_multiplier)))
-
-#     # derive window lengths
-#     w_sma_s = WM(sma_short)
-#     w_sma_l = WM(sma_long)
-#     w_rsi   = WM(rsi_window)
-#     w_atr   = WM(atr_window)
-#     w_bb    = WM(bb_window)
-#     w_obv   = WM(obv_sma)
-#     w_vwap  = WM(vwap_window)
-
-#     # pick base columns
-#     cols_in = ["open","high","low","close","volume","bid","ask", params.label_col]
-#     out     = df[cols_in].copy()
-#     c       = out["close"]
-
-#     # 2) price‐change channels
-#     out["ret"]     = c.pct_change()
-#     out["log_ret"] = np.log(c).diff()
-
-#     # 3) candlestick geometry
-#     o, h, l = out.open, out.high, out.low
-#     out["body"]       = c - o
-#     out["body_pct"]   = (c - o) / (o + 1e-8)
-#     out["upper_shad"] = h - out[["open","close"]].max(axis=1)
-#     out["lower_shad"] = out[["open","close"]].min(axis=1) - l
-#     out["range_pct"]  = (h - l) / (c + 1e-8)
-
-#     # 4) RSI
-#     out[f"rsi_{w_rsi}"] = ta.momentum.RSIIndicator(close=c, window=w_rsi).rsi()
-
-#     # 5) MACD
-#     macd = ta.trend.MACD(
-#         close=c,
-#         window_fast=macd_fast,
-#         window_slow=macd_slow,
-#         window_sign=macd_sig
-#     )
-#     out[f"macd_line_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd()
-#     out[f"macd_signal_{macd_fast}_{macd_slow}_{macd_sig}"] = macd.macd_signal()
-#     out[f"macd_diff_{macd_fast}_{macd_slow}_{macd_sig}"]   = macd.macd_diff()
-
-#     # 6) SMA + pct deviation
-#     sma_s = c.rolling(w_sma_s, min_periods=1).mean()
-#     sma_l = c.rolling(w_sma_l, min_periods=1).mean()
-#     out[f"sma_{w_sma_s}"]     = sma_s
-#     out[f"sma_{w_sma_l}"]     = sma_l
-#     out[f"sma_pct_{w_sma_s}"] = (c - sma_s) / (sma_s + 1e-8)
-#     out[f"sma_pct_{w_sma_l}"] = (c - sma_l) / (sma_l + 1e-8)
-
-#     # 7) ATR + pct
-#     atr = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=w_atr).average_true_range()
-#     out[f"atr_{w_atr}"]     = atr
-#     out[f"atr_pct_{w_atr}"] = atr / (c + 1e-8)
-
-#     # 8) Bollinger Bands + width
-#     bb    = ta.volatility.BollingerBands(close=c, window=w_bb, window_dev=2)
-#     lband = bb.bollinger_lband()
-#     hband = bb.bollinger_hband()
-#     mavg  = bb.bollinger_mavg()
-#     out[f"bb_lband_{w_bb}"] = lband
-#     out[f"bb_hband_{w_bb}"] = hband
-#     out[f"bb_w_{w_bb}"]     = (hband - lband) / (mavg + 1e-8)
-
-#     # 9) +DI, –DI, ADX
-#     adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w_atr)
-#     out[f"plus_di_{w_atr}"]  = adx.adx_pos()
-#     out[f"minus_di_{w_atr}"] = adx.adx_neg()
-#     out[f"adx_{w_atr}"]      = adx.adx()
-
-#     # 10) OBV + SMA + pct
-#     obv = ta.volume.OnBalanceVolumeIndicator(close=c, volume=out.volume).on_balance_volume()
-#     out["obv"]             = obv
-#     out[f"obv_sma_{w_obv}"] = obv.rolling(w_obv, min_periods=1).mean()
-#     out[f"obv_pct_{w_obv}"] = obv / (out.volume + 1e-8)
-
-#     # 11) VWAP + deviation
-#     vwap = ta.volume.VolumeWeightedAveragePrice(
-#         high=h, low=l, close=c, volume=out.volume, window=w_vwap
-#     ).volume_weighted_average_price()
-#     out[f"vwap_{w_vwap}"]     = vwap
-#     out[f"vwap_dev_{w_vwap}"] = (c - vwap) / (vwap + 1e-8)
-
-#     # 12) vol_spike ratio
-#     vol_roll = out.volume.rolling(w_obv, min_periods=1).mean()
-#     out[f"vol_spike_{w_obv}"] = out.volume / (vol_roll + 1e-8)
-
-#     # 13) calendar columns
-#     out["hour"]        = out.index.hour
-#     out["day_of_week"] = out.index.dayofweek
-#     out["month"]       = out.index.month
-
-#     # drop any NaNs from initial windows
-#     return out.dropna()
-
-
 def create_features(
     df: pd.DataFrame,
     window_multiplier: float = 1.0,
@@ -227,6 +92,10 @@ def create_features(
     # 2) Returns
     out["ret"]     = c.pct_change()
     out["log_ret"] = np.log(c + eps).diff()
+    
+    # 2.1) Rate‐of‐Change over sma_short window
+    roc_window = w_sma_s
+    out[f"roc_{roc_window}"] = c.diff(roc_window) / (c.shift(roc_window) + eps)
 
     # 3) Candlestick geometry
     out["body"]       = c - o
@@ -303,6 +172,9 @@ def create_features(
     # 14) drop only until every column is first valid
     first_valid = out.apply(lambda series: series.first_valid_index()).max()
     return out.loc[first_valid:].copy()
+
+
+##########################################################################################################
 
 
 def features_engineering(
@@ -394,120 +266,6 @@ def features_engineering(
     return out.dropna()
 
 
-# ##########################################################################################################
-
-
-# def features_engineering(
-#     df: pd.DataFrame,
-#     rsi_low:   float = 30.0,
-#     rsi_high:  float = 70.0,
-#     adx_thr:   float = 20.0,
-#     mult_w:    int   = 14,
-#     eps:       float = 1e-8
-# ) -> pd.DataFrame:
-#     """
-#     Build continuous “eng_” signals from raw indicators + relative‐price bands.
-
-#     1) eng_ma        = (SMA_short – SMA_long) / SMA_long
-#     2) eng_macd      = MACD_diff / SMA_long
-#     3) eng_bb        = distance outside BBands / BB_width
-#     4) eng_bb_mid    = (BB_mid – close) / close
-#     5) eng_rsi       = distance beyond [rsi_low, rsi_high] / 100
-#     6) eng_adx       = sign(DI+–DI–) × (|DI+–DI–|/100) × max(ADX–adx_thr, 0)/100
-#     7) eng_obv       = (OBV – OBV_SMA) / OBV_SMA
-#     8) eng_atr_div   = 10 000 × [(ATR/close) – rolling_mean(ATR/close, mult_w)]
-#     9) eng_sma_short = (SMA_short – close) / close
-#    10) eng_sma_long  = (SMA_long  – close) / close
-#    11) eng_vwap      = (VWAP – close) / close
-
-#     Returns a DataFrame of these engineered features, indexed same as `df`.
-#     """
-#     out   = pd.DataFrame(index=df.index)
-#     close = df["close"]
-
-#     # 1) Find true SMA columns (exclude sma_pct_*)
-#     sma_cols = [
-#         c for c in df.columns
-#         if c.startswith("sma_") and c.split("_")[1].isdigit()
-#     ]
-#     sma_cols = sorted(sma_cols, key=lambda c: int(c.split("_")[1]))
-#     sma_s, sma_l = sma_cols[:2]
-
-#     # 2) Locate MACD diff
-#     macd_diff_col = next(c for c in df.columns if c.startswith("macd_diff_"))
-
-#     # 3) Locate Bollinger lband/hband/width
-#     bb_l_col = next(c for c in df.columns if c.startswith("bb_lband_"))
-#     bb_h_col = next(c for c in df.columns if c.startswith("bb_hband_"))
-#     bb_w_col = next(c for c in df.columns if c.startswith("bb_w_"))
-
-#     # 4) Locate RSI
-#     rsi_col = next(c for c in df.columns if c.startswith("rsi_"))
-
-#     # 5) Locate +DI, –DI, ADX
-#     plus_di_col  = next(c for c in df.columns if c.startswith("plus_di_"))
-#     minus_di_col = next(c for c in df.columns if c.startswith("minus_di_"))
-#     adx_col      = next(c for c in df.columns if c.startswith("adx_"))
-
-#     # 6) Locate OBV & its SMA
-#     obv_col     = "obv"
-#     obv_sma_col = next(c for c in df.columns if c.startswith("obv_sma_"))
-
-#     # 7) Locate ATR/close pct
-#     atr_pct_col = next(c for c in df.columns if c.startswith("atr_pct_"))
-
-#     # 1) MA spread ratio
-#     out["eng_ma"] = ((df[sma_s] - df[sma_l]) / (df[sma_l] + eps)).round(3)
-
-#     # 2) MACD diff ratio
-#     out["eng_macd"] = (df[macd_diff_col] / (df[sma_l] + eps)).round(3)
-
-#     # 3) Bollinger deviation ratio
-#     lo, hi, bw = df[bb_l_col], df[bb_h_col], df[bb_w_col]
-#     dev = np.where(close < lo, lo - close,
-#           np.where(close > hi, close - hi, 0.0))
-#     out["eng_bb"] = (dev / (bw + eps)).round(3)
-
-#     # 4) Bollinger mid‐band relative
-#     bb_mid = (lo + hi) * 0.5
-#     out["eng_bb_mid"] = ((bb_mid - close) / (close + eps)).round(4)
-
-#     # 5) RSI threshold ratio
-#     rsi_vals = df[rsi_col]
-#     low_dev  = np.clip((rsi_low  - rsi_vals), 0, None) / 100.0
-#     high_dev = np.clip((rsi_vals - rsi_high), 0, None) / 100.0
-#     out["eng_rsi"] = np.where(
-#         rsi_vals < rsi_low, low_dev,
-#         np.where(rsi_vals > rsi_high, high_dev, 0.0)
-#     ).round(3)
-
-#     # 6) ADX‐weighted DI spread
-#     di_diff    = df[plus_di_col] - df[minus_di_col]
-#     diff_abs   = di_diff.abs() / 100.0
-#     ex         = np.clip((df[adx_col] - adx_thr) / 100.0, 0, None)
-#     out["eng_adx"] = (np.sign(di_diff) * diff_abs * ex).round(3)
-
-#     # 7) OBV divergence ratio
-#     out["eng_obv"] = (
-#         (df[obv_col] - df[obv_sma_col]) / (df[obv_sma_col] + eps)
-#     ).round(3)
-
-#     # 8) ATR/close stationary deviation
-#     ratio = df[atr_pct_col]
-#     rm    = ratio.rolling(mult_w, min_periods=1).mean()
-#     out["eng_atr_div"] = ((ratio - rm) * 10_000).round(1)
-
-#     # 9) SMA short/long relative to price
-#     out["eng_sma_short"] = ((df[sma_s] - close) / (close + eps)).round(4)
-#     out["eng_sma_long"]  = ((df[sma_l] - close) / (close + eps)).round(4)
-
-#     # 10) VWAP relative to price
-#     vwap_col = next(c for c in df.columns if c.startswith("vwap_") and not c.endswith("_dev"))
-#     out["eng_vwap"] = ((df[vwap_col] - close) / (close + eps)).round(4)
-
-#     return out
-
-
 ##########################################################################################################
 
 
@@ -523,61 +281,80 @@ def features_engineering(
 #     overrides:         Dict[str, str] = None
 # ) -> pd.DataFrame:
 #     """
-#     Analyze each feature’s distribution and assign it into one of six
-#     shape-preserving scaling groups, then apply any manual overrides.
+#     Analyze each feature’s distribution to assign it to one of six
+#     shape-preserving scaling groups, then apply any user overrides.
 
-#     Steps:
-#       1) Vectorized describe() to get min, max, 1%, 5%, 50%, 95%, 99%.
-#          Append skew, kurtosis, unique_count, zero_ratio.
-#       2) For each feature, decide a raw group in this priority:
-#          a) discrete      – unique_count ≤ discrete_thresh
-#          b) ratio         – central bulk ∈ ±ratio_range
-#          c) bounded       – all values ∈ [0,100]
-#          d) log_skewed    – positive-only & skew > skew_thresh
-#          e) robust_tails  – heavy extremes or kurtosis ≥ kurtosis_thresh
-#          f) unbounded     – everything else
-#       3) Apply only the user-provided overrides to raw assignments.
-#       4) Return a DataFrame with stats plus 'group_raw' and 'group_final'.
+#     1) Replace infinities with NaN and gather vectorized stats
+#        (min, max, 1%,5%,50%,95%,99%) via describe().
+#        Append skewness, kurtosis, unique_count, zero_ratio.
+#     2) For each feature, apply these rules in this order:
+#          a) discrete      — unique_count ≤ discrete_thresh
+#          b) log_skewed    — strictly ≥0 & skew > skew_thresh
+#          c) ratio         — central bulk ∈ ±ratio_range
+#          d) bounded       — all values ∈ [0,100]
+#          e) robust_tails  — extreme spikes or fat tails
+#                               (|min|max| ≥ heavy_thresh OR kurtosis ≥ kurtosis_thresh)
+#          f) unbounded     — fallback
+#     3) Layer on the exact overrides you pass in (no hidden defaults).
+#     4) Return DataFrame of stats with 'group_raw' and 'group_final'.
 #     """
-#     # 1) summary stats via describe()
-#     descr = df[cols].describe(percentiles=[0.01, 0.05, 0.95, 0.99]).T.rename(
-#         columns={'1%':'1%', '5%':'5%', '50%':'50%', '95%':'95%', '99%':'99%'}
+    
+#     # --- EXCLUDE anything we never want to treat as an indicator ---
+#     reserved = {"hour","day_of_week","month"} # ,"bb_lband_20","bb_hband_20","sma_14","sma_28","vwap_14" ?
+#     cols = [c for c in cols if c not in reserved]
+    
+#     # 1) cleanse infinities and compute stats
+#     data = df[cols].replace([np.inf, -np.inf], np.nan)
+#     descr = (
+#         data.describe(percentiles=[0.01,0.05,0.95,0.99])
+#             .T
+#             .rename(columns={'1%':'1%','5%':'5%','50%':'50%','95%':'95%','99%':'99%'})
 #     )
-#     # append distributional metrics
-#     descr['skew']         = df[cols].skew().values
-#     descr['kurtosis']     = df[cols].kurtosis().values
-#     descr['unique_count'] = df[cols].nunique().values
-#     descr['zero_ratio']   = (df[cols] == 0).mean().values
+#     descr['skew']         = data.skew().values
+#     descr['kurtosis']     = data.kurtosis().values
+#     descr['unique_count'] = data.nunique().values
+#     descr['zero_ratio']   = (data == 0).mean().values
 
-#     # 2) raw grouping logic
-#     raw_group: Dict[str, str] = {}
+#     # 2) raw grouping
+#     raw_group: Dict[str,str] = {}
 #     for feat in cols:
-#         mn, mx   = descr.at[feat, 'min'], descr.at[feat, 'max']
-#         p5, p95  = descr.at[feat, '5%'],  descr.at[feat, '95%']
-#         sk       = descr.at[feat, 'skew']
-#         kt       = descr.at[feat, 'kurtosis']
-#         uc       = descr.at[feat, 'unique_count']
+#         mn, mx   = descr.at[feat,'min'], descr.at[feat,'max']
+#         p5, p95  = descr.at[feat,'5%'], descr.at[feat,'95%']
+#         sk       = descr.at[feat,'skew']
+#         kt       = descr.at[feat,'kurtosis']
+#         uc       = descr.at[feat,'unique_count']
 
+#         # a) discrete cardinality
 #         if uc <= discrete_thresh:
 #             grp = 'discrete'
-#         elif p5 >= -ratio_range and p95 <= ratio_range:
-#             grp = 'ratio'
-#         elif mn >= 0 and mx <= 100:
-#             grp = 'bounded'
+
+#         # b) heavy positive skew (log‐transform)
 #         elif mn >= 0 and sk > skew_thresh:
 #             grp = 'log_skewed'
+
+#         # c) small ±bulk (Yeo–Johnson → MinMax)
+#         elif p5 >= -ratio_range and p95 <= ratio_range:
+#             grp = 'ratio'
+
+#         # d) natural [0–100] oscillators
+#         elif mn >= 0 and mx <= 100:
+#             grp = 'bounded'
+
+#         # e) two‐sided extremes or fat tails (winsorize)
 #         elif abs(mn) >= heavy_thresh or abs(mx) >= heavy_thresh or kt >= kurtosis_thresh:
 #             grp = 'robust_tails'
+
+#         # f) everything else
 #         else:
 #             grp = 'unbounded'
 
 #         raw_group[feat] = grp
 
-#     # 3) apply only user-provided overrides
+#     # 3) apply only user overrides
 #     overrides   = overrides or {}
 #     final_group = {f: overrides.get(f, raw_group[f]) for f in cols}
 
-#     # 4) assemble and return assignment table
+#     # 4) assemble assignment table
 #     df_assign = descr.copy()
 #     df_assign['group_raw']   = df_assign.index.map(raw_group)
 #     df_assign['group_final'] = df_assign.index.map(final_group)
@@ -589,106 +366,245 @@ def assign_feature_groups(
     df: pd.DataFrame,
     cols: List[str],
     *,
-    ratio_range:       float = 0.15,
-    heavy_thresh:      float = 1e7,
-    skew_thresh:       float = 3.0,
-    kurtosis_thresh:   float = 5.0,
-    discrete_thresh:   int   = 10,
-    overrides:         Dict[str, str] = None
+    ratio_range:     float = 0.15,
+    heavy_thresh:    float = 1e7,
+    skew_thresh:     float = 3.0,
+    kurtosis_thresh: float = 5.0,
+    discrete_thresh: int   = 10,
+    overrides:       Dict[str, str] = None
 ) -> pd.DataFrame:
     """
-    Analyze each feature’s distribution to assign it to one of six
-    shape-preserving scaling groups, then apply any user overrides.
+    Inspect each feature’s raw distribution and bucket it into one of six
+    scaling groups, excluding any pure price‐level columns:
 
-    1) Replace infinities with NaN and gather vectorized stats
-       (min, max, 1%,5%,50%,95%,99%) via describe().
-       Append skewness, kurtosis, unique_count, zero_ratio.
-    2) For each feature, apply these rules in this order:
-         a) discrete      — unique_count ≤ discrete_thresh
-         b) log_skewed    — strictly ≥0 & skew > skew_thresh
-         c) ratio         — central bulk ∈ ±ratio_range
-         d) bounded       — all values ∈ [0,100]
-         e) robust_tails  — extreme spikes or fat tails
-                              (|min|max| ≥ heavy_thresh OR kurtosis ≥ kurtosis_thresh)
-         f) unbounded     — fallback
-    3) Layer on the exact overrides you pass in (no hidden defaults).
-    4) Return DataFrame of stats with 'group_raw' and 'group_final'.
+      • EXCLUDE up front: calendar fields, OHLCV & bid/ask, raw SMA/VWAP/BBands.
+      • Compute min, max, 1/5/95/99-percentiles, skew, kurtosis, unique_count, zero_ratio.
+      • In order assign raw_group:
+         a) discrete
+         b) log_skewed
+         c) ratio
+         d) bounded
+         e) robust_tails
+         f) unbounded
+      • Apply any user overrides → group_final.
+      • Return DataFrame of stats + group_raw/group_final.
     """
-    # 1) cleanse infinities and compute stats
-    data = df[cols].replace([np.inf, -np.inf], np.nan)
+    # 1) Build reserved set (drop from grouping)
+    reserved = {
+        "hour","day_of_week","month",
+        "open","high","low","close","volume","bid","ask"
+    }
+    # add raw‐level BBands/SMA/VWAP
+    for c in cols:
+        if (c.startswith("bb_lband_")
+            or c.startswith("bb_hband_")
+            or (c.startswith("sma_") and "_pct" not in c)
+            or (c.startswith("vwap_") and not c.endswith("_dev"))):
+            reserved.add(c)
+
+    feats = [c for c in cols if c not in reserved]
+
+    # 2) Replace infinities, compute descriptive stats
+    data = df[feats].replace([np.inf, -np.inf], np.nan)
     descr = (
         data.describe(percentiles=[0.01,0.05,0.95,0.99])
             .T
-            .rename(columns={'1%':'1%','5%':'5%','50%':'50%','95%':'95%','99%':'99%'})
+            .rename(columns={"1%":"1%","5%":"5%","95%":"95%","99%":"99%"})
     )
-    descr['skew']         = data.skew().values
-    descr['kurtosis']     = data.kurtosis().values
-    descr['unique_count'] = data.nunique().values
-    descr['zero_ratio']   = (data == 0).mean().values
+    descr["skew"]         = data.skew().values
+    descr["kurtosis"]     = data.kurtosis().values
+    descr["unique_count"] = data.nunique().values
+    descr["zero_ratio"]   = (data==0).mean().values
 
-    # 2) raw grouping
+    # 3) Assign raw_group by priority rules
     raw_group: Dict[str,str] = {}
-    for feat in cols:
-        mn, mx   = descr.at[feat,'min'], descr.at[feat,'max']
-        p5, p95  = descr.at[feat,'5%'], descr.at[feat,'95%']
-        sk       = descr.at[feat,'skew']
-        kt       = descr.at[feat,'kurtosis']
-        uc       = descr.at[feat,'unique_count']
+    for feat in feats:
+        mn, mx   = descr.at[feat,"min"], descr.at[feat,"max"]
+        p5, p95  = descr.at[feat,"5%"], descr.at[feat,"95%"]
+        sk       = descr.at[feat,"skew"]
+        kt       = descr.at[feat,"kurtosis"]
+        uc       = descr.at[feat,"unique_count"]
 
-        # a) discrete cardinality
         if uc <= discrete_thresh:
-            grp = 'discrete'
-
-        # b) heavy positive skew (log‐transform)
+            grp = "discrete"
         elif mn >= 0 and sk > skew_thresh:
-            grp = 'log_skewed'
-
-        # c) small ±bulk (Yeo–Johnson → MinMax)
+            grp = "log_skewed"
         elif p5 >= -ratio_range and p95 <= ratio_range:
-            grp = 'ratio'
-
-        # d) natural [0–100] oscillators
+            grp = "ratio"
         elif mn >= 0 and mx <= 100:
-            grp = 'bounded'
-
-        # e) two‐sided extremes or fat tails (winsorize)
+            grp = "bounded"
         elif abs(mn) >= heavy_thresh or abs(mx) >= heavy_thresh or kt >= kurtosis_thresh:
-            grp = 'robust_tails'
-
-        # f) everything else
+            grp = "robust_tails"
         else:
-            grp = 'unbounded'
+            grp = "unbounded"
 
         raw_group[feat] = grp
 
-    # 3) apply only user overrides
+    # 4) Apply overrides
     overrides   = overrides or {}
-    final_group = {f: overrides.get(f, raw_group[f]) for f in cols}
+    final_group = {f: overrides.get(f, raw_group[f]) for f in feats}
 
-    # 4) assemble assignment table
+    # 5) Assemble assignment DataFrame
     df_assign = descr.copy()
-    df_assign['group_raw']   = df_assign.index.map(raw_group)
-    df_assign['group_final'] = df_assign.index.map(final_group)
+    df_assign["group_raw"]   = df_assign.index.map(raw_group)
+    df_assign["group_final"] = df_assign.index.map(final_group)
     return df_assign
 
 
+
+
+    
 ##########################################################################################################
 
 
-class Winsorizer(FunctionTransformer):
-    """Clips each column to its 1st and 99th percentiles computed on fit."""
-    def __init__(self):
-        super().__init__(func=None, inverse_func=None, validate=False)
+# def scale_with_splits(
+#     df: pd.DataFrame,
+#     assignment: pd.DataFrame,
+#     train_prop: float = params.train_prop,
+#     val_prop:   float = params.val_prop
+# ) -> pd.DataFrame:
+#     """
+#     Builds cyclical calendar features, splits the DataFrame into
+#     train/val/test, fits per-group pipelines to map each feature into [0,1],
+#     and then applies the transformer day-by-day (preserving intra-day blocks).
+#     Pipelines handle:
+#       • natural oscillators ([0,100] → MinMax → [0,1])
+#       • ratio-bulk features (Yeo–Johnson → MinMax)
+#       • skewed features (signed-log → MinMax)
+#       • heavy-tailed features (Winsorize → MinMax)
+#       • discrete features (Ordinal → MinMax)
+#       • unbounded features (StandardScaler → clip(−3,3) → MinMax)
+#     All pipelines end with a NaN-preserving clip to [0,1], and ±∞ in the raw
+#     data are first replaced with NaN so that missing-value masks stay aligned.
+#     """
+#     # 1) copy & datetime index
+#     df = df.copy()
+#     df.index = pd.to_datetime(df.index)
 
-    def fit(self, X, y=None):
-        self.lower_ = np.percentile(X, 1, axis=0)
-        self.upper_ = np.percentile(X, 99, axis=0)
-        return self
+#     # 1.1) treat infinities as missing
+#     df = df.replace([np.inf, -np.inf], np.nan)
 
-    def transform(self, X):
-        return np.clip(X, self.lower_, self.upper_)
+#     # 2) calendar fields + sin/cos
+#     df["hour"], df["day_of_week"], df["month"] = (
+#         df.index.hour, df.index.dayofweek, df.index.month
+#     )
+#     for name, period in [("hour", 24), ("day_of_week", 7), ("month", 12)]:
+#         vals = df[name]
+#         df[f"{name}_sin"] = np.sin(2 * np.pi * vals / period)
+#         df[f"{name}_cos"] = np.cos(2 * np.pi * vals / period)
 
-############ 
+#     # 3) contiguous train/val/test split
+#     N     = len(df)
+#     n_tr  = int(N * train_prop)
+#     n_val = int(N * val_prop)
+#     if n_tr + n_val >= N:
+#         raise ValueError("train_prop + val_prop must sum < 1.0")
+#     df_tr = df.iloc[:n_tr].copy()
+#     df_v  = df.iloc[n_tr:n_tr + n_val].copy()
+#     df_te = df.iloc[n_tr + n_val:].copy()
+
+#     # 4) compress sin/cos pairs via PCA on train
+#     for name in ("hour", "day_of_week", "month"):
+#         cols = [f"{name}_sin", f"{name}_cos"]
+#         pca  = PCA(n_components=1).fit(df_tr[cols])
+#         for split in (df_tr, df_v, df_te):
+#             split[name] = pca.transform(split[cols])
+#             split.drop(columns=cols, inplace=True)
+
+#     # 5) reserved vs feature columns
+#     reserved = {
+#         "open","high","low","close","volume","bid","ask", # ,"bb_lband_20","bb_hband_20","sma_14","sma_28","vwap_14" ?
+#         params.label_col, "hour","day_of_week","month"
+#     }
+#     feat_cols = [c for c in df_tr.columns if c not in reserved]
+
+#     # 6) feature grouping from assignment
+#     mapping = assignment["group_final"].to_dict()
+#     groups  = {
+#         grp: [f for f in feat_cols if mapping.get(f) == grp]
+#         for grp in [
+#             "bounded","ratio","log_skewed",
+#             "robust_tails","discrete","unbounded"
+#         ]
+#     }
+#     # restrict feat_cols to only those in groups
+#     feat_cols = [f for cols in groups.values() for f in cols]
+
+#     # helper for signed log
+#     def signed_log1p(X): return np.sign(X) * np.log1p(np.abs(X))
+
+#     # 7) define pipelines, each ending with NaN-preserving clip01
+#     pipelines = [
+#         ("bnd", Pipeline([
+#             ("clip100", FunctionTransformer(lambda X: np.clip(X, 0, 100), validate=False)),
+#             ("mm",      MinMaxScaler()),
+#             ("clip01",  FunctionTransformer(clip01_preserve_nan, validate=False)),
+#         ]), groups["bounded"]),
+
+#         ("rat", Pipeline([
+#             ("pt",      PowerTransformer(method="yeo-johnson", standardize=False)),
+#             ("mm",      MinMaxScaler()),
+#             ("clip01",  FunctionTransformer(clip01_preserve_nan, validate=False)),
+#         ]), groups["ratio"]),
+
+#         ("lgs", Pipeline([
+#             ("slog",    FunctionTransformer(signed_log1p, validate=False)),
+#             ("mm",      MinMaxScaler()),
+#             ("clip01",  FunctionTransformer(clip01_preserve_nan, validate=False)),
+#         ]), groups["log_skewed"]),
+
+#         ("rbt", Pipeline([
+#             ("win",     Winsorizer()),
+#             ("mm",      MinMaxScaler()),
+#             ("clip01",  FunctionTransformer(clip01_preserve_nan, validate=False)),
+#         ]), groups["robust_tails"]),
+
+#         ("dis", Pipeline([
+#             ("ord",     OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)),
+#             ("mm",      MinMaxScaler()),
+#             ("clip01",  FunctionTransformer(clip01_preserve_nan, validate=False)),
+#         ]), groups["discrete"]),
+
+#         ("unb", Pipeline([
+#             ("std",     StandardScaler()),
+#             ("clip3",   FunctionTransformer(lambda X: np.clip(X, -3, 3), validate=False)),
+#             ("mm",      MinMaxScaler()),
+#             ("clip01",  FunctionTransformer(clip01_preserve_nan, validate=False)),
+#         ]), groups["unbounded"]),
+#     ]
+#     ct = ColumnTransformer(transformers=pipelines, remainder="drop")
+
+#     # 8) fit only on train features
+#     ct.fit(df_tr[feat_cols])
+
+#     # flatten pipelines once to get output columns and width
+#     flat_features = []
+#     for _, _, cols in pipelines:
+#         flat_features.extend(cols)
+#     n_feats = len(flat_features)
+
+#     # 9) apply transformer day-by-day with progress bars
+#     def transform_by_day(split_df: pd.DataFrame, label: str) -> pd.DataFrame:
+#         arr = np.empty((len(split_df), n_feats), dtype=float)
+#         for day, block in tqdm(
+#             split_df.groupby(split_df.index.normalize()),
+#             desc=f"{label} days", unit="day"
+#         ):
+#             mask = split_df.index.normalize() == day
+#             arr[mask] = ct.transform(block[feat_cols])
+
+#         scaled = pd.DataFrame(arr, index=split_df.index, columns=flat_features)
+#         out    = pd.concat([scaled, split_df[list(reserved)]], axis=1)
+#         return out[split_df.columns]
+
+#     df_tr_s = transform_by_day(df_tr,  "train")
+#     df_v_s  = transform_by_day(df_v,   "val")
+#     df_te_s = transform_by_day(df_te,  "test")
+
+#     # 10) reassemble and drop raw OHLCV
+#     df_all = pd.concat([df_tr_s, df_v_s, df_te_s]).sort_index()
+#     return df_all.drop(columns=["open","high","low","close","volume"], errors="ignore")
+
 
 def scale_with_splits(
     df: pd.DataFrame,
@@ -697,30 +613,23 @@ def scale_with_splits(
     val_prop:   float = params.val_prop
 ) -> pd.DataFrame:
     """
-    Split a time‐series into train/val/test, scale each feature by its
-    assigned pipeline, and reassemble a unified [0,1] dataset.
-
-    1) Copy and timestamp the index.
-    2) Generate cyclical calendar features (hour/day_of_week/month) as sin/cos.
-    3) Split contiguously: train first M, then val next N, remainder → test.
-    4) Reduce each sin/cos pair into a single PCA component.
-    5) Identify feature columns vs reserved (OHLCV, bid/ask, label, calendar).
-    6) Build lists of features per group using assignment["group_final"].
-    7) Define six pipelines for:
-         • bounded      → linear divide by 100  
-         • ratio        → Yeo–Johnson → MinMax  
-         • log_skewed   → signed log1p → MinMax  
-         • robust_tails → Winsorizer → MinMax  
-         • discrete     → Ordinal → MinMax  
-         • unbounded    → StandardScaler → clip ±3σ → MinMax  
-    8) Fit ColumnTransformer on train features.
-    9) Transform each split _per day_ with a tqdm bar to preserve day‐block scaling.
-   10) Concatenate splits, restore reserved cols, drop raw OHLCV.
+    1) Copy & datetime‐parse; mask ±∞ → NaN.
+    2) Build cyclical calendar features, cast them to float.
+    3) Split CONTIGUOUSLY into TRAIN/VAL/TEST.
+    4) PCA‐compress each sin/cos pair → single calendar dimension.
+    5) Define reserved = raw OHLCV, bid/ask, label, calendar, plus
+       raw‐level BBands/SMA/VWAP.
+    6) From assignment.group_final, build six pipelines: bounded, ratio,
+       log_skewed, robust_tails, discrete, unbounded.
+    7) Fit on TRAIN features.
+    8) Transform each split day‐by‐day (tqdm) to preserve NaNs.
+    9) Drop all raw OHLCV & raw‐level columns; return final scaled DataFrame.
     """
     df = df.copy()
     df.index = pd.to_datetime(df.index)
+    df = df.replace([np.inf, -np.inf], np.nan)
 
-    # 2) Add sin/cos calendar features
+    # 2) calendar features + sin/cos
     df["hour"], df["day_of_week"], df["month"] = (
         df.index.hour, df.index.dayofweek, df.index.month
     )
@@ -729,182 +638,171 @@ def scale_with_splits(
         df[f"{name}_sin"] = np.sin(2 * np.pi * vals / period)
         df[f"{name}_cos"] = np.cos(2 * np.pi * vals / period)
 
-    # 3) Contiguous split into train/val/test
+    # 2.1) cast raw calendar cols to float to avoid dtype‐incompatible assignment
+    for name in ("hour","day_of_week","month"):
+        df[name] = df[name].astype(np.float64)
+
+    # 3) CONTIGUOUS splits
     N    = len(df)
     n_tr = int(N * train_prop)
-    n_val = int(N * val_prop)
+    n_val= int(N * val_prop)
     if n_tr + n_val >= N:
         raise ValueError("train_prop + val_prop must sum < 1.0")
     df_tr = df.iloc[:n_tr].copy()
-    df_v  = df.iloc[n_tr : n_tr + n_val].copy()
-    df_te = df.iloc[n_tr + n_val :].copy()
+    df_v  = df.iloc[n_tr:n_tr + n_val].copy()
+    df_te = df.iloc[n_tr + n_val:].copy()
 
-    # 4) PCA‐compress each sin/cos pair
-    for cal in ("hour", "day_of_week", "month"):
-        sincos = [f"{cal}_sin", f"{cal}_cos"]
-        pca    = PCA(n_components=1)
-        pca.fit(df_tr[sincos])
+    # 4) PCA compress sin/cos
+    for name in ("hour","day_of_week","month"):
+        pair = [f"{name}_sin", f"{name}_cos"]
+        pca  = PCA(n_components=1).fit(df_tr[pair])
         for split in (df_tr, df_v, df_te):
-            split[cal] = pca.transform(split[sincos])
-            split.drop(columns=sincos, inplace=True)
+            # use .loc to avoid SettingWithCopyWarning
+            split.loc[:, name] = pca.transform(split[pair]).ravel()
+            split.drop(columns=pair, inplace=True)
 
-    # 5) Carve out feature vs reserved columns
+    # 5) reserved vs feature columns
     reserved = {
         "open","high","low","close","volume","bid","ask",
-        params.label_col, "hour","day_of_week","month"
+        params.label_col,
+        "hour","day_of_week","month"
     }
+    # also drop raw‐level BBands/SMA/VWAP
+    for c in df.columns:
+        if (
+            c.startswith("bb_lband_")
+            or c.startswith("bb_hband_")
+            or (c.startswith("sma_") and "_pct" not in c)
+            or (c.startswith("vwap_") and not c.endswith("_dev"))
+        ):
+            reserved.add(c)
+
     feat_cols = [c for c in df_tr.columns if c not in reserved]
 
-    # 6) Build per‐group feature lists
+    # 6) build pipelines
     mapping = assignment["group_final"].to_dict()
-    groups  = {grp: [f for f in feat_cols if mapping.get(f)==grp]
-               for grp in ["bounded","ratio","log_skewed","robust_tails","discrete","unbounded"]}
+    groups  = {
+        grp: [f for f in feat_cols if mapping.get(f) == grp]
+        for grp in ["bounded","ratio","log_skewed","robust_tails","robust_tails_light","robust_tails_heavy","discrete","unbounded"]
+    }
 
-    # 7) Define pipelines for each group
-    def signed_log1p(X): 
+    def clip01(X: np.ndarray) -> np.ndarray:
+        mask = np.isnan(X)
+        out  = np.clip(X, 0.0, 1.0)
+        out[mask] = np.nan
+        return out
+
+    class Winsorizer(FunctionTransformer):
+        def __init__(self, lower_pct=1.0, upper_pct=99.0):
+            super().__init__(func=None, inverse_func=None, validate=False)
+            self.lower_pct = lower_pct
+            self.upper_pct = upper_pct
+    
+        def fit(self, X, y=None):
+            self.low_, self.high_ = (
+                np.nanpercentile(X, self.lower_pct, axis=0),
+                np.nanpercentile(X, self.upper_pct, axis=0)
+            )
+            return self
+    
+        def transform(self, X):
+            mask = np.isnan(X)
+            out  = np.clip(X, self.low_, self.high_)
+            out[mask] = np.nan
+            return out
+
+    def signed_log(X: np.ndarray) -> np.ndarray:
         return np.sign(X) * np.log1p(np.abs(X))
 
     pipelines = [
-        ("bnd", FunctionTransformer(lambda X: X/100.0, validate=False), groups["bounded"]),
+        ("bnd", Pipeline([
+            ("clip100", FunctionTransformer(lambda X: np.clip(X, 0, 100), validate=False)),
+            ("mm",      MinMaxScaler()),
+            ("c01",     FunctionTransformer(clip01, validate=False)),
+        ]), groups["bounded"]),
+
         ("rat", Pipeline([
-            ("pt", PowerTransformer(method="yeo-johnson", standardize=False)),
-            ("mm", MinMaxScaler())
+            ("pt",  PowerTransformer(method="yeo-johnson", standardize=False)),
+            ("mm",  MinMaxScaler()),
+            ("c01", FunctionTransformer(clip01, validate=False)),
         ]), groups["ratio"]),
+
         ("lgs", Pipeline([
-            ("slog", FunctionTransformer(signed_log1p, validate=False)),
-            ("mm",   MinMaxScaler())
+            ("slog", FunctionTransformer(signed_log, validate=False)),
+            ("mm",   MinMaxScaler()),
+            ("c01",  FunctionTransformer(clip01, validate=False)),
         ]), groups["log_skewed"]),
-        ("rbt", Pipeline([
-            ("win", Winsorizer()),
-            ("mm",  MinMaxScaler())
+
+        ("robust_tails_light", Pipeline([
+            ("win", Winsorizer(lower_pct=0.005, upper_pct=99.995)),
+            ("mm",  MinMaxScaler()),
+            ("c01", FunctionTransformer(clip01, validate=False)),
+        ]), groups["robust_tails_light"]),
+    
+        ("robust_tails", Pipeline([
+            ("win", Winsorizer(lower_pct=1.0, upper_pct=99.0)),
+            ("mm",  MinMaxScaler()),
+            ("c01", FunctionTransformer(clip01, validate=False)),
         ]), groups["robust_tails"]),
+    
+        ("robust_tails_heavy", Pipeline([
+            ("win", Winsorizer(lower_pct=20, upper_pct=80)),
+            ("mm",  MinMaxScaler()),
+            ("c01", FunctionTransformer(clip01, validate=False)),
+        ]), groups["robust_tails_heavy"]),
+
         ("dis", Pipeline([
-            ("ord", OrdinalEncoder()),
-            ("mm",  MinMaxScaler())
+            ("ord", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)),
+            ("mm",  MinMaxScaler()),
+            ("c01", FunctionTransformer(clip01, validate=False)),
         ]), groups["discrete"]),
+
         ("unb", Pipeline([
-            ("std",   StandardScaler()),
-            ("clip",  FunctionTransformer(lambda X: np.clip(X, -3, 3), validate=False)),
-            ("mm",    MinMaxScaler())
+            ("std", StandardScaler()),
+            ("c3",  FunctionTransformer(lambda X: np.clip(X, -3, 3), validate=False)),
+            ("mm",  MinMaxScaler()),
+            ("c01", FunctionTransformer(clip01, validate=False)),
         ]), groups["unbounded"]),
     ]
     ct = ColumnTransformer(transformers=pipelines, remainder="drop")
 
-    # 8) Fit on training features
+    # 7) fit on TRAIN
     ct.fit(df_tr[feat_cols])
 
-    # 9) Transform _per day_ with progress bar
-    def transform_by_day(split_df, label):
-        arr = np.empty((len(split_df), len(feat_cols)))
+    # 8) flatten names & widths
+    flat_feats = [f for _,_,cols in pipelines for f in cols]
+    n_feats    = len(flat_feats)
+
+    # 9) transform day‐by‐day
+    def transform_by_day(split_df: pd.DataFrame, label: str) -> pd.DataFrame:
+        arr = np.empty((len(split_df), n_feats), dtype=float)
         for day, block in tqdm(
             split_df.groupby(split_df.index.normalize()),
             desc=f"{label} days", unit="day"
         ):
-            mask      = split_df.index.normalize() == day
+            mask = split_df.index.normalize() == day
             arr[mask] = ct.transform(block[feat_cols])
-        scaled = pd.DataFrame(arr, index=split_df.index, columns=feat_cols)
+
+        scaled = pd.DataFrame(arr, index=split_df.index, columns=flat_feats)
         return pd.concat([scaled, split_df[list(reserved)]], axis=1)[split_df.columns]
 
-    df_tr_s = transform_by_day(df_tr,  "train")
-    df_v_s  = transform_by_day(df_v,   "val")
-    df_te_s = transform_by_day(df_te,  "test")
+    df_tr_s = transform_by_day(df_tr, "train")
+    df_v_s  = transform_by_day(df_v,  "val")
+    df_te_s = transform_by_day(df_te, "test")
 
-    # 10) Reassemble and drop raw OHLCV
+    # 10) reassemble & drop raw columns
     df_all = pd.concat([df_tr_s, df_v_s, df_te_s]).sort_index()
-    return df_all.drop(columns=["open","high","low","close","volume"], errors="ignore")
+    to_drop = ["open","high","low","close","volume"] + [
+        c for c in df_all.columns
+        if c.startswith("bb_lband_")
+        or c.startswith("bb_hband_")
+        or (c.startswith("sma_") and "_pct" not in c)
+        or (c.startswith("vwap_") and not c.endswith("_dev"))
+    ]
+    return df_all.drop(columns=to_drop, errors="ignore")
 
 
 #########################################################################################################
-
-
-# def compare_raw_vs_scaled(
-#     df_raw:     pd.DataFrame,
-#     df_scaled:  pd.DataFrame,
-#     assignment: pd.DataFrame,
-#     feat_cols:  list[str] | None = None,
-#     tol:        float = 1e-6
-# ) -> pd.DataFrame:
-#     """
-#     Compare raw vs scaled features, then verify:
-
-#       • min/max in [0,1] per group rules
-#       • Spearman ρ ≈ 1 (monotonic transform)
-#       • per-day monotonicity (scaled values preserve raw ordering)
-#     """
-#     if feat_cols is None:
-#         feat_cols = [c for c in df_raw.columns if c in df_scaled.columns]
-
-#     qs = [0.01, 0.05, 0.50, 0.95, 0.99]
-#     raw = (
-#         df_raw[feat_cols]
-#         .describe(percentiles=qs).T
-#         .loc[:, ['min','1%','5%','50%','95%','99%','max']]
-#     )
-#     raw.columns = [f"raw_{c}" for c in raw.columns]
-
-#     scaled = (
-#         df_scaled[feat_cols]
-#         .describe(percentiles=qs).T
-#         .loc[:, ['min','1%','5%','50%','95%','99%','max']]
-#     )
-#     scaled.columns = [f"scaled_{c}" for c in scaled.columns]
-
-#     cmp_df = pd.concat([raw, scaled], axis=1)
-#     cmp_df['group_final'] = assignment['group_final']
-
-#     # precompute stats for spearman & monotonicity
-#     spearman_rho = {}
-#     is_mono      = {}
-#     for feat in tqdm(feat_cols, desc="Checking shape"):
-#         x = df_raw[feat].dropna()
-#         y = df_scaled.loc[x.index, feat]
-
-#         rho = spearmanr(x, y).correlation
-#         order   = np.argsort(x.values)
-#         y_sorted= y.values[order]
-#         mono    = np.all(np.diff(y_sorted) >= -tol)
-
-#         spearman_rho[feat] = rho
-#         is_mono[feat]      = mono
-
-#     # final checks
-#     statuses, reasons = [], []
-#     for feat, row in cmp_df.iterrows():
-#         grp = row.group_final
-#         mn, mx = row.scaled_min, row.scaled_max
-#         rho    = spearman_rho[feat]
-#         mono   = is_mono[feat]
-
-#         errs = []
-#         # range check
-#         if grp == "bounded":
-#             if not (mn >= -tol and mx <= 1+tol):
-#                 errs.append(f"range[{mn:.3f},{mx:.3f}]")
-#         else:
-#             if not (abs(mn) <= tol and abs(mx-1) <= tol):
-#                 errs.append(f"range[{mn:.3f},{mx:.3f}]")
-
-#         # spearman check
-#         if abs(rho - 1) > 1e-3:
-#             errs.append(f"rho={rho:.3f}")
-
-#         # monotonic check
-#         if not mono:
-#             errs.append("non-monotonic")
-
-#         if errs:
-#             statuses.append("FAIL")
-#             reasons.append("; ".join(errs))
-#         else:
-#             statuses.append("OK")
-#             reasons.append("all checks passed")
-
-#     cmp_df['status']       = statuses
-#     cmp_df['reason']       = reasons
-#     cmp_df['spearman_rho'] = pd.Series(spearman_rho)
-#     cmp_df['is_monotonic'] = pd.Series(is_mono)
-
-#     return cmp_df
 
 
 def compare_raw_vs_scaled(
@@ -912,140 +810,139 @@ def compare_raw_vs_scaled(
     df_scaled: pd.DataFrame,
     assignment: pd.DataFrame,
     feat_cols: Optional[List[str]] = None,
-    tol_range: float = 1e-6,
-    tol_spearman: float = 1e-4,
-    check_per_day: bool = True
+    train_prop: float = params.train_prop,
+    tol_range:  float = 1e-6
 ) -> pd.DataFrame:
     """
-    Compare raw vs scaled features and verify shape preservation.
+    On the TRAIN slice only, verify that each scaled feature
+    preserves its core invariants under our per-day [0,1] pipelines.
 
-    Steps:
-      1) Replace inf→NaN in both raw & scaled.
-      2) Determine feature list = intersection of:
-           - columns common to raw & scaled
-           - optionally your provided feat_cols
-           - the assignment.index (so we skip 'signal', etc.)
-      3) Compute quantiles (min,1%,5%,50%,95%,99%,max) for raw & scaled.
-      4) For each feature:
-           a) Build mask = (raw.notna & scaled.notna)
-           b) Spearman ρ on aligned pairs
-           c) Global monotonic: sort by raw, check scaled non-decreasing
-           d) Per-day monotonic if enabled
-           e) Cardinality preserved for discrete group
-      5) Range check: all scaled values ∈ [0,1] ± tol_range
-      6) Collate status ('OK'/'FAIL') and reasons for any failing test.
+    Functionality:
+      1) Split off the first train_prop fraction; replace ±inf with NaN.
+      2) Select features common to raw, scaled, optional feat_cols,
+         and present in assignment.index.
+      3) Compute TRAIN‐only percentiles (min,1%,5%,50%,95%,99%,max).
+      4) For each feature on TRAIN:
+           a) NaN‐mask unchanged.
+           b) All scaled values ∈ [0,1] ± tol_range.
+           c) If 'discrete': unique_count unchanged.
+           d) If 'bounded': exact linear clip(raw,0,100)/100 mapping.
+           e) If constant raw: scaled is constant.
+      5) Return a summary DataFrame with pass/fail flags and reasons.
     """
-    # 1) clean infinities
-    raw = df_raw.replace([np.inf, -np.inf], np.nan)
-    sca = df_scaled.replace([np.inf, -np.inf], np.nan)
+    # 1) TRAIN split and NaN‐clean
+    N    = len(df_raw)
+    n_tr = int(N * train_prop)
+    raw_tr = df_raw.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
+    sca_tr = df_scaled.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
 
-    # 2) build feature list
-    all_cols = set(raw.columns) & set(sca.columns)
+    # 2) Determine features to test
+    common = set(raw_tr.columns) & set(sca_tr.columns)
     if feat_cols is not None:
-        all_cols &= set(feat_cols)
-    # restrict to only those indexed in your assignment table
-    feat_cols = [f for f in all_cols if f in assignment.index]
+        common &= set(feat_cols)
+    features = [f for f in common if f in assignment.index]
 
-    # 3) compute quantiles
+    # 3) Compute TRAIN‐only percentiles
     qs = [0.01, 0.05, 0.50, 0.95, 0.99]
-    raw_q = ( raw[feat_cols]
-               .describe(percentiles=qs).T
-               .loc[:, ['min','1%','5%','50%','95%','99%','max']]
-               .add_prefix('raw_') )
-    sca_q = ( sca[feat_cols]
-               .describe(percentiles=qs).T
-               .loc[:, ['min','1%','5%','50%','95%','99%','max']]
-               .add_prefix('scaled_') )
+    raw_q = (
+        raw_tr[features]
+        .describe(percentiles=qs).T
+        .loc[:, ['min','1%','5%','50%','95%','99%','max']]
+        .add_prefix('raw_')
+    )
+    sca_q = (
+        sca_tr[features]
+        .describe(percentiles=qs).T
+        .loc[:, ['min','1%','5%','50%','95%','99%','max']]
+        .add_prefix('scaled_')
+    )
     cmp_df = pd.concat([raw_q, sca_q], axis=1)
     cmp_df['group_final'] = assignment['group_final']
 
-    # prepare maps
-    rho_map = {}
-    mono_glob = {}
-    mono_day  = {}
-    card_ok   = {}
+    # 4) Prepare result containers
+    nan_ok       = {}
+    range_ok     = {}
+    discrete_ok  = {}
+    bounded_ok   = {}
+    const_ok     = {}
 
-    # 4) per‐feature checks
-    for feat in tqdm(feat_cols, desc="Shape checks"):
-        x = raw[feat]
-        y = sca[feat]
-
-        # a) align pairs where neither is NaN
-        mask = x.notna() & y.notna()
-        x2, y2 = x[mask], y[mask]
-
-        # b) spearman (or 1.0 if too few points)
-        if len(x2) < 2:
-            rho = 1.0
-        else:
-            rho = spearmanr(x2, y2).correlation
-            if rho is None:
-                rho = 1.0
-        rho_map[feat] = rho
-
-        # c) global monotonic
-        idx = np.argsort(x2.values)
-        y_sorted = y2.values[idx]
-        mono_glob[feat] = np.all(np.diff(y_sorted) >= -tol_range)
-
-        # d) daily monotonic
-        if check_per_day:
-            ok = True
-            for day, block in x2.groupby(x2.index.normalize()):
-                yb = y2.loc[block.index].values
-                if not np.all(np.diff(yb) >= -tol_range):
-                    ok = False
-                    break
-            mono_day[feat] = ok
-        else:
-            mono_day[feat] = True
-
-        # e) cardinality for 'discrete'
+    # 5) Per‐feature checks on TRAIN
+    for feat in tqdm(features, desc="Validating train-split"):
         grp = assignment.at[feat, 'group_final']
-        if grp == 'discrete':
-            card_ok[feat] = (x2.nunique() == y2.nunique())
+
+        # a) NaN‐mask unchanged
+        nan_ok[feat] = (raw_tr[feat].isna() == sca_tr[feat].isna()).all()
+
+        # align non‐NaN pairs
+        x = raw_tr[feat].dropna()
+        y = sca_tr[feat].dropna()
+        x, y = x.align(y, join='inner')
+
+        # b) Range containment [0,1]
+        if len(y):
+            ymin, ymax = y.min(), y.max()
+            range_ok[feat] = (ymin >= -tol_range) and (ymax <= 1 + tol_range)
         else:
-            card_ok[feat] = True
+            range_ok[feat] = True
 
-    # 5) range, status & reasons
-    statuses, reasons = [], []
-    for feat, row in cmp_df.iterrows():
-        mn, mx = row['scaled_min'], row['scaled_max']
+        # c) Discrete cardinality
+        if grp == 'discrete':
+            discrete_ok[feat] = x.nunique() == y.nunique()
+        else:
+            discrete_ok[feat] = True
+
+        # d) Bounded linear mapping
+        if grp == 'bounded' and len(x):
+            # clip raw to [0,100], then compute train-min/max
+            x_clip = np.clip(x, 0, 100)
+            lo, hi = x_clip.min(), x_clip.max()
+            # map into [0,1]
+            target = (x_clip - lo) / (hi - lo) if hi > lo else 0
+            bounded_ok[feat] = np.allclose(y, target, atol=tol_range)
+        else:
+            bounded_ok[feat] = True
+
+        # e) Constant‐feature behavior
+        rmin, rmax = raw_q.at[feat, 'raw_min'], raw_q.at[feat, 'raw_max']
+        if abs(rmax - rmin) < tol_range:
+            const_ok[feat] = y.nunique() == 1
+        else:
+            const_ok[feat] = True
+
+    # 6) Compile pass/fail status & reasons
+    status, reason = [], []
+    for feat in features:
         errs = []
-
-        # range containment
-        if not (mn >= -tol_range and mx <= 1 + tol_range):
+        if not nan_ok[feat]:
+            errs.append("nan_mask_changed")
+        if not range_ok[feat]:
+            mn, mx = sca_q.at[feat, 'scaled_min'], sca_q.at[feat, 'scaled_max']
             errs.append(f"range[{mn:.3f},{mx:.3f}]")
-
-        # correlation
-        if abs(rho_map[feat] - 1) > tol_spearman:
-            errs.append(f"rho={rho_map[feat]:.3f}")
-
-        # monotonic checks
-        if not mono_glob[feat]:
-            errs.append("non-monotonic_global")
-        if check_per_day and not mono_day[feat]:
-            errs.append("non-monotonic_daily")
-
-        # discrete cardinality
-        if not card_ok[feat]:
+        if not discrete_ok[feat]:
             errs.append("cardinality_changed")
+        if not bounded_ok[feat]:
+            errs.append("non-linear_bounded")
+        if not const_ok[feat]:
+            errs.append("constant_not_const")
 
         if errs:
-            statuses.append("FAIL")
-            reasons.append("; ".join(errs))
+            status.append("FAIL")
+            reason.append("; ".join(errs))
         else:
-            statuses.append("OK")
-            reasons.append("all checks passed")
+            status.append("OK")
+            reason.append("all checks passed")
 
-    cmp_df['spearman_rho']   = pd.Series(rho_map)
-    cmp_df['mono_global']    = pd.Series(mono_glob)
-    cmp_df['mono_daily']     = pd.Series(mono_day)
-    cmp_df['cardinality_ok'] = pd.Series(card_ok)
-    cmp_df['status']         = statuses
-    cmp_df['reason']         = reasons
+    cmp_df['nan_mask_ok']       = pd.Series(nan_ok)
+    cmp_df['range_ok']          = pd.Series(range_ok)
+    cmp_df['discrete_ok']       = pd.Series(discrete_ok)
+    cmp_df['bounded_linear_ok'] = pd.Series(bounded_ok)
+    cmp_df['constant_ok']       = pd.Series(const_ok)
+    cmp_df['status']            = status
+    cmp_df['reason']            = reason
 
     return cmp_df
+
+
 
 #########################################################################################################
 
