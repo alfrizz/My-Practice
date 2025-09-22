@@ -405,9 +405,9 @@ def split_to_day_datasets(
     # test split + raw-price arrays
     X_te,   y_sig_te,  y_ret_te,  end_times_te,  raw_close_te,
     *,
-    sess_start_time: time,    # session cutoff
-    signal_thresh:  float,    # threshold for binary signal head
-    return_thresh:  float,    # dead-zone threshold for ternary return head
+    sess_start_time:       time,    # session cutoff
+    signal_thresh:         float,    # threshold for binary signal head
+    return_thresh:         float,    # dead-zone threshold for ternary return head
     train_batch:           int = 32,
     train_workers:         int = 0,
     train_prefetch_factor: int = 1
