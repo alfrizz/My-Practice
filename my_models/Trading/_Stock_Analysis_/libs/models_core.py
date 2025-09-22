@@ -34,51 +34,44 @@ from tqdm.auto import tqdm
 def build_tensors(
     df: pd.DataFrame,
     *,
-    look_back:  int = params.look_back_tick, # number of past bars in each window
-    tmpdir:     str = None,             # where to write memmaps (auto‐created if None)
-    device:     torch.device = torch.device("cpu"),
-    sess_start: time                    # only include windows ending at/after this time
+    look_back:  int                   = params.look_back_tick,
+    tmpdir:     str                   = None,
+    device:     torch.device          = torch.device("cpu"),
+    sess_start: time                  = None
 ) -> tuple[
     torch.Tensor,  # X         shape=(N, look_back, F)
     torch.Tensor,  # y_sig     shape=(N,)
     torch.Tensor,  # y_ret     shape=(N,)
     torch.Tensor,  # raw_close shape=(N,)
-    torch.Tensor,  # raw_bid   shape=(N,)
-    torch.Tensor,  # raw_ask   shape=(N,)
     np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
 ]:
     """
-    Build sliding‐window tensors for LSTM from a full‐day DataFrame.
+    Build sliding‐window tensors for an LSTM trading model from full‐day data.
 
-    1) Automatically select ALL columns except {label_col, 'bid','ask'} as features.
-    2) Split data by calendar‐day; count how many windows end ≥ sess_start each day.
-    3) Allocate on‐disk numpy memmaps for:
-         X       = feature windows         (N, look_back, F)
-         y_sig   = next‐bar smoothed signal (N,)
-         y_ret   = next‐bar log‐return      (N,)
-         raw_*   = bid/mid/ask at window end (N,)
-         end_times = timestamp of each window end (N,)
+    1) Select all columns except {label_col, 'close_raw'} as features.
+    2) Group by calendar day and count windows ending ≥ sess_start.
+    3) Allocate on‐disk memmaps for inputs, targets, raw close, and timestamps.
     4) For each day:
-       a) extract feature array and target signal
-       b) reconstruct mid‐price = (bid + ask)/2 and compute bar‐to‐bar log‐returns
-       c) form sliding windows of features (drop last to align labels)
-       d) align next‐bar labels y_sig, y_ret, raw_* and timestamps
-       e) mask out windows ending before sess_start and write slices to memmaps
-    5) Wrap each memmap with torch.from_numpy, free CPU memory, and return tensors + end_times.
+       a) extract feature array and label signal;
+       b) compute log‐returns on raw close price;
+       c) build sliding windows of features;
+       d) align next‐bar labels, raw close points, and times;
+       e) mask windows before sess_start and write to memmaps.
+    5) Wrap memmaps as torch tensors, free CPU memory, return tensors + end_times.
     """
-    # copy df so we don’t modify user’s DataFrame
+    # copy to avoid mutating user’s DataFrame
     df = df.copy()
-
-    # 1) Automatically derive features_cols
-    exclude = {params.label_col, "bid", "ask"}
+    
+    # 1) derive feature columns
+    exclude = {params.label_col, "close_raw"}
     features_cols = [c for c in df.columns if c not in exclude]
     print("Inside build_tensors, features:", features_cols)
     F = len(features_cols)
-
+    
     # group by calendar day
     day_groups = df.groupby(df.index.normalize(), sort=False)
-
-    # 2) Count total valid windows across all days
+    
+    # 2) count valid windows
     N = 0
     for _, day_df in tqdm(day_groups, desc="Counting windows", leave=False):
         T = len(day_df)
@@ -87,13 +80,13 @@ def build_tensors(
         ends = day_df.index[look_back:]
         mask = np.array([ts.time() >= sess_start for ts in ends])
         N += int(mask.sum())
-
-    # 3) Allocate numpy memmaps on disk
+    
+    # 3) allocate memmaps
     if tmpdir is None:
         tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
     else:
         os.makedirs(tmpdir, exist_ok=True)
-
+    
     X_mm = np.lib.format.open_memmap(
         os.path.join(tmpdir, "X.npy"), mode="w+",
         dtype=np.float32, shape=(N, look_back, F)
@@ -107,85 +100,69 @@ def build_tensors(
         dtype=np.float32, shape=(N,)
     )
     c_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "c.npy"), mode="w+",
-        dtype=np.float32, shape=(N,)
-    )
-    b_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "b.npy"), mode="w+",
-        dtype=np.float32, shape=(N,)
-    )
-    a_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "a.npy"), mode="w+",
+        os.path.join(tmpdir, "close.npy"), mode="w+",
         dtype=np.float32, shape=(N,)
     )
     t_mm = np.lib.format.open_memmap(
         os.path.join(tmpdir, "t.npy"), mode="w+",
         dtype="datetime64[ns]", shape=(N,)
     )
-
-    # 4) Fill memmaps
+    
+    # 4) fill memmaps
     idx = 0
     for _, day_df in tqdm(day_groups, desc="Writing memmaps", leave=False):
         day_df = day_df.sort_index()
         T = len(day_df)
         if T <= look_back:
             continue
-
-        # a) extract features and signal
+    
+        # a) features and signal
         feats_np = day_df[features_cols].to_numpy(np.float32)
-        sig_np   = day_df[params.label_col]    .to_numpy(np.float32)
-
-        # b) reconstruct mid-price and compute log-returns
-        bid_np   = day_df["bid"]        .to_numpy(np.float32)
-        ask_np   = day_df["ask"]        .to_numpy(np.float32)
-        mid_np   = ((bid_np + ask_np)/2).astype(np.float32)
-        ret_full = np.zeros_like(mid_np, dtype=np.float32)
-        ret_full[1:] = np.log(mid_np[1:] / mid_np[:-1])
-
-        # c) build sliding windows of features
+        sig_np   = day_df[params.label_col].to_numpy(np.float32)
+    
+        # b) raw close and log‐returns
+        close_np = day_df["close_raw"].to_numpy(np.float32)
+        ret_full = np.zeros_like(close_np, dtype=np.float32)
+        ret_full[1:] = np.log(close_np[1:] / close_np[:-1])
+    
+        # c) sliding windows of features
         wins = np.lib.stride_tricks.sliding_window_view(
             feats_np, window_shape=(look_back, F)
         ).reshape(T - look_back + 1, look_back, F)
-        wins = wins[:-1]  # drop last window to align next-step labels
-
-        # d) align next-bar labels & raw prices
+        wins = wins[:-1]  # drop last to align next‐bar labels
+    
+        # d) align labels and raw close
         lab_sig = sig_np[look_back:]
         lab_ret = ret_full[look_back:]
-        c_pts   = mid_np[look_back:]
-        b_pts   = bid_np[look_back:]
-        a_pts   = ask_np[look_back:]
+        c_pts   = close_np[look_back:]
         times   = day_df.index.to_numpy()[look_back:]
-
-        # e) mask by session start and write
+    
+        # e) mask by session start
         mask = np.array([pd.Timestamp(ts).time() >= sess_start for ts in times])
         if not mask.any():
             continue
-
+    
         m = mask.sum()
-        X_mm [idx:idx+m] = wins[mask]
-        y_mm [idx:idx+m] = lab_sig[mask]
-        r_mm [idx:idx+m] = lab_ret[mask]
-        c_mm [idx:idx+m] = c_pts[mask]
-        b_mm [idx:idx+m] = b_pts[mask]
-        a_mm [idx:idx+m] = a_pts[mask]
-        t_mm [idx:idx+m] = times[mask]
+        X_mm[idx:idx+m] = wins[mask]
+        y_mm[idx:idx+m] = lab_sig[mask]
+        r_mm[idx:idx+m] = lab_ret[mask]
+        c_mm[idx:idx+m] = c_pts[mask]
+        t_mm[idx:idx+m] = times[mask]
         idx += m
-
-    # 5) Wrap memmaps as torch Tensors
+    
+    # 5) wrap as torch tensors
     X         = torch.from_numpy(X_mm).to(device, non_blocking=True)
     y_sig     = torch.from_numpy(y_mm).to(device, non_blocking=True)
     y_ret     = torch.from_numpy(r_mm).to(device, non_blocking=True)
     raw_close = torch.from_numpy(c_mm).to(device, non_blocking=True)
-    raw_bid   = torch.from_numpy(b_mm).to(device, non_blocking=True)
-    raw_ask   = torch.from_numpy(a_mm).to(device, non_blocking=True)
     end_times = t_mm.copy()  # numpy datetime64 array
-
-    # cleanup temporary buffers
+    
+    # cleanup
     gc.collect()
     if device.type == "cuda":
         torch.cuda.empty_cache()
-
-    return X, y_sig, y_ret, raw_close, raw_bid, raw_ask, end_times
+    
+    return X, y_sig, y_ret, raw_close, end_times
 
     
 #########################################################################################################
@@ -196,8 +173,6 @@ def chronological_split(
     y_sig:       torch.Tensor,
     y_ret:       torch.Tensor,
     raw_close:   torch.Tensor,
-    raw_bid:     torch.Tensor,
-    raw_ask:     torch.Tensor,
     end_times:   np.ndarray,      # (N,), dtype datetime64[ns]
     *,
     train_prop:  float,
@@ -208,7 +183,7 @@ def chronological_split(
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],          # (X_tr, y_sig_tr, y_ret_tr)
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],          # (X_val, y_sig_val, y_ret_val)
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],  
-                                                              # (X_te, y_sig_te, y_ret_te, raw_close_te, raw_bid_te, raw_ask_te)
+                                                              # (X_te, y_sig_te, y_ret_te, raw_close_te)
     list,                                                     # samples_per_day
     torch.Tensor, torch.Tensor, torch.Tensor                  # day_id_tr, day_id_val, day_id_te
 ]:
@@ -219,7 +194,7 @@ def chronological_split(
     2) Decide how many days go to train/val/test by proportions
        (training days rounded up to full batches of train_batch).
     3) Compute cumulative sums of daily counts and slice X, y_sig, y_ret,
-       plus raw_close/raw_bid/raw_ask for the test set.
+       plus raw_close for the test set.
     4) Build per‐window day_id tags for each split as CPU tensors
        (so they can be moved to GPU per‐batch in a DataLoader).
     """
@@ -251,8 +226,6 @@ def chronological_split(
     X_val, y_sig_val, y_ret_val = X[i_tr:i_val],  y_sig[i_tr:i_val],  y_ret[i_tr:i_val]
     X_te,  y_sig_te,  y_ret_te   = X[i_val:],     y_sig[i_val:],      y_ret[i_val:]
     close_te = raw_close[i_val:]
-    bid_te   = raw_bid[i_val:]
-    ask_te   = raw_ask[i_val:]
 
     # 4) Build day‐ID vectors on CPU
     def make_day_ids(start_day: int, end_day: int) -> torch.Tensor:
@@ -270,7 +243,7 @@ def chronological_split(
     return (
         (X_tr,  y_sig_tr,  y_ret_tr),
         (X_val, y_sig_val, y_ret_val),
-        (X_te,  y_sig_te,  y_ret_te,  close_te, bid_te, ask_te),
+        (X_te,  y_sig_te,  y_ret_te,  close_te),
         samples_per_day,
         day_id_tr, day_id_val, day_id_te
     )
@@ -287,9 +260,8 @@ class DayWindowDataset(Dataset):
       • y_day     : regression target (your precomputed signal), shape (1, W)
       • y_sig_cls : binary label = 1 if signal > signal_thresh else 0
       • ret_day   : true bar-to-bar returns, shape (1, W)
-      • y_ret_ter : ternary label ∈ {0,1,2} for (down, flat, up) based
-                    on ret_day and return_thresh
-      • [rc, rb, ra]  : optional raw price tensors, each shape (W,)
+      • y_ret_ter : ternary label ∈ {0,1,2} for (down, flat, up) based on ret_day and return_thresh
+      • rc        : optional raw close tensor, each shape (W,)
       • weekday   : integer day-of-week
       • end_ts    : timestamp of the last bar in the window
     """
@@ -299,8 +271,6 @@ class DayWindowDataset(Dataset):
         y_signal:       torch.Tensor,   # (N_windows,)
         y_return:       torch.Tensor,   # (N_windows,)
         raw_close:      torch.Tensor,   # or None
-        raw_bid:        torch.Tensor,   # or None
-        raw_ask:        torch.Tensor,   # or None
         end_times:      np.ndarray,     # (N_windows,), dtype datetime64[ns]
         sess_start_time: time,          # cutoff for trading session
         signal_thresh:  float,          # buy_threshold for y_sig_cls
@@ -308,7 +278,7 @@ class DayWindowDataset(Dataset):
     ):
         self.signal_thresh = signal_thresh
         self.return_thresh = return_thresh
-        self.has_raw   = raw_close is not None
+        self.has_raw       = raw_close is not None
 
         # Filter windows by trading‐session start
         valid = [
@@ -322,8 +292,6 @@ class DayWindowDataset(Dataset):
 
         if self.has_raw:
             self.raw_close = raw_close[valid]
-            self.raw_bid   = raw_bid[valid]
-            self.raw_ask   = raw_ask[valid]
 
         # Build day‐boundaries for grouping windows by calendar date
         dates        = pd.to_datetime(self.end_times).normalize()
@@ -361,11 +329,8 @@ class DayWindowDataset(Dataset):
 
         if self.has_raw:
             rc = self.raw_close[s:e]
-            rb = self.raw_bid[s:e]
-            ra = self.raw_ask[s:e]
             return (
-                x_day, y_day, y_sig_cls, ret_day, y_ret_ter,
-                rc, rb, ra, wd, end_ts
+                x_day, y_day, y_sig_cls, ret_day, y_ret_ter, rc, wd, end_ts
             )
 
         return x_day, y_day, y_sig_cls, ret_day, y_ret_ter, wd, end_ts
@@ -382,7 +347,7 @@ def pad_collate(batch):
       (x_day, y_day, y_sig_cls, ret_day, y_ret_ter, weekday, end_ts)
     or test (has raw prices):
       (x_day, y_day, y_sig_cls, ret_day, y_ret_ter,
-       rc, rb, ra, weekday, end_ts)
+       rc, weekday, end_ts)
 
     Returns:
       x_pad      Tensor (B, max_W, look_back, F)
@@ -390,16 +355,15 @@ def pad_collate(batch):
       y_sig_pad  Tensor (B, max_W)
       ret_pad    Tensor (B, max_W)
       y_ter_pad  LongTensor (B, max_W)
-      [rc_pad, rb_pad, ra_pad]  # only if has_raw
+      rc_pad  # only if has_raw
       wd_tensor  LongTensor (B,)
       ts_list    list of end_ts for each day
       lengths    list[int] true window counts per day
     """
-    has_raw = len(batch[0]) == 10
+    has_raw = len(batch[0]) == 8
 
     if has_raw:
-        (x_list, y_list, ysig_list, ret_list, yter_list,
-         rc_list, rb_list, ra_list, wd_list, ts_list) = zip(*batch)
+        (x_list, y_list, ysig_list, ret_list, yter_list, rc_list, wd_list, ts_list) = zip(*batch)
     else:
         x_list, y_list, ysig_list, ret_list, yter_list, wd_list, ts_list = zip(*batch)
 
@@ -423,11 +387,8 @@ def pad_collate(batch):
 
     if has_raw:
         rc_pad = pad_sequence(rc_list, batch_first=True)
-        rb_pad = pad_sequence(rb_list, batch_first=True)
-        ra_pad = pad_sequence(ra_list, batch_first=True)
         return (
-            x_pad, y_pad, ysig_pad, ret_pad, yter_pad,
-            rc_pad, rb_pad, ra_pad, wd_tensor, list(ts_list), lengths
+            x_pad, y_pad, ysig_pad, ret_pad, yter_pad, rc_pad, wd_tensor, list(ts_list), lengths
         )
 
     return x_pad, y_pad, ysig_pad, ret_pad, yter_pad, wd_tensor, list(ts_list), lengths
@@ -442,8 +403,7 @@ def split_to_day_datasets(
     # val split
     X_val,  y_sig_val, y_ret_val, end_times_val,
     # test split + raw-price arrays
-    X_te,   y_sig_te,  y_ret_te,  end_times_te,
-    raw_close_te, raw_bid_te, raw_ask_te,
+    X_te,   y_sig_te,  y_ret_te,  end_times_te,  raw_close_te,
     *,
     sess_start_time: time,    # session cutoff
     signal_thresh:  float,    # threshold for binary signal head
@@ -456,8 +416,8 @@ def split_to_day_datasets(
     Build three DataLoaders that yield *per‐day* batches of the LSTM windows:
     
       1) Instantiate DayWindowDataset for train, val, test.  
-         - train/val: raw_close/raw_bid/raw_ask = None  
-         - test:    raw_close/raw_bid/raw_ask = real price arrays  
+         - train/val: raw_close = None  
+         - test:    raw_close = real price arrays  
          Each dataset filters windows before sess_start_time and computes:
            • y_sig_cls (binary from y_signal > signal_thresh)  
            • y_ret_ter (ternary from y_return vs ±return_thresh)  
@@ -474,13 +434,13 @@ def split_to_day_datasets(
     """
     # 1) Build the three DayWindowDatasets with a brief progress bar
     splits = [
-        ("train", X_tr, y_sig_tr, y_ret_tr, end_times_tr, None, None, None),
-        ("val",   X_val, y_sig_val, y_ret_val, end_times_val,   None, None, None),
-        ("test",  X_te,  y_sig_te,  y_ret_te,  end_times_te,  raw_close_te, raw_bid_te, raw_ask_te)
+        ("train", X_tr, y_sig_tr, y_ret_tr, end_times_tr, None),
+        ("val",   X_val, y_sig_val, y_ret_val, end_times_val,   None),
+        ("test",  X_te,  y_sig_te,  y_ret_te,  end_times_te,  raw_close_te)
     ]
 
     datasets = {}
-    for name, Xd, ys, yr, et, rc, rb, ra in tqdm(
+    for name, Xd, ys, yr, et, rc in tqdm(
         splits, desc="Creating DayWindowDatasets", unit="split"
     ):
         datasets[name] = DayWindowDataset(
@@ -488,8 +448,6 @@ def split_to_day_datasets(
             y_signal=ys,
             y_return=yr,
             raw_close=rc,
-            raw_bid=rb,
-            raw_ask=ra,
             end_times=et,
             sess_start_time=sess_start_time,
             signal_thresh=signal_thresh,

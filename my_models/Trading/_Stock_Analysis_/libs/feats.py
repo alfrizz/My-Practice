@@ -85,7 +85,7 @@ def create_features(
     w_vol_spike = WM(vol_spike_window)
 
     # Base columns
-    cols_in = ["open","high","low","close","volume","bid","ask", params.label_col]
+    cols_in = ["open","high","low","close","volume", params.label_col]
     out     = df[cols_in].copy()
     c, o, h, l = out["close"], out["open"], out["high"], out["low"]
 
@@ -284,7 +284,7 @@ def assign_feature_groups(
     Inspect each feature’s raw distribution and bucket it into one of six
     scaling groups, excluding any pure price‐level columns:
 
-      • EXCLUDE up front: calendar fields, OHLCV & bid/ask, raw SMA/VWAP/BBands.
+      • EXCLUDE up front: calendar fields, OHLCV, raw SMA/VWAP/BBands.
       • Compute min, max, 1/5/95/99-percentiles, skew, kurtosis, unique_count, zero_ratio.
       • In order assign raw_group:
          a) discrete
@@ -299,7 +299,7 @@ def assign_feature_groups(
     # 1) Build reserved set (drop from grouping)
     reserved = {
         "hour","day_of_week","month",
-        "open","high","low","close","volume","bid","ask"
+        "open","high","low","close","volume"
     }
     # add raw‐level BBands/SMA/VWAP
     for c in cols:
@@ -372,7 +372,7 @@ def scale_with_splits(
     2) Build cyclical calendar features, cast them to float.
     3) Split CONTIGUOUSLY into TRAIN/VAL/TEST.
     4) PCA‐compress each sin/cos pair → single calendar dimension.
-    5) Define reserved = raw OHLCV, bid/ask, label, calendar, plus
+    5) Define reserved = raw OHLCV, label, calendar, plus
        raw‐level BBands/SMA/VWAP.
     6) From assignment.group_final, build six pipelines: bounded, ratio,
        log_skewed, robust_tails, discrete, unbounded.
@@ -418,7 +418,7 @@ def scale_with_splits(
 
     # 5) reserved vs feature columns
     reserved = {
-        "open","high","low","close","volume","bid","ask",
+        "open","high","low","close","volume",
         params.label_col,
         "hour","day_of_week","month"
     }
