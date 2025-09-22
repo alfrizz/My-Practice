@@ -191,83 +191,6 @@ def build_tensors(
 #########################################################################################################
 
 
-# def chronological_split(
-#     X:           torch.Tensor,
-#     y_sig:       torch.Tensor,
-#     y_ret:       torch.Tensor,
-#     raw_close:   torch.Tensor,
-#     raw_bid:     torch.Tensor,
-#     raw_ask:     torch.Tensor,
-#     end_times:   np.ndarray,      # (N,), dtype datetime64[ns]
-#     *,
-#     train_prop:  float,
-#     val_prop:    float,
-#     train_batch: int,
-#     device = torch.device("cpu")
-# ) -> Tuple[
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],          # (X_tr, y_sig_tr, y_ret_tr)
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],          # (X_val, y_sig_val, y_ret_val)
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],  
-#                                                               # (X_te, y_sig_te, y_ret_te, raw_close_te, raw_bid_te, raw_ask_te)
-#     list,                                                     # samples_per_day
-#     torch.Tensor, torch.Tensor, torch.Tensor                  # day_id_tr, day_id_val, day_id_te
-# ]:
-#     """
-#     Chronologically split tensors by calendar-day into train/val/test:
-#       1) Count windows per normalized date → samples_per_day.
-#       2) Determine how many days go to train/val/test (by proportions,
-#          rounding train_days up to full batches of train_batch).
-#       3) Cum‐sum the daily counts → slice X, y_sig, y_ret, raw_*, end_times.
-#       4) Build per-window day_id tags for each split.
-#     """
-#     # 1) Count windows per day
-#     dt_idx    = pd.to_datetime(end_times)
-#     normed    = dt_idx.normalize()
-#     days, counts = np.unique(normed.values, return_counts=True)
-#     samples_per_day = counts.tolist()
-
-#     # sanity
-#     total = sum(samples_per_day)
-#     if total != X.size(0):
-#         raise ValueError(f"Window count mismatch {total} vs {X.size(0)}")
-
-#     # 2) determine day splits
-#     D = len(samples_per_day)
-#     orig_tr_days   = int(D * train_prop)
-#     full_batches   = (orig_tr_days + train_batch - 1) // train_batch
-#     tr_days        = min(D, full_batches * train_batch)
-#     cut_train      = tr_days - 1
-#     cut_val        = int(D * (train_prop + val_prop))
-
-#     # 3) slice indices by window count
-#     cumsum = np.concatenate([[0], np.cumsum(counts)])
-#     i_tr   = int(cumsum[tr_days])
-#     i_val  = int(cumsum[cut_val + 1])
-
-#     X_tr, y_sig_tr, y_ret_tr = X[:i_tr],       y_sig[:i_tr],       y_ret[:i_tr]
-#     X_val, y_sig_val, y_ret_val = X[i_tr:i_val], y_sig[i_tr:i_val], y_ret[i_tr:i_val]
-#     X_te,  y_sig_te,  y_ret_te  = X[i_val:],    y_sig[i_val:],      y_ret[i_val:]
-#     close_te = raw_close[i_val:]; bid_te = raw_bid[i_val:]; ask_te = raw_ask[i_val:]
-
-#     # 4) day_id tags
-#     def make_day_ids(s, e):
-#         cnts = samples_per_day[s : e+1]
-#         days = torch.arange(s, e+1, device=device)
-#         return days.repeat_interleave(torch.tensor(cnts, device=device))
-
-#     day_id_tr  = make_day_ids(0,          cut_train)
-#     day_id_val = make_day_ids(cut_train+1, cut_val)
-#     day_id_te  = make_day_ids(cut_val+1,  D-1)
-
-#     return (
-#         (X_tr,  y_sig_tr,  y_ret_tr),
-#         (X_val, y_sig_val, y_ret_val),
-#         (X_te,  y_sig_te,  y_ret_te,  close_te, bid_te, ask_te),
-#         samples_per_day,
-#         day_id_tr, day_id_val, day_id_te
-#     )
-
-
 def chronological_split(
     X:           torch.Tensor,
     y_sig:       torch.Tensor,
@@ -646,8 +569,5 @@ def make_optimizer_and_scheduler(
     scaler = GradScaler()
 
     return optimizer, plateau_sched, cosine_sched, scaler, clipnorm
-
-
-#########################################################################################################
 
 

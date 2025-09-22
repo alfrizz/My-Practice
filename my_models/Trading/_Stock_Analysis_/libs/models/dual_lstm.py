@@ -445,17 +445,18 @@ def lstm_training_loop(
             plateau_sched.step(vl["rmse"])
             
         # e) folder‐best checkpoint (→ `_chp`)
-        save_pat = re.compile(rf"{params.ticker}_(\d+\.\d+)_chp\.pth")
+        # combine chp/fin into one regex
+        save_pat = re.compile(rf"{params.ticker}_(\d+\.\d+)_(?:chp|fin)\.pth")
         # list all existing checkpoint files
         models_dir = Path(params.models_folder)
         models_dir.mkdir(exist_ok=True)
 
         existing_rmses = [
             float(m.group(1))
-            for f in models_dir.glob(f"{params.ticker}_*_chp.pth")
-            for m in (save_pat.match(f.name),) if m
+            for f in models_dir.glob("*.pth")
+            if (m := save_pat.match(f.name))
         ]
-        best_existing = min(existing_rmses) if existing_rmses else float("inf")
+        best_existing = min(existing_rmses, default=float("inf"))
 
         # f) early‐stop + update run‐best
         if vl["rmse"] < best_val_rmse:
@@ -482,6 +483,7 @@ def lstm_training_loop(
                 chp_name = f"{params.ticker}_{best_val_rmse:.5f}_chp.pth"
                 torch.save(ckpt, models_dir / chp_name)
                 print(f"🔖 Saved folder‐best checkpoint (_chp): {chp_name}")
+                best_existing = best_val_rmse
                 
         else:
             patience_ctr += 1

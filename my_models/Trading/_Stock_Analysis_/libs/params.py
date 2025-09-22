@@ -103,30 +103,27 @@ def signal_parameters(ticker):
     look_back ==> length of historical window (how many minutes of history each training example contains): number of past time‐steps fed into the LSTM to predict next value
     '''
     if ticker == 'AAPL':
-        look_back = 90
+        look_back = 60
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
         smooth_sign_win = 15
-        features_cols = ['adx_14',
-                         'atr_14',
-                         'ret',
+        features_cols = ['sma_pct_14',
                          'atr_pct_14',
-                         'log_ret',
-                         'macd_signal_12_26_9',
-                         'bb_hband_20',
-                         'body',
+                         'rsi_14',
                          'bb_w_20',
-                         'eng_vwap',
+                         'plus_di_14',
+                         'range_pct',
+                         'eng_ma',
                          'minus_di_14',
-                         'body_pct',
-                         'hour',
-                         'eng_obv',
-                         'vol_spike_14',
                          'macd_diff_12_26_9',
-                         'sma_28',
-                         'eng_sma_long',
-                         'obv_pct_14',
-                         'eng_macd']
+                         'ret',
+                         'eng_macd',
+                         'macd_line_12_26_9',
+                         'obv_diff_14',
+                         'eng_atr_div',
+                         'eng_adx',
+                         'hour',
+                         'adx_14']
         trailing_stop_pred = 0.1
         pred_threshold = 0.3
         
@@ -147,7 +144,7 @@ hparams = {
     "DROPOUT_LONG":          0.15,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             4,     # number of multi-head attention heads; more heads capture diverse interactions
     "ATT_DROPOUT":           0.15,  # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          3e-5,  # L2 penalty on all weights; prevents extreme magnitudes
+    "WEIGHT_DECAY":          5e-4,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,    # number of sequences per training batch
@@ -155,15 +152,15 @@ hparams = {
     "NUM_WORKERS":           4,     # DataLoader CPU workers
     "TRAIN_PREFETCH_FACTOR": 2,     # prefetch factor for DataLoader
 
-    "MAX_EPOCHS":            90,    # maximum number of epochs
-    "EARLY_STOP_PATIENCE":   6,     # epochs with no val–RMSE improvement before stopping
+    "MAX_EPOCHS":            100,   # maximum number of epochs
+    "EARLY_STOP_PATIENCE":   7,     # epochs with no val–RMSE improvement before stopping
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
-    "INITIAL_LR":            9e-5,  # starting learning rateS
-    "CLIPNORM":              3,     # max gradient norm for clipping
+    "INITIAL_LR":            1e-4,  # starting learning rateS
+    "CLIPNORM":              0.5,     # max gradient norm for clipping
     "ETA_MIN":               1e-6,  # floor LR in CosineAnnealingWarmRestarts
-    "T_0":                   90,    # period (in epochs) of first cosine decay cycle
+    "T_0":                   100,   # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
     # ───────────────NOT USED──────────────── #
