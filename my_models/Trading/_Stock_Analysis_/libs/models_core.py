@@ -12,6 +12,10 @@ import pandas as pd
 import numpy  as np
 import math
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from numpy.lib.format import header_data_from_array_1_0, write_array_header_1_0
+from threading import Lock
+
 import datetime as dt
 from datetime import datetime, time
 from pathlib import Path
@@ -25,19 +29,300 @@ from torch.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch.optim import AdamW
 
+from numba import njit
 from tqdm.auto import tqdm
 
 
 #########################################################################################################
 
 
+# def build_tensors(
+#     df: pd.DataFrame,
+#     *,
+#     look_back:  int                   = params.look_back_tick,
+#     tmpdir:     str                   = None,
+#     device:     torch.device          = torch.device("cpu"),
+#     sess_start: time                  = None
+# ) -> tuple[
+#     torch.Tensor,  # X         shape=(N, look_back, F)
+#     torch.Tensor,  # y_sig     shape=(N,)
+#     torch.Tensor,  # y_ret     shape=(N,)
+#     torch.Tensor,  # raw_close shape=(N,)
+#     np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
+# ]:
+#     """
+#     Build sliding‐window tensors for an LSTM trading model from full‐day data.
+
+#     1) Select all columns except {label_col, 'close_raw'} as features.
+#     2) Group by calendar day and count windows ending ≥ sess_start.
+#     3) Allocate on‐disk memmaps for inputs, targets, raw close, and timestamps.
+#     4) For each day:
+#        a) extract feature array and label signal;
+#        b) compute log‐returns on raw close price;
+#        c) build sliding windows of features;
+#        d) align next‐bar labels, raw close points, and times;
+#        e) mask windows before sess_start and write to memmaps.
+#     5) Wrap memmaps as torch tensors, free CPU memory, return tensors + end_times.
+#     """
+#     # copy to avoid mutating user’s DataFrame
+#     df = df.copy()
+    
+#     # 1) derive feature columns
+#     exclude = {params.label_col, "close_raw"}
+#     features_cols = [c for c in df.columns if c not in exclude]
+#     print("Inside build_tensors, features:", features_cols)
+#     F = len(features_cols)
+    
+#     # group by calendar day
+#     day_groups = df.groupby(df.index.normalize(), sort=False)
+    
+#     # 2) count valid windows
+#     N = 0
+#     for _, day_df in tqdm(day_groups, desc="Counting windows", leave=False):
+#         T = len(day_df)
+#         if T <= look_back:
+#             continue
+#         ends = day_df.index[look_back:]
+#         mask = np.array([ts.time() >= sess_start for ts in ends])
+#         N += int(mask.sum())
+    
+#     # 3) allocate memmaps
+#     if tmpdir is None:
+#         tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
+#     else:
+#         os.makedirs(tmpdir, exist_ok=True)
+    
+#     X_mm = np.lib.format.open_memmap(
+#         os.path.join(tmpdir, "X.npy"), mode="w+",
+#         dtype=np.float32, shape=(N, look_back, F)
+#     )
+#     y_mm = np.lib.format.open_memmap(
+#         os.path.join(tmpdir, "y_sig.npy"), mode="w+",
+#         dtype=np.float32, shape=(N,)
+#     )
+#     r_mm = np.lib.format.open_memmap(
+#         os.path.join(tmpdir, "y_ret.npy"), mode="w+",
+#         dtype=np.float32, shape=(N,)
+#     )
+#     c_mm = np.lib.format.open_memmap(
+#         os.path.join(tmpdir, "close.npy"), mode="w+",
+#         dtype=np.float32, shape=(N,)
+#     )
+#     t_mm = np.lib.format.open_memmap(
+#         os.path.join(tmpdir, "t.npy"), mode="w+",
+#         dtype="datetime64[ns]", shape=(N,)
+#     )
+    
+#     # 4) fill memmaps
+#     idx = 0
+#     for _, day_df in tqdm(day_groups, desc="Writing memmaps", leave=False):
+#         day_df = day_df.sort_index()
+#         T = len(day_df)
+#         if T <= look_back:
+#             continue
+    
+#         # a) features and signal
+#         feats_np = day_df[features_cols].to_numpy(np.float32)
+#         sig_np   = day_df[params.label_col].to_numpy(np.float32)
+    
+#         # b) raw close and log‐returns
+#         close_np = day_df["close_raw"].to_numpy(np.float32)
+#         ret_full = np.zeros_like(close_np, dtype=np.float32)
+#         ret_full[1:] = np.log(close_np[1:] / close_np[:-1])
+    
+#         # c) sliding windows of features
+#         wins = np.lib.stride_tricks.sliding_window_view(
+#             feats_np, window_shape=(look_back, F)
+#         ).reshape(T - look_back + 1, look_back, F)
+#         wins = wins[:-1]  # drop last to align next‐bar labels
+    
+#         # d) align labels and raw close
+#         lab_sig = sig_np[look_back:]
+#         lab_ret = ret_full[look_back:]
+#         c_pts   = close_np[look_back:]
+#         times   = day_df.index.to_numpy()[look_back:]
+    
+#         # e) mask by session start
+#         mask = np.array([pd.Timestamp(ts).time() >= sess_start for ts in times])
+#         if not mask.any():
+#             continue
+    
+#         m = mask.sum()
+#         X_mm[idx:idx+m] = wins[mask]
+#         y_mm[idx:idx+m] = lab_sig[mask]
+#         r_mm[idx:idx+m] = lab_ret[mask]
+#         c_mm[idx:idx+m] = c_pts[mask]
+#         t_mm[idx:idx+m] = times[mask]
+#         idx += m
+    
+#     # 5) wrap as torch tensors
+#     X         = torch.from_numpy(X_mm).to(device, non_blocking=True)
+#     y_sig     = torch.from_numpy(y_mm).to(device, non_blocking=True)
+#     y_ret     = torch.from_numpy(r_mm).to(device, non_blocking=True)
+#     raw_close = torch.from_numpy(c_mm).to(device, non_blocking=True)
+#     end_times = t_mm.copy()  # numpy datetime64 array
+    
+#     # cleanup
+#     gc.collect()
+#     if device.type == "cuda":
+#         torch.cuda.empty_cache()
+    
+#     return X, y_sig, y_ret, raw_close, end_times
+
+
+
+
+
+
+
+
+# def build_tensors(
+#     df: pd.DataFrame,
+#     *,
+#     look_back:  int                   = params.look_back_tick,
+#     tmpdir:     str                   = None,
+#     device:     torch.device          = torch.device("cpu"),
+#     sess_start: time                  = None
+# ) -> tuple[
+#     torch.Tensor,  # X         shape=(N, look_back, F)
+#     torch.Tensor,  # y_sig     shape=(N,)
+#     torch.Tensor,  # y_ret     shape=(N,)
+#     torch.Tensor,  # raw_close shape=(N,)
+#     np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
+# ]:
+#     """
+#     Build sliding‐window tensors for an LSTM trading model.
+
+#     1) Copy the DataFrame & select feature columns.
+#     2) First pass: for each calendar day
+#        a) extract NumPy arrays (features, label, raw_close);
+#        b) compute log‐returns;
+#        c) compute end‐of‐window timestamps + boolean mask ≥ sess_start;
+#        d) count valid windows, accumulate N, and store:
+#           (feats_np, lab_sig, lab_ret, c_pts, ends_np, mask, write_offset).
+#     3) Alloc memmaps of shape N for X, y_sig, y_ret, raw_close, end_times.
+#     4) Second pass (parallel): for each payload
+#        a) build sliding windows via NumPy stride_tricks,
+#        b) write masked slices into memmaps,
+#        c) tick one per‐day tqdm.
+#     5) Wrap memmaps as PyTorch tensors, cleanup, return.
+#     """
+#     # 1) Prep
+#     df = df.copy()
+#     exclude      = {params.label_col, "close_raw"}
+#     feature_cols = [c for c in df.columns if c not in exclude]
+#     print("Inside build_tensors, features:", feature_cols)
+#     F = len(feature_cols)
+
+#     sess_time = sess_start.time() if hasattr(sess_start, "time") else sess_start
+
+#     # 2) First pass → build a list of purely NumPy payloads + count N
+#     day_groups = df.groupby(df.index.normalize(), sort=False)
+#     payloads = []
+#     N = 0
+
+#     for _, day_df in tqdm(day_groups, desc="Preparing days", leave=False):
+#         day_df = day_df.sort_index()
+#         T = len(day_df)
+#         if T <= look_back:
+#             continue
+
+#         # a) NumPy arrays
+#         feats_np = day_df[feature_cols].to_numpy(np.float32)      # (T, F)
+#         sig_np   = day_df[params.label_col].to_numpy(np.float32) # (T,)
+#         close_np = day_df["close_raw"].to_numpy(np.float32)      # (T,)
+
+#         # b) log‐returns
+#         ret_full       = np.empty_like(close_np, np.float32)
+#         ret_full[0]    = 0.0
+#         ret_full[1:]   = np.log(close_np[1:] / close_np[:-1])
+
+#         # c) end‐times + mask
+#         ends_np = day_df.index.to_numpy()[look_back:]            # (T-look_back,)
+#         times = ends_np.astype("datetime64[ns]").astype("datetime64[s]")
+#         secs  = (times - times.astype("datetime64[D]")) \
+#                  / np.timedelta64(1, "s")
+#         mask  = secs >= (sess_time.hour*3600 + sess_time.minute*60)
+
+#         m = int(mask.sum())
+#         if m == 0:
+#             continue
+
+#         # slice per‐window arrays once
+#         lab_sig = sig_np[look_back:]    # (T-look_back,)
+#         lab_ret = ret_full[look_back:]
+#         c_pts   = close_np[look_back:]
+
+#         # record payload + offset
+#         payloads.append((feats_np, lab_sig, lab_ret, c_pts, ends_np, mask, N))
+#         N += m
+
+#     # 3) Allocate memmaps
+#     if tmpdir is None:
+#         tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
+#     else:
+#         os.makedirs(tmpdir, exist_ok=True)
+
+#     def _memmap(name, shape, dtype):
+#         return np.lib.format.open_memmap(
+#             os.path.join(tmpdir, name), mode="w+", dtype=dtype, shape=shape
+#         )
+
+#     X_mm = _memmap("X.npy",     (N, look_back, F), np.float32)
+#     y_mm = _memmap("y_sig.npy", (N,),             np.float32)
+#     r_mm = _memmap("y_ret.npy", (N,),             np.float32)
+#     c_mm = _memmap("close.npy", (N,),             np.float32)
+#     t_mm = _memmap("t.npy",     (N,),     "datetime64[ns]")
+
+#     # 4) Second pass (parallel) – pure NumPy in threads
+#     pbar = tqdm(total=len(payloads), desc="Writing days")
+
+#     def _write(payload):
+#         feats_np, lab_sig, lab_ret, c_pts, ends_np, mask, offset = payload
+
+#         # sliding‐window view + drop last bar
+#         wins = np.lib.stride_tricks.sliding_window_view(
+#                    feats_np, window_shape=(look_back, F)
+#                ).reshape(feats_np.shape[0]-look_back+1, look_back, F)[:-1]
+
+#         # write masked slices
+#         m = mask.sum()
+#         X_mm[offset:offset+m] = wins[mask]
+#         y_mm[offset:offset+m] = lab_sig[mask]
+#         r_mm[offset:offset+m] = lab_ret[mask]
+#         c_mm[offset:offset+m] = c_pts[mask]
+#         t_mm[offset:offset+m] = ends_np[mask]
+
+#         pbar.update(1)
+
+#     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as exe:
+#         exe.map(_write, payloads)
+#     pbar.close()
+
+#     # 5) Wrap & cleanup
+#     X         = torch.from_numpy(X_mm).to(device, non_blocking=True)
+#     y_sig     = torch.from_numpy(y_mm).to(device, non_blocking=True)
+#     y_ret     = torch.from_numpy(r_mm).to(device, non_blocking=True)
+#     raw_close = torch.from_numpy(c_mm).to(device, non_blocking=True)
+#     end_times = t_mm.copy()
+
+#     gc.collect()
+#     if device.type == "cuda":
+#         torch.cuda.empty_cache()
+
+#     return X, y_sig, y_ret, raw_close, end_times
+
+
+
+
 def build_tensors(
     df: pd.DataFrame,
     *,
-    look_back:  int                   = params.look_back_tick,
-    tmpdir:     str                   = None,
-    device:     torch.device          = torch.device("cpu"),
-    sess_start: time                  = None
+    look_back:   int                  = params.look_back_tick,
+    tmpdir:      str                  = None,
+    device:      torch.device         = torch.device("cpu"),
+    sess_start = None,
+    in_memory:   bool                 = True
 ) -> tuple[
     torch.Tensor,  # X         shape=(N, look_back, F)
     torch.Tensor,  # y_sig     shape=(N,)
@@ -46,125 +331,152 @@ def build_tensors(
     np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
 ]:
     """
-    Build sliding‐window tensors for an LSTM trading model from full‐day data.
+    Build sliding‐window tensors for an LSTM trading model.
 
-    1) Select all columns except {label_col, 'close_raw'} as features.
-    2) Group by calendar day and count windows ending ≥ sess_start.
-    3) Allocate on‐disk memmaps for inputs, targets, raw close, and timestamps.
-    4) For each day:
-       a) extract feature array and label signal;
-       b) compute log‐returns on raw close price;
-       c) build sliding windows of features;
-       d) align next‐bar labels, raw close points, and times;
-       e) mask windows before sess_start and write to memmaps.
-    5) Wrap memmaps as torch tensors, free CPU memory, return tensors + end_times.
+    1) Copy DataFrame; select feature columns.
+    2) First pass per calendar day:
+       a) extract NumPy arrays (features, signal, raw_close);
+       b) compute log‐returns;
+       c) compute window‐end timestamps and boolean mask ≥ sess_start;
+       d) count valid windows, accumulate N, and store:
+          (feats_np, sig_end, ret_end, close_end, ends_np, mask, offset).
+    3) Allocate either in‐RAM numpy arrays or on‐disk memmaps of shape N:
+       X (N, look_back, F), y_sig, y_ret, raw_close, end_times.
+       On MemoryError, automatically fall back to memmaps.
+    4) Second pass (parallel, one job per stored day):
+       a) build sliding windows via numpy stride_tricks,
+       b) write masked slices into the shared buffers,
+       c) tick one per‐day tqdm bar.
+    5) If using memmaps, flush + os.sync() to ensure durability.
+    6) Wrap buffers as PyTorch tensors; cleanup; return.
     """
-    # copy to avoid mutating user’s DataFrame
+    # 1) Prepare DataFrame & feature list
     df = df.copy()
-    
-    # 1) derive feature columns
-    exclude = {params.label_col, "close_raw"}
-    features_cols = [c for c in df.columns if c not in exclude]
-    print("Inside build_tensors, features:", features_cols)
-    F = len(features_cols)
-    
-    # group by calendar day
+    exclude      = {params.label_col, "close_raw"}
+    feature_cols = [c for c in df.columns if c not in exclude]
+    print("Inside build_tensors, features:", feature_cols)
+    F = len(feature_cols)
+
+    # normalize sess_start to Python time
+    sess_time = sess_start.time() if hasattr(sess_start, "time") else sess_start
+    cutoff_sec = sess_time.hour * 3600 + sess_time.minute * 60
+
+    # 2) First pass: build payloads of pure NumPy + count N
     day_groups = df.groupby(df.index.normalize(), sort=False)
-    
-    # 2) count valid windows
-    N = 0
-    for _, day_df in tqdm(day_groups, desc="Counting windows", leave=False):
-        T = len(day_df)
-        if T <= look_back:
-            continue
-        ends = day_df.index[look_back:]
-        mask = np.array([ts.time() >= sess_start for ts in ends])
-        N += int(mask.sum())
-    
-    # 3) allocate memmaps
-    if tmpdir is None:
-        tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
-    else:
-        os.makedirs(tmpdir, exist_ok=True)
-    
-    X_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "X.npy"), mode="w+",
-        dtype=np.float32, shape=(N, look_back, F)
-    )
-    y_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "y_sig.npy"), mode="w+",
-        dtype=np.float32, shape=(N,)
-    )
-    r_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "y_ret.npy"), mode="w+",
-        dtype=np.float32, shape=(N,)
-    )
-    c_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "close.npy"), mode="w+",
-        dtype=np.float32, shape=(N,)
-    )
-    t_mm = np.lib.format.open_memmap(
-        os.path.join(tmpdir, "t.npy"), mode="w+",
-        dtype="datetime64[ns]", shape=(N,)
-    )
-    
-    # 4) fill memmaps
-    idx = 0
-    for _, day_df in tqdm(day_groups, desc="Writing memmaps", leave=False):
+    payloads   = []
+    N_total    = 0
+
+    for _, day_df in tqdm(day_groups, desc="Preparing days", leave=False):
         day_df = day_df.sort_index()
         T = len(day_df)
         if T <= look_back:
             continue
-    
-        # a) features and signal
-        feats_np = day_df[features_cols].to_numpy(np.float32)
-        sig_np   = day_df[params.label_col].to_numpy(np.float32)
-    
-        # b) raw close and log‐returns
-        close_np = day_df["close_raw"].to_numpy(np.float32)
-        ret_full = np.zeros_like(close_np, dtype=np.float32)
-        ret_full[1:] = np.log(close_np[1:] / close_np[:-1])
-    
-        # c) sliding windows of features
-        wins = np.lib.stride_tricks.sliding_window_view(
-            feats_np, window_shape=(look_back, F)
-        ).reshape(T - look_back + 1, look_back, F)
-        wins = wins[:-1]  # drop last to align next‐bar labels
-    
-        # d) align labels and raw close
-        lab_sig = sig_np[look_back:]
-        lab_ret = ret_full[look_back:]
-        c_pts   = close_np[look_back:]
-        times   = day_df.index.to_numpy()[look_back:]
-    
-        # e) mask by session start
-        mask = np.array([pd.Timestamp(ts).time() >= sess_start for ts in times])
-        if not mask.any():
+
+        # a) extract arrays
+        feats_np = day_df[feature_cols].to_numpy(np.float32)       # (T, F)
+        sig_np   = day_df[params.label_col].to_numpy(np.float32)  # (T,)
+        close_np = day_df["close_raw"].to_numpy(np.float32)       # (T,)
+
+        # b) compute log‐returns
+        ret_full       = np.empty_like(close_np, np.float32)
+        ret_full[0]    = 0.0
+        ret_full[1:]   = np.log(close_np[1:] / close_np[:-1])
+
+        # c) window‐end times & mask
+        ends_np = day_df.index.to_numpy()[look_back:]                      # (T-look_back,)
+        secs    = (ends_np - ends_np.astype("datetime64[D]")) \
+                    / np.timedelta64(1, "s")
+        mask    = secs >= cutoff_sec                                       # (T-look_back,)
+
+        m = int(mask.sum())
+        if m == 0:
             continue
-    
+
+        # slice next‐bar arrays once
+        sig_end   = sig_np[look_back:]     # (T-look_back,)
+        ret_end   = ret_full[look_back:]
+        close_end = close_np[look_back:]
+
+        payloads.append((feats_np, sig_end, ret_end, close_end, ends_np, mask, N_total))
+        N_total += m
+
+    # 3) Allocate buffers: in RAM or memmap
+    use_memmap = not in_memory
+    X_buf = y_buf = r_buf = c_buf = t_buf = None
+
+    if not use_memmap:
+        try:
+            X_buf = np.empty((N_total, look_back, F),   np.float32)
+            y_buf = np.empty((N_total,),                np.float32)
+            r_buf = np.empty((N_total,),                np.float32)
+            c_buf = np.empty((N_total,),                np.float32)
+            t_buf = np.empty((N_total,),      "datetime64[ns]")
+        except MemoryError:
+            print("Buffer allocation OOM, falling back to memmaps")
+            use_memmap = True
+
+    if use_memmap:
+        if tmpdir is None:
+            tmpdir = tempfile.mkdtemp(prefix="lstm_memmap_")
+        else:
+            os.makedirs(tmpdir, exist_ok=True)
+
+        def _open_memmap(name, shape, dtype):
+            return np.lib.format.open_memmap(
+                os.path.join(tmpdir, name),
+                mode="w+", dtype=dtype, shape=shape
+            )
+
+        X_buf = _open_memmap("X.npy",      (N_total, look_back, F), np.float32)
+        y_buf = _open_memmap("y_sig.npy",  (N_total,),             np.float32)
+        r_buf = _open_memmap("y_ret.npy",  (N_total,),             np.float32)
+        c_buf = _open_memmap("close.npy",  (N_total,),             np.float32)
+        t_buf = _open_memmap("t.npy",      (N_total,),     "datetime64[ns]")
+
+    # 4) Second pass: fill buffers in parallel
+    pbar = tqdm(total=len(payloads), desc="Writing days")
+
+    def _write_np(payload):
+        feats_np, sig_end, ret_end, close_end, ends_np, mask, offset = payload
+
+        # sliding windows + drop last
+        wins = np.lib.stride_tricks.sliding_window_view(
+                   feats_np, window_shape=(look_back, F)
+               ).reshape(feats_np.shape[0] - look_back + 1, look_back, F)[:-1]
+
         m = mask.sum()
-        X_mm[idx:idx+m] = wins[mask]
-        y_mm[idx:idx+m] = lab_sig[mask]
-        r_mm[idx:idx+m] = lab_ret[mask]
-        c_mm[idx:idx+m] = c_pts[mask]
-        t_mm[idx:idx+m] = times[mask]
-        idx += m
-    
-    # 5) wrap as torch tensors
-    X         = torch.from_numpy(X_mm).to(device, non_blocking=True)
-    y_sig     = torch.from_numpy(y_mm).to(device, non_blocking=True)
-    y_ret     = torch.from_numpy(r_mm).to(device, non_blocking=True)
-    raw_close = torch.from_numpy(c_mm).to(device, non_blocking=True)
-    end_times = t_mm.copy()  # numpy datetime64 array
-    
-    # cleanup
+        X_buf[offset:offset+m] = wins[mask]
+        y_buf[offset:offset+m] = sig_end[mask]
+        r_buf[offset:offset+m] = ret_end[mask]
+        c_buf[offset:offset+m] = close_end[mask]
+        t_buf[offset:offset+m] = ends_np[mask]
+
+        pbar.update(1)
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as exe:
+        exe.map(_write_np, payloads)
+    pbar.close()
+
+    # 5) Flush memmaps if used
+    if use_memmap:
+        for arr in (X_buf, y_buf, r_buf, c_buf, t_buf):
+            arr.flush()
+        os.sync()
+
+    # 6) Wrap as PyTorch tensors
+    X         = torch.from_numpy(X_buf).to(device, non_blocking=True)
+    y_sig     = torch.from_numpy(y_buf).to(device, non_blocking=True)
+    y_ret     = torch.from_numpy(r_buf).to(device, non_blocking=True)
+    raw_close = torch.from_numpy(c_buf).to(device, non_blocking=True)
+    end_times = t_buf.copy()
+
+    # 7) Cleanup
     gc.collect()
     if device.type == "cuda":
         torch.cuda.empty_cache()
-    
+
     return X, y_sig, y_ret, raw_close, end_times
 
-    
 #########################################################################################################
 
 

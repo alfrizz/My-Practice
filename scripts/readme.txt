@@ -1,4 +1,4 @@
-This repository contains scripts and configuration files to build, run, and synchronize a Dockerized Jupyter Lab environment on WSL2 with GPU support and Unison-backed workspace syncing.
+This repository contains scripts and configuration files to build, run, and synchronize a Dockerized Jupyter Lab environment on WSL2 with GPU support and Unison-backed workspace syncing:
 
 -----------------------------------------------
 
@@ -21,7 +21,7 @@ docker-compose.yml	Orchestrates the gpu-jl Jupyter service: builds from Dockerfi
 requirements.txt	Pinned Python dependencies for reproducible builds: Jupyter Lab, torchmetrics, pandas, plotly, Optuna, and more.
 
 shrink-wsl.ps1          WSL maintenance: prunes old `/tmp` files and Jupyter checkpoints, runs fstrim, compacts Ubuntu `ext4.vhdx`and logs each step along with C: free-space and VHDX size 
-                        Manually execute on an elevated Powershell, run: PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts\shrink-wsl.ps1"
+                        Manually execute on elevated Powershell, run:=> PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts\shrink-wsl.ps1"
 shrink-wsl.log          Timestamped record of every action, disk-free and VHDX-size before/after maintenance, and compaction output.  
 
 sync-practice.sh	Bash script run at WSL boot: waits for G: drive, then runs Unison in batch mode to sync /home/alfrizz/my_practice ↔ G: folder.
@@ -59,6 +59,9 @@ mountFsTab    = true
 
 [boot]
 command = su - alfrizz -c "/home/alfrizz/my_practice/scripts/sync-practice.sh >> /home/alfrizz/my_practice/scripts/sync-practice.log 2>&1 &"
+
+[user]
+default = alfrizz
 
 
 -----------------------------------------------

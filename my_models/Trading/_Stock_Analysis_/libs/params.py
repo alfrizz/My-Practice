@@ -17,12 +17,12 @@ import json
 
 ticker = 'AAPL'
 label_col  = "signal" 
-
 month_to_check = '2023-10'
-createCSVsign = False
 
+createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidasktoclose_pct = 0.05 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one
+sel_val_rmse = 0.24397  # set to None to pick best automatically
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -140,11 +140,11 @@ hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           64,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
     "LONG_UNITS":            96,    # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.15,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.15,  # moderate dropout after weekly LSTM; balances overfitting and information retention
+    "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_LONG":          0.30,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             4,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.15,  # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          5e-4,  # L2 penalty on all weights; prevents extreme magnitudes
+    "ATT_DROPOUT":           0.20,  # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,    # number of sequences per training batch
@@ -163,7 +163,6 @@ hparams = {
     "T_0":                   100,   # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
-    # ───────────────NOT USED──────────────── #
     # —— Active Loss Hyperparameters —— 
     "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 (Huber) loss; range: 0.01–1.0: lower→more like MAE (heavier spike penalty), higher→more like MSE (tolerate spikes)
     "CLS_LOSS_WEIGHT":       0.05,  # α weight for the binary BCE loss head; range: 0.1–10.0: lower→less emphasis on threshold-crossing signal, higher→stronger spike detection
