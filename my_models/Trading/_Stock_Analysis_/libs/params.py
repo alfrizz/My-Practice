@@ -22,7 +22,7 @@ month_to_check = '2023-10'
 createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidasktoclose_pct = 0.05 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one
-sel_val_rmse = 0.24397  # set to None to pick best automatically
+sel_val_rmse = 0.24825  # set to None to pick best automatically
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -138,11 +138,11 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           64,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
-    "LONG_UNITS":            96,    # hidden size of weekly LSTM; large context window for long-term trends
+    "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
+    "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
     "DROPOUT_SHORT":         0.25,  # light dropout after daily LSTM+attention; preserves spike information
     "DROPOUT_LONG":          0.30,  # moderate dropout after weekly LSTM; balances overfitting and information retention
-    "ATT_HEADS":             4,     # number of multi-head attention heads; more heads capture diverse interactions
+    "ATT_HEADS":             6,     # number of multi-head attention heads; more heads capture diverse interactions
     "ATT_DROPOUT":           0.20,  # dropout inside attention layers; regularizes attention maps
     "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
 
