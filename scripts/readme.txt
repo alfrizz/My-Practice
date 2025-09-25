@@ -32,13 +32,13 @@ C:\Users\alfri\.wslconfig
 -----------------------------------------------
 [wsl2]
 # Maximum RAM WSL2 can consume (leave the rest GB for Windows)
-memory=26GB
+memory=56GB
 
 # Number of virtual processors (leave at least 4 for host OS)
-processors=16
+processors=20
 
 # Swap settings – large enough to avoid OOM, small enough to not thrash
-swap=24GB
+swap=16GB
 
 # Place the swap file alongside your user profile for fast NVMe access
 swapFile=C:\\Users\\alfri\\AppData\\Local\\Docker\\wsl\\swap\\wsl2_swap.vhdx

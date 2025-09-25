@@ -145,12 +145,14 @@ hparams = {
     "ATT_HEADS":             6,     # number of multi-head attention heads; more heads capture diverse interactions
     "ATT_DROPOUT":           0.20,  # dropout inside attention layers; regularizes attention maps
     "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
+    "CONV_K":                3,
+    "CONV_DILATION":         1,
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,    # number of sequences per training batch
     "VAL_BATCH":             1,     # number of sequences per validation batch
-    "NUM_WORKERS":           4,     # DataLoader CPU workers
-    "TRAIN_PREFETCH_FACTOR": 2,     # prefetch factor for DataLoader
+    "NUM_WORKERS":           12,     # DataLoader CPU workers
+    "TRAIN_PREFETCH_FACTOR": 4,     # prefetch factor for DataLoader
 
     "MAX_EPOCHS":            100,   # maximum number of epochs
     "EARLY_STOP_PATIENCE":   7,     # epochs with no val–RMSE improvement before stopping
