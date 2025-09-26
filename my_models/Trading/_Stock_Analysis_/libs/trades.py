@@ -73,6 +73,8 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
     return df_adj, split_events
 
 
+##################
+
 
 def process_splits(folder, ticker, bidasktoclose_pct):
     """
@@ -108,12 +110,10 @@ def process_splits(folder, ticker, bidasktoclose_pct):
     # Read the intraday CSV, using the 'datetime' column for dates.
     df = pd.read_csv(intraday_csv, index_col=0, parse_dates=["datetime"])
     df = df[['open', 'high', 'low', 'close', 'volume']]
-
-    bidasktoclose_spread = bidasktoclose_pct / 100
     
     # Create 'ask' and 'bid' columns using the given spread 
-    df['ask'] = round(df['close'] * (1 + bidasktoclose_spread), 4)
-    df['bid'] = round(df['close'] * (1 - bidasktoclose_spread), 4)
+    df['ask'] = round(df['close'] * (1 + params.bidask_spread_pct/100), 4)
+    df['bid'] = round(df['close'] * (1 - params.bidask_spread_pct/100), 4)
     
     # Plot the original data.
     print("Plotting original data...")

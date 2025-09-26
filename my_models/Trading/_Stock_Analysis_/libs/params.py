@@ -11,17 +11,19 @@ import os
 import glob
 import json
 
+from libs.models import dual_lstm, dual_lstm_smooth
 
 #########################################################################################################
-
 
 ticker = 'AAPL'
 label_col  = "signal" 
 month_to_check = '2023-10'
+model_selected = dual_lstm_smooth
 
+createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidasktoclose_pct = 0.05 # percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes): 0.1% is a conservative one
+bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 sel_val_rmse = 0.24825  # set to None to pick best automatically
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -166,8 +168,11 @@ hparams = {
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
     # —— Active Loss Hyperparameters —— 
-    "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 (Huber) loss; range: 0.01–1.0: lower→more like MAE (heavier spike penalty), higher→more like MSE (tolerate spikes)
-    "CLS_LOSS_WEIGHT":       0.05,  # α weight for the binary BCE loss head; range: 0.1–10.0: lower→less emphasis on threshold-crossing signal, higher→stronger spike detection
+    "SMOOTH_ALPHA":          0.99,  # EWMA decay rate; higher→more weight on latest, lower→longer history
+    "SMOOTH_BETA":           10.0,  # smoothing weight; higher→stronger drop resistance, lower→more bleed
+    "SMOOTH_DELTA":          0.02,  # Huber δ for smoothing; lower→small drops squared, higher→tolerated as linear
+    "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 loss; lower→more like MAE, higher→more like MSE
+    "CLS_LOSS_WEIGHT":       0.05,  # weight for binary-BCE head; lower→less spike emphasis, higher→more
     
     # ── ReduceLROnPlateau Scheduler ───
     "PLATEAU_FACTOR":        0.9,   # multiply LR by this factor on plateau

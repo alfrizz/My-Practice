@@ -376,8 +376,8 @@ class DayWindowDataset(Dataset):
 
         return x_day, y_day, y_sig_cls, ret_day, y_ret_ter, wd, end_ts
 
-        
-#########################################################################################################
+    
+###############
 
 
 def pad_collate(batch):
@@ -430,7 +430,7 @@ def pad_collate(batch):
     return x_pad, y_pad, ysig_pad, ret_pad, yter_pad, wd_tensor, list(ts_list), lengths
 
     
-###################
+###############
 
 
 def split_to_day_datasets(
