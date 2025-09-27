@@ -18,13 +18,14 @@ from libs.models import dual_lstm, dual_lstm_smooth
 ticker = 'AAPL'
 label_col  = "signal" 
 month_to_check = '2023-10'
-model_selected = dual_lstm_smooth
 
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
-sel_val_rmse = 0.24825  # set to None to pick best automatically
+
+model_selected = dual_lstm_smooth
+sel_val_rmse = 0.25074  # set to None to pick best automatically
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -126,8 +127,8 @@ def signal_parameters(ticker):
                          'eng_adx',
                          'hour',
                          'adx_14']
-        trailing_stop_pred = 0.1
-        pred_threshold = 0.3
+        trailing_stop_pred = 0.035
+        pred_threshold = 0.35
         
     return look_back, sess_start_pred, sess_start_shift, features_cols, smooth_sign_win, trailing_stop_pred, pred_threshold
 

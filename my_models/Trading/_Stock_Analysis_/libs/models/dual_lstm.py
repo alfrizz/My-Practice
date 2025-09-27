@@ -34,7 +34,7 @@ torch.backends.cudnn.benchmark          = True
 #########################################################################################################
 
 
-class DualMemoryLSTM(nn.Module):
+class ModelClass(nn.Module):
     """
     Dual-Memory LSTM for smoothed continuous‐signal regression + binary‐flag prediction.
 
@@ -209,7 +209,7 @@ class DualMemoryLSTM(nn.Module):
 #########################################################################################################
 
 
-def lstm_training_loop(
+def model_training_loop(
     model:         torch.nn.Module,
     optimizer:     torch.optim.Optimizer,
     cosine_sched:  torch.optim.lr_scheduler.CosineAnnealingWarmRestarts,

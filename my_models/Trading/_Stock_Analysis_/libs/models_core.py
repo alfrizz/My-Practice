@@ -549,3 +549,73 @@ def make_optimizer_and_scheduler(
     return optimizer, plateau_sched, cosine_sched, scaler, clipnorm
 
 
+#########################################################################################################
+
+
+def maybe_save_chkpt(models_dir: Path, model: torch.nn.Module, vl_rmse: float,
+                     cur_best: float, tr: dict, vl: dict, live_plot, params):
+    """
+    If vl_rmse improves cur_best, capture the model state and live_plot.
+    Additionally write a folder-best checkpoint (_chp) if this rmse is better than files on disk.
+    Returns (updated_best, best_state, best_tr, best_vl, best_existing).
+    """
+    # expects filenames like TICKER_0.12345_chp.pth or TICKER_0.12345_fin.pth
+    save_pat = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth")
+
+    models_dir.mkdir(exist_ok=True)
+    existing_rmses = [
+        float(m.group(1))
+        for f in models_dir.glob("*.pth")
+        if (m := save_pat.match(f.name))
+    ]
+    best_existing = min(existing_rmses, default=float("inf"))
+
+    if vl_rmse < cur_best:
+        best_state = model.state_dict()
+        best_tr, best_vl = tr.copy(), vl.copy()
+        updated_best = vl_rmse
+
+        # capture live plot bytes
+        buf = io.BytesIO()
+        live_plot.fig.savefig(buf, format="png")
+        buf.seek(0)
+        plot_bytes = buf.read()
+
+        # save folder-best iff strictly better than existing on disk
+        if updated_best < best_existing:
+            name = f"{params.ticker}_{updated_best:.5f}_chp.pth"
+            ckpt = {
+                "model_state_dict": best_state,
+                "hparams": params.hparams,
+                "train_metrics": best_tr,
+                "val_metrics": best_vl,
+                "train_plot_png": plot_bytes,
+            }
+            torch.save(ckpt, models_dir / name)
+            print(f"🔖 Saved folder-best checkpoint (_chp): {name}")
+            best_existing = updated_best
+
+        return updated_best, best_state, best_tr, best_vl, best_existing
+
+    return cur_best, None, {}, {}, best_existing
+
+################ 
+
+def save_final_chkpt(models_dir: Path, best_state, best_val_rmse: float,
+                     params, best_tr: dict, best_vl: dict, live_plot, suffix: str = "_fin"):
+    """Write the final best checkpoint (_fin) using best_state and embed the final plot."""
+    buf = io.BytesIO()
+    live_plot.fig.savefig(buf, format="png")
+    buf.seek(0)
+    final_plot = buf.read()
+
+    ckpt = {
+        "model_state_dict": best_state,
+        "hparams": params.hparams,
+        "train_metrics": best_tr,
+        "val_metrics": best_vl,
+        "train_plot_png": final_plot,
+    }
+    name = f"{params.ticker}_{best_val_rmse:.5f}{suffix}.pth"
+    torch.save(ckpt, Path(params.models_folder) / name)
+    print(f"✅ Final best model saved: {name}")
