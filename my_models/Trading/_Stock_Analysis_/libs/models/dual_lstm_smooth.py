@@ -674,15 +674,15 @@ def model_training_loop(
 
     # eval-only quick path
     if not is_train:
-        metrics = models_core.get_metrics(device)
+        metrics = get_metrics(device)
         metrics_out, preds = eval_on_loader(val_loader, model, device, metrics, collect_preds=True)
         return metrics_out, preds
 
     # ---------------- TRAIN MODE ----------------
     torch.backends.cudnn.benchmark = True
 
-    train_metrics = models_core.get_metrics(device)
-    val_metrics = models_core.get_metrics(device)
+    train_metrics = get_metrics(device)
+    val_metrics = get_metrics(device)
 
     best_val_rmse = float("inf")
     best_state = None
