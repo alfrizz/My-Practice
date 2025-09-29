@@ -1,4 +1,4 @@
-from libs import plots, params, models
+from libs import plots, params, models_core
 
 from typing import Sequence, List, Tuple, Optional, Union
 import gc 
@@ -209,336 +209,6 @@ class ModelClass(nn.Module):
 ######################################################################################################
 
 
-# def model_training_loop(
-#     model:         torch.nn.Module,
-#     optimizer:     torch.optim.Optimizer,
-#     cosine_sched:  torch.optim.lr_scheduler.CosineAnnealingWarmRestarts,
-#     plateau_sched: torch.optim.lr_scheduler.ReduceLROnPlateau,
-#     scaler:        GradScaler,
-#     train_loader:  torch.utils.data.DataLoader,
-#     val_loader:    torch.utils.data.DataLoader,
-#     *,
-#     max_epochs:          int,
-#     early_stop_patience: int,
-#     clipnorm:            float,
-#     device:              torch.device = torch.device("cpu"),
-# ) -> float:
-#     """
-#     Train a DualSmoothLSTM with:
-#       - Regression head (MSE) + binary and ternary classification heads
-#       - Exponential‐baseline smoothing applied to the *final* regression outputs
-#         via a one‐sided Huber penalty on downward slips
-#       - Mixed‐precision (amp) and LR scheduling (cosine warm restarts + plateau)
-
-#     Functionality:
-#       1. Device & model initialization
-#       2. Standard multi‐task losses (MSE + BCE)
-#       3. Exponential‐Baseline Tracking across windows:
-#            ewma_t = α·lr_t + (1−α)·ewma_{t−1}
-#       4. One‐Sided Huber penalty on downward slips: 
-#            slip = max(ewma_t − lr_t, 0)
-#       5. Metrics collection and checkpointing
-#     """
-#     # 1) Device & model setup
-#     model.to(device)
-#     torch.backends.cudnn.benchmark = True
-
-#     # 2) Losses & hyper‐weights
-#     mse_loss   = nn.MSELoss()
-#     bce_loss   = nn.BCEWithLogitsLoss()
-#     alpha_cls  = params.hparams["CLS_LOSS_WEIGHT"]
-
-#     # smoothing hyperparams from global hparams
-#     α       = params.hparams["SMOOTH_ALPHA"]   # e.g. = 1 - exp(-1/60)
-#     β       = params.hparams["SMOOTH_BETA"]    # smooth penalty weight
-#     δ       = params.hparams["SMOOTH_DELTA"]   # Huber threshold
-
-#     save_pat = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth")
-#     live_plot = plots.LiveRMSEPlot()
-
-#     # classification metrics
-#     thr         = 0.5
-#     train_rmse  = torchmetrics.MeanSquaredError(squared=False).to(device)
-#     train_mae   = torchmetrics.MeanAbsoluteError().to(device)
-#     train_r2    = torchmetrics.R2Score().to(device)
-#     train_acc   = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
-#     train_prec  = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
-#     train_rec   = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
-#     train_f1    = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
-#     train_auc   = torchmetrics.classification.BinaryAUROC().to(device)
-    
-#     val_rmse    = torchmetrics.MeanSquaredError(squared=False).to(device)
-#     val_mae     = torchmetrics.MeanAbsoluteError().to(device)
-#     val_r2      = torchmetrics.R2Score().to(device)
-#     val_acc     = torchmetrics.classification.BinaryAccuracy(threshold=thr).to(device)
-#     val_prec    = torchmetrics.classification.BinaryPrecision(threshold=thr).to(device)
-#     val_rec     = torchmetrics.classification.BinaryRecall(threshold=thr).to(device)
-#     val_f1      = torchmetrics.classification.BinaryF1Score(threshold=thr).to(device)
-#     val_auc     = torchmetrics.classification.BinaryAUROC().to(device)
-
-#     best_val_rmse = float("inf")
-#     patience_ctr  = 0
-
-#     # 3) Epoch loop
-#     for epoch in range(1, max_epochs + 1):
-#         gc.collect()
-#         model.train()
-#         model.h_short = model.h_long = None
-    
-#         # reset train metrics
-#         for m in (train_rmse, train_mae, train_r2,
-#                   train_acc, train_prec, train_rec,
-#                   train_f1, train_auc):
-#             m.reset()
-    
-#         pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
-#         for batch_idx, batch in enumerate(pbar):
-#             (xb_days, y_sig_days, y_sig_cls_days,
-#              ret_days, y_ret_ter_days,
-#              wd_days, ts_list, lengths) = batch
-    
-#             xb    = xb_days.to(device, non_blocking=True)
-#             y_sig = y_sig_days.to(device, non_blocking=True)
-#             y_cls = y_sig_cls_days.to(device, non_blocking=True)
-#             wd    = wd_days.to(device, non_blocking=True)
-    
-#             optimizer.zero_grad(set_to_none=True)
-#             prev_day = None
-#             ewma     = None   # start fresh baseline at beginning of each batch
-    
-#             # loop each window in the batch
-#             for di in range(xb.size(0)):
-#                 W      = lengths[di]
-#                 day_id = int(wd[di].item())
-    
-#                 x_seq   = xb[di, :W]
-#                 sig_seq = y_sig[di, :W]
-#                 cls_seq = y_cls[di, :W].view(-1)
-    
-#                 # reset hidden states per day & week 
-#                 model.reset_short()
-#                 if prev_day is not None and day_id < prev_day:
-#                     model.reset_long()
-#                     # NOTE: we no longer clear ewma here—
-#                     # the EWMA persists across weeks for continuous smoothing
-#                 prev_day = day_id
-    
-#                 pr, pc, _ = model(x_seq)
-    
-#                 with autocast(device_type=device.type):
-#                     lr_logits  = pr[..., -1, 0]   # shape = (W,)
-#                     cls_logits = pc[..., -1, 0]   # shape = (W,)
-#                     lr         = torch.sigmoid(lr_logits)
-            
-#                     # build matching target vectors
-#                     targ_r = sig_seq              # shape = (W,)
-#                     targ_c = cls_seq              # shape = (W,)
-            
-#                     # 1) base loss over all windows
-#                     loss_reg = mse_loss(lr,      targ_r)
-#                     loss_cls = bce_loss(cls_logits, targ_c)
-#                     loss     = loss_reg + alpha_cls * loss_cls
-            
-#                     # 2) EWMA smoothing penalty (unchanged)
-#                     if ewma is None:
-#                         ewma = lr.detach()
-#                     else:
-#                         ewma = α * lr.detach() + (1 - α) * ewma
-            
-#                     slip = torch.relu(ewma - lr)
-#                     hub  = torch.where(
-#                         slip <= δ,
-#                         0.5 * slip**2,
-#                         δ * (slip - 0.5 * δ)
-#                     )
-#                     loss += β * hub.mean()
-            
-#                 scaler.scale(loss).backward()
-            
-#                 # — UPDATE TRAIN METRICS WITH VECTORS INSTEAD OF SCALARS —
-#                 train_rmse.update(lr,      targ_r)
-#                 train_mae .update(lr,      targ_r)
-#                 train_r2  .update(lr,      targ_r)
-            
-#                 probs = torch.sigmoid(cls_logits)
-#                 train_acc .update(probs, targ_c)
-#                 train_prec.update(probs, targ_c)
-#                 train_rec .update(probs, targ_c)
-#                 train_f1  .update(probs, targ_c)
-#                 train_auc .update(probs, targ_c)
-
-
-#                 # detach hidden states
-#                 for h in (model.h_short, model.c_short, model.h_long, model.c_long):
-#                     h.detach_()
-
-#             # optimizer step & schedulers
-#             scaler.unscale_(optimizer)
-#             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-#             scaler.step(optimizer)
-#             scaler.update()
-
-#             frac = epoch - 1 + batch_idx / len(train_loader)
-#             cosine_sched.step(frac)
-
-#             pbar.set_postfix(
-#                 train_rmse=train_rmse.compute().item(),
-#                 lr=optimizer.param_groups[0]['lr'],
-#                 refresh=False
-#             )
-
-#         # collect train metrics
-#         tr = {
-#             "rmse":  train_rmse.compute().item(),
-#             "mae":   train_mae.compute().item(),
-#             "r2":    train_r2.compute().item(),
-#             "acc":   train_acc.compute().item(),
-#             "prec":  train_prec.compute().item(),
-#             "rec":   train_rec.compute().item(),
-#             "f1":    train_f1.compute().item(),
-#             "auroc": train_auc.compute().item(),
-#         }
-
-#         # b) Validation (same as before, final‐step only)
-#         model.eval()
-#         model.h_short = model.h_long = None
-#         for m in (val_rmse, val_mae, val_r2,
-#                   val_acc, val_prec, val_rec,
-#                   val_f1, val_auc):
-#             m.reset()
-
-#         with torch.no_grad():
-#             prev_day = None
-#             for batch in val_loader:
-#                 (xb_day, y_sig_day, y_sig_cls_day,
-#                  ret_day, y_ret_ter_day,
-#                  wd, ts_list, lengths) = batch
-
-#                 W      = lengths[0]
-#                 day_id = int(wd.item())
-#                 x_seq   = xb_day[0, :W].to(device)
-#                 sig_seq = y_sig_day[0, :W].to(device)
-#                 cls_seq = y_sig_cls_day[0, :W].view(-1).to(device)
-
-#                 model.reset_short()
-#                 if prev_day is not None and day_id < prev_day:
-#                     model.reset_long()
-#                 prev_day = day_id
-
-#                 pr, pc, _ = model(x_seq)
-#                 # predictions for every window
-#                 lr_logits  = pr[..., -1, 0]        # shape (W,)
-#                 cls_logits = pc[..., -1, 0]        # shape (W,)
-#                 lr         = torch.sigmoid(lr_logits)
-                
-#                 # full-target vectors
-#                 targ_r = sig_seq                 # shape (W,)
-#                 targ_c = cls_seq                 # shape (W,)
-                
-#                 # update regression metrics on full vectors
-#                 val_rmse.update(lr,      targ_r)
-#                 val_mae .update(lr,      targ_r)
-#                 val_r2  .update(lr,      targ_r)
-                
-#                 # update classification metrics on full vectors
-#                 probs = torch.sigmoid(cls_logits)
-#                 val_acc .update(probs, targ_c)
-#                 val_prec.update(probs, targ_c)
-#                 val_rec .update(probs, targ_c)
-#                 val_f1  .update(probs, targ_c)
-#                 val_auc .update(probs, targ_c)
-
-#         # collect val metrics
-#         vl = {
-#             "rmse":  val_rmse.compute().item(),
-#             "mae":   val_mae.compute().item(),
-#             "r2":    val_r2.compute().item(),
-#             "acc":   val_acc.compute().item(),
-#             "prec":  val_prec.compute().item(),
-#             "rec":   val_rec.compute().item(),
-#             "f1":    val_f1.compute().item(),
-#             "auroc": val_auc.compute().item(),
-#         }
-
-#         # c) Live plot & logging
-#         live_plot.update(tr["rmse"], vl["rmse"])
-#         print(f"Epoch {epoch:03d}")
-#         print(
-#             f'TRAIN→ '
-#             f'RMSE={tr["rmse"]:.4f} MAE={tr["mae"]:.4f} R2={tr["r2"]:.4f} | '
-#             f'Acc={tr["acc"]:.4f} Prec={tr["prec"]:.4f} Rec={tr["rec"]:.4f} '
-#             f'F1={tr["f1"]:.4f} AUROC={tr["auroc"]:.4f}'
-#         )
-#         print(
-#             f'VALID→ '
-#             f'RMSE={vl["rmse"]:.4f} MAE={vl["mae"]:.4f} R2={vl["r2"]:.4f} | '
-#             f'Acc={vl["acc"]:.4f} Prec={vl["prec"]:.4f} Rec={vl["rec"]:.4f} '
-#             f'F1={vl["f1"]:.4f} AUROC={vl["auroc"]:.4f}'
-#         )
-
-#         # d) Plateau scheduler after warmup
-#         if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
-#             plateau_sched.step(vl["rmse"])
-
-#         # e) Save checkpoints (unchanged)
-#         models_dir = Path(params.models_folder)
-#         models_dir.mkdir(exist_ok=True)
-#         existing_rmses = [
-#             float(m.group(1))
-#             for f in models_dir.glob("*.pth")
-#             if (m := save_pat.match(f.name))
-#         ]
-#         best_existing = min(existing_rmses, default=float("inf"))
-
-#         if vl["rmse"] < best_val_rmse:
-#             best_val_rmse, best_state = vl["rmse"], model.state_dict()
-#             best_tr, best_vl           = tr.copy(), vl.copy()
-#             patience_ctr               = 0
-
-#             buf = io.BytesIO()
-#             live_plot.fig.savefig(buf, format="png")
-#             buf.seek(0)
-#             best_plot = buf.read()
-
-#             if best_val_rmse < best_existing:
-#                 ckpt = {
-#                     "model_state_dict": best_state,
-#                     "hparams":          params.hparams,
-#                     "train_metrics":    best_tr,
-#                     "val_metrics":      best_vl,
-#                     "train_plot_png":   best_plot,
-#                 }
-#                 name = f"{params.ticker}_{best_val_rmse:.5f}_chp.pth"
-#                 torch.save(ckpt, models_dir / name)
-#                 print(f"🔖 Saved folder‐best checkpoint (_chp): {name}")
-#                 best_existing = best_val_rmse
-#         else:
-#             patience_ctr += 1
-#             if patience_ctr >= early_stop_patience:
-#                 print("Early stopping at epoch", epoch)
-#                 break
-
-#     # f) Final checkpoint (unchanged)
-#     buf = io.BytesIO()
-#     live_plot.fig.savefig(buf, format="png")
-#     buf.seek(0)
-#     final_plot = buf.read()
-#     final_ckpt = {
-#         "model_state_dict": best_state,
-#         "hparams":          params.hparams,
-#         "train_metrics":    best_tr,
-#         "val_metrics":      best_vl,
-#         "train_plot_png":   final_plot,
-#     }
-#     fin_name = f"{params.ticker}_{best_val_rmse:.5f}_fin.pth"
-#     torch.save(final_ckpt, models_dir / fin_name)
-#     print(f"✅ Final best model (_fin) saved: {fin_name}")
-
-#     return best_val_rmse
-
-#########################################################################################################
-
-
 def get_metrics(device: torch.device, thr: float = 0.5):
     """Return a dict of metrics (regression, binary, ternary) placed on device."""
     return {
@@ -552,7 +222,7 @@ def get_metrics(device: torch.device, thr: float = 0.5):
         "rec":  torchmetrics.classification.BinaryRecall(threshold=thr).to(device),
         "f1":   torchmetrics.classification.BinaryF1Score(threshold=thr).to(device),
         "auc":  torchmetrics.classification.BinaryAUROC().to(device),
-        # ternary (created even if unused)
+        # ternary 
         "t_acc":  torchmetrics.classification.MulticlassAccuracy(num_classes=3).to(device),
         "t_prec": torchmetrics.classification.MulticlassPrecision(num_classes=3, average="macro").to(device),
         "t_rec":  torchmetrics.classification.MulticlassRecall(num_classes=3, average="macro").to(device),
@@ -560,30 +230,52 @@ def get_metrics(device: torch.device, thr: float = 0.5):
         "t_auc":  torchmetrics.classification.MulticlassAUROC(num_classes=3, average="macro").to(device),
     }
 
+
 ###################### 
+
 
 def eval_on_loader(loader, model: torch.nn.Module, device: torch.device, metrics: dict, collect_preds: bool = False):
     """
-    Shared evaluation used by validation and standalone eval.
-    - Resets metrics, iterates loader, respects the same hidden-state handling,
-      updates metrics per-window and optionally returns concatenated regression preds.
+    Shared evaluation helper for validation and standalone inference.
+
+    Functionality:
+      1) Reset all metric states.
+      2) Move model to eval mode and clear its hidden states.
+      3) Disable gradient computation for speed.
+      4) For each batch in loader (progress bar):
+         a) Unpack a 9-tuple batch:
+            xb, y_reg, y_bin, y_ret, y_ter, rc, wd, ts_list, lengths
+         b) Move inputs to `device`.
+         c) For each sequence in the batch:
+            • Reset or carry LSTM states on day rollover.
+            • Slice out the true window length.
+            • Forward pass → raw_reg, raw_bin, raw_ter logits.
+            • Sigmoid-activate regression & binary heads, softmax for ternary.
+            • Update all regression, binary, and ternary metrics.
+            • Optionally collect `pr` into a list.
+      5) After looping, compute scalar metric results.
+      6) Return `(metrics_dict, preds_array_or_None)`.
     """
+    # 1) Reset metrics
     for m in metrics.values():
         m.reset()
 
+    # Container for optional regression predictions
     preds = []
+
+    # 2) Set model to evaluation and clear hidden states
     model.eval()
     model.h_short = model.h_long = None
     prev_day = None
 
+    # 3) No gradients needed
     with torch.no_grad():
+        # 4) Loop over all batches
         for batch in tqdm(loader, desc="eval", unit="batch"):
-            # support both 9-tuple and 8-tuple batches (same unpack pattern as train)
-            if len(batch) == 9:
-                xb, y_reg, y_bin, y_ret, y_ter, rc, wd, ts_list, lengths = batch
-            else:
-                xb, y_reg, y_bin, y_ret, y_ter, wd, ts_list, lengths = batch
+            # Unpack the expected 9-tuple batch structure
+            xb, y_reg, y_bin, y_ret, y_ter, rc, wd, ts_list, lengths = batch
 
+            # Move tensors to device
             xb    = xb.to(device, non_blocking=True)
             y_reg = y_reg.to(device, non_blocking=True)
             y_bin = y_bin.to(device, non_blocking=True)
@@ -591,50 +283,313 @@ def eval_on_loader(loader, model: torch.nn.Module, device: torch.device, metrics
             wd    = wd.to(device, non_blocking=True)
 
             B = xb.size(0)
+            # 4.c) Process each sequence within the batch
             for i in range(B):
                 W_true = lengths[i]
                 day_id = int(wd[i].item())
 
+                # Reset short‐term hidden state; reset long‐term on day rollover
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
 
-                x_day = xb[i, :W_true]
+                # Slice out the unpadded window
+                x_day  = xb[i, :W_true]
                 targ_r = y_reg[i, :W_true].view(-1)
                 targ_b = y_bin[i, :W_true].view(-1)
                 targ_t = y_ter[i, :W_true].view(-1)
 
+                # Forward pass to get logits
                 pr_logits, pb_logits, pt_logits = model(x_day)
 
-                pr = torch.sigmoid(pr_logits[..., -1, 0])        # (W,)
-                pb = torch.sigmoid(pb_logits[..., -1, 0])        # (W,)
-                pt = torch.softmax(pt_logits[..., -1, :], dim=-1) # (W,3)
+                # Apply activations
+                pr = torch.sigmoid(pr_logits[..., -1, 0])         # (W_true,)
+                pb = torch.sigmoid(pb_logits[..., -1, 0])         # (W_true,)
+                pt = torch.softmax(pt_logits[..., -1, :], dim=-1) # (W_true, 3)
 
-                # regression
+                # Update regression metrics
                 metrics["rmse"].update(pr, targ_r)
                 metrics["mae"].update(pr, targ_r)
                 metrics["r2"].update(pr, targ_r)
-                # binary
+                # Update binary metrics
                 metrics["acc"].update(pb,  targ_b)
                 metrics["prec"].update(pb, targ_b)
                 metrics["rec"].update(pb,  targ_b)
                 metrics["f1"].update(pb,   targ_b)
                 metrics["auc"].update(pb,  targ_b)
-                # ternary
+                # Update ternary metrics
                 metrics["t_acc"].update(pt, targ_t)
                 metrics["t_prec"].update(pt, targ_t)
                 metrics["t_rec"].update(pt, targ_t)
                 metrics["t_f1"].update(pt, targ_t)
                 metrics["t_auc"].update(pt, targ_t)
 
+                # Collect regression predictions if requested
                 if collect_preds:
                     preds.append(pr.cpu().numpy())
 
+    # 5) Compute final scalar metrics
     out = {k: m.compute().item() for k, m in metrics.items()}
+    # 6) Return metrics dict and concatenated preds or None
     return out, (np.concatenate(preds, axis=0) if collect_preds and preds else None)
 
+
 ###################### 
+
+
+# def model_training_loop(
+#     model:         torch.nn.Module,
+#     optimizer:     torch.optim.Optimizer,
+#     cosine_sched:  torch.optim.lr_scheduler.CosineAnnealingWarmRestarts,
+#     plateau_sched: torch.optim.lr_scheduler.ReduceLROnPlateau,
+#     scaler:        GradScaler,
+#     train_loader,
+#     val_loader,
+#     *,
+#     max_epochs:          int,
+#     early_stop_patience: int,
+#     clipnorm:            float,
+#     device:              torch.device = torch.device("cpu"),
+#     mode:                str = "train",   # "train" or "eval"
+# ):
+#     """
+#     Train or evaluate the stateful CNN→BiLSTM→Attention→BiLSTM model.
+
+#     This single entry point covers both training and inference:
+
+#       • mode="train":
+#         - Moves model to device and enables cuDNN benchmark.
+#         - Defines losses (MSE, BCE) and smoothing hyperparameters from params.
+#         - Runs a full mixed-precision, stateful training loop:
+#             · Iterates epochs up to max_epochs.
+#             · Per-batch: resets gradients, loops each window in a stateful fashion,
+#               applies the one-sided Huber smoothing penalty, backpropagates, and updates metrics.
+#             · After each batch: unscales gradients, clips norms, steps optimizer & LR (cosine warm restarts).
+#             · At epoch end: computes train metrics, runs validation via shared helper, updates live plot,
+#               applies plateau LR scheduler, and performs early stopping & folder-best checkpointing.
+#         - At the end: saves a final checkpoint (_fin) with the best model state, metrics, and plot.
+
+#       • mode="eval":
+#         - Quickly runs a single evaluation pass over val_loader using the identical
+#           validation logic: resets metric objects, walks the loader statefully,
+#           updates and computes all regression, binary, and ternary metrics,
+#           and returns (metrics_dict, numpy_predictions).
+
+#     Returns:
+#       - In train mode: the best validation RMSE (float).
+#       - In eval mode: a tuple (metrics_dict, preds_array).
+#     """
+#     # Move model to target device
+#     model.to(device)
+
+#     # losses and smoothing hyperparameters (unchanged)
+#     mse_loss  = nn.MSELoss()
+#     bce_loss  = nn.BCEWithLogitsLoss()
+#     alpha_cls = params.hparams["CLS_LOSS_WEIGHT"]
+#     α = params.hparams["SMOOTH_ALPHA"]
+#     β = params.hparams["SMOOTH_BETA"]
+#     δ = params.hparams["SMOOTH_DELTA"]
+
+#     # Determine execution mode
+#     is_train = mode == "train"
+
+#     # Quick evaluation path when mode!="train"
+#     if not is_train:
+#         metrics = get_metrics(device)
+#         metrics_out, preds = eval_on_loader(val_loader, model, device, metrics, collect_preds=True)
+#         return metrics_out, preds
+
+#     # ---------------- TRAIN MODE ----------------
+#     # Enable cuDNN auto-tuning for faster convs
+#     torch.backends.cudnn.benchmark = True
+
+#     # Instantiate separate metric sets for training and validation
+#     train_metrics = get_metrics(device)
+#     val_metrics   = get_metrics(device)
+
+#     # Initialize checkpoint & early-stop trackers
+#     best_val_rmse = float("inf")
+#     best_state    = None
+#     best_tr       = best_vl = {}
+#     patience_ctr  = 0
+
+#     # Live plot for RMSE progression
+#     live_plot = plots.LiveRMSEPlot()
+
+#     # Main epoch loop
+#     for epoch in range(1, max_epochs + 1):
+#         gc.collect()                   # free Python garbage
+#         model.train()                  # set training mode
+#         model.h_short = model.h_long = None  # reset hidden states
+
+#         # Reset training metrics at epoch start
+#         for m in (
+#             train_metrics["rmse"], train_metrics["mae"], train_metrics["r2"],
+#             train_metrics["acc"], train_metrics["prec"], train_metrics["rec"],
+#             train_metrics["f1"],  train_metrics["auc"]
+#         ):
+#             m.reset()
+
+#         # Batch loop with tqdm progress bar
+#         pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
+#         for batch_idx, batch in enumerate(pbar):
+#             (
+#                 xb_days, y_sig_days, y_sig_cls_days,
+#                 ret_days, y_ret_ter_days,
+#                 wd_days, ts_list, lengths
+#             ) = batch
+
+#             # Move inputs to device
+#             xb    = xb_days.to(device, non_blocking=True)
+#             y_sig = y_sig_days.to(device, non_blocking=True)
+#             y_cls = y_sig_cls_days.to(device, non_blocking=True)
+#             wd    = wd_days.to(device, non_blocking=True)
+
+#             optimizer.zero_grad(set_to_none=True)
+#             prev_day = None
+#             ewma     = None   # baseline for smoothing penalty
+
+#             # Per-sample (window) loop within the batch
+#             for di in range(xb.size(0)):
+#                 W      = lengths[di]
+#                 day_id = int(wd[di].item())
+
+#                 x_seq   = xb[di, :W]
+#                 sig_seq = y_sig[di, :W]
+#                 cls_seq = y_cls[di, :W].view(-1)
+
+#                 # Handle short‐term and long‐term hidden-state resets
+#                 model.reset_short()
+#                 if prev_day is not None and day_id < prev_day:
+#                     model.reset_long()
+#                 prev_day = day_id
+
+#                 # Forward pass through the three-headed model
+#                 pr, pc, _ = model(x_seq)
+
+#                 with autocast(device_type=device.type):
+#                     # Extract final‐step logits for regression and classification
+#                     lr_logits  = pr[..., -1, 0]   # shape = (W,)
+#                     cls_logits = pc[..., -1, 0]   # shape = (W,)
+#                     # Sigmoid‐activate regression output to [0,1]
+#                     lr = torch.sigmoid(lr_logits)
+
+#                     targ_r = sig_seq
+#                     targ_c = cls_seq
+
+#                     # Base multi‐task loss (regression + weighted classification)
+#                     loss_reg = mse_loss(lr, targ_r)
+#                     loss_cls = bce_loss(cls_logits, targ_c)
+#                     loss = loss_reg + alpha_cls * loss_cls
+
+#                     # Exponential‐moving‐average smoothing penalty
+#                     if ewma is None:
+#                         ewma = lr.detach()
+#                     else:
+#                         ewma = α * lr.detach() + (1 - α) * ewma
+
+#                     slip = torch.relu(ewma - lr)
+#                     hub  = torch.where(
+#                         slip <= δ,
+#                         0.5 * slip**2,
+#                         δ * (slip - 0.5 * δ)
+#                     )
+#                     loss += β * hub.mean()
+
+#                 # Backpropagate with mixed precision
+#                 scaler.scale(loss).backward()
+
+#                 # Update training metrics (vector form)
+#                 train_metrics["rmse"].update(lr, targ_r)
+#                 train_metrics["mae"].update(lr, targ_r)
+#                 train_metrics["r2"].update(lr, targ_r)
+
+#                 probs = torch.sigmoid(cls_logits)
+#                 train_metrics["acc"].update(probs, targ_c)
+#                 train_metrics["prec"].update(probs, targ_c)
+#                 train_metrics["rec"].update(probs, targ_c)
+#                 train_metrics["f1"].update(probs, targ_c)
+#                 train_metrics["auc"].update(probs, targ_c)
+
+#                 # Detach hidden states to prevent graph retention
+#                 for h in (model.h_short, model.c_short, model.h_long, model.c_long):
+#                     h.detach_()
+
+#             # Gradient unscale, clipping, optimizer and scheduler step
+#             scaler.unscale_(optimizer)
+#             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+#             scaler.step(optimizer)
+#             scaler.update()
+
+#             frac = epoch - 1 + batch_idx / len(train_loader)
+#             cosine_sched.step(frac)
+
+#             # Update progress bar with current RMSE and LR
+#             pbar.set_postfix(
+#                 train_rmse=train_metrics["rmse"].compute().item(),
+#                 lr=optimizer.param_groups[0]["lr"],
+#                 refresh=False
+#             )
+
+#         # Gather final train metrics for this epoch
+#         tr = {
+#             "rmse":  train_metrics["rmse"].compute().item(),
+#             "mae":   train_metrics["mae"].compute().item(),
+#             "r2":    train_metrics["r2"].compute().item(),
+#             "acc":   train_metrics["acc"].compute().item(),
+#             "prec":  train_metrics["prec"].compute().item(),
+#             "rec":   train_metrics["rec"].compute().item(),
+#             "f1":    train_metrics["f1"].compute().item(),
+#             "auroc": train_metrics["auc"].compute().item(),
+#         }
+
+#         # Validation using the shared eval helper (no preds collected here)
+#         vl, _ = eval_on_loader(val_loader, model, device, val_metrics, collect_preds=False)
+
+#         # e) Maybe save folder-best checkpoint and update best state/metrics
+#         models_dir = Path(params.models_folder)
+#         best_val_rmse, maybe_state, maybe_tr, maybe_vl, best_existing = \
+#             models_core.maybe_save_chkpt(
+#                 models_dir, model, vl["rmse"],
+#                 best_val_rmse, tr, vl, live_plot, params
+#             )
+
+#         if maybe_state is not None:
+#             best_state, best_tr, best_vl = maybe_state, maybe_tr, maybe_vl
+#             patience_ctr = 0
+#         else:
+#             patience_ctr += 1
+#             if patience_ctr >= early_stop_patience:
+#                 print("Early stopping at epoch", epoch)
+#                 break
+
+#         # f) Logging, live-plot update, and plateau LR scheduler
+#         live_plot.update(tr["rmse"], vl["rmse"])
+#         print(f"Epoch {epoch:03d}")
+#         print(
+#             f'TRAIN→ RMSE={tr["rmse"]:.4f} MAE={tr["mae"]:.4f} R2={tr["r2"]:.4f} | '
+#             f'Acc={tr["acc"]:.4f} Prec={tr["prec"]:.4f} Rec={tr["rec"]:.4f} '
+#             f'F1={tr["f1"]:.4f} AUROC={tr["auroc"]:.4f}'
+#         )
+#         print(
+#             f'VALID→ RMSE={vl["rmse"]:.4f} MAE={vl["mae"]:.4f} R2={vl["r2"]:.4f} | '
+#             f'Acc={vl["acc"]:.4f} Prec={vl["prec"]:.4f} Rec={vl["rec"]:.4f} '
+#             f'F1={vl["f1"]:.4f} AUROC={vl["auc"]:.4f}'
+#         )
+
+#         if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
+#             plateau_sched.step(vl["rmse"])
+
+#     # Final checkpoint using the best state captured during training
+#     if best_state is not None:
+#         models_dir = Path(params.models_folder)
+#         models_core.save_final_chkpt(
+#             models_dir, best_state, best_val_rmse,
+#             params, best_tr, best_vl, live_plot, suffix="_fin"
+#         )
+
+#     return best_val_rmse
 
 def model_training_loop(
     model:         torch.nn.Module,
@@ -652,17 +607,29 @@ def model_training_loop(
     mode:                str = "train",   # "train" or "eval"
 ):
     """
-    Train or evaluate the model.
+    Train or evaluate the stateful CNN→BiLSTM→Attention→BiLSTM model.
 
-    Features:
-      - mode="train": full training loop with mixed-precision, schedulers, early stopping,
-                      per-epoch validation, live plot updates, and checkpointing (folder-best _chp and final _fin).
-      - mode="eval":  single evaluation pass (reuses identical eval code) and returns metrics + preds.
-      - Shared: hidden-state handling, metric definitions, EWMA smoothing penalty in training loss.
+    Modes:
+      • train:
+        - Mixed-precision, per-window stateful loops with smoothing penalty.
+        - CosineAnnealingWarmRestarts + ReduceLROnPlateau schedulers.
+        - Early stopping, live RMSE plotting, folder‐best and final checkpointing.
+        - Expects each train batch as a 9-tuple:
+          (xb_days, y_sig_days, y_sig_cls_days,
+           ret_days, y_ret_ter_days,
+           rc_days,  # raw_close slice, unused in loss/metrics
+           wd_days, ts_list, lengths)
+      • eval:
+        - Single-pass evaluation over val_loader via shared `eval_on_loader`.
+        - Returns (metrics_dict, preds_array).
+
+    Returns:
+      - train mode: best validation RMSE (float)
+      - eval mode: (metrics_dict, preds_array)
     """
     model.to(device)
 
-    # losses & smoothing hyperparams (unchanged)
+    # Loss functions & smoothing hyperparameters
     mse_loss  = nn.MSELoss()
     bce_loss  = nn.BCEWithLogitsLoss()
     alpha_cls = params.hparams["CLS_LOSS_WEIGHT"]
@@ -670,42 +637,45 @@ def model_training_loop(
     β = params.hparams["SMOOTH_BETA"]
     δ = params.hparams["SMOOTH_DELTA"]
 
-    is_train = mode == "train"
-
-    # eval-only quick path
+    is_train = (mode == "train")
     if not is_train:
-        metrics = get_metrics(device)
-        metrics_out, preds = eval_on_loader(val_loader, model, device, metrics, collect_preds=True)
+        metrics_out, preds = eval_on_loader(
+            val_loader, model, device, get_metrics(device), collect_preds=True
+        )
         return metrics_out, preds
 
     # ---------------- TRAIN MODE ----------------
     torch.backends.cudnn.benchmark = True
-
     train_metrics = get_metrics(device)
-    val_metrics = get_metrics(device)
+    val_metrics   = get_metrics(device)
 
     best_val_rmse = float("inf")
-    best_state = None
+    best_state    = None
     best_tr = best_vl = {}
-    patience_ctr = 0
-
-    live_plot = plots.LiveRMSEPlot()
+    patience_ctr  = 0
+    live_plot     = plots.LiveRMSEPlot()
 
     for epoch in range(1, max_epochs + 1):
         gc.collect()
         model.train()
         model.h_short = model.h_long = None
 
-        for m in (train_metrics["rmse"], train_metrics["mae"], train_metrics["r2"],
-                  train_metrics["acc"], train_metrics["prec"], train_metrics["rec"],
-                  train_metrics["f1"], train_metrics["auc"]):
+        # Reset metrics at epoch start
+        for m in (
+            train_metrics["rmse"], train_metrics["mae"], train_metrics["r2"],
+            train_metrics["acc"], train_metrics["prec"], train_metrics["rec"],
+            train_metrics["f1"],  train_metrics["auc"]
+        ):
             m.reset()
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
         for batch_idx, batch in enumerate(pbar):
-            (xb_days, y_sig_days, y_sig_cls_days,
-             ret_days, y_ret_ter_days,
-             wd_days, ts_list, lengths) = batch
+            (
+                xb_days, y_sig_days, y_sig_cls_days,
+                ret_days, y_ret_ter_days,
+                rc_days,                # raw_close slice, not used here
+                wd_days, ts_list, lengths
+            ) = batch
 
             xb    = xb_days.to(device, non_blocking=True)
             y_sig = y_sig_days.to(device, non_blocking=True)
@@ -714,14 +684,14 @@ def model_training_loop(
 
             optimizer.zero_grad(set_to_none=True)
             prev_day = None
-            ewma = None
+            ewma     = None
 
-            # per-sample loop in batch (stateful)
+            # Per-sample stateful loop
             for di in range(xb.size(0)):
-                W = lengths[di]
+                W      = lengths[di]
                 day_id = int(wd[di].item())
 
-                x_seq = xb[di, :W]
+                x_seq   = xb[di, :W]
                 sig_seq = y_sig[di, :W]
                 cls_seq = y_cls[di, :W].view(-1)
 
@@ -733,8 +703,8 @@ def model_training_loop(
                 pr, pc, _ = model(x_seq)
 
                 with autocast(device_type=device.type):
-                    lr_logits  = pr[..., -1, 0]   # (W,)
-                    cls_logits = pc[..., -1, 0]   # (W,)
+                    lr_logits  = pr[..., -1, 0]
+                    cls_logits = pc[..., -1, 0]
                     lr = torch.sigmoid(lr_logits)
 
                     targ_r = sig_seq
@@ -750,16 +720,21 @@ def model_training_loop(
                         ewma = α * lr.detach() + (1 - α) * ewma
 
                     slip = torch.relu(ewma - lr)
-                    hub  = torch.where(slip <= δ, 0.5 * slip**2, δ * (slip - 0.5 * δ))
+                    hub  = torch.where(
+                        slip <= δ,
+                        0.5 * slip**2,
+                        δ * (slip - 0.5 * δ)
+                    )
                     loss += β * hub.mean()
 
                 scaler.scale(loss).backward()
 
-                # update train metrics with per-window vectors
+                # Update regression metrics
                 train_metrics["rmse"].update(lr, targ_r)
                 train_metrics["mae"].update(lr, targ_r)
                 train_metrics["r2"].update(lr, targ_r)
 
+                # Update binary classification metrics
                 probs = torch.sigmoid(cls_logits)
                 train_metrics["acc"].update(probs, targ_c)
                 train_metrics["prec"].update(probs, targ_c)
@@ -767,41 +742,46 @@ def model_training_loop(
                 train_metrics["f1"].update(probs, targ_c)
                 train_metrics["auc"].update(probs, targ_c)
 
-                # detach hidden states
+                # Detach hidden states after each sample
                 for h in (model.h_short, model.c_short, model.h_long, model.c_long):
                     h.detach_()
 
-            # optimizer step & schedulers
+            # Optimizer & schedulers step
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer)
             scaler.update()
-
             frac = epoch - 1 + batch_idx / len(train_loader)
             cosine_sched.step(frac)
 
-            pbar.set_postfix(train_rmse=train_metrics["rmse"].compute().item(),
-                             lr=optimizer.param_groups[0]["lr"], refresh=False)
+            pbar.set_postfix(
+                train_rmse=train_metrics["rmse"].compute().item(),
+                lr=optimizer.param_groups[0]["lr"],
+                refresh=False
+            )
 
-        # collect train metrics
+        # ---- Collect only the metrics actually updated in training
         tr = {
-            "rmse": train_metrics["rmse"].compute().item(),
-            "mae":  train_metrics["mae"].compute().item(),
-            "r2":   train_metrics["r2"].compute().item(),
-            "acc":  train_metrics["acc"].compute().item(),
-            "prec": train_metrics["prec"].compute().item(),
-            "rec":  train_metrics["rec"].compute().item(),
-            "f1":   train_metrics["f1"].compute().item(),
-            "auroc":train_metrics["auc"].compute().item(),
+            "rmse":  train_metrics["rmse"].compute().item(),
+            "mae":   train_metrics["mae"].compute().item(),
+            "r2":    train_metrics["r2"].compute().item(),
+            "acc":   train_metrics["acc"].compute().item(),
+            "prec":  train_metrics["prec"].compute().item(),
+            "rec":   train_metrics["rec"].compute().item(),
+            "f1":    train_metrics["f1"].compute().item(),
+            "auroc": train_metrics["auc"].compute().item(),
         }
 
-        # validation using shared helper (no predictions collected here)
+        # Validation pass
         vl, _ = eval_on_loader(val_loader, model, device, val_metrics, collect_preds=False)
 
-        # e) maybe save folder-best checkpoint and update best state/metrics
+        # Folder-best checkpoint & early stopping
         models_dir = Path(params.models_folder)
-        best_val_rmse, maybe_state, maybe_tr, maybe_vl, best_existing = \
-            models_core.maybe_save_chkpt(models_dir, model, vl["rmse"], best_val_rmse, tr, vl, live_plot, params)
+        best_val_rmse, maybe_state, maybe_tr, maybe_vl, _ = \
+            models_core.maybe_save_chkpt(
+                models_dir, model, vl["rmse"],
+                best_val_rmse, tr, vl, live_plot, params
+            )
 
         if maybe_state is not None:
             best_state, best_tr, best_vl = maybe_state, maybe_tr, maybe_vl
@@ -812,7 +792,7 @@ def model_training_loop(
                 print("Early stopping at epoch", epoch)
                 break
 
-        # f) logging, plotting and plateau scheduler
+        # Logging, plotting, and plateau scheduler
         live_plot.update(tr["rmse"], vl["rmse"])
         print(f"Epoch {epoch:03d}")
         print(
@@ -823,15 +803,18 @@ def model_training_loop(
         print(
             f'VALID→ RMSE={vl["rmse"]:.4f} MAE={vl["mae"]:.4f} R2={vl["r2"]:.4f} | '
             f'Acc={vl["acc"]:.4f} Prec={vl["prec"]:.4f} Rec={vl["rec"]:.4f} '
-            f'F1={vl["f1"]:.4f} AUROC={vl["auroc"]:.4f}'
+            f'F1={vl["f1"]:.4f} AUROC={vl["auc"]:.4f}'
         )
 
         if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
             plateau_sched.step(vl["rmse"])
 
-    # final checkpoint using the best state captured
+    # Final checkpoint save if best_state exists
     if best_state is not None:
-        models_dir = Path(params.models_folder)
-        models_core.save_final_chkpt(models_dir, best_state, best_val_rmse, params, best_tr, best_vl, live_plot, suffix="_fin")
+        models_core.save_final_chkpt(
+            Path(params.models_folder),
+            best_state, best_val_rmse, params,
+            best_tr, best_vl, live_plot, suffix="_fin"
+        )
 
     return best_val_rmse
