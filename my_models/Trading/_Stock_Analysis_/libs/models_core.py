@@ -205,90 +205,6 @@ def build_tensors(
 #########################################################################################################
 
 
-# def chronological_split(
-#     X:           torch.Tensor,
-#     y_sig:       torch.Tensor,
-#     y_ret:       torch.Tensor,
-#     raw_close:   torch.Tensor,
-#     end_times:   np.ndarray,      # (N,), dtype datetime64[ns]
-#     *,
-#     train_prop:  float,
-#     val_prop:    float,
-#     train_batch: int,
-#     device       = torch.device("cpu")
-# ) -> Tuple[
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],          
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],          
-#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],  
-#     list,                                                    
-#     torch.Tensor, torch.Tensor, torch.Tensor                  
-# ]:
-#     """
-#     Split flattened windows into train/val/test sets by calendar day.
-
-#     Functionality:
-#       1) Convert end_times to normalized calendar days and count windows per day.
-#       2) Determine how many days belong to train/val/test based on proportions
-#          (with train rounded up to full batches of train_batch).
-#       3) Compute cumulative window counts and slice X, y_sig, y_ret,
-#          and raw_close for the test set.
-#       4) Build per-window day_id tensors for each split, so DataLoader
-#          can move them to GPU alongside samples.
-
-#     Returns:
-#       (X_tr, y_sig_tr, y_ret_tr),
-#       (X_val, y_sig_val, y_ret_val),
-#       (X_te,  y_sig_te,  y_ret_te, raw_close_te),
-#       samples_per_day,
-#       day_id_tr, day_id_val, day_id_te
-#     """
-#     # 1) Count windows per normalized date
-#     dt_idx        = pd.to_datetime(end_times)
-#     normed        = dt_idx.normalize()
-#     days, counts  = np.unique(normed.values, return_counts=True)
-#     samples_per_day = counts.tolist()
-
-#     # Sanity check total windows matches tensor length
-#     total = sum(samples_per_day)
-#     if total != X.size(0):
-#         raise ValueError(f"Window count mismatch {total} vs {X.size(0)}")
-
-#     # 2) Determine day‐level cut points for train/val/test
-#     D            = len(samples_per_day)
-#     orig_tr_days = int(D * train_prop)
-#     full_batches = (orig_tr_days + train_batch - 1) // train_batch
-#     tr_days      = min(D, full_batches * train_batch)
-#     cut_train    = tr_days - 1
-#     cut_val      = int(D * (train_prop + val_prop))
-
-#     # 3) Slice by window counts
-#     cumsum      = np.concatenate([[0], np.cumsum(counts)])
-#     i_tr        = int(cumsum[tr_days])
-#     i_val       = int(cumsum[cut_val + 1])
-
-#     X_tr    = X[:i_tr];    y_sig_tr = y_sig[:i_tr];  y_ret_tr = y_ret[:i_tr]
-#     X_val   = X[i_tr:i_val]; y_sig_val = y_sig[i_tr:i_val]; y_ret_val = y_ret[i_tr:i_val]
-#     X_te    = X[i_val:];   y_sig_te = y_sig[i_val:];  y_ret_te = y_ret[i_val:]
-#     close_te = raw_close[i_val:]
-
-#     # 4) Build day_id tensors for each split
-#     def make_day_ids(start_day: int, end_day: int) -> torch.Tensor:
-#         cnts    = samples_per_day[start_day : end_day + 1]
-#         days_idx= torch.arange(start_day, end_day + 1, dtype=torch.long)
-#         return days_idx.repeat_interleave(torch.tensor(cnts, dtype=torch.long))
-
-#     day_id_tr  = make_day_ids(0,          cut_train)
-#     day_id_val = make_day_ids(cut_train+1, cut_val)
-#     day_id_te  = make_day_ids(cut_val+1,  D - 1)
-
-#     return (
-#         (X_tr,  y_sig_tr,  y_ret_tr),
-#         (X_val, y_sig_val, y_ret_val),
-#         (X_te,  y_sig_te,  y_ret_te,  close_te),
-#         samples_per_day,
-#         day_id_tr, day_id_val, day_id_te
-#     )
-
 def chronological_split(
     X:           torch.Tensor,
     y_sig:       torch.Tensor,
@@ -376,8 +292,6 @@ def chronological_split(
         samples_per_day,
         day_id_tr, day_id_val, day_id_te
     )
-
-
 
 
 #########################################################################################################
@@ -517,81 +431,6 @@ def pad_collate(batch):
 
     
 ###############
-
-
-# def split_to_day_datasets(
-#     X_tr, y_sig_tr, y_ret_tr, end_times_tr,
-#     X_val, y_sig_val, y_ret_val, end_times_val,
-#     X_te, y_sig_te, y_ret_te, end_times_te, raw_close_te,
-#     *,
-#     sess_start_time:       time,
-#     signal_thresh:         float,
-#     return_thresh:         float,
-#     train_batch:           int = 32,
-#     train_workers:         int = 0,
-#     train_prefetch_factor: int = 1
-# ) -> tuple[DataLoader, DataLoader, DataLoader]:
-#     """
-#     Instantiate DayWindowDataset for train/val/test and wrap into DataLoaders.
-
-#     Functionality:
-#       1) Build three DayWindowDataset objects—each already holds
-#          windows filtered by session start, grouped by calendar day,
-#          and applies binary/ternary thresholding on‐the‐fly.
-#       2) Wrap in DataLoader:
-#          - train: batch_size=train_batch, pad_collate, num_workers, pin_memory, prefetch
-#          - val/test: batch_size=1, pad_collate, single worker, pin_memory
-#     """
-#     splits = [
-#         ("train", X_tr, y_sig_tr, y_ret_tr, end_times_tr, None),
-#         ("val",   X_val, y_sig_val, y_ret_val, end_times_val,   None),
-#         ("test",  X_te,  y_sig_te,  y_ret_te,  end_times_te,  raw_close_te)
-#     ]
-
-#     datasets = {}
-#     for name, Xd, ys, yr, et, rc in tqdm(splits, desc="Creating DayWindowDatasets", unit="split"):
-#         datasets[name] = DayWindowDataset(
-#             X=Xd,
-#             y_signal=ys,
-#             y_return=yr,
-#             raw_close=rc,
-#             end_times=et,
-#             sess_start_time=sess_start_time,
-#             signal_thresh=signal_thresh,
-#             return_thresh=return_thresh
-#         )
-
-#     train_loader = DataLoader(
-#         datasets["train"],
-#         batch_size=train_batch,
-#         shuffle=False,
-#         drop_last=False,
-#         collate_fn=pad_collate,
-#         num_workers=train_workers,
-#         pin_memory=True,
-#         persistent_workers=(train_workers > 0),
-#         prefetch_factor=(train_prefetch_factor if train_workers > 0 else None)
-#     )
-
-#     val_loader = DataLoader(
-#         datasets["val"],
-#         batch_size=1,
-#         shuffle=False,
-#         collate_fn=pad_collate,
-#         num_workers=0,
-#         pin_memory=True
-#     )
-
-#     test_loader = DataLoader(
-#         datasets["test"],
-#         batch_size=1,
-#         shuffle=False,
-#         collate_fn=pad_collate,
-#         num_workers=0,
-#         pin_memory=True
-#     )
-
-#     return train_loader, val_loader, test_loader
 
 
 def split_to_day_datasets(
@@ -874,7 +713,9 @@ def maybe_save_chkpt(models_dir: Path, model: torch.nn.Module, vl_rmse: float,
 
     return cur_best, None, {}, {}, best_existing
 
+    
 ################ 
+
 
 def save_final_chkpt(models_dir: Path, best_state, best_val_rmse: float,
                      params, best_tr: dict, best_vl: dict, live_plot, suffix: str = "_fin"):

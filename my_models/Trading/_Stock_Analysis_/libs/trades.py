@@ -129,6 +129,7 @@ def process_splits(folder, ticker, bidasktoclose_pct):
         print("No splits detected.")
   
     return df_adjusted
+
     
 #########################################################################################################
 

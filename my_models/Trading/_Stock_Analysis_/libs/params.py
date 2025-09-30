@@ -25,7 +25,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = dual_lstm_smooth
-sel_val_rmse = 0.25074  # set to None to pick best automatically
+sel_val_rmse = 0.22762  # set to None to pick best automatically
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -142,14 +142,17 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
-    "LONG_UNITS":            128,    # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.30,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.40,  # moderate dropout after weekly LSTM; balances overfitting and information retention
+    "LONG_UNITS":            128,   # hidden size of weekly LSTM; large context window for long-term trends
+    "DROPOUT_SHORT":         0.05,  # light dropout after daily LSTM+attention; preserves spike information
+    "DROPOUT_LONG":          0.10,  # moderate dropout after weekly LSTM; balances overfitting and information retention
     "ATT_HEADS":             6,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.20,  # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-3,  # L2 penalty on all weights; prevents extreme magnitudes
-    "CONV_K":                3,
-    "CONV_DILATION":         1,
+    "ATT_DROPOUT":           0.0,  # dropout inside attention layers; regularizes attention maps
+    "WEIGHT_DECAY":          1e-5,  # L2 penalty on all weights; prevents extreme magnitudes
+    
+    "CONV_K":                3,     # kernel size for input feature conv1d
+    "CONV_DILATION":         1,     # dilation for input feature conv1d
+    "SMOOTH_K":              5,     # causal conv kernel size for regression smoothing
+    "SMOOTH_DILATION":       2,     # dilation for smoothing conv (covers windows [t-4, t] if k=3,d=2)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,    # number of sequences per training batch
@@ -163,15 +166,17 @@ hparams = {
     # ── Optimizer & Scheduler Settings ────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
     "INITIAL_LR":            5e-5,  # starting learning rateS
-    "CLIPNORM":              3,     # max gradient norm for clipping
+    "CLIPNORM":              0.5,     # max gradient norm for clipping
     "ETA_MIN":               1e-6,  # floor LR in CosineAnnealingWarmRestarts
     "T_0":                   100,   # period (in epochs) of first cosine decay cycle
     "T_MULT":                1,     # multiplier for cycle length after each restart
 
     # —— Active Loss Hyperparameters —— 
-    "SMOOTH_ALPHA":          0.99,  # EWMA decay rate; higher→more weight on latest, lower→longer history
-    "SMOOTH_BETA":           10.0,  # smoothing weight; higher→stronger drop resistance, lower→more bleed
-    "SMOOTH_DELTA":          0.02,  # Huber δ for smoothing; lower→small drops squared, higher→tolerated as linear
+    "DIFF1_WEIGHT":          1.0,   # L2 penalty on negative first‐differences
+    "DIFF2_WEIGHT":          0.2,   # L2 penalty on second‐difference (curvature)
+    "SMOOTH_ALPHA":          0.005,  # EWMA decay rate; higher→more weight on latest, lower→longer history
+    "SMOOTH_BETA":           20.0,  # smoothing weight; higher→stronger drop resistance, lower→more bleed
+    "SMOOTH_DELTA":          0.01,  # Huber δ for smoothing; lower→small drops squared, higher→tolerated as linear
     "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 loss; lower→more like MAE, higher→more like MSE
     "CLS_LOSS_WEIGHT":       0.05,  # weight for binary-BCE head; lower→less spike emphasis, higher→more
     
