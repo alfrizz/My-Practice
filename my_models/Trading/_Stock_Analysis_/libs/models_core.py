@@ -379,6 +379,108 @@ class DayWindowDataset(Dataset):
         # Return the fixed 8-tuple
         return x_day, y_day, y_sig_cls, ret_day, y_ret_ter, rc, wd, end_ts
 
+# class DayWindowDataset(Dataset):
+#     """
+#     Wrap sliding windows into per-day groups for DataLoader.
+
+#     Functionality:
+#       1) Accepts X, y_signal, y_return, raw_close, and end_times (all pre-filtered).
+#       2) Groups windows by calendar date (numpy.datetime64[D]).
+#       3) Computes start/end indices and weekday for each day.
+#       4) Stores full per-day arrays of window-end timestamps.
+#       5) On __getitem__, returns a 9-tuple:
+#          - x_day    : Tensor (1, W, look_back, F)
+#          - y_day    : Tensor (1, W)
+#          - y_sig_cls: Tensor (1, W) binary labels (y_day > signal_thresh)
+#          - ret_day  : Tensor (1, W) true returns
+#          - y_ret_ter: LongTensor (1, W) ternary labels (ret_day vs return_thresh)
+#          - rc       : Tensor (W,) raw_close slice
+#          - wd       : int weekday index
+#          - ts_list  : numpy.ndarray (W,) of all window-end timestamps for the day
+#          - length   : int number of windows W
+#     """
+#     def __init__(
+#         self,
+#         X:               torch.Tensor,   # (N_windows, look_back, F)
+#         y_signal:        torch.Tensor,   # (N_windows,)
+#         y_return:        torch.Tensor,   # (N_windows,)
+#         raw_close:       torch.Tensor,   # (N_windows,)
+#         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
+#         sess_start_time: time,           # unused: already filtered upstream
+#         signal_thresh:   float,
+#         return_thresh:   float
+#     ):
+#         # Store thresholds and raw buffers
+#         self.signal_thresh = signal_thresh
+#         self.return_thresh = return_thresh
+#         self.X         = X
+#         self.y_signal  = y_signal
+#         self.y_return  = y_return
+#         self.raw_close = raw_close
+#         self.end_times = end_times
+
+#         # 1) Group windows by calendar day
+#         days64 = end_times.astype("datetime64[D]")
+#         days, counts = np.unique(days64, return_counts=True)
+#         boundaries   = np.concatenate(([0], np.cumsum(counts)))
+
+#         # 2) Build per-day start/end indices and weekday tensor
+#         self.start   = torch.tensor(boundaries[:-1], dtype=torch.long)
+#         self.end     = torch.tensor(boundaries[1:],  dtype=torch.long)
+#         weekdays     = pd.to_datetime(days).dayofweek
+#         self.weekday = torch.tensor(weekdays, dtype=torch.long)
+
+#         # 3) Store full per-day arrays of window-end timestamps
+#         #    so ts_lists[idx].shape == (W_day,)
+#         self.ts_lists = [
+#             end_times[s:e]  # numpy.datetime64[ns] slice for each day
+#             for s, e in zip(boundaries[:-1], boundaries[1:])
+#         ]
+
+#     def __len__(self):
+#         return len(self.start)
+
+#     def __getitem__(self, idx: int):
+#         # Determine slice indices for this day
+#         s = self.start[idx].item()
+#         e = self.end[idx].item()
+#         W = e - s  # number of windows in this day
+
+#         # 4) Slice out windows and add batch dimension
+#         x_day      = self.X[s:e].unsqueeze(0)        # (1, W, look_back, F)
+#         y_day      = self.y_signal[s:e].unsqueeze(0) # (1, W)
+
+#         # 5) Binary label per window
+#         y_sig_cls = (y_day > self.signal_thresh).float()
+
+#         # 6) True returns + ternary label
+#         ret_day   = self.y_return[s:e].unsqueeze(0)  # (1, W)
+#         y_ret_ter = torch.ones_like(ret_day, dtype=torch.long)
+#         y_ret_ter[ret_day >  self.return_thresh] = 2
+#         y_ret_ter[ret_day < -self.return_thresh] = 0
+
+#         # 7) Raw close slice (W,)
+#         rc = self.raw_close[s:e]
+
+#         # 8) Weekday index
+#         wd = int(self.weekday[idx].item())
+
+#         # 9) Full per-day timestamp list & window count
+#         ts_list = self.ts_lists[idx]  # numpy.ndarray shape (W,)
+#         length  = W                   # integer
+
+#         # Return the 9-tuple needed by eval_on_loader
+#         return (
+#             x_day,       # Tensor (1, W, look_back, F)
+#             y_day,       # Tensor (1, W)
+#             y_sig_cls,   # Tensor (1, W)
+#             ret_day,     # Tensor (1, W)
+#             y_ret_ter,   # LongTensor (1, W)
+#             rc,          # Tensor (W,)
+#             wd,          # int
+#             ts_list,     # numpy.ndarray (W,) datetime64[ns]
+#             length       # int
+#         )
 
 ######################
 
@@ -569,6 +671,8 @@ def model_core_pipeline(
     # 3) carve end_times in the same proportions
     n_tr  = day_id_tr .shape[0]
     n_val = day_id_val.shape[0]
+    # n_tr  = X_tr.shape[0]
+    # n_val = X_val.shape[0]
     i_tr, i_val = n_tr, n_tr + n_val
 
     end_times_tr  = end_times[:i_tr]

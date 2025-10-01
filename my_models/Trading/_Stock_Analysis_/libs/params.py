@@ -25,7 +25,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = dual_lstm_smooth
-sel_val_rmse = 0.22762  # set to None to pick best automatically
+sel_val_rmse = None  # set to None to pick best automatically
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -141,48 +141,49 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           96,    # hidden size of daily LSTM; high capacity to model fine-grained daily patterns
-    "LONG_UNITS":            128,   # hidden size of weekly LSTM; large context window for long-term trends
-    "DROPOUT_SHORT":         0.05,  # light dropout after daily LSTM+attention; preserves spike information
-    "DROPOUT_LONG":          0.10,  # moderate dropout after weekly LSTM; balances overfitting and information retention
-    "ATT_HEADS":             6,     # number of multi-head attention heads; more heads capture diverse interactions
-    "ATT_DROPOUT":           0.0,  # dropout inside attention layers; regularizes attention maps
-    "WEIGHT_DECAY":          1e-5,  # L2 penalty on all weights; prevents extreme magnitudes
-    
-    "CONV_K":                3,     # kernel size for input feature conv1d
-    "CONV_DILATION":         1,     # dilation for input feature conv1d
-    "SMOOTH_K":              5,     # causal conv kernel size for regression smoothing
-    "SMOOTH_DILATION":       2,     # dilation for smoothing conv (covers windows [t-4, t] if k=3,d=2)
+    "SHORT_UNITS":           128,    # daily LSTM hidden size; ↑capacity for spike detail, ↓overfit & latency
+    "LONG_UNITS":            128,    # weekly LSTM hidden size; ↑long-term context, ↓short-term reactivity
+    "DROPOUT_SHORT":         0.25,   # after daily LSTM+attn; ↑regularization (smoother), ↓retains sharp spikes
+    "DROPOUT_LONG":          0.30,   # after weekly LSTM; ↑overfitting guard, ↓lag on trend changes
+    "ATT_HEADS":             8,      # multi-head count; ↑diverse pattern capture, ↓compute & per-head dim
+    "ATT_DROPOUT":           0.20,   # inside attention; ↑map regularity, ↓signal erosion
+
+    "WEIGHT_DECAY":          3e-3,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+
+    "CONV_K":                3,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
+    "CONV_DILATION":         1,      # input conv dilation; ↑receptive field, ↓signal granularity
+    "SMOOTH_K":              3,      # regression‐head conv kernel; ↑smoothing window, ↓reactivity
+    "SMOOTH_DILATION":       1,      # regression conv dilation; ↑lag smoothing, ↓immediate response
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           64,    # number of sequences per training batch
-    "VAL_BATCH":             1,     # number of sequences per validation batch
-    "NUM_WORKERS":           12,    # DataLoader CPU workers
-    "TRAIN_PREFETCH_FACTOR": 4,     # prefetch factor for DataLoader
+    "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
+    "VAL_BATCH":             1,      # sequences per val batch; unchanged
+    "NUM_WORKERS":           12,     # DataLoader workers; ↑throughput, ↓CPU contention
+    "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "MAX_EPOCHS":            100,   # maximum number of epochs
-    "EARLY_STOP_PATIENCE":   7,     # epochs with no val–RMSE improvement before stopping
+    "MAX_EPOCHS":            100,    # max epochs; unchanged
+    "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
-    "LR_EPOCHS_WARMUP":      3,     # epochs to keep LR constant before cosine decay
-    "INITIAL_LR":            5e-5,  # starting learning rateS
-    "CLIPNORM":              0.5,     # max gradient norm for clipping
-    "ETA_MIN":               1e-6,  # floor LR in CosineAnnealingWarmRestarts
-    "T_0":                   100,   # period (in epochs) of first cosine decay cycle
-    "T_MULT":                1,     # multiplier for cycle length after each restart
+    "LR_EPOCHS_WARMUP":      3,      # constant LR before decay; ↑stable start, ↓early adaptation
+    "INITIAL_LR":            2e-4,   # start LR; ↑fast convergence, ↓risk of instability
+    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
+    "T_0":                   100,    # first cycle length; unchanged
+    "T_MULT":                1,      # cycle length multiplier; unchanged
 
-    # —— Active Loss Hyperparameters —— 
-    "DIFF1_WEIGHT":          1.0,   # L2 penalty on negative first‐differences
-    "DIFF2_WEIGHT":          0.2,   # L2 penalty on second‐difference (curvature)
-    "SMOOTH_ALPHA":          0.005,  # EWMA decay rate; higher→more weight on latest, lower→longer history
-    "SMOOTH_BETA":           20.0,  # smoothing weight; higher→stronger drop resistance, lower→more bleed
-    "SMOOTH_DELTA":          0.01,  # Huber δ for smoothing; lower→small drops squared, higher→tolerated as linear
-    "HUBER_BETA":            0.1,   # δ threshold for SmoothL1 loss; lower→more like MAE, higher→more like MSE
-    "CLS_LOSS_WEIGHT":       0.05,  # weight for binary-BCE head; lower→less spike emphasis, higher→more
-    
+    # —— Active Loss & Smoothing Hyperparameters —— 
+    "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
+    "DIFF2_WEIGHT":          0.2,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
+    "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
+    "SMOOTH_BETA":           15.0,   # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
+    "SMOOTH_DELTA":          0.005,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
+    "HUBER_BETA":            0.1,    # SmoothL1 threshold; ↑MAE behavior (robust), ↓MSE behavior (squared)
+    "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight; ↑spike emphasis, ↓regression focus
+
     # ── ReduceLROnPlateau Scheduler ───
-    "PLATEAU_FACTOR":        0.9,   # multiply LR by this factor on plateau
-    "PLATEAU_PATIENCE":      0,     # epochs with no val-improve before LR cut
-    "MIN_LR":                1e-6,  # lower bound on LR after reductions
-    "PLAT_EPOCHS_WARMUP":    999    # epochs to wait before triggering plateau logic
+    "PLATEAU_FACTOR":        0.9,    # multiply LR by this factor on plateau
+    "PLATEAU_PATIENCE":      0,      # epochs with no val-improve before LR cut
+    "MIN_LR":                1e-6,   # lower bound on LR after reductions
+    "PLAT_EPOCHS_WARMUP":    999     # epochs to wait before triggering plateau logic
 }
