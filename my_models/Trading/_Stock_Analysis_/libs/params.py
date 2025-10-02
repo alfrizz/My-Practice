@@ -25,7 +25,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = dual_lstm_smooth
-sel_val_rmse = None  # set to None to pick best automatically
+sel_val_rmse = 0.24458 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -129,11 +129,13 @@ def signal_parameters(ticker):
                          'adx_14']
         trailing_stop_pred = 0.035
         pred_threshold = 0.35
+        return_threshold = 0.01
         
-    return look_back, sess_start_pred, sess_start_shift, features_cols, smooth_sign_win, trailing_stop_pred, pred_threshold
+    return look_back, sess_start_pred, sess_start_shift, features_cols, smooth_sign_win, trailing_stop_pred, pred_threshold, return_threshold
 
 # automatically executed function to get the parameters for the selected ticker
-look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick, smooth_sign_win_tick, trailing_stop_pred_tick, pred_threshold_tick = signal_parameters(ticker)
+look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick, smooth_sign_win_tick, trailing_stop_pred_tick, pred_threshold_tick, return_threshold_tick \
+= signal_parameters(ticker)
 
 
 #########################################################################################################
@@ -148,7 +150,7 @@ hparams = {
     "ATT_HEADS":             8,      # multi-head count; ↑diverse pattern capture, ↓compute & per-head dim
     "ATT_DROPOUT":           0.20,   # inside attention; ↑map regularity, ↓signal erosion
 
-    "WEIGHT_DECAY":          3e-3,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "WEIGHT_DECAY":          7e-3,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
 
     "CONV_K":                3,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
     "CONV_DILATION":         1,      # input conv dilation; ↑receptive field, ↓signal granularity
@@ -166,7 +168,7 @@ hparams = {
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,      # constant LR before decay; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            2e-4,   # start LR; ↑fast convergence, ↓risk of instability
+    "INITIAL_LR":            7e-5,   # start LR; ↑fast convergence, ↓risk of instability
     "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
     "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
     "T_0":                   100,    # first cycle length; unchanged

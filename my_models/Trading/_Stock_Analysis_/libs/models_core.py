@@ -15,6 +15,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from numpy.lib.format import header_data_from_array_1_0, write_array_header_1_0
 from threading import Lock
+import warnings
 
 import datetime as dt
 from datetime import datetime, time
@@ -379,108 +380,6 @@ class DayWindowDataset(Dataset):
         # Return the fixed 8-tuple
         return x_day, y_day, y_sig_cls, ret_day, y_ret_ter, rc, wd, end_ts
 
-# class DayWindowDataset(Dataset):
-#     """
-#     Wrap sliding windows into per-day groups for DataLoader.
-
-#     Functionality:
-#       1) Accepts X, y_signal, y_return, raw_close, and end_times (all pre-filtered).
-#       2) Groups windows by calendar date (numpy.datetime64[D]).
-#       3) Computes start/end indices and weekday for each day.
-#       4) Stores full per-day arrays of window-end timestamps.
-#       5) On __getitem__, returns a 9-tuple:
-#          - x_day    : Tensor (1, W, look_back, F)
-#          - y_day    : Tensor (1, W)
-#          - y_sig_cls: Tensor (1, W) binary labels (y_day > signal_thresh)
-#          - ret_day  : Tensor (1, W) true returns
-#          - y_ret_ter: LongTensor (1, W) ternary labels (ret_day vs return_thresh)
-#          - rc       : Tensor (W,) raw_close slice
-#          - wd       : int weekday index
-#          - ts_list  : numpy.ndarray (W,) of all window-end timestamps for the day
-#          - length   : int number of windows W
-#     """
-#     def __init__(
-#         self,
-#         X:               torch.Tensor,   # (N_windows, look_back, F)
-#         y_signal:        torch.Tensor,   # (N_windows,)
-#         y_return:        torch.Tensor,   # (N_windows,)
-#         raw_close:       torch.Tensor,   # (N_windows,)
-#         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
-#         sess_start_time: time,           # unused: already filtered upstream
-#         signal_thresh:   float,
-#         return_thresh:   float
-#     ):
-#         # Store thresholds and raw buffers
-#         self.signal_thresh = signal_thresh
-#         self.return_thresh = return_thresh
-#         self.X         = X
-#         self.y_signal  = y_signal
-#         self.y_return  = y_return
-#         self.raw_close = raw_close
-#         self.end_times = end_times
-
-#         # 1) Group windows by calendar day
-#         days64 = end_times.astype("datetime64[D]")
-#         days, counts = np.unique(days64, return_counts=True)
-#         boundaries   = np.concatenate(([0], np.cumsum(counts)))
-
-#         # 2) Build per-day start/end indices and weekday tensor
-#         self.start   = torch.tensor(boundaries[:-1], dtype=torch.long)
-#         self.end     = torch.tensor(boundaries[1:],  dtype=torch.long)
-#         weekdays     = pd.to_datetime(days).dayofweek
-#         self.weekday = torch.tensor(weekdays, dtype=torch.long)
-
-#         # 3) Store full per-day arrays of window-end timestamps
-#         #    so ts_lists[idx].shape == (W_day,)
-#         self.ts_lists = [
-#             end_times[s:e]  # numpy.datetime64[ns] slice for each day
-#             for s, e in zip(boundaries[:-1], boundaries[1:])
-#         ]
-
-#     def __len__(self):
-#         return len(self.start)
-
-#     def __getitem__(self, idx: int):
-#         # Determine slice indices for this day
-#         s = self.start[idx].item()
-#         e = self.end[idx].item()
-#         W = e - s  # number of windows in this day
-
-#         # 4) Slice out windows and add batch dimension
-#         x_day      = self.X[s:e].unsqueeze(0)        # (1, W, look_back, F)
-#         y_day      = self.y_signal[s:e].unsqueeze(0) # (1, W)
-
-#         # 5) Binary label per window
-#         y_sig_cls = (y_day > self.signal_thresh).float()
-
-#         # 6) True returns + ternary label
-#         ret_day   = self.y_return[s:e].unsqueeze(0)  # (1, W)
-#         y_ret_ter = torch.ones_like(ret_day, dtype=torch.long)
-#         y_ret_ter[ret_day >  self.return_thresh] = 2
-#         y_ret_ter[ret_day < -self.return_thresh] = 0
-
-#         # 7) Raw close slice (W,)
-#         rc = self.raw_close[s:e]
-
-#         # 8) Weekday index
-#         wd = int(self.weekday[idx].item())
-
-#         # 9) Full per-day timestamp list & window count
-#         ts_list = self.ts_lists[idx]  # numpy.ndarray shape (W,)
-#         length  = W                   # integer
-
-#         # Return the 9-tuple needed by eval_on_loader
-#         return (
-#             x_day,       # Tensor (1, W, look_back, F)
-#             y_day,       # Tensor (1, W)
-#             y_sig_cls,   # Tensor (1, W)
-#             ret_day,     # Tensor (1, W)
-#             y_ret_ter,   # LongTensor (1, W)
-#             rc,          # Tensor (W,)
-#             wd,          # int
-#             ts_list,     # numpy.ndarray (W,) datetime64[ns]
-#             length       # int
-#         )
 
 ######################
 
@@ -709,6 +608,9 @@ def model_core_pipeline(
 
 
 def summarize_split(name, loader, times):
+    """
+    Summary of loaders content and times
+    """
     ds      = loader.dataset
     X       = ds.X                      # (N_windows, look_back, n_features)
     L, F    = X.shape[1], X.shape[2]
@@ -770,17 +672,42 @@ def make_optimizer_and_scheduler(
 #########################################################################################################
 
 
-def maybe_save_chkpt(models_dir: Path, model: torch.nn.Module, vl_rmse: float,
-                     cur_best: float, tr: dict, vl: dict, live_plot, params):
+def maybe_save_chkpt(
+    models_dir: Path,
+    model: torch.nn.Module,
+    vl_rmse: float,
+    cur_best: float,
+    tr: dict,
+    vl: dict,
+    live_plot,
+    params
+):
     """
-    If vl_rmse improves cur_best, capture the model state and live_plot.
-    Additionally write a folder-best checkpoint (_chp) if this rmse is better than files on disk.
-    Returns (updated_best, best_state, best_tr, best_vl, best_existing).
-    """
-    # expects filenames like TICKER_0.12345_chp.pth or TICKER_0.12345_fin.pth
-    save_pat = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth")
+    Compare `vl_rmse` against:
+      - cur_best: the best RMSE seen so far in this run
+      - existing on‐disk checkpoints in models_dir
 
+    If `vl_rmse` < cur_best:
+      • capture model.state_dict() as best_state (mapping of tensors)
+      • copy train (tr) & val (vl) metric dicts
+      • serialize a folder‐best checkpoint (_chp) if this beats files on disk
+      • return (updated_best, best_state, best_tr, best_vl, best_existing)
+
+    Else:
+      • return (cur_best, None, {}, {}, best_existing)
+
+    Keys saved in each checkpoint dict:
+      - "model_state_dict": state_dict() mapping
+      - "hparams":           params.hparams
+      - "train_metrics":     dict of float metrics
+      - "val_metrics":       dict of float metrics
+      - "train_plot_png":    raw PNG bytes of the live‐plot
+    """
+    # ensure output folder exists
     models_dir.mkdir(exist_ok=True)
+
+    # parse existing on‐disk RMS values
+    save_pat = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth")
     existing_rmses = [
         float(m.group(1))
         for f in models_dir.glob("*.pth")
@@ -788,26 +715,30 @@ def maybe_save_chkpt(models_dir: Path, model: torch.nn.Module, vl_rmse: float,
     ]
     best_existing = min(existing_rmses, default=float("inf"))
 
+    # if we improved over this run’s best
     if vl_rmse < cur_best:
+        # 1) capture the new best state_dict
         best_state = model.state_dict()
-        best_tr, best_vl = tr.copy(), vl.copy()
+        # 2) snapshot metrics
+        best_tr = tr.copy()
+        best_vl = vl.copy()
         updated_best = vl_rmse
 
-        # capture live plot bytes
+        # 3) render plot to PNG bytes
         buf = io.BytesIO()
         live_plot.fig.savefig(buf, format="png")
         buf.seek(0)
         plot_bytes = buf.read()
 
-        # save folder-best iff strictly better than existing on disk
+        # 4) if also better than on‐disk, write a folder‐best chkpt
         if updated_best < best_existing:
             name = f"{params.ticker}_{updated_best:.5f}_chp.pth"
             ckpt = {
                 "model_state_dict": best_state,
-                "hparams": params.hparams,
-                "train_metrics": best_tr,
-                "val_metrics": best_vl,
-                "train_plot_png": plot_bytes,
+                "hparams":          params.hparams,
+                "train_metrics":    best_tr,
+                "val_metrics":      best_vl,
+                "train_plot_png":   plot_bytes,
             }
             torch.save(ckpt, models_dir / name)
             print(f"🔖 Saved folder-best checkpoint (_chp): {name}")
@@ -815,27 +746,117 @@ def maybe_save_chkpt(models_dir: Path, model: torch.nn.Module, vl_rmse: float,
 
         return updated_best, best_state, best_tr, best_vl, best_existing
 
+    # no improvement: carry forward previous best_existing
     return cur_best, None, {}, {}, best_existing
+
 
     
 ################ 
 
 
-def save_final_chkpt(models_dir: Path, best_state, best_val_rmse: float,
-                     params, best_tr: dict, best_vl: dict, live_plot, suffix: str = "_fin"):
-    """Write the final best checkpoint (_fin) using best_state and embed the final plot."""
+def save_final_chkpt(
+    models_dir: Path,
+    best_state: dict,
+    best_val_rmse: float,
+    params,
+    best_tr: dict,
+    best_vl: dict,
+    live_plot,
+    suffix: str = "_fin"
+):
+    """
+    Write the final overall‐best checkpoint (_fin):
+
+      • Uses the state_dict mapping in `best_state`  
+      • Embeds final hyperparameters, metrics, and plot PNG  
+      • Filename: <TICKER>_<best_val_rmse><suffix>.pth  
+    """
+    # serialize current live‐plot to PNG bytes
     buf = io.BytesIO()
     live_plot.fig.savefig(buf, format="png")
     buf.seek(0)
     final_plot = buf.read()
 
+    # assemble checkpoint dict
     ckpt = {
         "model_state_dict": best_state,
-        "hparams": params.hparams,
-        "train_metrics": best_tr,
-        "val_metrics": best_vl,
-        "train_plot_png": final_plot,
+        "hparams":          params.hparams,
+        "train_metrics":    best_tr,
+        "val_metrics":      best_vl,
+        "train_plot_png":   final_plot,
     }
+
+    # write to disk
     name = f"{params.ticker}_{best_val_rmse:.5f}{suffix}.pth"
-    torch.save(ckpt, Path(params.models_folder) / name)
+    (models_dir / name).parent.mkdir(exist_ok=True, parents=True)
+    torch.save(ckpt, models_dir / name)
     print(f"✅ Final best model saved: {name}")
+
+
+################
+
+
+def select_checkpoint(
+    models_folder: Path,
+    ticker: str,
+    sel_val_rmse: float | None = None,
+    tol: float = 1e-6
+) -> Path:
+    """
+    Return the Path to the checkpoint:
+      • If sel_val_rmse is not None, pick the file whose parsed RMSE
+        equals sel_val_rmse within tol
+      • Otherwise, or if no exact match, pick the file with the
+        smallest parsed RMSE in the folder
+
+    In either case, among ties prefer:
+       1) filenames ending with '_fin.pth'
+       2) then '_chp.pth'
+       3) then any other match
+
+    Raises FileNotFoundError if no *.pth files exist for the ticker.
+    """
+    ckpts = list(Path(models_folder).glob(f"{ticker}_*.pth"))
+    if not ckpts:
+        raise FileNotFoundError(f"No checkpoints found in {models_folder} for {ticker}")
+
+    # helper to extract rmse float from 'TICKER_<rmse>_*.pth'
+    def parse_rmse(path: Path) -> float:
+        stem = path.stem  # e.g. "AAPL_0.12345_chp"
+        parts = stem.split("_")
+        try:
+            return float(parts[1])
+        except (IndexError, ValueError):
+            return float("inf")
+
+    # build a map of path → rmse
+    rmse_map = {p: parse_rmse(p) for p in ckpts}
+
+    # decide candidate set
+    if sel_val_rmse is not None:
+        # find any whose rmse matches sel_val_rmse within tol
+        exact = [p for p, v in rmse_map.items() if abs(v - sel_val_rmse) <= tol]
+        if exact:
+            candidates = exact
+        else:
+            warnings.warn(
+                f"No exact checkpoint for sel_val_rmse={sel_val_rmse:.5f}; "
+                "falling back to minimum RMSE"
+            )
+            candidates = ckpts
+    else:
+        candidates = ckpts
+
+    # among candidates, pick by (priority, rmse)
+    def priority(path: Path) -> tuple[int, float]:
+        name = path.name
+        if name.endswith("_fin.pth"):
+            prio = 0
+        elif name.endswith("_chp.pth"):
+            prio = 1
+        else:
+            prio = 2
+        return prio, rmse_map[path]
+
+    return min(candidates, key=priority)
+
