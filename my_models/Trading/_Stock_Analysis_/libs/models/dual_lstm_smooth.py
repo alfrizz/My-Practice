@@ -459,6 +459,7 @@ def model_training_loop(
     train_metrics = get_metrics(device)
     val_metrics   = get_metrics(device)
     best_val_rmse = float("inf")
+    best_state    = None
     patience_ctr  = 0
     live_plot     = plots.LiveRMSEPlot()
 
@@ -607,10 +608,13 @@ def model_training_loop(
         # Checkpoint, early-stop, live‐plot
         models_dir = Path(params.models_folder)
         live_plot.update(tr["rmse"], vl["rmse"])
-        best_val_rmse, st, tr_best, vl_best, best_state = models_core.maybe_save_chkpt(
+        best_val_rmse, st, tr_best, vl_best, tmp_state = models_core.maybe_save_chkpt(
             models_dir, model, vl["rmse"],
             best_val_rmse, tr, vl, live_plot, params
         )
+        if tmp_state is not None:
+            best_state = tmp_state
+            
         patience_ctr = 0 if st else patience_ctr + 1
         if patience_ctr >= early_stop_patience:
             print(f"Early stopping at epoch {epoch}")
@@ -641,7 +645,7 @@ def model_training_loop(
 
     # Final‐best checkpoint
     if best_state is not None:
-        save_final_chkpt(
+        models_core.save_final_chkpt(
             Path(params.models_folder),
             best_state, best_val_rmse, params,
             tr_best, vl_best, live_plot, suffix="_fin"

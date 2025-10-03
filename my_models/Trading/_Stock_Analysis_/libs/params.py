@@ -145,43 +145,40 @@ hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           128,    # daily LSTM hidden size; ↑capacity for spike detail, ↓overfit & latency
     "LONG_UNITS":            128,    # weekly LSTM hidden size; ↑long-term context, ↓short-term reactivity
-    "DROPOUT_SHORT":         0.25,   # after daily LSTM+attn; ↑regularization (smoother), ↓retains sharp spikes
-    "DROPOUT_LONG":          0.30,   # after weekly LSTM; ↑overfitting guard, ↓lag on trend changes
+    "DROPOUT_SHORT":         0.15,   # after daily LSTM+attn; ↑regularization (smoother), ↓retains sharp spikes
+    "DROPOUT_LONG":          0.20,   # after weekly LSTM; ↑overfitting guard, ↓lag on trend changes
     "ATT_HEADS":             8,      # multi-head count; ↑diverse pattern capture, ↓compute & per-head dim
-    "ATT_DROPOUT":           0.20,   # inside attention; ↑map regularity, ↓signal erosion
-
-    "WEIGHT_DECAY":          7e-3,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "ATT_DROPOUT":           0.10,   # inside attention; ↑map regularity, ↓signal erosion
 
     "CONV_K":                3,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
     "CONV_DILATION":         1,      # input conv dilation; ↑receptive field, ↓signal granularity
     "SMOOTH_K":              3,      # regression‐head conv kernel; ↑smoothing window, ↓reactivity
     "SMOOTH_DILATION":       1,      # regression conv dilation; ↑lag smoothing, ↓immediate response
 
+    # —— Active Loss & Smoothing Hyperparameters —— 
+    "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
+    "DIFF2_WEIGHT":          1,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
+    "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
+    "SMOOTH_BETA":           25,   # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
+    "SMOOTH_DELTA":          0.02,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
+    "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight; ↑spike emphasis, ↓regression focus
+
+    # ── Optimizer & Scheduler Settings ────────────────────────────────
+    "LR_EPOCHS_WARMUP":      3,      # constant LR before decay; ↑stable start, ↓early adaptation
+    "INITIAL_LR":            7e-5,   # start LR; ↑fast convergence, ↓risk of instability
+    "WEIGHT_DECAY":          1e-3,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
+    "T_0":                   100,    # first cycle length; unchanged
+    "T_MULT":                1,      # cycle length multiplier; unchanged
+
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch; unchanged
     "NUM_WORKERS":           12,     # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
-
     "MAX_EPOCHS":            100,    # max epochs; unchanged
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time
-
-    # ── Optimizer & Scheduler Settings ────────────────────────────────
-    "LR_EPOCHS_WARMUP":      3,      # constant LR before decay; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            7e-5,   # start LR; ↑fast convergence, ↓risk of instability
-    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
-    "T_0":                   100,    # first cycle length; unchanged
-    "T_MULT":                1,      # cycle length multiplier; unchanged
-
-    # —— Active Loss & Smoothing Hyperparameters —— 
-    "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
-    "DIFF2_WEIGHT":          0.2,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
-    "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
-    "SMOOTH_BETA":           15.0,   # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
-    "SMOOTH_DELTA":          0.005,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
-    "HUBER_BETA":            0.1,    # SmoothL1 threshold; ↑MAE behavior (robust), ↓MSE behavior (squared)
-    "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight; ↑spike emphasis, ↓regression focus
 
     # ── ReduceLROnPlateau Scheduler ───
     "PLATEAU_FACTOR":        0.9,    # multiply LR by this factor on plateau

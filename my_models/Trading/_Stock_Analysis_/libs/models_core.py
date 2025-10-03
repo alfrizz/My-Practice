@@ -681,58 +681,52 @@ def maybe_save_chkpt(
     vl: dict,
     live_plot,
     params
-):
+) -> tuple[float, bool, dict, dict, dict | None]:
     """
-    Compare `vl_rmse` against:
-      - cur_best: the best RMSE seen so far in this run
-      - existing on‐disk checkpoints in models_dir
+    Compare `vl_rmse` (current validation RMSE) against the best RMSE so far
+    (cur_best) *and* on‐disk checkpoints. If it’s an improvement, capture
+    the model’s weights, metrics, and plot for both folder‐best and
+    in‐run checkpointing.
 
-    If `vl_rmse` < cur_best:
-      • capture model.state_dict() as best_state (mapping of tensors)
-      • copy train (tr) & val (vl) metric dicts
-      • serialize a folder‐best checkpoint (_chp) if this beats files on disk
-      • return (updated_best, best_state, best_tr, best_vl, best_existing)
-
-    Else:
-      • return (cur_best, None, {}, {}, best_existing)
-
-    Keys saved in each checkpoint dict:
-      - "model_state_dict": state_dict() mapping
-      - "hparams":           params.hparams
-      - "train_metrics":     dict of float metrics
-      - "val_metrics":       dict of float metrics
-      - "train_plot_png":    raw PNG bytes of the live‐plot
+    Returns:
+      updated_best_rmse : new best RMSE (float)
+      improved          : True if vl_rmse < cur_best
+      best_train_metrics: snapshot of train metrics at this best
+      best_val_metrics  : snapshot of val   metrics at this best
+      best_state_dict   : model.state_dict() if improved, else None
     """
-    # ensure output folder exists
+    # Ensure output folder exists
     models_dir.mkdir(exist_ok=True)
 
-    # parse existing on‐disk RMS values
-    save_pat = re.compile(rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth")
+    # 1) Gather on‐disk RMSEs to know if we're beating existing files
+    pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth"
+    save_re = re.compile(pattern)
     existing_rmses = [
         float(m.group(1))
         for f in models_dir.glob("*.pth")
-        if (m := save_pat.match(f.name))
+        if (m := save_re.match(f.name))
     ]
-    best_existing = min(existing_rmses, default=float("inf"))
+    best_on_disk = min(existing_rmses, default=float("inf"))
 
-    # if we improved over this run’s best
+    # 2) Check for improvement in this run
     if vl_rmse < cur_best:
-        # 1) capture the new best state_dict
-        best_state = model.state_dict()
-        # 2) snapshot metrics
-        best_tr = tr.copy()
-        best_vl = vl.copy()
+        improved = True
         updated_best = vl_rmse
 
-        # 3) render plot to PNG bytes
+        # Capture weights + metric snapshots
+        best_state = model.state_dict()
+        best_tr    = tr.copy()
+        best_vl    = vl.copy()
+
+        # Render the live RMSE plot to bytes
         buf = io.BytesIO()
         live_plot.fig.savefig(buf, format="png")
         buf.seek(0)
         plot_bytes = buf.read()
 
-        # 4) if also better than on‐disk, write a folder‐best chkpt
-        if updated_best < best_existing:
-            name = f"{params.ticker}_{updated_best:.5f}_chp.pth"
+        # 3) If we also beat any on‐disk model, write a folder‐best checkpoint
+        if updated_best < best_on_disk:
+            fname = f"{params.ticker}_{updated_best:.5f}_chp.pth"
             ckpt = {
                 "model_state_dict": best_state,
                 "hparams":          params.hparams,
@@ -740,15 +734,13 @@ def maybe_save_chkpt(
                 "val_metrics":      best_vl,
                 "train_plot_png":   plot_bytes,
             }
-            torch.save(ckpt, models_dir / name)
-            print(f"🔖 Saved folder-best checkpoint (_chp): {name}")
-            best_existing = updated_best
+            torch.save(ckpt, models_dir / fname)
+            print(f"🔖 Saved folder‐best checkpoint (_chp): {fname}")
 
-        return updated_best, best_state, best_tr, best_vl, best_existing
+        return updated_best, improved, best_tr, best_vl, best_state
 
-    # no improvement: carry forward previous best_existing
-    return cur_best, None, {}, {}, best_existing
-
+    # No improvement
+    return cur_best, False, {}, {}, None
 
     
 ################ 
@@ -767,17 +759,17 @@ def save_final_chkpt(
     """
     Write the final overall‐best checkpoint (_fin):
 
-      • Uses the state_dict mapping in `best_state`  
-      • Embeds final hyperparameters, metrics, and plot PNG  
-      • Filename: <TICKER>_<best_val_rmse><suffix>.pth  
+      • Uses the state_dict mapping in `best_state`
+      • Embeds hyperparameters, final train/val metrics, and the plot PNG
+      • Filename: <TICKER>_<best_val_rmse><suffix>.pth
     """
-    # serialize current live‐plot to PNG bytes
+    # Render the live RMSE plot to PNG bytes
     buf = io.BytesIO()
     live_plot.fig.savefig(buf, format="png")
     buf.seek(0)
     final_plot = buf.read()
 
-    # assemble checkpoint dict
+    # Assemble the checkpoint dict
     ckpt = {
         "model_state_dict": best_state,
         "hparams":          params.hparams,
@@ -786,11 +778,11 @@ def save_final_chkpt(
         "train_plot_png":   final_plot,
     }
 
-    # write to disk
-    name = f"{params.ticker}_{best_val_rmse:.5f}{suffix}.pth"
-    (models_dir / name).parent.mkdir(exist_ok=True, parents=True)
-    torch.save(ckpt, models_dir / name)
-    print(f"✅ Final best model saved: {name}")
+    # Write to disk
+    fname = f"{params.ticker}_{best_val_rmse:.5f}{suffix}.pth"
+    (models_dir / fname).parent.mkdir(exist_ok=True, parents=True)
+    torch.save(ckpt, models_dir / fname)
+    print(f"✅ Final‐best model saved: {fname}")
 
 
 ################
