@@ -722,8 +722,12 @@ def ig_feature_importance(
 
     # 2) wrap model to return only the final regression output
     def forward_reg(x):
-        pr, _, _ = model(x)
-        return torch.sigmoid(pr[..., -1, 0])
+        out = model(x)
+        if isinstance(out, (tuple, list)):
+            pr = out[0]
+        else:
+            pr = out
+        return torch.sigmoid(pr[..., -1, 0])  
 
     ig = IntegratedGradients(forward_reg)
 

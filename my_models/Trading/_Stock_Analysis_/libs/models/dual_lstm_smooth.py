@@ -32,8 +32,7 @@ torch.backends.cudnn.allow_tf32         = True
 torch.backends.cudnn.benchmark          = True
 
 
-######################################################################################################
-
+""
 
 class ModelClass(nn.Module):
     """
@@ -127,7 +126,7 @@ class ModelClass(nn.Module):
         self.smoother = nn.Conv1d(1, 1, kernel_size=smooth_k,
                                   dilation=smooth_dilation,
                                   padding=0, bias=False)
-        # init moving‐avg filter
+        # init moving-avg filter
         nn.init.constant_(self.smoother.weight, 1.0 / smooth_k)
         self.smoother.weight.requires_grad = False
 
@@ -212,8 +211,7 @@ class ModelClass(nn.Module):
 
 
 
-######################################################################################################
-
+""
 
 def get_metrics(device: torch.device, thr: float = 0.5):
     """
@@ -252,8 +250,8 @@ def get_metrics(device: torch.device, thr: float = 0.5):
     return all_metrics
 
 
-#######################
 
+""
 
 def update_metrics(
     metrics: dict[str, torchmetrics.Metric],
@@ -285,8 +283,8 @@ def update_metrics(
     metrics["t_auc"].update(pt_seq, t_t)
 
 
-####################### 
 
+""
 
 def eval_on_loader(
     loader,
@@ -400,8 +398,8 @@ def eval_on_loader(
     return results, None
 
 
-###################### 
 
+""
 
 def model_training_loop(
     model: torch.nn.Module,
@@ -417,37 +415,36 @@ def model_training_loop(
     clipnorm: float,
     device: torch.device = torch.device("cpu"),
     mode: str = "train",
-    cls_loss_weight: float = 0.05,
+    cls_loss_weight: float = 0.05,    # unused in loss
     smooth_alpha: float = 0.005,
-    smooth_beta: float = 20.0,
+    smooth_beta: float = 20.0,       # diagnostics only
     smooth_delta: float = 0.01,
     diff1_weight: float = 1.0,
     diff2_weight: float = 0.2
-):
+) -> float:
     """
-    Train or evaluate the CNN→BiLSTM→Attention→BiLSTM network with three heads.
-
-    Modes:
-      - "train":
-          1) Per-window mixed-precision forward/backward with slip smoothing and diff penalties
-          2) MSE regression head + weighted BCE binary head
-          3) No loss on ternary head (purely for metrics)
-          4) Stateful LSTM: reset short term each day, reset long term on weekday wrap
-          5) Gradient clipping, CosineAnnealingWarmRestarts, ReduceLROnPlateau,
-             early stopping, live RMSE plot, folder-best and final-best checkpointing
-          6) Batch-level metric updates for regression, binary, and ternary
-      - otherwise:
-          Single-pass eval via `eval_on_loader` on val_loader
-
+    Train (or eval) the CNN→BiLSTM→Attention→BiLSTM model.
+    
+    In 'train' mode:
+      - Loss = pure MSE on the regression head.
+      - We still compute slip smoothing + diff penalties every window
+        for logging, but we do NOT add them into `loss`.
+      - Binary & ternary heads run for metrics only; their losses
+        are never backpropagated.
+      - All stateful‐LSTM resets, mixed‐precision, schedulers,
+        gradient clipping, checkpointing, live RMSE plotting
+        remain as before.
+    
+    In other modes:
+      - Delegate to eval_on_loader().
+    
     Returns:
-      TRAIN → best validation RMSE (float)
-      EVAL  → (metrics_dict, preds_array, times_array)
+      best_val_rmse: lowest validation RMSE observed.
     """
     model.to(device)
     mse_loss = nn.MSELoss()
-    bce_loss = nn.BCEWithLogitsLoss()
+    bce_loss = nn.BCEWithLogitsLoss()  # metrics only
 
-    # If not training, delegate to eval_on_loader
     if mode != "train":
         return eval_on_loader(
             val_loader, model, device,
@@ -458,61 +455,54 @@ def model_training_loop(
     torch.backends.cudnn.benchmark = True
     train_metrics = get_metrics(device)
     val_metrics   = get_metrics(device)
-    best_val_rmse = float("inf")
-    best_state    = None
-    patience_ctr  = 0
-    live_plot     = plots.LiveRMSEPlot()
+
+    best_val_rmse, best_state = float("inf"), None
+    best_tr_metrics, best_vl_metrics = {}, {}
+    patience_ctr = 0
+    live_plot = plots.LiveRMSEPlot()
 
     for epoch in range(1, max_epochs + 1):
         gc.collect()
         model.train()
         model.h_short = model.h_long = None
 
-        # Reset all train metrics
         for m in train_metrics.values():
             m.reset()
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
         for batch_idx, batch in enumerate(pbar):
-            # Unpack exactly what DayWindowDataset returns:
-            xb_days, y_reg_days, y_sig_cls_days, y_ret_days, y_ret_ter_days, \
-                rc_days, wd_days, ts_list, lengths = batch
+            xb_days, y_r_days, y_b_days, _, y_t_days, \
+            rc_days, wd_days, ts_list, lengths = batch
 
-            # Move inputs/targets to device
-            xb     = xb_days.to(device, non_blocking=True)             # (B, W, look_back, F)
-            targ_r = y_reg_days   .to(device, non_blocking=True)       # (B, W)
-            targ_b = y_sig_cls_days.to(device, non_blocking=True)      # (B, W) {0,1}
-            targ_t = y_ret_ter_days.to(device, non_blocking=True).view(-1)  # (B*W,) {0,1,2}
-            wd     = wd_days.to(device, non_blocking=True)             # (B,)
+            xb = xb_days.to(device, non_blocking=True)
+            targ_r = y_r_days.to(device, non_blocking=True)
+            targ_b = y_b_days.to(device, non_blocking=True)
+            targ_t = y_t_days.to(device, non_blocking=True).view(-1)
+            wd = wd_days.to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
 
-            # Buffers for preds & targets
             preds_r, targs_r = [], []
             preds_b, targs_b = [], []
             preds_t, targs_t = [], []
 
-            prev_day     = None
-            ewma         = None
-            prev_lr      = None
-            prev_prev_lr = None
+            prev_day, ewma = None, None
+            prev_lr, prev_prev_lr = None, None
 
-            # Loop over each day's windows
+            # --- window‐level forward & diagnostics ---
             for di in range(xb.size(0)):
                 W      = lengths[di]
                 day_id = int(wd[di].item())
                 x_seq  = xb[di, :W]
                 y_r    = targ_r[di, :W].view(-1)
                 y_b    = targ_b[di, :W].view(-1)
-                y_t    = targ_t[di * W : di * W + W]  # discrete 0/1/2
+                y_t    = targ_t[di * W : di * W + W]
 
-                # Reset LSTM states
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
 
-                # Forward pass through all three heads
                 pr_log, pc_log, pt_log = model(x_seq)
                 lr_logits = pr_log[..., -1, 0]
                 b_logits  = pc_log[..., -1, 0]
@@ -522,105 +512,107 @@ def model_training_loop(
                 pb = torch.sigmoid(b_logits)
                 pt = torch.softmax(t_logits, dim=-1)
 
-                # Stash for metric updates
-                preds_r.append(lr.detach());     targs_r.append(y_r)
-                preds_b.append(pb.detach());     targs_b.append(y_b)
-                preds_t.append(pt.detach());     targs_t.append(y_t)
+                preds_r.append(lr.detach()); targs_r.append(y_r)
+                preds_b.append(pb.detach()); targs_b.append(y_b)
+                preds_t.append(pt.detach()); targs_t.append(y_t)
 
-                # Compute loss under autocast
                 with autocast(device_type=device.type):
-                    loss = mse_loss(lr, y_r) \
-                         + cls_loss_weight * bce_loss(b_logits, y_b)
+                    # Pure‐MSE for backprop
+                    loss = mse_loss(lr, y_r)
 
-                    # Slip smoothing (EWMA + Huber)
+                    # Build diagnostics terms
                     ewma_new = lr.detach() if ewma is None \
                                else smooth_alpha * lr.detach() + (1 - smooth_alpha) * ewma
                     slip = torch.relu(ewma_new - lr)
                     if prev_lr is not None:
-                        slip = torch.where(lr > prev_lr, torch.zeros_like(slip), slip)
+                        slip = torch.where(lr > prev_lr,
+                                           torch.zeros_like(slip),
+                                           slip)
                     hub = torch.where(
                         slip <= smooth_delta,
                         0.5 * slip**2,
                         smooth_delta * (slip - 0.5 * smooth_delta),
                     )
-                    loss = loss + smooth_beta * hub.mean()
 
-                    # 1st & 2nd difference penalties
+                    # explicit if/else to avoid `tensor or tensor`
                     if prev_lr is not None:
                         neg_diff = torch.relu(prev_lr - lr)
-                        loss    = loss + diff1_weight * neg_diff.pow(2).mean()
+                    else:
+                        neg_diff = torch.zeros_like(lr)
+
                     if prev_prev_lr is not None:
                         curv = lr - 2 * prev_lr + prev_prev_lr
-                        loss    = loss + diff2_weight * curv.pow(2).mean()
+                    else:
+                        curv = torch.zeros_like(lr)
 
                 prev_prev_lr, prev_lr, ewma = prev_lr, lr.detach(), ewma_new
-                scaler.scale(loss).backward()
+            # --- end window loop ---
 
-                # Detach hidden states
-                for h in (model.h_short, model.c_short, model.h_long, model.c_long):
-                    h.detach_()
+            # diagnostics on first batch only
+            if batch_idx == 0:
+                models_core.log_loss_components(
+                    epoch, batch_idx, lr, y_r, b_logits, hub, prev_lr, prev_prev_lr, 
+                    mse_loss, bce_loss, cls_loss_weight, smooth_beta,
+                    diff1_weight, diff2_weight, params.log_file
+                )
 
-            # End per-window loop
-
-            # Optimizer step
+            # backprop pure‐MSE
+            scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
+
+            if batch_idx == 0:
+                models_core.log_gradient_norms(
+                    epoch, batch_idx, model, params.log_file
+                )
+                
             nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer)
             scaler.update()
 
-            # Batch‐level metric updates
+            # batch‐level metrics (all heads)
             with torch.no_grad():
-                pr_cat = torch.cat(preds_r)
-                tr_cat = torch.cat(targs_r)
-                pb_cat = torch.cat(preds_b)
-                tb_cat = torch.cat(targs_b)
-                pt_cat = torch.cat(preds_t)
-                tt_cat = torch.cat(targs_t)
-
                 update_metrics(
                     train_metrics,
-                    pr_cat, tr_cat,
-                    pb_cat, tb_cat,
-                    pt_cat, tt_cat
+                    torch.cat(preds_r), torch.cat(targs_r),
+                    torch.cat(preds_b), torch.cat(targs_b),
+                    torch.cat(preds_t), torch.cat(targs_t),
                 )
 
-            # Scheduler & progress bar update
+            # scheduler & progress bar
             frac = epoch - 1 + (batch_idx + 1) / len(train_loader)
             cosine_sched.step(frac)
             pbar.set_postfix(lr=optimizer.param_groups[0]["lr"], refresh=False)
 
-        # End training batches
-
-        # Compute train metrics → floats
+        # Compute epoch metrics
         raw_tr = {n: m.compute() for n, m in train_metrics.items()}
-        tr     = {n: (v.item() if isinstance(v, torch.Tensor) else v) for n, v in raw_tr.items()}
+        tr     = {n: (v.item() if isinstance(v, torch.Tensor) else v)
+                  for n, v in raw_tr.items()}
 
-        # Validation pass via eval_on_loader
         for m in val_metrics.values():
             m.reset()
-        raw_vl, _ = eval_on_loader(
-            val_loader, model, device,
-            val_metrics,
-            collect_preds=False
-        )
-        vl = {n: (v.item() if isinstance(v, torch.Tensor) else v) for n, v in raw_vl.items()}
+        raw_vl, _ = eval_on_loader(val_loader, model, device, val_metrics)
+        vl = {n: (v.item() if isinstance(v, torch.Tensor) else v)
+              for n, v in raw_vl.items()}
 
-        # Checkpoint, early-stop, live‐plot
+        # Checkpoint & early stopping
         models_dir = Path(params.models_folder)
         live_plot.update(tr["rmse"], vl["rmse"])
-        best_val_rmse, st, tr_best, vl_best, tmp_state = models_core.maybe_save_chkpt(
-            models_dir, model, vl["rmse"],
-            best_val_rmse, tr, vl, live_plot, params
-        )
+        best_val_rmse, improved, tr_best, vl_best, tmp_state = \
+            models_core.maybe_save_chkpt(
+                models_dir, model, vl["rmse"],
+                best_val_rmse, tr, vl, live_plot, params
+            )
         if tmp_state is not None:
-            best_state = tmp_state
-            
-        patience_ctr = 0 if st else patience_ctr + 1
+            best_state      = tmp_state
+            best_tr_metrics = tr_best.copy()
+            best_vl_metrics = vl_best.copy()
+
+        patience_ctr = 0 if improved else patience_ctr + 1
         if patience_ctr >= early_stop_patience:
             print(f"Early stopping at epoch {epoch}")
             break
 
-        # Epoch summary printout
+        # Print epoch summary
         print(f"Epoch {epoch:03d}")
         print(
             f'TRAIN→ RMSE={tr["rmse"]:.5f} MAE={tr["mae"]:.5f} R2={tr["r2"]:.5f} | '
@@ -637,18 +629,21 @@ def model_training_loop(
             f'T_F1={vl["t_f1"]:.5f} T_AUC={vl["t_auc"]:.5f}'
         )
 
-        # Plateau scheduler after warmup
         if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
             plateau_sched.step(vl["rmse"])
 
-    # End epoch loop
-
-    # Final‐best checkpoint
+    # Final-best checkpoint
     if best_state is not None:
         models_core.save_final_chkpt(
             Path(params.models_folder),
-            best_state, best_val_rmse, params,
-            tr_best, vl_best, live_plot, suffix="_fin"
+            best_state,
+            best_val_rmse,
+            params,
+            best_tr_metrics,
+            best_vl_metrics,
+            live_plot,
+            suffix="_fin"
         )
 
     return best_val_rmse
+

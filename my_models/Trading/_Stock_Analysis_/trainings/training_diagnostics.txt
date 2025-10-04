@@ -1,0 +1,810 @@
+
+
+****************************************************************************************************
+
+2025-10-04 11:03:38  [E01 B000] Loss→ MSE=0.1129  BCE=0.0693  HUB=0.0563  D1=0.0000  D2=0.0391
+2025-10-04 11:03:38  
+PARAMETER NAMES:
+2025-10-04 11:03:38    conv.weight
+2025-10-04 11:03:38    conv.bias
+2025-10-04 11:03:38    bn.weight
+2025-10-04 11:03:38    bn.bias
+2025-10-04 11:03:38    short_lstm.weight_ih_l0
+2025-10-04 11:03:38    short_lstm.weight_hh_l0
+2025-10-04 11:03:38    short_lstm.bias_ih_l0
+2025-10-04 11:03:38    short_lstm.bias_hh_l0
+2025-10-04 11:03:38    short_lstm.weight_ih_l0_reverse
+2025-10-04 11:03:38    short_lstm.weight_hh_l0_reverse
+2025-10-04 11:03:38    short_lstm.bias_ih_l0_reverse
+2025-10-04 11:03:38    short_lstm.bias_hh_l0_reverse
+2025-10-04 11:03:38    ln_short.weight
+2025-10-04 11:03:38    ln_short.bias
+2025-10-04 11:03:38    long_lstm.weight_ih_l0
+2025-10-04 11:03:38    long_lstm.weight_hh_l0
+2025-10-04 11:03:38    long_lstm.bias_ih_l0
+2025-10-04 11:03:38    long_lstm.bias_hh_l0
+2025-10-04 11:03:38    long_lstm.weight_ih_l0_reverse
+2025-10-04 11:03:38    long_lstm.weight_hh_l0_reverse
+2025-10-04 11:03:38    long_lstm.bias_ih_l0_reverse
+2025-10-04 11:03:38    long_lstm.bias_hh_l0_reverse
+2025-10-04 11:03:38    short2long.weight
+2025-10-04 11:03:38    short2long.bias
+2025-10-04 11:03:38    ln_long.weight
+2025-10-04 11:03:38    ln_long.bias
+2025-10-04 11:03:38    pred.weight
+2025-10-04 11:03:38    pred.bias
+2025-10-04 11:03:38  END PARAMETER NAMES
+
+2025-10-04 11:03:38  [E01 B000] GradNorm→ reg=0.4  cls=0.0  ter=0.0
+2025-10-04 11:06:54  
+
+****************************************************************************************************
+
+2025-10-04 11:06:54  [E01 B000] Loss→ MSE=0.1096  BCE=0.0693  HUB=0.0607  D1=0.0000  D2=0.0467
+2025-10-04 11:06:54  
+PARAMETER NAMES:
+2025-10-04 11:06:54    conv.weight
+2025-10-04 11:06:54    conv.bias
+2025-10-04 11:06:54    bn.weight
+2025-10-04 11:06:54    bn.bias
+2025-10-04 11:06:54    short_lstm.weight_ih_l0
+2025-10-04 11:06:54    short_lstm.weight_hh_l0
+2025-10-04 11:06:54    short_lstm.bias_ih_l0
+2025-10-04 11:06:54    short_lstm.bias_hh_l0
+2025-10-04 11:06:54    short_lstm.weight_ih_l0_reverse
+2025-10-04 11:06:54    short_lstm.weight_hh_l0_reverse
+2025-10-04 11:06:54    short_lstm.bias_ih_l0_reverse
+2025-10-04 11:06:54    short_lstm.bias_hh_l0_reverse
+2025-10-04 11:06:54    ln_short.weight
+2025-10-04 11:06:54    ln_short.bias
+2025-10-04 11:06:54    long_lstm.weight_ih_l0
+2025-10-04 11:06:54    long_lstm.weight_hh_l0
+2025-10-04 11:06:54    long_lstm.bias_ih_l0
+2025-10-04 11:06:54    long_lstm.bias_hh_l0
+2025-10-04 11:06:54    long_lstm.weight_ih_l0_reverse
+2025-10-04 11:06:54    long_lstm.weight_hh_l0_reverse
+2025-10-04 11:06:54    long_lstm.bias_ih_l0_reverse
+2025-10-04 11:06:54    long_lstm.bias_hh_l0_reverse
+2025-10-04 11:06:54    short2long.weight
+2025-10-04 11:06:54    short2long.bias
+2025-10-04 11:06:54    ln_long.weight
+2025-10-04 11:06:54    ln_long.bias
+2025-10-04 11:06:54    pred.weight
+2025-10-04 11:06:54    pred.bias
+2025-10-04 11:06:54  END PARAMETER NAMES
+
+2025-10-04 11:06:54  [E01 B000] GradNorm→ reg=0.4  cls=0.0  ter=0.0
+2025-10-04 11:07:17  [E02 B000] Loss→ MSE=0.1113  BCE=0.0693  HUB=0.0632  D1=0.0000  D2=0.0600
+2025-10-04 11:07:17  [E02 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:07:43  [E03 B000] Loss→ MSE=0.1131  BCE=0.0693  HUB=0.0700  D1=0.0000  D2=0.0548
+2025-10-04 11:07:43  [E03 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:08:08  [E04 B000] Loss→ MSE=0.1131  BCE=0.0693  HUB=0.0692  D1=0.0000  D2=0.0722
+2025-10-04 11:08:08  [E04 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:08:33  [E05 B000] Loss→ MSE=0.1118  BCE=0.0693  HUB=0.0738  D1=0.0000  D2=0.0720
+2025-10-04 11:08:33  [E05 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:08:58  [E06 B000] Loss→ MSE=0.1157  BCE=0.0693  HUB=0.0696  D1=0.0000  D2=0.0763
+2025-10-04 11:08:58  [E06 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:09:24  [E07 B000] Loss→ MSE=0.1141  BCE=0.0693  HUB=0.0807  D1=0.0000  D2=0.0752
+2025-10-04 11:09:24  [E07 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:09:49  [E08 B000] Loss→ MSE=0.1095  BCE=0.0693  HUB=0.0737  D1=0.0000  D2=0.0750
+2025-10-04 11:09:49  [E08 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:10:14  [E09 B000] Loss→ MSE=0.1132  BCE=0.0693  HUB=0.0703  D1=0.0000  D2=0.0839
+2025-10-04 11:10:14  [E09 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:10:39  [E10 B000] Loss→ MSE=0.1144  BCE=0.0693  HUB=0.0783  D1=0.0000  D2=0.0789
+2025-10-04 11:10:39  [E10 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:11:03  [E11 B000] Loss→ MSE=0.1088  BCE=0.0693  HUB=0.0680  D1=0.0000  D2=0.0800
+2025-10-04 11:11:03  [E11 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:11:27  [E12 B000] Loss→ MSE=0.1099  BCE=0.0693  HUB=0.0718  D1=0.0000  D2=0.0796
+2025-10-04 11:11:27  [E12 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:11:52  [E13 B000] Loss→ MSE=0.1100  BCE=0.0693  HUB=0.0746  D1=0.0000  D2=0.0775
+2025-10-04 11:11:52  [E13 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:12:18  [E14 B000] Loss→ MSE=0.1116  BCE=0.0693  HUB=0.0679  D1=0.0000  D2=0.0809
+2025-10-04 11:12:18  [E14 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:12:43  [E15 B000] Loss→ MSE=0.1079  BCE=0.0693  HUB=0.0662  D1=0.0000  D2=0.0775
+2025-10-04 11:12:43  [E15 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:13:08  [E16 B000] Loss→ MSE=0.1091  BCE=0.0693  HUB=0.0634  D1=0.0000  D2=0.0785
+2025-10-04 11:13:08  [E16 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:13:33  [E17 B000] Loss→ MSE=0.1115  BCE=0.0693  HUB=0.0679  D1=0.0000  D2=0.0810
+2025-10-04 11:13:33  [E17 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:13:57  [E18 B000] Loss→ MSE=0.1112  BCE=0.0693  HUB=0.0611  D1=0.0000  D2=0.0832
+2025-10-04 11:13:57  [E18 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:14:23  [E19 B000] Loss→ MSE=0.1087  BCE=0.0693  HUB=0.0672  D1=0.0000  D2=0.0756
+2025-10-04 11:14:23  [E19 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:14:48  [E20 B000] Loss→ MSE=0.1057  BCE=0.0693  HUB=0.0656  D1=0.0000  D2=0.0796
+2025-10-04 11:14:48  [E20 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:15:14  [E21 B000] Loss→ MSE=0.1072  BCE=0.0693  HUB=0.0682  D1=0.0000  D2=0.0770
+2025-10-04 11:15:14  [E21 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:15:38  [E22 B000] Loss→ MSE=0.1071  BCE=0.0693  HUB=0.0604  D1=0.0000  D2=0.0806
+2025-10-04 11:15:38  [E22 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:16:03  [E23 B000] Loss→ MSE=0.1076  BCE=0.0693  HUB=0.0600  D1=0.0000  D2=0.0818
+2025-10-04 11:16:03  [E23 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:16:30  [E24 B000] Loss→ MSE=0.1099  BCE=0.0693  HUB=0.0610  D1=0.0000  D2=0.0830
+2025-10-04 11:16:30  [E24 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:16:56  [E25 B000] Loss→ MSE=0.1073  BCE=0.0693  HUB=0.0636  D1=0.0000  D2=0.0760
+2025-10-04 11:16:56  [E25 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:17:20  [E26 B000] Loss→ MSE=0.1077  BCE=0.0693  HUB=0.0684  D1=0.0000  D2=0.0803
+2025-10-04 11:17:20  [E26 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:17:47  [E27 B000] Loss→ MSE=0.1062  BCE=0.0693  HUB=0.0646  D1=0.0000  D2=0.0793
+2025-10-04 11:17:47  [E27 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:18:11  [E28 B000] Loss→ MSE=0.1031  BCE=0.0693  HUB=0.0647  D1=0.0000  D2=0.0851
+2025-10-04 11:18:11  [E28 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:18:35  [E29 B000] Loss→ MSE=0.1058  BCE=0.0693  HUB=0.0624  D1=0.0000  D2=0.0780
+2025-10-04 11:18:35  [E29 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:18:59  [E30 B000] Loss→ MSE=0.1061  BCE=0.0693  HUB=0.0658  D1=0.0000  D2=0.0769
+2025-10-04 11:18:59  [E30 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:19:23  [E31 B000] Loss→ MSE=0.1049  BCE=0.0693  HUB=0.0551  D1=0.0000  D2=0.0757
+2025-10-04 11:19:23  [E31 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:19:48  [E32 B000] Loss→ MSE=0.1048  BCE=0.0693  HUB=0.0587  D1=0.0000  D2=0.0730
+2025-10-04 11:19:48  [E32 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:20:12  [E33 B000] Loss→ MSE=0.1063  BCE=0.0693  HUB=0.0612  D1=0.0000  D2=0.0807
+2025-10-04 11:20:12  [E33 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:20:37  [E34 B000] Loss→ MSE=0.1061  BCE=0.0693  HUB=0.0601  D1=0.0000  D2=0.0798
+2025-10-04 11:20:37  [E34 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:21:01  [E35 B000] Loss→ MSE=0.1054  BCE=0.0693  HUB=0.0599  D1=0.0000  D2=0.0742
+2025-10-04 11:21:01  [E35 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:21:25  [E36 B000] Loss→ MSE=0.1037  BCE=0.0693  HUB=0.0547  D1=0.0000  D2=0.0719
+2025-10-04 11:21:25  [E36 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:21:50  [E37 B000] Loss→ MSE=0.1085  BCE=0.0693  HUB=0.0612  D1=0.0000  D2=0.0728
+2025-10-04 11:21:50  [E37 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 11:42:51  
+
+****************************************************************************************************
+
+2025-10-04 11:42:51  [E01 B000] Loss→ MSE=0.1277  BCE=0.0693  HUB=0.0735  D1=0.0000  D2=0.0438
+2025-10-04 11:42:53  
+PARAMETER NAMES:
+2025-10-04 11:42:53    conv.weight
+2025-10-04 11:42:53    conv.bias
+2025-10-04 11:42:53    bn.weight
+2025-10-04 11:42:53    bn.bias
+2025-10-04 11:42:53    short_lstm.weight_ih_l0
+2025-10-04 11:42:53    short_lstm.weight_hh_l0
+2025-10-04 11:42:53    short_lstm.bias_ih_l0
+2025-10-04 11:42:53    short_lstm.bias_hh_l0
+2025-10-04 11:42:53    short_lstm.weight_ih_l0_reverse
+2025-10-04 11:42:53    short_lstm.weight_hh_l0_reverse
+2025-10-04 11:42:53    short_lstm.bias_ih_l0_reverse
+2025-10-04 11:42:53    short_lstm.bias_hh_l0_reverse
+2025-10-04 11:42:53    ln_short.weight
+2025-10-04 11:42:53    ln_short.bias
+2025-10-04 11:42:53    long_lstm.weight_ih_l0
+2025-10-04 11:42:53    long_lstm.weight_hh_l0
+2025-10-04 11:42:53    long_lstm.bias_ih_l0
+2025-10-04 11:42:53    long_lstm.bias_hh_l0
+2025-10-04 11:42:53    long_lstm.weight_ih_l0_reverse
+2025-10-04 11:42:53    long_lstm.weight_hh_l0_reverse
+2025-10-04 11:42:53    long_lstm.bias_ih_l0_reverse
+2025-10-04 11:42:53    long_lstm.bias_hh_l0_reverse
+2025-10-04 11:42:53    short2long.weight
+2025-10-04 11:42:53    short2long.bias
+2025-10-04 11:42:53    ln_long.weight
+2025-10-04 11:42:53    ln_long.bias
+2025-10-04 11:42:53    pred.weight
+2025-10-04 11:42:53    pred.bias
+2025-10-04 11:42:53  END PARAMETER NAMES
+
+2025-10-04 11:42:53  [E01 B000] GradNorm→ reg=0.9  cls=0.0  ter=0.0
+2025-10-04 11:45:39  [E02 B000] Loss→ MSE=0.1212  BCE=0.0693  HUB=0.0483  D1=0.0000  D2=0.0248
+2025-10-04 11:45:40  [E02 B000] GradNorm→ reg=0.4  cls=0.0  ter=0.0
+2025-10-04 11:49:04  [E03 B000] Loss→ MSE=0.1201  BCE=0.0693  HUB=0.0490  D1=0.0000  D2=0.0323
+2025-10-04 11:49:08  [E03 B000] GradNorm→ reg=0.4  cls=0.0  ter=0.0
+2025-10-04 11:52:15  [E04 B000] Loss→ MSE=0.1194  BCE=0.0693  HUB=0.0582  D1=0.0000  D2=0.0342
+2025-10-04 11:52:19  [E04 B000] GradNorm→ reg=0.4  cls=0.0  ter=0.0
+2025-10-04 11:55:32  [E05 B000] Loss→ MSE=0.1179  BCE=0.0693  HUB=0.0601  D1=0.0000  D2=0.0463
+2025-10-04 11:55:33  [E05 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 11:59:26  [E06 B000] Loss→ MSE=0.1144  BCE=0.0693  HUB=0.0537  D1=0.0000  D2=0.0441
+2025-10-04 11:59:26  [E06 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 12:02:05  [E07 B000] Loss→ MSE=0.1109  BCE=0.0693  HUB=0.0601  D1=0.0000  D2=0.0441
+2025-10-04 12:02:06  [E07 B000] GradNorm→ reg=0.3  cls=0.0  ter=0.0
+2025-10-04 12:05:29  [E08 B000] Loss→ MSE=0.1091  BCE=0.0693  HUB=0.0595  D1=0.0000  D2=0.0454
+2025-10-04 12:05:30  [E08 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 12:09:19  [E09 B000] Loss→ MSE=0.1118  BCE=0.0693  HUB=0.0610  D1=0.0000  D2=0.0483
+2025-10-04 12:09:23  [E09 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 12:12:30  [E10 B000] Loss→ MSE=0.1099  BCE=0.0693  HUB=0.0641  D1=0.0000  D2=0.0542
+2025-10-04 12:12:33  [E10 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 12:16:05  [E11 B000] Loss→ MSE=0.1077  BCE=0.0693  HUB=0.0574  D1=0.0000  D2=0.0553
+2025-10-04 12:16:06  [E11 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:19:15  [E12 B000] Loss→ MSE=0.1067  BCE=0.0693  HUB=0.0584  D1=0.0000  D2=0.0588
+2025-10-04 12:19:16  [E12 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:22:15  [E13 B000] Loss→ MSE=0.1059  BCE=0.0693  HUB=0.0602  D1=0.0000  D2=0.0580
+2025-10-04 12:22:16  [E13 B000] GradNorm→ reg=0.0  cls=0.0  ter=0.0
+2025-10-04 12:25:34  [E14 B000] Loss→ MSE=0.1056  BCE=0.0693  HUB=0.0577  D1=0.0000  D2=0.0601
+2025-10-04 12:25:34  [E14 B000] GradNorm→ reg=0.0  cls=0.0  ter=0.0
+2025-10-04 12:28:25  [E15 B000] Loss→ MSE=0.1062  BCE=0.0693  HUB=0.0549  D1=0.0000  D2=0.0606
+2025-10-04 12:28:29  [E15 B000] GradNorm→ reg=0.0  cls=0.0  ter=0.0
+2025-10-04 12:31:25  [E16 B000] Loss→ MSE=0.1079  BCE=0.0693  HUB=0.0538  D1=0.0000  D2=0.0652
+2025-10-04 12:31:26  [E16 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:34:23  [E17 B000] Loss→ MSE=0.1059  BCE=0.0693  HUB=0.0506  D1=0.0000  D2=0.0649
+2025-10-04 12:34:24  [E17 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:37:10  [E18 B000] Loss→ MSE=0.1033  BCE=0.0693  HUB=0.0488  D1=0.0000  D2=0.0683
+2025-10-04 12:37:12  [E18 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:40:49  [E19 B000] Loss→ MSE=0.1037  BCE=0.0693  HUB=0.0503  D1=0.0000  D2=0.0660
+2025-10-04 12:40:50  [E19 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:43:32  [E20 B000] Loss→ MSE=0.1095  BCE=0.0693  HUB=0.0447  D1=0.0000  D2=0.0676
+2025-10-04 12:43:33  [E20 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:46:23  [E21 B000] Loss→ MSE=0.1065  BCE=0.0693  HUB=0.0510  D1=0.0000  D2=0.0691
+2025-10-04 12:46:27  [E21 B000] GradNorm→ reg=0.1  cls=0.0  ter=0.0
+2025-10-04 12:49:32  [E22 B000] Loss→ MSE=0.1057  BCE=0.0693  HUB=0.0451  D1=0.0000  D2=0.0717
+2025-10-04 12:49:35  [E22 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 12:52:44  [E23 B000] Loss→ MSE=0.1054  BCE=0.0693  HUB=0.0451  D1=0.0000  D2=0.0679
+2025-10-04 12:52:45  [E23 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 12:55:42  [E24 B000] Loss→ MSE=0.1076  BCE=0.0693  HUB=0.0415  D1=0.0000  D2=0.0690
+2025-10-04 12:55:46  [E24 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 12:58:44  [E25 B000] Loss→ MSE=0.1085  BCE=0.0693  HUB=0.0424  D1=0.0000  D2=0.0683
+2025-10-04 12:58:45  [E25 B000] GradNorm→ reg=0.2  cls=0.0  ter=0.0
+2025-10-04 13:19:42  
+
+****************************************************************************************************
+
+2025-10-04 13:19:42  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:19:42  [E01 B000] Loss→ MSE=0.1479  BCE=0.0693  HUB=0.0810  D1=0.0000  D2=0.0587 | lr(mean,sd,min,max)=0.5427,0.1244,0.2087,0.8106 | hub(mean,max)=0.0008,0.0069 | slip_frac=0.412
+2025-10-04 13:19:43  
+PARAMETER NAMES:
+2025-10-04 13:19:43    conv.weight
+2025-10-04 13:19:43    conv.bias
+2025-10-04 13:19:43    bn.weight
+2025-10-04 13:19:43    bn.bias
+2025-10-04 13:19:43    short_lstm.weight_ih_l0
+2025-10-04 13:19:43    short_lstm.weight_hh_l0
+2025-10-04 13:19:43    short_lstm.bias_ih_l0
+2025-10-04 13:19:43    short_lstm.bias_hh_l0
+2025-10-04 13:19:43    short_lstm.weight_ih_l0_reverse
+2025-10-04 13:19:43    short_lstm.weight_hh_l0_reverse
+2025-10-04 13:19:43    short_lstm.bias_ih_l0_reverse
+2025-10-04 13:19:43    short_lstm.bias_hh_l0_reverse
+2025-10-04 13:19:43    ln_short.weight
+2025-10-04 13:19:43    ln_short.bias
+2025-10-04 13:19:43    long_lstm.weight_ih_l0
+2025-10-04 13:19:43    long_lstm.weight_hh_l0
+2025-10-04 13:19:43    long_lstm.bias_ih_l0
+2025-10-04 13:19:43    long_lstm.bias_hh_l0
+2025-10-04 13:19:43    long_lstm.weight_ih_l0_reverse
+2025-10-04 13:19:43    long_lstm.weight_hh_l0_reverse
+2025-10-04 13:19:43    long_lstm.bias_ih_l0_reverse
+2025-10-04 13:19:43    long_lstm.bias_hh_l0_reverse
+2025-10-04 13:19:43    short2long.weight
+2025-10-04 13:19:43    short2long.bias
+2025-10-04 13:19:43    ln_long.weight
+2025-10-04 13:19:43    ln_long.bias
+2025-10-04 13:19:43    pred.weight
+2025-10-04 13:19:43    pred.bias
+2025-10-04 13:19:43  END PARAMETER NAMES
+
+2025-10-04 13:19:43  [E01 B000] GradNorm→ reg=0.867  cls=0.000  ter=0.000 | total_norm=1.355 max=0.763 min=0.000 zero_frac=0.000 param_norm=25.638
+2025-10-04 13:19:43  Top6_grads: pred.weight:0.763, conv.weight:0.683, short2long.weight:0.659, short_lstm.weight_ih_l0:0.340, short_lstm.weight_ih_l0_reverse:0.276, short_lstm.bias_ih_l0:0.175
+2025-10-04 13:27:32  
+
+****************************************************************************************************
+
+2025-10-04 13:27:32  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:27:32  [E01 B000] Loss→ MSE=0.1159  BCE=0.0693  HUB=0.0457  D1=0.0000  D2=0.0245 | lr(mean,sd,min,max)=0.2113,0.0806,0.0657,0.5451 | hub(mean,max)=0.0005,0.0035 | slip_frac=0.410
+2025-10-04 13:27:32  
+PARAMETER NAMES:
+2025-10-04 13:27:32    conv.weight
+2025-10-04 13:27:32    conv.bias
+2025-10-04 13:27:32    bn.weight
+2025-10-04 13:27:32    bn.bias
+2025-10-04 13:27:32    short_lstm.weight_ih_l0
+2025-10-04 13:27:32    short_lstm.weight_hh_l0
+2025-10-04 13:27:32    short_lstm.bias_ih_l0
+2025-10-04 13:27:32    short_lstm.bias_hh_l0
+2025-10-04 13:27:32    short_lstm.weight_ih_l0_reverse
+2025-10-04 13:27:32    short_lstm.weight_hh_l0_reverse
+2025-10-04 13:27:32    short_lstm.bias_ih_l0_reverse
+2025-10-04 13:27:32    short_lstm.bias_hh_l0_reverse
+2025-10-04 13:27:32    ln_short.weight
+2025-10-04 13:27:32    ln_short.bias
+2025-10-04 13:27:32    long_lstm.weight_ih_l0
+2025-10-04 13:27:32    long_lstm.weight_hh_l0
+2025-10-04 13:27:32    long_lstm.bias_ih_l0
+2025-10-04 13:27:32    long_lstm.bias_hh_l0
+2025-10-04 13:27:32    long_lstm.weight_ih_l0_reverse
+2025-10-04 13:27:32    long_lstm.weight_hh_l0_reverse
+2025-10-04 13:27:32    long_lstm.bias_ih_l0_reverse
+2025-10-04 13:27:32    long_lstm.bias_hh_l0_reverse
+2025-10-04 13:27:32    short2long.weight
+2025-10-04 13:27:32    short2long.bias
+2025-10-04 13:27:32    ln_long.weight
+2025-10-04 13:27:32    ln_long.bias
+2025-10-04 13:27:32    pred.weight
+2025-10-04 13:27:32    pred.bias
+2025-10-04 13:27:32  END PARAMETER NAMES
+
+2025-10-04 13:27:32  [E01 B000] GradNorm→ reg=0.260  cls=0.000  ter=0.000 | total_norm=0.342 max=0.230 min=0.000 zero_frac=0.000 param_norm=25.649
+2025-10-04 13:27:32  Top6_grads: pred.weight:0.230, short2long.weight:0.168, conv.weight:0.135, short_lstm.weight_ih_l0:0.075, short_lstm.weight_ih_l0_reverse:0.060, long_lstm.weight_ih_l0:0.041
+2025-10-04 13:28:02  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:28:02  [E02 B000] Loss→ MSE=0.1165  BCE=0.0693  HUB=0.0500  D1=0.0000  D2=0.0288 | lr(mean,sd,min,max)=0.2107,0.0962,0.0646,0.7271 | hub(mean,max)=0.0005,0.0039 | slip_frac=0.421
+2025-10-04 13:28:02  [E02 B000] GradNorm→ reg=0.268  cls=0.000  ter=0.000 | total_norm=0.343 max=0.237 min=0.000 zero_frac=0.000 param_norm=25.661
+2025-10-04 13:28:02  Top6_grads: pred.weight:0.237, short2long.weight:0.158, conv.weight:0.141, short_lstm.weight_ih_l0:0.072, short_lstm.weight_ih_l0_reverse:0.056, long_lstm.weight_ih_l0:0.039
+2025-10-04 13:28:32  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:28:32  [E03 B000] Loss→ MSE=0.1192  BCE=0.0693  HUB=0.0572  D1=0.0000  D2=0.0316 | lr(mean,sd,min,max)=0.2119,0.0981,0.0517,0.6462 | hub(mean,max)=0.0006,0.0046 | slip_frac=0.446
+2025-10-04 13:28:32  [E03 B000] GradNorm→ reg=0.256  cls=0.000  ter=0.000 | total_norm=0.318 max=0.227 min=0.000 zero_frac=0.000 param_norm=25.672
+2025-10-04 13:28:32  Top6_grads: pred.weight:0.227, short2long.weight:0.140, conv.weight:0.133, short_lstm.weight_ih_l0:0.061, short_lstm.weight_ih_l0_reverse:0.050, long_lstm.weight_ih_l0:0.034
+2025-10-04 13:29:03  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:29:03  [E04 B000] Loss→ MSE=0.1163  BCE=0.0693  HUB=0.0538  D1=0.0000  D2=0.0357 | lr(mean,sd,min,max)=0.2284,0.1043,0.0514,0.6737 | hub(mean,max)=0.0005,0.0052 | slip_frac=0.415
+2025-10-04 13:29:03  [E04 B000] GradNorm→ reg=0.236  cls=0.000  ter=0.000 | total_norm=0.289 max=0.210 min=0.000 zero_frac=0.000 param_norm=25.683
+2025-10-04 13:29:03  Top6_grads: pred.weight:0.210, conv.weight:0.124, short2long.weight:0.121, short_lstm.weight_ih_l0:0.052, short_lstm.weight_ih_l0_reverse:0.044, long_lstm.weight_ih_l0:0.030
+2025-10-04 13:29:32  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:29:32  [E05 B000] Loss→ MSE=0.1121  BCE=0.0693  HUB=0.0572  D1=0.0000  D2=0.0361 | lr(mean,sd,min,max)=0.2355,0.1083,0.0765,0.6969 | hub(mean,max)=0.0006,0.0046 | slip_frac=0.404
+2025-10-04 13:29:32  [E05 B000] GradNorm→ reg=0.212  cls=0.000  ter=0.000 | total_norm=0.257 max=0.189 min=0.000 zero_frac=0.000 param_norm=25.694
+2025-10-04 13:29:32  Top6_grads: pred.weight:0.189, conv.weight:0.115, short2long.weight:0.102, short_lstm.weight_ih_l0:0.043, short_lstm.weight_ih_l0_reverse:0.039, long_lstm.weight_ih_l0:0.025
+2025-10-04 13:30:01  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:30:01  [E06 B000] Loss→ MSE=0.1145  BCE=0.0693  HUB=0.0655  D1=0.0000  D2=0.0393 | lr(mean,sd,min,max)=0.2401,0.1106,0.0721,0.6657 | hub(mean,max)=0.0007,0.0045 | slip_frac=0.455
+2025-10-04 13:30:01  [E06 B000] GradNorm→ reg=0.190  cls=0.000  ter=0.000 | total_norm=0.232 max=0.170 min=0.000 zero_frac=0.000 param_norm=25.706
+2025-10-04 13:30:01  Top6_grads: pred.weight:0.170, conv.weight:0.109, short2long.weight:0.087, short_lstm.weight_ih_l0:0.036, short_lstm.weight_ih_l0_reverse:0.036, long_lstm.weight_ih_l0:0.021
+2025-10-04 13:30:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:30:31  [E07 B000] Loss→ MSE=0.1104  BCE=0.0693  HUB=0.0620  D1=0.0000  D2=0.0404 | lr(mean,sd,min,max)=0.2515,0.1105,0.0774,0.6572 | hub(mean,max)=0.0006,0.0047 | slip_frac=0.410
+2025-10-04 13:30:32  [E07 B000] GradNorm→ reg=0.167  cls=0.000  ter=0.000 | total_norm=0.206 max=0.150 min=0.000 zero_frac=0.000 param_norm=25.717
+2025-10-04 13:30:32  Top6_grads: pred.weight:0.150, conv.weight:0.102, short2long.weight:0.074, short_lstm.weight_ih_l0_reverse:0.033, short_lstm.weight_ih_l0:0.031, long_lstm.weight_ih_l0:0.018
+2025-10-04 13:31:01  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:31:01  [E08 B000] Loss→ MSE=0.1088  BCE=0.0693  HUB=0.0649  D1=0.0000  D2=0.0430 | lr(mean,sd,min,max)=0.2619,0.1203,0.0784,0.7632 | hub(mean,max)=0.0006,0.0051 | slip_frac=0.410
+2025-10-04 13:31:02  [E08 B000] GradNorm→ reg=0.141  cls=0.000  ter=0.000 | total_norm=0.175 max=0.127 min=0.000 zero_frac=0.000 param_norm=25.728
+2025-10-04 13:31:02  Top6_grads: pred.weight:0.127, conv.weight:0.090, short2long.weight:0.060, short_lstm.weight_ih_l0_reverse:0.028, short_lstm.weight_ih_l0:0.025, long_lstm.weight_ih_l0:0.015
+2025-10-04 13:31:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:31:31  [E09 B000] Loss→ MSE=0.1074  BCE=0.0693  HUB=0.0674  D1=0.0000  D2=0.0437 | lr(mean,sd,min,max)=0.2643,0.1179,0.0897,0.7344 | hub(mean,max)=0.0007,0.0060 | slip_frac=0.410
+2025-10-04 13:31:31  [E09 B000] GradNorm→ reg=0.113  cls=0.000  ter=0.000 | total_norm=0.141 max=0.101 min=0.000 zero_frac=0.000 param_norm=25.738
+2025-10-04 13:31:31  Top6_grads: pred.weight:0.101, conv.weight:0.076, short2long.weight:0.047, short_lstm.weight_ih_l0_reverse:0.023, short_lstm.weight_ih_l0:0.019, long_lstm.weight_ih_l0:0.012
+2025-10-04 13:32:02  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:32:02  [E10 B000] Loss→ MSE=0.1059  BCE=0.0693  HUB=0.0597  D1=0.0000  D2=0.0479 | lr(mean,sd,min,max)=0.2798,0.1227,0.0990,0.8137 | hub(mean,max)=0.0006,0.0058 | slip_frac=0.375
+2025-10-04 13:32:02  [E10 B000] GradNorm→ reg=0.087  cls=0.000  ter=0.000 | total_norm=0.111 max=0.079 min=0.000 zero_frac=0.000 param_norm=25.749
+2025-10-04 13:32:02  Top6_grads: pred.weight:0.079, conv.weight:0.063, short2long.weight:0.035, short_lstm.weight_ih_l0_reverse:0.018, short_lstm.weight_ih_l0:0.014, long_lstm.weight_ih_l0:0.009
+2025-10-04 13:32:32  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:32:32  [E11 B000] Loss→ MSE=0.1026  BCE=0.0693  HUB=0.0635  D1=0.0000  D2=0.0497 | lr(mean,sd,min,max)=0.2877,0.1234,0.1043,0.7346 | hub(mean,max)=0.0006,0.0059 | slip_frac=0.370
+2025-10-04 13:32:32  [E11 B000] GradNorm→ reg=0.063  cls=0.000  ter=0.000 | total_norm=0.086 max=0.057 min=0.000 zero_frac=0.000 param_norm=25.759
+2025-10-04 13:32:32  Top6_grads: pred.weight:0.057, conv.weight:0.054, short2long.weight:0.025, short_lstm.weight_ih_l0_reverse:0.014, short_lstm.weight_ih_l0:0.011, long_lstm.weight_ih_l0:0.007
+2025-10-04 13:33:01  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:33:01  [E12 B000] Loss→ MSE=0.1031  BCE=0.0693  HUB=0.0738  D1=0.0000  D2=0.0490 | lr(mean,sd,min,max)=0.2927,0.1266,0.0962,0.7230 | hub(mean,max)=0.0007,0.0061 | slip_frac=0.408
+2025-10-04 13:33:01  [E12 B000] GradNorm→ reg=0.039  cls=0.000  ter=0.000 | total_norm=0.062 max=0.044 min=0.000 zero_frac=0.000 param_norm=25.769
+2025-10-04 13:33:01  Top6_grads: conv.weight:0.044, pred.weight:0.037, short2long.weight:0.017, short_lstm.weight_ih_l0:0.010, short_lstm.weight_ih_l0_reverse:0.009, long_lstm.weight_ih_l0:0.005
+2025-10-04 13:33:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:33:31  [E13 B000] Loss→ MSE=0.1034  BCE=0.0693  HUB=0.0634  D1=0.0000  D2=0.0511 | lr(mean,sd,min,max)=0.3046,0.1275,0.1133,0.7155 | hub(mean,max)=0.0006,0.0052 | slip_frac=0.364
+2025-10-04 13:33:32  [E13 B000] GradNorm→ reg=0.026  cls=0.000  ter=0.000 | total_norm=0.057 max=0.045 min=0.000 zero_frac=0.000 param_norm=25.779
+2025-10-04 13:33:32  Top6_grads: conv.weight:0.045, pred.weight:0.026, short2long.weight:0.015, short_lstm.weight_ih_l0:0.012, short_lstm.weight_ih_l0_reverse:0.009, long_lstm.weight_ih_l0:0.005
+2025-10-04 13:34:02  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:34:02  [E14 B000] Loss→ MSE=0.1021  BCE=0.0693  HUB=0.0677  D1=0.0000  D2=0.0548 | lr(mean,sd,min,max)=0.3094,0.1276,0.0936,0.7243 | hub(mean,max)=0.0007,0.0054 | slip_frac=0.386
+2025-10-04 13:34:03  [E14 B000] GradNorm→ reg=0.029  cls=0.000  ter=0.000 | total_norm=0.066 max=0.053 min=0.000 zero_frac=0.000 param_norm=25.790
+2025-10-04 13:34:03  Top6_grads: conv.weight:0.053, pred.weight:0.027, short2long.weight:0.016, short_lstm.weight_ih_l0:0.014, short_lstm.weight_ih_l0_reverse:0.012, long_lstm.weight_ih_l0:0.006
+2025-10-04 13:34:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:34:31  [E15 B000] Loss→ MSE=0.1033  BCE=0.0693  HUB=0.0658  D1=0.0000  D2=0.0560 | lr(mean,sd,min,max)=0.3176,0.1331,0.0913,0.7977 | hub(mean,max)=0.0007,0.0060 | slip_frac=0.368
+2025-10-04 13:34:32  [E15 B000] GradNorm→ reg=0.038  cls=0.000  ter=0.000 | total_norm=0.078 max=0.062 min=0.000 zero_frac=0.000 param_norm=25.802
+2025-10-04 13:34:32  Top6_grads: conv.weight:0.062, pred.weight:0.034, short2long.weight:0.020, short_lstm.weight_ih_l0:0.016, short_lstm.weight_ih_l0_reverse:0.015, long_lstm.weight_ih_l0:0.008
+2025-10-04 13:35:01  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:35:01  [E16 B000] Loss→ MSE=0.1014  BCE=0.0693  HUB=0.0610  D1=0.0000  D2=0.0461 | lr(mean,sd,min,max)=0.3203,0.1294,0.1119,0.7159 | hub(mean,max)=0.0006,0.0055 | slip_frac=0.361
+2025-10-04 13:35:01  [E16 B000] GradNorm→ reg=0.050  cls=0.000  ter=0.000 | total_norm=0.095 max=0.073 min=0.000 zero_frac=0.000 param_norm=25.814
+2025-10-04 13:35:01  Top6_grads: conv.weight:0.073, pred.weight:0.045, short2long.weight:0.024, short_lstm.weight_ih_l0_reverse:0.020, short_lstm.weight_ih_l0:0.018, long_lstm.weight_ih_l0:0.009
+2025-10-04 13:35:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:35:31  [E17 B000] Loss→ MSE=0.1000  BCE=0.0693  HUB=0.0612  D1=0.0000  D2=0.0498 | lr(mean,sd,min,max)=0.3245,0.1250,0.1024,0.7610 | hub(mean,max)=0.0006,0.0057 | slip_frac=0.373
+2025-10-04 13:35:31  [E17 B000] GradNorm→ reg=0.064  cls=0.000  ter=0.000 | total_norm=0.112 max=0.084 min=0.000 zero_frac=0.000 param_norm=25.827
+2025-10-04 13:35:31  Top6_grads: conv.weight:0.084, pred.weight:0.057, short2long.weight:0.027, short_lstm.weight_ih_l0_reverse:0.023, short_lstm.weight_ih_l0:0.020, long_lstm.weight_ih_l0:0.012
+2025-10-04 13:36:03  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:36:03  [E18 B000] Loss→ MSE=0.1002  BCE=0.0693  HUB=0.0634  D1=0.0000  D2=0.0529 | lr(mean,sd,min,max)=0.3274,0.1303,0.1144,0.8106 | hub(mean,max)=0.0006,0.0052 | slip_frac=0.377
+2025-10-04 13:36:03  [E18 B000] GradNorm→ reg=0.073  cls=0.000  ter=0.000 | total_norm=0.127 max=0.094 min=0.000 zero_frac=0.000 param_norm=25.841
+2025-10-04 13:36:03  Top6_grads: conv.weight:0.094, pred.weight:0.065, short2long.weight:0.031, short_lstm.weight_ih_l0_reverse:0.027, short_lstm.weight_ih_l0:0.022, long_lstm.weight_ih_l0:0.014
+2025-10-04 13:36:32  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:36:32  [E19 B000] Loss→ MSE=0.1011  BCE=0.0693  HUB=0.0576  D1=0.0000  D2=0.0520 | lr(mean,sd,min,max)=0.3323,0.1318,0.1098,0.7949 | hub(mean,max)=0.0006,0.0053 | slip_frac=0.328
+2025-10-04 13:36:33  [E19 B000] GradNorm→ reg=0.081  cls=0.000  ter=0.000 | total_norm=0.136 max=0.101 min=0.000 zero_frac=0.000 param_norm=25.854
+2025-10-04 13:36:33  Top6_grads: conv.weight:0.101, pred.weight:0.072, short2long.weight:0.033, short_lstm.weight_ih_l0_reverse:0.029, short_lstm.weight_ih_l0:0.023, long_lstm.weight_ih_l0:0.014
+2025-10-04 13:37:03  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:37:03  [E20 B000] Loss→ MSE=0.0986  BCE=0.0693  HUB=0.0607  D1=0.0000  D2=0.0516 | lr(mean,sd,min,max)=0.3334,0.1280,0.1187,0.8016 | hub(mean,max)=0.0006,0.0056 | slip_frac=0.359
+2025-10-04 13:37:03  [E20 B000] GradNorm→ reg=0.085  cls=0.000  ter=0.000 | total_norm=0.148 max=0.110 min=0.000 zero_frac=0.000 param_norm=25.867
+2025-10-04 13:37:03  Top6_grads: conv.weight:0.110, pred.weight:0.076, short2long.weight:0.035, short_lstm.weight_ih_l0_reverse:0.032, short_lstm.weight_ih_l0:0.025, long_lstm.weight_ih_l0:0.015
+2025-10-04 13:37:33  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:37:33  [E21 B000] Loss→ MSE=0.0978  BCE=0.0693  HUB=0.0523  D1=0.0000  D2=0.0506 | lr(mean,sd,min,max)=0.3363,0.1238,0.1178,0.7633 | hub(mean,max)=0.0005,0.0049 | slip_frac=0.339
+2025-10-04 13:37:33  [E21 B000] GradNorm→ reg=0.088  cls=0.000  ter=0.000 | total_norm=0.149 max=0.110 min=0.000 zero_frac=0.000 param_norm=25.880
+2025-10-04 13:37:33  Top6_grads: conv.weight:0.110, pred.weight:0.078, short2long.weight:0.034, short_lstm.weight_ih_l0_reverse:0.034, short_lstm.weight_ih_l0:0.025, long_lstm.weight_ih_l0:0.016
+2025-10-04 13:38:03  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:38:03  [E22 B000] Loss→ MSE=0.0984  BCE=0.0693  HUB=0.0533  D1=0.0000  D2=0.0513 | lr(mean,sd,min,max)=0.3361,0.1236,0.0914,0.7983 | hub(mean,max)=0.0005,0.0064 | slip_frac=0.337
+2025-10-04 13:38:03  [E22 B000] GradNorm→ reg=0.094  cls=0.000  ter=0.000 | total_norm=0.159 max=0.117 min=0.000 zero_frac=0.000 param_norm=25.893
+2025-10-04 13:38:03  Top6_grads: conv.weight:0.117, pred.weight:0.084, short2long.weight:0.036, short_lstm.weight_ih_l0_reverse:0.036, short_lstm.weight_ih_l0:0.026, long_lstm.weight_ih_l0:0.017
+2025-10-04 13:38:33  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:38:33  [E23 B000] Loss→ MSE=0.0975  BCE=0.0693  HUB=0.0463  D1=0.0000  D2=0.0480 | lr(mean,sd,min,max)=0.3465,0.1242,0.1284,0.7841 | hub(mean,max)=0.0005,0.0056 | slip_frac=0.282
+2025-10-04 13:38:33  [E23 B000] GradNorm→ reg=0.100  cls=0.000  ter=0.000 | total_norm=0.169 max=0.123 min=0.000 zero_frac=0.000 param_norm=25.906
+2025-10-04 13:38:33  Top6_grads: conv.weight:0.123, pred.weight:0.089, short_lstm.weight_ih_l0_reverse:0.039, short2long.weight:0.038, short_lstm.weight_ih_l0:0.027, long_lstm.weight_ih_l0:0.022
+2025-10-04 13:39:01  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:39:01  [E24 B000] Loss→ MSE=0.0980  BCE=0.0693  HUB=0.0509  D1=0.0000  D2=0.0517 | lr(mean,sd,min,max)=0.3458,0.1278,0.1226,0.8038 | hub(mean,max)=0.0005,0.0063 | slip_frac=0.344
+2025-10-04 13:39:01  [E24 B000] GradNorm→ reg=0.106  cls=0.000  ter=0.000 | total_norm=0.176 max=0.127 min=0.000 zero_frac=0.000 param_norm=25.918
+2025-10-04 13:39:01  Top6_grads: conv.weight:0.127, pred.weight:0.095, short_lstm.weight_ih_l0_reverse:0.041, short2long.weight:0.039, short_lstm.weight_ih_l0:0.027, long_lstm.weight_ih_l0:0.023
+2025-10-04 13:39:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:39:31  [E25 B000] Loss→ MSE=0.1002  BCE=0.0693  HUB=0.0415  D1=0.0000  D2=0.0471 | lr(mean,sd,min,max)=0.3498,0.1222,0.1308,0.7521 | hub(mean,max)=0.0004,0.0056 | slip_frac=0.279
+2025-10-04 13:39:31  [E25 B000] GradNorm→ reg=0.112  cls=0.000  ter=0.000 | total_norm=0.186 max=0.132 min=0.000 zero_frac=0.000 param_norm=25.931
+2025-10-04 13:39:31  Top6_grads: conv.weight:0.132, pred.weight:0.100, short_lstm.weight_ih_l0_reverse:0.045, short2long.weight:0.040, long_lstm.weight_ih_l0:0.034, short_lstm.weight_ih_l0:0.030
+2025-10-04 13:40:00  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:40:00  [E26 B000] Loss→ MSE=0.0996  BCE=0.0693  HUB=0.0456  D1=0.0000  D2=0.0513 | lr(mean,sd,min,max)=0.3511,0.1226,0.1192,0.7657 | hub(mean,max)=0.0005,0.0060 | slip_frac=0.306
+2025-10-04 13:40:00  [E26 B000] GradNorm→ reg=0.117  cls=0.000  ter=0.000 | total_norm=0.193 max=0.134 min=0.000 zero_frac=0.000 param_norm=25.943
+2025-10-04 13:40:00  Top6_grads: conv.weight:0.134, pred.weight:0.105, short_lstm.weight_ih_l0_reverse:0.046, short2long.weight:0.041, long_lstm.weight_ih_l0:0.038, short_lstm.weight_ih_l0:0.031
+2025-10-04 13:41:30  
+
+****************************************************************************************************
+
+2025-10-04 13:41:30  
+PARAMETER NAMES:
+2025-10-04 13:41:30    conv.weight
+2025-10-04 13:41:30    conv.bias
+2025-10-04 13:41:30    bn.weight
+2025-10-04 13:41:30    bn.bias
+2025-10-04 13:41:30    short_lstm.weight_ih_l0
+2025-10-04 13:41:30    short_lstm.weight_hh_l0
+2025-10-04 13:41:30    short_lstm.bias_ih_l0
+2025-10-04 13:41:30    short_lstm.bias_hh_l0
+2025-10-04 13:41:30    short_lstm.weight_ih_l0_reverse
+2025-10-04 13:41:30    short_lstm.weight_hh_l0_reverse
+2025-10-04 13:41:30    short_lstm.bias_ih_l0_reverse
+2025-10-04 13:41:30    short_lstm.bias_hh_l0_reverse
+2025-10-04 13:41:30    ln_short.weight
+2025-10-04 13:41:30    ln_short.bias
+2025-10-04 13:41:30    long_lstm.weight_ih_l0
+2025-10-04 13:41:30    long_lstm.weight_hh_l0
+2025-10-04 13:41:30    long_lstm.bias_ih_l0
+2025-10-04 13:41:30    long_lstm.bias_hh_l0
+2025-10-04 13:41:30    long_lstm.weight_ih_l0_reverse
+2025-10-04 13:41:30    long_lstm.weight_hh_l0_reverse
+2025-10-04 13:41:30    long_lstm.bias_ih_l0_reverse
+2025-10-04 13:41:30    long_lstm.bias_hh_l0_reverse
+2025-10-04 13:41:30    short2long.weight
+2025-10-04 13:41:30    short2long.bias
+2025-10-04 13:41:30    ln_long.weight
+2025-10-04 13:41:30    ln_long.bias
+2025-10-04 13:41:30    pred.weight
+2025-10-04 13:41:30    pred.bias
+2025-10-04 13:41:30  END PARAMETER NAMES
+
+2025-10-04 13:41:30  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:41:30  [E01 B000] Loss→ MSE=0.1097  BCE=0.0693  HUB=0.0402  D1=0.0000  D2=0.0331 | lr(mean,sd,min,max)=0.3453,0.1059,0.0849,0.7001 | hub(mean,max)=0.0004,0.0047 | slip_frac=0.297
+2025-10-04 13:41:31  [E01 B000] GradNorm→ reg=0.197  cls=0.000  ter=0.000 | total_norm=0.355 max=0.191 min=0.000 zero_frac=0.000 param_norm=30.026
+2025-10-04 13:41:31  Top6_grads: conv.weight:0.191, pred.weight:0.184, short2long.weight:0.166, short_lstm.weight_ih_l0_reverse:0.089, short_lstm.weight_ih_l0:0.087, short_lstm.bias_ih_l0:0.056
+2025-10-04 13:42:01  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:42:01  [E02 B000] Loss→ MSE=0.1055  BCE=0.0693  HUB=0.0421  D1=0.0000  D2=0.0337 | lr(mean,sd,min,max)=0.2544,0.0960,0.0726,0.5721 | hub(mean,max)=0.0004,0.0054 | slip_frac=0.324
+2025-10-04 13:42:01  [E02 B000] GradNorm→ reg=0.215  cls=0.000  ter=0.000 | total_norm=0.290 max=0.194 min=0.000 zero_frac=0.000 param_norm=30.034
+2025-10-04 13:42:01  Top6_grads: pred.weight:0.194, short2long.weight:0.142, conv.weight:0.103, short_lstm.weight_ih_l0:0.070, short_lstm.weight_ih_l0_reverse:0.066, short_lstm.bias_ih_l0:0.034
+2025-10-04 13:42:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:42:31  [E03 B000] Loss→ MSE=0.1054  BCE=0.0693  HUB=0.0584  D1=0.0000  D2=0.0465 | lr(mean,sd,min,max)=0.2794,0.1195,0.0796,0.7363 | hub(mean,max)=0.0006,0.0059 | slip_frac=0.384
+2025-10-04 13:42:32  [E03 B000] GradNorm→ reg=0.136  cls=0.000  ter=0.000 | total_norm=0.177 max=0.123 min=0.000 zero_frac=0.000 param_norm=30.044
+2025-10-04 13:42:32  Top6_grads: pred.weight:0.123, short2long.weight:0.081, conv.weight:0.068, short_lstm.weight_ih_l0:0.039, short_lstm.weight_ih_l0_reverse:0.037, long_lstm.weight_ih_l0:0.020
+2025-10-04 13:43:02  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:43:02  [E04 B000] Loss→ MSE=0.1035  BCE=0.0693  HUB=0.0582  D1=0.0000  D2=0.0538 | lr(mean,sd,min,max)=0.3011,0.1249,0.0942,0.7615 | hub(mean,max)=0.0006,0.0055 | slip_frac=0.366
+2025-10-04 13:43:02  [E04 B000] GradNorm→ reg=0.078  cls=0.000  ter=0.000 | total_norm=0.100 max=0.072 min=0.000 zero_frac=0.000 param_norm=30.055
+2025-10-04 13:43:02  Top6_grads: pred.weight:0.072, short2long.weight:0.042, conv.weight:0.042, short_lstm.weight_ih_l0:0.022, short_lstm.weight_ih_l0_reverse:0.019, long_lstm.weight_ih_l0:0.011
+2025-10-04 13:43:33  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:43:33  [E05 B000] Loss→ MSE=0.1002  BCE=0.0693  HUB=0.0570  D1=0.0000  D2=0.0553 | lr(mean,sd,min,max)=0.3133,0.1260,0.1105,0.8012 | hub(mean,max)=0.0006,0.0058 | slip_frac=0.357
+2025-10-04 13:43:33  [E05 B000] GradNorm→ reg=0.030  cls=0.000  ter=0.000 | total_norm=0.049 max=0.031 min=0.000 zero_frac=0.000 param_norm=30.067
+2025-10-04 13:43:33  Top6_grads: conv.weight:0.031, pred.weight:0.029, short2long.weight:0.017, short_lstm.weight_ih_l0:0.012, short_lstm.weight_ih_l0_reverse:0.008, long_lstm.weight_ih_l0:0.006
+2025-10-04 13:44:07  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:44:07  [E06 B000] Loss→ MSE=0.1012  BCE=0.0693  HUB=0.0602  D1=0.0000  D2=0.0571 | lr(mean,sd,min,max)=0.3324,0.1300,0.0992,0.7829 | hub(mean,max)=0.0006,0.0060 | slip_frac=0.368
+2025-10-04 13:44:07  [E06 B000] GradNorm→ reg=0.043  cls=0.000  ter=0.000 | total_norm=0.076 max=0.053 min=0.000 zero_frac=0.000 param_norm=30.079
+2025-10-04 13:44:07  Top6_grads: conv.weight:0.053, pred.weight:0.039, short2long.weight:0.025, short_lstm.weight_ih_l0:0.016, short_lstm.weight_ih_l0_reverse:0.013, short_lstm.bias_ih_l0:0.009
+2025-10-04 13:44:41  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:44:41  [E07 B000] Loss→ MSE=0.1040  BCE=0.0693  HUB=0.0546  D1=0.0000  D2=0.0554 | lr(mean,sd,min,max)=0.3411,0.1282,0.1228,0.8226 | hub(mean,max)=0.0005,0.0052 | slip_frac=0.359
+2025-10-04 13:44:41  [E07 B000] GradNorm→ reg=0.088  cls=0.000  ter=0.000 | total_norm=0.134 max=0.087 min=0.000 zero_frac=0.000 param_norm=30.092
+2025-10-04 13:44:41  Top6_grads: conv.weight:0.087, pred.weight:0.079, short2long.weight:0.043, short_lstm.weight_ih_l0:0.026, short_lstm.weight_ih_l0_reverse:0.023, short_lstm.bias_ih_l0:0.015
+2025-10-04 13:45:13  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:45:13  [E08 B000] Loss→ MSE=0.0979  BCE=0.0693  HUB=0.0504  D1=0.0000  D2=0.0566 | lr(mean,sd,min,max)=0.3513,0.1256,0.1185,0.8042 | hub(mean,max)=0.0005,0.0053 | slip_frac=0.333
+2025-10-04 13:45:13  [E08 B000] GradNorm→ reg=0.119  cls=0.000  ter=0.000 | total_norm=0.175 max=0.111 min=0.000 zero_frac=0.000 param_norm=30.105
+2025-10-04 13:45:13  Top6_grads: conv.weight:0.111, pred.weight:0.107, short2long.weight:0.054, short_lstm.weight_ih_l0:0.033, short_lstm.weight_ih_l0_reverse:0.031, short_lstm.bias_ih_l0:0.019
+2025-10-04 13:45:47  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:45:47  [E09 B000] Loss→ MSE=0.0998  BCE=0.0693  HUB=0.0525  D1=0.0000  D2=0.0579 | lr(mean,sd,min,max)=0.3556,0.1282,0.1433,0.8120 | hub(mean,max)=0.0005,0.0049 | slip_frac=0.344
+2025-10-04 13:45:47  [E09 B000] GradNorm→ reg=0.142  cls=0.000  ter=0.000 | total_norm=0.212 max=0.137 min=0.000 zero_frac=0.000 param_norm=30.118
+2025-10-04 13:45:47  Top6_grads: conv.weight:0.137, pred.weight:0.129, short2long.weight:0.063, short_lstm.weight_ih_l0:0.039, short_lstm.weight_ih_l0_reverse:0.037, short_lstm.bias_ih_l0:0.023
+2025-10-04 13:46:19  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:46:19  [E10 B000] Loss→ MSE=0.0997  BCE=0.0693  HUB=0.0528  D1=0.0000  D2=0.0628 | lr(mean,sd,min,max)=0.3603,0.1328,0.1394,0.8538 | hub(mean,max)=0.0005,0.0049 | slip_frac=0.350
+2025-10-04 13:46:19  [E10 B000] GradNorm→ reg=0.166  cls=0.000  ter=0.000 | total_norm=0.245 max=0.160 min=0.000 zero_frac=0.000 param_norm=30.132
+2025-10-04 13:46:19  Top6_grads: conv.weight:0.160, pred.weight:0.150, short2long.weight:0.069, short_lstm.weight_ih_l0:0.045, short_lstm.weight_ih_l0_reverse:0.044, short_lstm.bias_ih_l0:0.026
+2025-10-04 13:46:50  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:46:50  [E11 B000] Loss→ MSE=0.1021  BCE=0.0693  HUB=0.0542  D1=0.0000  D2=0.0652 | lr(mean,sd,min,max)=0.3721,0.1355,0.1231,0.8114 | hub(mean,max)=0.0005,0.0052 | slip_frac=0.359
+2025-10-04 13:46:51  [E11 B000] GradNorm→ reg=0.180  cls=0.000  ter=0.000 | total_norm=0.267 max=0.176 min=0.000 zero_frac=0.000 param_norm=30.145
+2025-10-04 13:46:51  Top6_grads: conv.weight:0.176, pred.weight:0.163, short2long.weight:0.073, short_lstm.weight_ih_l0:0.049, short_lstm.weight_ih_l0_reverse:0.048, short_lstm.bias_ih_l0:0.028
+2025-10-04 13:47:23  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:47:23  [E12 B000] Loss→ MSE=0.1025  BCE=0.0693  HUB=0.0519  D1=0.0000  D2=0.0614 | lr(mean,sd,min,max)=0.3700,0.1358,0.1435,0.8780 | hub(mean,max)=0.0005,0.0065 | slip_frac=0.335
+2025-10-04 13:47:23  [E12 B000] GradNorm→ reg=0.185  cls=0.000  ter=0.000 | total_norm=0.278 max=0.186 min=0.000 zero_frac=0.000 param_norm=30.159
+2025-10-04 13:47:23  Top6_grads: conv.weight:0.186, pred.weight:0.167, short2long.weight:0.072, short_lstm.weight_ih_l0:0.050, short_lstm.weight_ih_l0_reverse:0.050, short_lstm.bias_ih_l0:0.029
+2025-10-04 13:47:55  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:47:55  [E13 B000] Loss→ MSE=0.0990  BCE=0.0693  HUB=0.0476  D1=0.0000  D2=0.0596 | lr(mean,sd,min,max)=0.3688,0.1330,0.1221,0.8099 | hub(mean,max)=0.0005,0.0054 | slip_frac=0.344
+2025-10-04 13:47:55  [E13 B000] GradNorm→ reg=0.190  cls=0.000  ter=0.000 | total_norm=0.283 max=0.190 min=0.000 zero_frac=0.000 param_norm=30.174
+2025-10-04 13:47:55  Top6_grads: conv.weight:0.190, pred.weight:0.172, short2long.weight:0.072, short_lstm.weight_ih_l0_reverse:0.051, short_lstm.weight_ih_l0:0.051, short_lstm.bias_ih_l0:0.028
+2025-10-04 13:48:27  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:48:27  [E14 B000] Loss→ MSE=0.1015  BCE=0.0693  HUB=0.0418  D1=0.0000  D2=0.0618 | lr(mean,sd,min,max)=0.3779,0.1338,0.1340,0.8460 | hub(mean,max)=0.0004,0.0044 | slip_frac=0.282
+2025-10-04 13:48:27  [E14 B000] GradNorm→ reg=0.199  cls=0.000  ter=0.000 | total_norm=0.299 max=0.203 min=0.000 zero_frac=0.000 param_norm=30.189
+2025-10-04 13:48:27  Top6_grads: conv.weight:0.203, pred.weight:0.181, short2long.weight:0.072, short_lstm.weight_ih_l0:0.054, short_lstm.weight_ih_l0_reverse:0.054, short_lstm.bias_ih_l0:0.030
+2025-10-04 13:48:59  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:48:59  [E15 B000] Loss→ MSE=0.0980  BCE=0.0693  HUB=0.0352  D1=0.0000  D2=0.0605 | lr(mean,sd,min,max)=0.3821,0.1328,0.1271,0.8649 | hub(mean,max)=0.0004,0.0042 | slip_frac=0.242
+2025-10-04 13:49:00  [E15 B000] GradNorm→ reg=0.199  cls=0.000  ter=0.000 | total_norm=0.299 max=0.203 min=0.000 zero_frac=0.000 param_norm=30.206
+2025-10-04 13:49:00  Top6_grads: conv.weight:0.203, pred.weight:0.180, short2long.weight:0.070, short_lstm.weight_ih_l0_reverse:0.055, short_lstm.weight_ih_l0:0.054, short_lstm.bias_ih_l0:0.030
+2025-10-04 13:49:31  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:49:31  [E16 B000] Loss→ MSE=0.0988  BCE=0.0693  HUB=0.0371  D1=0.0000  D2=0.0625 | lr(mean,sd,min,max)=0.3806,0.1349,0.1363,0.8775 | hub(mean,max)=0.0004,0.0058 | slip_frac=0.268
+2025-10-04 13:49:31  [E16 B000] GradNorm→ reg=0.193  cls=0.000  ter=0.000 | total_norm=0.295 max=0.204 min=0.000 zero_frac=0.000 param_norm=30.224
+2025-10-04 13:49:31  Top6_grads: conv.weight:0.204, pred.weight:0.175, short2long.weight:0.067, short_lstm.weight_ih_l0_reverse:0.054, short_lstm.weight_ih_l0:0.052, short_lstm.bias_ih_l0:0.029
+2025-10-04 13:50:04  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:50:04  [E17 B000] Loss→ MSE=0.0969  BCE=0.0693  HUB=0.0331  D1=0.0000  D2=0.0654 | lr(mean,sd,min,max)=0.3840,0.1354,0.1352,0.8632 | hub(mean,max)=0.0003,0.0041 | slip_frac=0.255
+2025-10-04 13:50:04  [E17 B000] GradNorm→ reg=0.190  cls=0.000  ter=0.000 | total_norm=0.294 max=0.204 min=0.000 zero_frac=0.000 param_norm=30.243
+2025-10-04 13:50:04  Top6_grads: conv.weight:0.204, pred.weight:0.172, short2long.weight:0.065, short_lstm.weight_ih_l0_reverse:0.055, short_lstm.weight_ih_l0:0.055, short_lstm.bias_ih_l0:0.029
+2025-10-04 13:50:41  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:50:41  [E18 B000] Loss→ MSE=0.0958  BCE=0.0693  HUB=0.0322  D1=0.0000  D2=0.0639 | lr(mean,sd,min,max)=0.3860,0.1332,0.1398,0.8469 | hub(mean,max)=0.0003,0.0049 | slip_frac=0.237
+2025-10-04 13:50:41  [E18 B000] GradNorm→ reg=0.186  cls=0.000  ter=0.000 | total_norm=0.293 max=0.204 min=0.000 zero_frac=0.000 param_norm=30.261
+2025-10-04 13:50:41  Top6_grads: conv.weight:0.204, pred.weight:0.169, short2long.weight:0.062, short_lstm.weight_ih_l0:0.057, short_lstm.weight_ih_l0_reverse:0.055, long_lstm.weight_ih_l0:0.034
+2025-10-04 13:51:13  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:51:13  [E19 B000] Loss→ MSE=0.0938  BCE=0.0693  HUB=0.0281  D1=0.0000  D2=0.0670 | lr(mean,sd,min,max)=0.3910,0.1362,0.1678,0.8744 | hub(mean,max)=0.0003,0.0055 | slip_frac=0.231
+2025-10-04 13:51:13  [E19 B000] GradNorm→ reg=0.182  cls=0.000  ter=0.000 | total_norm=0.292 max=0.203 min=0.000 zero_frac=0.000 param_norm=30.280
+2025-10-04 13:51:13  Top6_grads: conv.weight:0.203, pred.weight:0.165, short2long.weight:0.061, short_lstm.weight_ih_l0:0.059, short_lstm.weight_ih_l0_reverse:0.058, long_lstm.weight_ih_l0:0.037
+2025-10-04 13:51:45  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:51:45  [E20 B000] Loss→ MSE=0.0947  BCE=0.0693  HUB=0.0297  D1=0.0000  D2=0.0711 | lr(mean,sd,min,max)=0.3892,0.1398,0.1555,0.8551 | hub(mean,max)=0.0003,0.0052 | slip_frac=0.237
+2025-10-04 13:51:45  [E20 B000] GradNorm→ reg=0.169  cls=0.000  ter=0.000 | total_norm=0.278 max=0.198 min=0.000 zero_frac=0.000 param_norm=30.297
+2025-10-04 13:51:45  Top6_grads: conv.weight:0.198, pred.weight:0.154, short2long.weight:0.056, short_lstm.weight_ih_l0_reverse:0.056, short_lstm.weight_ih_l0:0.055, long_lstm.weight_ih_l0:0.033
+2025-10-04 13:52:16  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:52:16  [E21 B000] Loss→ MSE=0.0966  BCE=0.0693  HUB=0.0271  D1=0.0000  D2=0.0702 | lr(mean,sd,min,max)=0.3915,0.1409,0.1651,0.8492 | hub(mean,max)=0.0003,0.0036 | slip_frac=0.215
+2025-10-04 13:52:16  [E21 B000] GradNorm→ reg=0.171  cls=0.000  ter=0.000 | total_norm=0.287 max=0.202 min=0.000 zero_frac=0.000 param_norm=30.313
+2025-10-04 13:52:16  Top6_grads: conv.weight:0.202, pred.weight:0.155, short_lstm.weight_ih_l0:0.062, short_lstm.weight_ih_l0_reverse:0.059, short2long.weight:0.057, long_lstm.weight_ih_l0:0.042
+2025-10-04 13:52:52  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:52:52  [E22 B000] Loss→ MSE=0.0960  BCE=0.0693  HUB=0.0225  D1=0.0000  D2=0.0707 | lr(mean,sd,min,max)=0.3981,0.1367,0.1698,0.8484 | hub(mean,max)=0.0002,0.0033 | slip_frac=0.197
+2025-10-04 13:52:52  [E22 B000] GradNorm→ reg=0.163  cls=0.000  ter=0.000 | total_norm=0.282 max=0.197 min=0.000 zero_frac=0.000 param_norm=30.328
+2025-10-04 13:52:52  Top6_grads: conv.weight:0.197, pred.weight:0.148, short_lstm.weight_ih_l0:0.065, short_lstm.weight_ih_l0_reverse:0.061, short2long.weight:0.052, long_lstm.weight_ih_l0:0.050
+2025-10-04 13:53:24  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:53:24  [E23 B000] Loss→ MSE=0.0942  BCE=0.0693  HUB=0.0238  D1=0.0000  D2=0.0719 | lr(mean,sd,min,max)=0.3976,0.1427,0.1539,0.8916 | hub(mean,max)=0.0002,0.0037 | slip_frac=0.200
+2025-10-04 13:53:25  [E23 B000] GradNorm→ reg=0.165  cls=0.000  ter=0.000 | total_norm=0.287 max=0.202 min=0.000 zero_frac=0.000 param_norm=30.342
+2025-10-04 13:53:25  Top6_grads: conv.weight:0.202, pred.weight:0.150, short_lstm.weight_ih_l0_reverse:0.066, short_lstm.weight_ih_l0:0.066, short2long.weight:0.054, long_lstm.weight_ih_l0:0.048
+2025-10-04 13:53:56  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 13:53:56  [E24 B000] Loss→ MSE=0.0965  BCE=0.0693  HUB=0.0244  D1=0.0000  D2=0.0721 | lr(mean,sd,min,max)=0.3982,0.1418,0.1444,0.8812 | hub(mean,max)=0.0002,0.0040 | slip_frac=0.197
+2025-10-04 13:53:56  [E24 B000] GradNorm→ reg=0.163  cls=0.000  ter=0.000 | total_norm=0.288 max=0.203 min=0.000 zero_frac=0.000 param_norm=30.356
+2025-10-04 13:53:56  Top6_grads: conv.weight:0.203, pred.weight:0.147, short_lstm.weight_ih_l0:0.068, short_lstm.weight_ih_l0_reverse:0.066, short2long.weight:0.053, long_lstm.weight_ih_l0:0.050
+2025-10-04 14:01:25  
+
+****************************************************************************************************
+
+2025-10-04 14:01:25  
+PARAMETER NAMES:
+2025-10-04 14:01:25    conv.weight
+2025-10-04 14:01:25    conv.bias
+2025-10-04 14:01:25    bn.weight
+2025-10-04 14:01:25    bn.bias
+2025-10-04 14:01:25    short_lstm.weight_ih_l0
+2025-10-04 14:01:25    short_lstm.weight_hh_l0
+2025-10-04 14:01:25    short_lstm.bias_ih_l0
+2025-10-04 14:01:25    short_lstm.bias_hh_l0
+2025-10-04 14:01:25    short_lstm.weight_ih_l0_reverse
+2025-10-04 14:01:25    short_lstm.weight_hh_l0_reverse
+2025-10-04 14:01:25    short_lstm.bias_ih_l0_reverse
+2025-10-04 14:01:25    short_lstm.bias_hh_l0_reverse
+2025-10-04 14:01:25    ln_short.weight
+2025-10-04 14:01:25    ln_short.bias
+2025-10-04 14:01:25    long_lstm.weight_ih_l0
+2025-10-04 14:01:25    long_lstm.weight_hh_l0
+2025-10-04 14:01:25    long_lstm.bias_ih_l0
+2025-10-04 14:01:25    long_lstm.bias_hh_l0
+2025-10-04 14:01:25    long_lstm.weight_ih_l0_reverse
+2025-10-04 14:01:25    long_lstm.weight_hh_l0_reverse
+2025-10-04 14:01:25    long_lstm.bias_ih_l0_reverse
+2025-10-04 14:01:25    long_lstm.bias_hh_l0_reverse
+2025-10-04 14:01:25    short2long.weight
+2025-10-04 14:01:25    short2long.bias
+2025-10-04 14:01:25    ln_long.weight
+2025-10-04 14:01:25    ln_long.bias
+2025-10-04 14:01:25    pred.weight
+2025-10-04 14:01:25    pred.bias
+2025-10-04 14:01:25  END PARAMETER NAMES
+
+2025-10-04 14:01:25  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:01:26  [E01 B000] Loss→ MSE=0.1181  BCE=0.0693  HUB=0.0688  D1=0.0000  D2=0.0722 | lr(mean,sd,min,max)=0.5234,0.1372,0.1418,0.8973 | hub(mean,max)=0.0007,0.0061 | slip_frac=0.350
+2025-10-04 14:01:27  [E01 B000] GradNorm→ reg=0.998  cls=0.000  ter=0.000 | total_norm=1.365 max=0.911 min=0.000 zero_frac=0.000 param_norm=35.066
+2025-10-04 14:01:27  Top6_grads: pred.weight:0.911, short2long.weight:0.708, short_lstm.weight_ih_l0:0.417, short_lstm.weight_ih_l0_reverse:0.365, conv.weight:0.319, long_lstm.weight_ih_l0:0.160
+2025-10-04 14:04:16  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:04:16  [E02 B000] Loss→ MSE=0.1166  BCE=0.0693  HUB=0.0562  D1=0.0000  D2=0.0528 | lr(mean,sd,min,max)=0.2495,0.1287,0.0380,0.7370 | hub(mean,max)=0.0006,0.0067 | slip_frac=0.381
+2025-10-04 14:04:17  [E02 B000] GradNorm→ reg=0.260  cls=0.000  ter=0.000 | total_norm=0.345 max=0.239 min=0.000 zero_frac=0.000 param_norm=35.077
+2025-10-04 14:04:17  Top6_grads: pred.weight:0.239, short2long.weight:0.159, conv.weight:0.106, short_lstm.weight_ih_l0:0.104, short_lstm.weight_ih_l0_reverse:0.083, short_lstm.bias_ih_l0:0.039
+2025-10-04 14:07:42  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:07:43  [E03 B000] Loss→ MSE=0.1169  BCE=0.0693  HUB=0.0615  D1=0.0000  D2=0.0711 | lr(mean,sd,min,max)=0.2663,0.1425,0.0668,0.8749 | hub(mean,max)=0.0006,0.0049 | slip_frac=0.397
+2025-10-04 14:07:47  [E03 B000] GradNorm→ reg=0.215  cls=0.000  ter=0.000 | total_norm=0.275 max=0.198 min=0.000 zero_frac=0.000 param_norm=35.090
+2025-10-04 14:07:47  Top6_grads: pred.weight:0.198, short2long.weight:0.115, conv.weight:0.095, short_lstm.weight_ih_l0:0.079, short_lstm.weight_ih_l0_reverse:0.060, short_lstm.bias_ih_l0:0.030
+2025-10-04 14:11:20  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:11:20  [E04 B000] Loss→ MSE=0.1170  BCE=0.0693  HUB=0.0604  D1=0.0000  D2=0.0645 | lr(mean,sd,min,max)=0.2744,0.1371,0.0527,0.8656 | hub(mean,max)=0.0006,0.0052 | slip_frac=0.377
+2025-10-04 14:11:21  [E04 B000] GradNorm→ reg=0.191  cls=0.000  ter=0.000 | total_norm=0.235 max=0.176 min=0.000 zero_frac=0.000 param_norm=35.103
+2025-10-04 14:11:21  Top6_grads: pred.weight:0.176, short2long.weight:0.089, conv.weight:0.088, short_lstm.weight_ih_l0:0.061, short_lstm.weight_ih_l0_reverse:0.047, short_lstm.bias_ih_l0:0.023
+2025-10-04 14:14:36  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:14:36  [E05 B000] Loss→ MSE=0.1087  BCE=0.0693  HUB=0.0619  D1=0.0000  D2=0.0639 | lr(mean,sd,min,max)=0.2828,0.1333,0.0898,0.8399 | hub(mean,max)=0.0006,0.0053 | slip_frac=0.377
+2025-10-04 14:14:37  [E05 B000] GradNorm→ reg=0.170  cls=0.000  ter=0.000 | total_norm=0.206 max=0.158 min=0.000 zero_frac=0.000 param_norm=35.118
+2025-10-04 14:14:37  Top6_grads: pred.weight:0.158, conv.weight:0.082, short2long.weight:0.072, short_lstm.weight_ih_l0:0.049, short_lstm.weight_ih_l0_reverse:0.039, short_lstm.bias_ih_l0:0.018
+2025-10-04 14:18:21  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:18:21  [E06 B000] Loss→ MSE=0.1097  BCE=0.0693  HUB=0.0524  D1=0.0000  D2=0.0587 | lr(mean,sd,min,max)=0.2944,0.1275,0.0879,0.7343 | hub(mean,max)=0.0005,0.0056 | slip_frac=0.355
+2025-10-04 14:18:22  [E06 B000] GradNorm→ reg=0.150  cls=0.000  ter=0.000 | total_norm=0.180 max=0.139 min=0.000 zero_frac=0.000 param_norm=35.133
+2025-10-04 14:18:22  Top6_grads: pred.weight:0.139, conv.weight:0.075, short2long.weight:0.058, short_lstm.weight_ih_l0:0.042, short_lstm.weight_ih_l0_reverse:0.033, long_lstm.weight_ih_l0:0.015
+2025-10-04 14:21:13  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:21:13  [E07 B000] Loss→ MSE=0.1104  BCE=0.0693  HUB=0.0552  D1=0.0000  D2=0.0629 | lr(mean,sd,min,max)=0.2987,0.1366,0.0874,0.8234 | hub(mean,max)=0.0006,0.0054 | slip_frac=0.359
+2025-10-04 14:21:14  [E07 B000] GradNorm→ reg=0.130  cls=0.000  ter=0.000 | total_norm=0.157 max=0.121 min=0.000 zero_frac=0.000 param_norm=35.149
+2025-10-04 14:21:14  Top6_grads: pred.weight:0.121, conv.weight:0.070, short2long.weight:0.047, short_lstm.weight_ih_l0:0.036, short_lstm.weight_ih_l0_reverse:0.028, long_lstm.weight_ih_l0:0.013
+2025-10-04 14:24:30  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:24:30  [E08 B000] Loss→ MSE=0.1054  BCE=0.0693  HUB=0.0460  D1=0.0000  D2=0.0661 | lr(mean,sd,min,max)=0.3129,0.1384,0.0891,0.7848 | hub(mean,max)=0.0005,0.0059 | slip_frac=0.302
+2025-10-04 14:24:31  [E08 B000] GradNorm→ reg=0.111  cls=0.000  ter=0.000 | total_norm=0.134 max=0.104 min=0.000 zero_frac=0.000 param_norm=35.164
+2025-10-04 14:24:31  Top6_grads: pred.weight:0.104, conv.weight:0.061, short2long.weight:0.037, short_lstm.weight_ih_l0:0.032, short_lstm.weight_ih_l0_reverse:0.022, long_lstm.weight_ih_l0:0.012
+2025-10-04 14:28:34  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:28:34  [E09 B000] Loss→ MSE=0.1080  BCE=0.0693  HUB=0.0468  D1=0.0000  D2=0.0701 | lr(mean,sd,min,max)=0.3179,0.1399,0.0667,0.8471 | hub(mean,max)=0.0005,0.0051 | slip_frac=0.317
+2025-10-04 14:28:38  [E09 B000] GradNorm→ reg=0.095  cls=0.000  ter=0.000 | total_norm=0.117 max=0.089 min=0.000 zero_frac=0.000 param_norm=35.181
+2025-10-04 14:28:38  Top6_grads: pred.weight:0.089, conv.weight:0.057, short2long.weight:0.030, short_lstm.weight_ih_l0:0.027, short_lstm.weight_ih_l0_reverse:0.020, long_lstm.weight_ih_l0:0.012
+2025-10-04 14:31:58  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:31:58  [E10 B000] Loss→ MSE=0.1075  BCE=0.0693  HUB=0.0433  D1=0.0000  D2=0.0626 | lr(mean,sd,min,max)=0.3231,0.1358,0.0855,0.7807 | hub(mean,max)=0.0004,0.0047 | slip_frac=0.319
+2025-10-04 14:32:02  [E10 B000] GradNorm→ reg=0.077  cls=0.000  ter=0.000 | total_norm=0.099 max=0.072 min=0.000 zero_frac=0.000 param_norm=35.200
+2025-10-04 14:32:02  Top6_grads: pred.weight:0.072, conv.weight:0.051, short_lstm.weight_ih_l0:0.026, short2long.weight:0.024, short_lstm.weight_ih_l0_reverse:0.016, long_lstm.weight_ih_l0:0.011
+2025-10-04 14:35:35  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:35:35  [E11 B000] Loss→ MSE=0.1101  BCE=0.0693  HUB=0.0391  D1=0.0000  D2=0.0658 | lr(mean,sd,min,max)=0.3273,0.1376,0.1043,0.8523 | hub(mean,max)=0.0004,0.0049 | slip_frac=0.286
+2025-10-04 14:35:36  [E11 B000] GradNorm→ reg=0.069  cls=0.000  ter=0.000 | total_norm=0.093 max=0.064 min=0.000 zero_frac=0.000 param_norm=35.220
+2025-10-04 14:35:36  Top6_grads: pred.weight:0.064, conv.weight:0.051, short_lstm.weight_ih_l0:0.026, short2long.weight:0.023, short_lstm.weight_ih_l0_reverse:0.016, long_lstm.weight_ih_l0:0.015
+2025-10-04 14:38:54  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:38:54  [E12 B000] Loss→ MSE=0.1077  BCE=0.0693  HUB=0.0302  D1=0.0000  D2=0.0606 | lr(mean,sd,min,max)=0.3348,0.1339,0.0724,0.8046 | hub(mean,max)=0.0003,0.0043 | slip_frac=0.242
+2025-10-04 14:38:55  [E12 B000] GradNorm→ reg=0.052  cls=0.000  ter=0.000 | total_norm=0.075 max=0.048 min=0.000 zero_frac=0.000 param_norm=35.243
+2025-10-04 14:38:55  Top6_grads: pred.weight:0.048, conv.weight:0.045, short_lstm.weight_ih_l0:0.021, short2long.weight:0.016, long_lstm.weight_ih_l0:0.015, short_lstm.weight_ih_l0_reverse:0.013
+2025-10-04 14:42:00  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:42:00  [E13 B000] Loss→ MSE=0.1111  BCE=0.0693  HUB=0.0332  D1=0.0000  D2=0.0681 | lr(mean,sd,min,max)=0.3394,0.1385,0.1127,0.8785 | hub(mean,max)=0.0003,0.0046 | slip_frac=0.239
+2025-10-04 14:42:01  [E13 B000] GradNorm→ reg=0.049  cls=0.000  ter=0.000 | total_norm=0.077 max=0.049 min=0.000 zero_frac=0.000 param_norm=35.264
+2025-10-04 14:42:01  Top6_grads: conv.weight:0.049, pred.weight:0.046, short_lstm.weight_ih_l0:0.024, long_lstm.weight_ih_l0:0.017, short_lstm.weight_ih_l0_reverse:0.014, short2long.weight:0.014
+2025-10-04 14:45:28  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:45:28  [E14 B000] Loss→ MSE=0.1095  BCE=0.0693  HUB=0.0306  D1=0.0000  D2=0.0680 | lr(mean,sd,min,max)=0.3457,0.1346,0.1054,0.7778 | hub(mean,max)=0.0003,0.0051 | slip_frac=0.206
+2025-10-04 14:45:29  [E14 B000] GradNorm→ reg=0.031  cls=0.000  ter=0.000 | total_norm=0.063 max=0.045 min=0.000 zero_frac=0.000 param_norm=35.285
+2025-10-04 14:45:29  Top6_grads: conv.weight:0.045, pred.weight:0.029, short_lstm.weight_ih_l0:0.021, long_lstm.weight_ih_l0:0.015, short_lstm.weight_ih_l0_reverse:0.012, short2long.weight:0.010
+2025-10-04 14:48:44  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 14:48:44  [E15 B000] Loss→ MSE=0.1112  BCE=0.0693  HUB=0.0305  D1=0.0000  D2=0.0681 | lr(mean,sd,min,max)=0.3443,0.1381,0.0873,0.8509 | hub(mean,max)=0.0003,0.0049 | slip_frac=0.217
+2025-10-04 14:48:48  [E15 B000] GradNorm→ reg=0.029  cls=0.000  ter=0.000 | total_norm=0.074 max=0.052 min=0.000 zero_frac=0.000 param_norm=35.307
+2025-10-04 14:48:48  Top6_grads: conv.weight:0.052, pred.weight:0.028, long_lstm.weight_ih_l0:0.025, short_lstm.weight_ih_l0:0.024, short_lstm.weight_ih_l0_reverse:0.018, short2long.weight:0.009
+2025-10-04 16:29:44  
+
+****************************************************************************************************
+
+2025-10-04 16:29:44  
+PARAMETER NAMES:
+2025-10-04 16:29:44    conv.weight
+2025-10-04 16:29:44    conv.bias
+2025-10-04 16:29:44    bn.weight
+2025-10-04 16:29:44    bn.bias
+2025-10-04 16:29:44    short_lstm.weight_ih_l0
+2025-10-04 16:29:44    short_lstm.weight_hh_l0
+2025-10-04 16:29:44    short_lstm.bias_ih_l0
+2025-10-04 16:29:44    short_lstm.bias_hh_l0
+2025-10-04 16:29:44    short_lstm.weight_ih_l0_reverse
+2025-10-04 16:29:44    short_lstm.weight_hh_l0_reverse
+2025-10-04 16:29:44    short_lstm.bias_ih_l0_reverse
+2025-10-04 16:29:44    short_lstm.bias_hh_l0_reverse
+2025-10-04 16:29:44    ln_short.weight
+2025-10-04 16:29:44    ln_short.bias
+2025-10-04 16:29:44    short2long.weight
+2025-10-04 16:29:44    short2long.bias
+2025-10-04 16:29:44    ln_long.weight
+2025-10-04 16:29:44    ln_long.bias
+2025-10-04 16:29:44    pred.weight
+2025-10-04 16:29:44    pred.bias
+2025-10-04 16:29:44  END PARAMETER NAMES
+
+2025-10-04 16:29:44  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:29:44  [E01 B000] Loss→ MSE=0.1152  BCE=0.0693  HUB=0.0685  D1=0.0000  D2=0.0665 | lr(mean,sd,min,max)=0.4634,0.1299,0.1453,0.8307 | hub(mean,max)=0.0007,0.0063 | slip_frac=0.357
+2025-10-04 16:29:44  [E01 B000] GradNorm→ reg=0.641  cls=0.000  ter=0.000 | total_norm=0.958 max=0.598 min=0.000 zero_frac=0.000 param_norm=23.296
+2025-10-04 16:29:44  Top6_grads: short2long.weight:0.598, pred.weight:0.576, short_lstm.weight_ih_l0:0.278, short_lstm.weight_ih_l0_reverse:0.223, conv.weight:0.220, short_lstm.bias_ih_l0:0.118
+2025-10-04 16:29:44  [TUNE] total_grad_norm=0.957845
+2025-10-04 16:30:12  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:30:12  [E02 B000] Loss→ MSE=0.1261  BCE=0.0693  HUB=0.0609  D1=0.0000  D2=0.0485 | lr(mean,sd,min,max)=0.2006,0.1199,0.0325,0.6922 | hub(mean,max)=0.0006,0.0052 | slip_frac=0.459
+2025-10-04 16:30:12  [E02 B000] GradNorm→ reg=0.273  cls=0.000  ter=0.000 | total_norm=0.377 max=0.245 min=0.000 zero_frac=0.000 param_norm=23.303
+2025-10-04 16:30:12  Top6_grads: pred.weight:0.245, short2long.weight:0.217, conv.weight:0.102, short_lstm.weight_ih_l0:0.098, short_lstm.weight_ih_l0_reverse:0.071, short_lstm.bias_ih_l0:0.051
+2025-10-04 16:30:12  [TUNE] total_grad_norm=0.376606
+2025-10-04 16:30:37  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:30:37  [E03 B000] Loss→ MSE=0.1212  BCE=0.0693  HUB=0.0662  D1=0.0000  D2=0.0545 | lr(mean,sd,min,max)=0.2283,0.1323,0.0476,0.7478 | hub(mean,max)=0.0007,0.0064 | slip_frac=0.428
+2025-10-04 16:30:37  [E03 B000] GradNorm→ reg=0.234  cls=0.000  ter=0.000 | total_norm=0.303 max=0.211 min=0.000 zero_frac=0.000 param_norm=23.308
+2025-10-04 16:30:37  Top6_grads: pred.weight:0.211, short2long.weight:0.161, conv.weight:0.092, short_lstm.weight_ih_l0:0.070, short_lstm.weight_ih_l0_reverse:0.052, short_lstm.bias_ih_l0:0.036
+2025-10-04 16:30:37  [TUNE] total_grad_norm=0.303196
+2025-10-04 16:31:04  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:31:04  [E04 B000] Loss→ MSE=0.1198  BCE=0.0693  HUB=0.0641  D1=0.0000  D2=0.0582 | lr(mean,sd,min,max)=0.2499,0.1382,0.0495,0.8790 | hub(mean,max)=0.0006,0.0062 | slip_frac=0.419
+2025-10-04 16:31:05  [E04 B000] GradNorm→ reg=0.195  cls=0.000  ter=0.000 | total_norm=0.243 max=0.177 min=0.000 zero_frac=0.000 param_norm=23.313
+2025-10-04 16:31:05  Top6_grads: pred.weight:0.177, short2long.weight:0.119, conv.weight:0.081, short_lstm.weight_ih_l0:0.050, short_lstm.weight_ih_l0_reverse:0.039, short_lstm.bias_ih_l0:0.026
+2025-10-04 16:31:05  [TUNE] total_grad_norm=0.242919
+2025-10-04 16:31:32  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:31:32  [E05 B000] Loss→ MSE=0.1140  BCE=0.0693  HUB=0.0603  D1=0.0000  D2=0.0557 | lr(mean,sd,min,max)=0.2691,0.1346,0.0681,0.7786 | hub(mean,max)=0.0006,0.0057 | slip_frac=0.361
+2025-10-04 16:31:32  [E05 B000] GradNorm→ reg=0.156  cls=0.000  ter=0.000 | total_norm=0.190 max=0.142 min=0.000 zero_frac=0.000 param_norm=23.319
+2025-10-04 16:31:32  Top6_grads: pred.weight:0.142, short2long.weight:0.087, conv.weight:0.069, short_lstm.weight_ih_l0:0.037, short_lstm.weight_ih_l0_reverse:0.030, short_lstm.bias_ih_l0:0.018
+2025-10-04 16:31:32  [TUNE] total_grad_norm=0.190388
+2025-10-04 16:31:57  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:31:57  [E06 B000] Loss→ MSE=0.1094  BCE=0.0693  HUB=0.0616  D1=0.0000  D2=0.0608 | lr(mean,sd,min,max)=0.2817,0.1344,0.0904,0.8058 | hub(mean,max)=0.0006,0.0054 | slip_frac=0.379
+2025-10-04 16:31:57  [E06 B000] GradNorm→ reg=0.119  cls=0.000  ter=0.000 | total_norm=0.144 max=0.109 min=0.000 zero_frac=0.000 param_norm=23.325
+2025-10-04 16:31:57  Top6_grads: pred.weight:0.109, short2long.weight:0.062, conv.weight:0.056, short_lstm.weight_ih_l0:0.026, short_lstm.weight_ih_l0_reverse:0.022, short_lstm.bias_ih_l0:0.013
+2025-10-04 16:31:57  [TUNE] total_grad_norm=0.143603
+2025-10-04 16:32:23  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:32:23  [E07 B000] Loss→ MSE=0.1098  BCE=0.0693  HUB=0.0572  D1=0.0000  D2=0.0640 | lr(mean,sd,min,max)=0.2955,0.1390,0.1104,0.8174 | hub(mean,max)=0.0006,0.0060 | slip_frac=0.375
+2025-10-04 16:32:23  [E07 B000] GradNorm→ reg=0.077  cls=0.000  ter=0.000 | total_norm=0.095 max=0.071 min=0.000 zero_frac=0.000 param_norm=23.330
+2025-10-04 16:32:23  Top6_grads: pred.weight:0.071, conv.weight:0.040, short2long.weight:0.039, short_lstm.weight_ih_l0:0.018, short_lstm.weight_ih_l0_reverse:0.015, short_lstm.bias_ih_l0:0.007
+2025-10-04 16:32:23  [TUNE] total_grad_norm=0.095155
+2025-10-04 16:32:49  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:32:49  [E08 B000] Loss→ MSE=0.1054  BCE=0.0693  HUB=0.0514  D1=0.0000  D2=0.0605 | lr(mean,sd,min,max)=0.3118,0.1404,0.0941,0.8191 | hub(mean,max)=0.0005,0.0054 | slip_frac=0.346
+2025-10-04 16:32:49  [E08 B000] GradNorm→ reg=0.048  cls=0.000  ter=0.000 | total_norm=0.063 max=0.045 min=0.000 zero_frac=0.000 param_norm=23.336
+2025-10-04 16:32:49  Top6_grads: pred.weight:0.045, conv.weight:0.031, short2long.weight:0.026, short_lstm.weight_ih_l0:0.012, short_lstm.weight_ih_l0_reverse:0.010, short_lstm.bias_ih_l0:0.004
+2025-10-04 16:32:49  [TUNE] total_grad_norm=0.063339
+2025-10-04 16:33:14  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:33:14  [E09 B000] Loss→ MSE=0.1051  BCE=0.0693  HUB=0.0562  D1=0.0000  D2=0.0568 | lr(mean,sd,min,max)=0.3198,0.1314,0.1215,0.8278 | hub(mean,max)=0.0006,0.0052 | slip_frac=0.348
+2025-10-04 16:33:14  [E09 B000] GradNorm→ reg=0.026  cls=0.000  ter=0.000 | total_norm=0.048 max=0.032 min=0.000 zero_frac=0.000 param_norm=23.341
+2025-10-04 16:33:14  Top6_grads: conv.weight:0.032, pred.weight:0.025, short2long.weight:0.020, short_lstm.weight_ih_l0:0.011, short_lstm.weight_ih_l0_reverse:0.009, short_lstm.weight_hh_l0:0.003
+2025-10-04 16:33:14  [TUNE] total_grad_norm=0.047830
+2025-10-04 16:33:39  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:33:39  [E10 B000] Loss→ MSE=0.1017  BCE=0.0693  HUB=0.0535  D1=0.0000  D2=0.0600 | lr(mean,sd,min,max)=0.3242,0.1317,0.1217,0.8153 | hub(mean,max)=0.0005,0.0050 | slip_frac=0.370
+2025-10-04 16:33:40  [E10 B000] GradNorm→ reg=0.034  cls=0.000  ter=0.000 | total_norm=0.058 max=0.039 min=0.000 zero_frac=0.000 param_norm=23.346
+2025-10-04 16:33:40  Top6_grads: conv.weight:0.039, pred.weight:0.032, short2long.weight:0.023, short_lstm.weight_ih_l0:0.012, short_lstm.weight_ih_l0_reverse:0.010, short_lstm.weight_hh_l0:0.003
+2025-10-04 16:33:40  [TUNE] total_grad_norm=0.057721
+2025-10-04 16:34:04  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:34:04  [E11 B000] Loss→ MSE=0.1019  BCE=0.0693  HUB=0.0463  D1=0.0000  D2=0.0553 | lr(mean,sd,min,max)=0.3340,0.1355,0.1212,0.8239 | hub(mean,max)=0.0005,0.0040 | slip_frac=0.333
+2025-10-04 16:34:04  [E11 B000] GradNorm→ reg=0.052  cls=0.000  ter=0.000 | total_norm=0.079 max=0.052 min=0.000 zero_frac=0.000 param_norm=23.350
+2025-10-04 16:34:04  Top6_grads: conv.weight:0.052, pred.weight:0.047, short2long.weight:0.028, short_lstm.weight_ih_l0:0.014, short_lstm.weight_ih_l0_reverse:0.013, short_lstm.bias_ih_l0:0.005
+2025-10-04 16:34:04  [TUNE] total_grad_norm=0.078886
+2025-10-04 16:34:30  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:34:30  [E12 B000] Loss→ MSE=0.1014  BCE=0.0693  HUB=0.0445  D1=0.0000  D2=0.0595 | lr(mean,sd,min,max)=0.3449,0.1329,0.1348,0.7800 | hub(mean,max)=0.0004,0.0051 | slip_frac=0.324
+2025-10-04 16:34:30  [E12 B000] GradNorm→ reg=0.072  cls=0.000  ter=0.000 | total_norm=0.101 max=0.066 min=0.000 zero_frac=0.000 param_norm=23.355
+2025-10-04 16:34:30  Top6_grads: pred.weight:0.066, conv.weight:0.063, short2long.weight:0.033, short_lstm.weight_ih_l0_reverse:0.016, short_lstm.weight_ih_l0:0.016, pred.bias:0.006
+2025-10-04 16:34:30  [TUNE] total_grad_norm=0.100924
+2025-10-04 16:34:55  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:34:55  [E13 B000] Loss→ MSE=0.1022  BCE=0.0693  HUB=0.0417  D1=0.0000  D2=0.0520 | lr(mean,sd,min,max)=0.3458,0.1277,0.1035,0.8136 | hub(mean,max)=0.0004,0.0037 | slip_frac=0.333
+2025-10-04 16:34:55  [E13 B000] GradNorm→ reg=0.080  cls=0.000  ter=0.000 | total_norm=0.110 max=0.072 min=0.000 zero_frac=0.000 param_norm=23.358
+2025-10-04 16:34:55  Top6_grads: pred.weight:0.072, conv.weight:0.069, short2long.weight:0.035, short_lstm.weight_ih_l0:0.018, short_lstm.weight_ih_l0_reverse:0.017, pred.bias:0.008
+2025-10-04 16:34:55  [TUNE] total_grad_norm=0.110433
+2025-10-04 16:35:21  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:35:21  [E14 B000] Loss→ MSE=0.0988  BCE=0.0693  HUB=0.0380  D1=0.0000  D2=0.0514 | lr(mean,sd,min,max)=0.3483,0.1238,0.1294,0.7756 | hub(mean,max)=0.0004,0.0046 | slip_frac=0.286
+2025-10-04 16:35:21  [E14 B000] GradNorm→ reg=0.090  cls=0.000  ter=0.000 | total_norm=0.124 max=0.082 min=0.000 zero_frac=0.000 param_norm=23.362
+2025-10-04 16:35:21  Top6_grads: pred.weight:0.082, conv.weight:0.078, short2long.weight:0.038, short_lstm.weight_ih_l0_reverse:0.020, short_lstm.weight_ih_l0:0.019, pred.bias:0.008
+2025-10-04 16:35:21  [TUNE] total_grad_norm=0.124035
+2025-10-04 16:35:47  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:35:47  [E15 B000] Loss→ MSE=0.0978  BCE=0.0693  HUB=0.0353  D1=0.0000  D2=0.0524 | lr(mean,sd,min,max)=0.3574,0.1301,0.1291,0.8284 | hub(mean,max)=0.0004,0.0041 | slip_frac=0.273
+2025-10-04 16:35:47  [E15 B000] GradNorm→ reg=0.101  cls=0.000  ter=0.000 | total_norm=0.138 max=0.092 min=0.000 zero_frac=0.000 param_norm=23.366
+2025-10-04 16:35:47  Top6_grads: pred.weight:0.092, conv.weight:0.087, short2long.weight:0.040, short_lstm.weight_ih_l0_reverse:0.021, short_lstm.weight_ih_l0:0.021, pred.bias:0.009
+2025-10-04 16:35:47  [TUNE] total_grad_norm=0.137913
+2025-10-04 16:36:12  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:36:12  [E16 B000] Loss→ MSE=0.0981  BCE=0.0693  HUB=0.0325  D1=0.0000  D2=0.0502 | lr(mean,sd,min,max)=0.3597,0.1253,0.1377,0.7854 | hub(mean,max)=0.0003,0.0038 | slip_frac=0.286
+2025-10-04 16:36:12  [E16 B000] GradNorm→ reg=0.112  cls=0.000  ter=0.000 | total_norm=0.147 max=0.102 min=0.000 zero_frac=0.000 param_norm=23.370
+2025-10-04 16:36:12  Top6_grads: pred.weight:0.102, conv.weight:0.090, short2long.weight:0.042, short_lstm.weight_ih_l0_reverse:0.023, short_lstm.weight_ih_l0:0.022, pred.bias:0.010
+2025-10-04 16:36:12  [TUNE] total_grad_norm=0.147422
+2025-10-04 16:36:36  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:36:36  [E17 B000] Loss→ MSE=0.0975  BCE=0.0693  HUB=0.0334  D1=0.0000  D2=0.0485 | lr(mean,sd,min,max)=0.3595,0.1226,0.1556,0.7583 | hub(mean,max)=0.0003,0.0040 | slip_frac=0.288
+2025-10-04 16:36:37  [E17 B000] GradNorm→ reg=0.116  cls=0.000  ter=0.000 | total_norm=0.154 max=0.105 min=0.000 zero_frac=0.000 param_norm=23.374
+2025-10-04 16:36:37  Top6_grads: pred.weight:0.105, conv.weight:0.095, short2long.weight:0.043, short_lstm.weight_ih_l0_reverse:0.024, short_lstm.weight_ih_l0:0.022, pred.bias:0.010
+2025-10-04 16:36:37  [TUNE] total_grad_norm=0.153607
+2025-10-04 16:37:01  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:37:01  [E18 B000] Loss→ MSE=0.0970  BCE=0.0693  HUB=0.0324  D1=0.0000  D2=0.0472 | lr(mean,sd,min,max)=0.3600,0.1259,0.1286,0.8157 | hub(mean,max)=0.0003,0.0042 | slip_frac=0.262
+2025-10-04 16:37:02  [E18 B000] GradNorm→ reg=0.118  cls=0.000  ter=0.000 | total_norm=0.157 max=0.107 min=0.000 zero_frac=0.000 param_norm=23.377
+2025-10-04 16:37:02  Top6_grads: pred.weight:0.107, conv.weight:0.098, short2long.weight:0.043, short_lstm.weight_ih_l0_reverse:0.024, short_lstm.weight_ih_l0:0.023, pred.bias:0.011
+2025-10-04 16:37:02  [TUNE] total_grad_norm=0.157345
+2025-10-04 16:37:27  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:37:27  [E19 B000] Loss→ MSE=0.0985  BCE=0.0693  HUB=0.0345  D1=0.0000  D2=0.0507 | lr(mean,sd,min,max)=0.3624,0.1254,0.1284,0.7850 | hub(mean,max)=0.0003,0.0042 | slip_frac=0.264
+2025-10-04 16:37:27  [E19 B000] GradNorm→ reg=0.122  cls=0.000  ter=0.000 | total_norm=0.162 max=0.111 min=0.000 zero_frac=0.000 param_norm=23.381
+2025-10-04 16:37:27  Top6_grads: pred.weight:0.111, conv.weight:0.101, short2long.weight:0.043, short_lstm.weight_ih_l0_reverse:0.025, short_lstm.weight_ih_l0:0.024, pred.bias:0.011
+2025-10-04 16:37:27  [TUNE] total_grad_norm=0.161820
+2025-10-04 16:37:54  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:37:54  [E20 B000] Loss→ MSE=0.0971  BCE=0.0693  HUB=0.0274  D1=0.0000  D2=0.0435 | lr(mean,sd,min,max)=0.3647,0.1206,0.1590,0.7846 | hub(mean,max)=0.0003,0.0041 | slip_frac=0.239
+2025-10-04 16:37:54  [E20 B000] GradNorm→ reg=0.126  cls=0.000  ter=0.000 | total_norm=0.167 max=0.114 min=0.000 zero_frac=0.000 param_norm=23.385
+2025-10-04 16:37:54  Top6_grads: pred.weight:0.114, conv.weight:0.104, short2long.weight:0.043, short_lstm.weight_ih_l0_reverse:0.026, short_lstm.weight_ih_l0:0.024, pred.bias:0.011
+2025-10-04 16:37:54  [TUNE] total_grad_norm=0.166636
+2025-10-04 16:38:20  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:38:20  [E21 B000] Loss→ MSE=0.0977  BCE=0.0693  HUB=0.0346  D1=0.0000  D2=0.0509 | lr(mean,sd,min,max)=0.3628,0.1259,0.1196,0.8213 | hub(mean,max)=0.0003,0.0052 | slip_frac=0.293
+2025-10-04 16:38:20  [E21 B000] GradNorm→ reg=0.126  cls=0.000  ter=0.000 | total_norm=0.169 max=0.115 min=0.000 zero_frac=0.000 param_norm=23.389
+2025-10-04 16:38:20  Top6_grads: pred.weight:0.115, conv.weight:0.107, short2long.weight:0.043, short_lstm.weight_ih_l0_reverse:0.027, short_lstm.weight_ih_l0:0.025, pred.bias:0.012
+2025-10-04 16:38:20  [TUNE] total_grad_norm=0.168855
+2025-10-04 16:38:45  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:38:45  [E22 B000] Loss→ MSE=0.0991  BCE=0.0693  HUB=0.0262  D1=0.0000  D2=0.0452 | lr(mean,sd,min,max)=0.3656,0.1200,0.1541,0.8068 | hub(mean,max)=0.0003,0.0034 | slip_frac=0.235
+2025-10-04 16:38:45  [E22 B000] GradNorm→ reg=0.126  cls=0.000  ter=0.000 | total_norm=0.167 max=0.115 min=0.000 zero_frac=0.000 param_norm=23.393
+2025-10-04 16:38:45  Top6_grads: pred.weight:0.115, conv.weight:0.106, short2long.weight:0.041, short_lstm.weight_ih_l0_reverse:0.026, short_lstm.weight_ih_l0:0.024, pred.bias:0.011
+2025-10-04 16:38:45  [TUNE] total_grad_norm=0.167214
+2025-10-04 16:39:11  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:39:11  [E23 B000] Loss→ MSE=0.0986  BCE=0.0693  HUB=0.0267  D1=0.0000  D2=0.0468 | lr(mean,sd,min,max)=0.3688,0.1209,0.1504,0.8964 | hub(mean,max)=0.0003,0.0042 | slip_frac=0.255
+2025-10-04 16:39:11  [E23 B000] GradNorm→ reg=0.130  cls=0.000  ter=0.000 | total_norm=0.175 max=0.119 min=0.000 zero_frac=0.000 param_norm=23.397
+2025-10-04 16:39:11  Top6_grads: pred.weight:0.119, conv.weight:0.112, short2long.weight:0.042, short_lstm.weight_ih_l0_reverse:0.028, short_lstm.weight_ih_l0:0.026, pred.bias:0.012
+2025-10-04 16:39:11  [TUNE] total_grad_norm=0.174650
+2025-10-04 16:39:35  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:39:35  [E24 B000] Loss→ MSE=0.0956  BCE=0.0693  HUB=0.0287  D1=0.0000  D2=0.0478 | lr(mean,sd,min,max)=0.3703,0.1215,0.1587,0.8242 | hub(mean,max)=0.0003,0.0034 | slip_frac=0.264
+2025-10-04 16:39:35  [E24 B000] GradNorm→ reg=0.131  cls=0.000  ter=0.000 | total_norm=0.176 max=0.119 min=0.000 zero_frac=0.000 param_norm=23.401
+2025-10-04 16:39:35  Top6_grads: pred.weight:0.119, conv.weight:0.113, short2long.weight:0.041, short_lstm.weight_ih_l0_reverse:0.029, short_lstm.weight_ih_l0:0.026, pred.bias:0.012
+2025-10-04 16:39:35  [TUNE] total_grad_norm=0.175585
+2025-10-04 16:39:59  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:39:59  [E25 B000] Loss→ MSE=0.0959  BCE=0.0693  HUB=0.0239  D1=0.0000  D2=0.0460 | lr(mean,sd,min,max)=0.3698,0.1207,0.1300,0.8025 | hub(mean,max)=0.0002,0.0041 | slip_frac=0.231
+2025-10-04 16:39:59  [E25 B000] GradNorm→ reg=0.126  cls=0.000  ter=0.000 | total_norm=0.170 max=0.114 min=0.000 zero_frac=0.000 param_norm=23.405
+2025-10-04 16:39:59  Top6_grads: pred.weight:0.114, conv.weight:0.110, short2long.weight:0.040, short_lstm.weight_ih_l0_reverse:0.028, short_lstm.weight_ih_l0:0.025, pred.bias:0.011
+2025-10-04 16:39:59  [TUNE] total_grad_norm=0.169541
+2025-10-04 16:40:24  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:40:24  [E26 B000] Loss→ MSE=0.0965  BCE=0.0693  HUB=0.0294  D1=0.0000  D2=0.0464 | lr(mean,sd,min,max)=0.3649,0.1182,0.1350,0.7780 | hub(mean,max)=0.0003,0.0041 | slip_frac=0.231
+2025-10-04 16:40:24  [E26 B000] GradNorm→ reg=0.126  cls=0.000  ter=0.000 | total_norm=0.173 max=0.115 min=0.000 zero_frac=0.000 param_norm=23.410
+2025-10-04 16:40:24  Top6_grads: pred.weight:0.115, conv.weight:0.113, short2long.weight:0.040, short_lstm.weight_ih_l0_reverse:0.028, short_lstm.weight_ih_l0:0.026, pred.bias:0.012
+2025-10-04 16:40:24  [TUNE] total_grad_norm=0.172927
+2025-10-04 16:40:49  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:40:49  [E27 B000] Loss→ MSE=0.0967  BCE=0.0693  HUB=0.0260  D1=0.0000  D2=0.0474 | lr(mean,sd,min,max)=0.3692,0.1190,0.1121,0.7681 | hub(mean,max)=0.0003,0.0034 | slip_frac=0.233
+2025-10-04 16:40:49  [E27 B000] GradNorm→ reg=0.127  cls=0.000  ter=0.000 | total_norm=0.172 max=0.115 min=0.000 zero_frac=0.000 param_norm=23.414
+2025-10-04 16:40:49  Top6_grads: pred.weight:0.115, conv.weight:0.113, short2long.weight:0.038, short_lstm.weight_ih_l0_reverse:0.028, short_lstm.weight_ih_l0:0.026, pred.bias:0.011
+2025-10-04 16:40:49  [TUNE] total_grad_norm=0.172273
+2025-10-04 16:41:14  shapes: lr_vals=(451,) y_r=(451,) hub=(451,)
+2025-10-04 16:41:14  [E28 B000] Loss→ MSE=0.0969  BCE=0.0693  HUB=0.0219  D1=0.0000  D2=0.0478 | lr(mean,sd,min,max)=0.3731,0.1196,0.1243,0.8448 | hub(mean,max)=0.0002,0.0038 | slip_frac=0.208
+2025-10-04 16:41:14  [E28 B000] GradNorm→ reg=0.130  cls=0.000  ter=0.000 | total_norm=0.177 max=0.118 min=0.000 zero_frac=0.000 param_norm=23.419
+2025-10-04 16:41:14  Top6_grads: pred.weight:0.118, conv.weight:0.116, short2long.weight:0.039, short_lstm.weight_ih_l0_reverse:0.030, short_lstm.weight_ih_l0:0.027, pred.bias:0.012
+2025-10-04 16:41:14  [TUNE] total_grad_norm=0.177003

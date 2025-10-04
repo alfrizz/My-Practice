@@ -852,3 +852,271 @@ def select_checkpoint(
 
     return min(candidates, key=priority)
 
+
+#########################################################################################################
+
+
+def _append_log(line: str, log_file: Path):
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_file, "a") as f:
+        f.write(f"{ts}  {line}\n")
+
+################ 
+
+# def log_loss_components(
+#     epoch: int,
+#     batch_idx: int,
+#     lr_vals: torch.Tensor,
+#     y_r:     torch.Tensor,
+#     b_logits:torch.Tensor,
+#     hub:     torch.Tensor,
+#     prev_lr: torch.Tensor|None,
+#     prev_prev_lr: torch.Tensor|None,
+#     mse_loss,
+#     bce_loss,
+#     cls_loss_weight: float,
+#     smooth_beta:     float,
+#     diff1_weight:    float,
+#     diff2_weight:    float,
+#     log_file:        Path
+# ):
+#     if epoch == 1:
+#         _append_log("\n\n" + "*"*100 + "\n", log_file)
+
+#     # regression MSE
+#     l_mse = mse_loss(lr_vals, y_r).item()
+
+#     # binary BCE diagnostic: if b_logits is None, treat as zeros (caller provides zeros)
+#     # ensure shapes match: b_logits may be scalar or vector
+#     zeros = torch.zeros_like(b_logits)
+#     l_bce = (cls_loss_weight * bce_loss(b_logits, zeros)).item()
+
+#     # huber-style slip diagnostic (mean of hub per-window vector)
+#     l_hub = (smooth_beta * hub.mean()).item()
+
+#     # D1: negative first-diff penalty (only if prev_lr provided)
+#     l_d1 = 0.0
+#     if prev_lr is not None:
+#         neg = torch.relu(prev_lr - lr_vals)
+#         l_d1 = (diff1_weight * neg.pow(2).mean()).item()
+
+#     # D2: curvature penalty (only if prev_prev_lr provided)
+#     l_d2 = 0.0
+#     if prev_prev_lr is not None:
+#         curv = lr_vals - 2*prev_lr + prev_prev_lr
+#         l_d2 = (diff2_weight * curv.pow(2).mean()).item()
+
+#     line = (f"[E{epoch:02d} B{batch_idx:03d}] Loss→ "
+#             f"MSE={l_mse:.4f}  BCE={l_bce:.4f}  HUB={l_hub:.4f}  "
+#             f"D1={l_d1:.4f}  D2={l_d2:.4f}")
+#     _append_log(line, log_file)
+
+def log_loss_components(
+    epoch: int,
+    batch_idx: int,
+    lr_vals: torch.Tensor,
+    y_r:     torch.Tensor,
+    b_logits:torch.Tensor,
+    hub:     torch.Tensor,
+    prev_lr: torch.Tensor|None,
+    prev_prev_lr: torch.Tensor|None,
+    mse_loss,
+    bce_loss,
+    cls_loss_weight: float,
+    smooth_beta:     float,
+    diff1_weight:    float,
+    diff2_weight:    float,
+    model:     torch.nn.Module,
+    log_file:        Path,
+    optimizer: torch.optim.Optimizer | None = None,
+    batch_loss: float | torch.Tensor | None = None
+):
+    """
+    Extended diagnostics for a single-batch window inspection.
+
+    Adds optional logging of:
+      - optimizer learning rate (if optimizer provided)
+      - aggregated batch_loss (if provided)
+
+    All previous information is preserved.
+    """
+    if epoch == 1:
+        _append_log("\n\n" + "*"*100 + "\n", log_file)
+        _append_log("\nPARAMETER NAMES:", log_file)
+        for name, _ in model.named_parameters():
+            _append_log(f"  {name}", log_file)
+        _append_log("END PARAMETER NAMES\n", log_file)
+
+    # shapes and safe cast to CPU scalars where needed
+    shape_info = f"shapes: lr_vals={tuple(lr_vals.shape)} y_r={tuple(y_r.shape)} hub={tuple(hub.shape)}"
+    _append_log(shape_info, log_file)
+
+    # regression MSE (per-window vector -> scalar)
+    l_mse = mse_loss(lr_vals, y_r).item()
+
+    # binary BCE diagnostic: caller should pass zeros if b_logits missing
+    zeros = torch.zeros_like(b_logits)
+    l_bce = (cls_loss_weight * bce_loss(b_logits, zeros)).item()
+
+    # huber-style slip diagnostic (mean + max)
+    hub_mean = float(hub.mean().item())
+    hub_max  = float(hub.max().item())
+    l_hub = (smooth_beta * hub_mean)
+
+    # lr_vals summary stats
+    lr_mean = float(lr_vals.mean().item())
+    lr_std  = float(lr_vals.std().item())
+    lr_min  = float(lr_vals.min().item())
+    lr_max  = float(lr_vals.max().item())
+
+    # slip percent above a tiny threshold (useful to know how often smoothing triggers)
+    slip_thresh = getattr(hub, "_log_slip_thresh", 1e-6)
+    slip_frac = float((hub > slip_thresh).float().mean().item())
+
+    # D1: negative first-diff penalty (only if prev_lr provided)
+    l_d1 = 0.0
+    if prev_lr is not None:
+        neg = torch.relu(prev_lr - lr_vals)
+        l_d1 = (diff1_weight * neg.pow(2).mean()).item()
+
+    # D2: curvature penalty (only if prev_prev_lr provided)
+    l_d2 = 0.0
+    if prev_prev_lr is not None:
+        curv = lr_vals - 2*prev_lr + prev_prev_lr
+        l_d2 = (diff2_weight * curv.pow(2).mean()).item()
+
+    # optional optimizer LR (take first param group)
+    opt_lr = None
+    if optimizer is not None and len(optimizer.param_groups) > 0:
+        opt_lr = float(optimizer.param_groups[0].get("lr", 0.0))
+
+    # batch_loss scalar
+    batch_loss_val = None
+    if batch_loss is not None:
+        batch_loss_val = float(batch_loss.item()) if torch.is_tensor(batch_loss) else float(batch_loss)
+
+    # Compose compact log line with both scalars and a small set of summaries
+    line = (
+        f"[E{epoch:02d} B{batch_idx:03d}] Loss→ "
+        f"MSE={l_mse:.4f}  BCE={l_bce:.4f}  HUB={l_hub:.4f}  "
+        f"D1={l_d1:.4f}  D2={l_d2:.4f} | "
+        f"lr(mean,sd,min,max)={lr_mean:.4f},{lr_std:.4f},{lr_min:.4f},{lr_max:.4f} | "
+        f"hub(mean,max)={hub_mean:.4f},{hub_max:.4f} | slip_frac={slip_frac:.3f}"
+    )
+    _append_log(line, log_file)
+
+    # Extra concise tuning line: optimizer LR, batch_loss, and a placeholder for total_grad_norm (logged elsewhere)
+    extra_parts = []
+    if opt_lr is not None:
+        extra_parts.append(f"opt_lr={opt_lr:.4e}")
+    if batch_loss_val is not None:
+        extra_parts.append(f"batch_loss={batch_loss_val:.6f}")
+    if extra_parts:
+        _append_log("[TUNE] " + "  ".join(extra_parts), log_file)
+
+################ 
+
+# def log_gradient_norms(
+#     epoch: int,
+#     batch_idx: int,
+#     model:     torch.nn.Module,
+#     log_file:  Path
+# ):
+#     # dump parameter names once
+#     if epoch == 1:
+#         _append_log("\nPARAMETER NAMES:", log_file)
+#         for name, _ in model.named_parameters():
+#             _append_log(f"  {name}", log_file)
+#         _append_log("END PARAMETER NAMES\n", log_file)
+
+#     grads = {"reg":0.0, "cls":0.0, "ter":0.0}
+#     for name, p in model.named_parameters():
+#         if p.grad is None:
+#             continue
+#         n = p.grad.norm().item()
+#         # maintain previous naming convention: match prefixes used in model definition
+#         if name.startswith("pred"):
+#             grads["reg"] += n
+#         elif name.startswith("cls_head"):
+#             grads["cls"] += n
+#         elif name.startswith("cls_ter"):
+#             grads["ter"] += n
+
+#     line = (f"[E{epoch:02d} B{batch_idx:03d}] GradNorm→ "
+#             f"reg={grads['reg']:.1f}  cls={grads['cls']:.1f}  ter={grads['ter']:.1f}")
+#     _append_log(line, log_file)
+
+def log_gradient_norms(
+    epoch: int,
+    batch_idx: int,
+    model:     torch.nn.Module,
+    log_file:  Path,
+    top_k:     int = 6
+):
+    """
+    Extended gradient / parameter norms dump.
+
+    Logs:
+      - per-head aggregated grad norms (reg / cls / ter)
+      - total grad norm, max, min
+      - parameter norm
+      - zero-gradient parameter count and fraction
+      - top_k parameters by grad norm
+      - Appends a concise tuning line with total_grad_norm for quick scanning
+    """
+    per_head = {"reg": 0.0, "cls": 0.0, "ter": 0.0}
+    grads_list = []
+    param_list = []
+    zero_grad_count = 0
+    total_params = 0
+
+    for name, p in model.named_parameters():
+        total_params += 1
+        if p.grad is None:
+            zero_grad_count += 1
+            grads_list.append((name, 0.0))
+            param_list.append((name, float(p.detach().norm().item())))
+            continue
+        gnorm = float(p.grad.norm().item())
+        pnorm = float(p.detach().norm().item())
+        grads_list.append((name, gnorm))
+        param_list.append((name, pnorm))
+
+        if name.startswith("pred"):
+            per_head["reg"] += gnorm
+        elif name.startswith("cls_head"):
+            per_head["cls"] += gnorm
+        elif name.startswith("cls_ter"):
+            per_head["ter"] += gnorm
+
+    # global grad stats
+    grad_vals = [v for _, v in grads_list]
+    total_grad_sq = sum(v * v for v in grad_vals)
+    total_grad_norm = float(math.sqrt(total_grad_sq)) if total_grad_sq > 0 else 0.0
+    max_grad = float(max(grad_vals)) if grad_vals else 0.0
+    min_grad = float(min(grad_vals)) if grad_vals else 0.0
+
+    # param norms summary
+    param_norm_vals = [v for _, v in param_list]
+    total_param_norm = float(math.sqrt(sum(v * v for v in param_norm_vals))) if param_norm_vals else 0.0
+
+    # zero-grad fraction
+    zero_frac = zero_grad_count / max(1, total_params)
+
+    # top-k parameters by grad magnitude
+    topk = sorted(grads_list, key=lambda x: x[1], reverse=True)[:top_k]
+    topk_str = ", ".join(f"{n}:{g:.3f}" for n, g in topk)
+
+    # compose lines
+    head_line = (f"[E{epoch:02d} B{batch_idx:03d}] GradNorm→ "
+                 f"reg={per_head['reg']:.3f}  cls={per_head['cls']:.3f}  ter={per_head['ter']:.3f} | "
+                 f"total_norm={total_grad_norm:.3f} max={max_grad:.3f} min={min_grad:.3f} "
+                 f"zero_frac={zero_frac:.3f} param_norm={total_param_norm:.3f}")
+    _append_log(head_line, log_file)
+
+    # top-k detail line (compact)
+    _append_log(f"Top{top_k}_grads: {topk_str}", log_file)
+
+    # concise tuning line for quick scanning: total_grad_norm
+    _append_log(f"[TUNE] total_grad_norm={total_grad_norm:.6f}", log_file)

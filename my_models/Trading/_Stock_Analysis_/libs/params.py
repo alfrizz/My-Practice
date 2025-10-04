@@ -11,7 +11,7 @@ import os
 import glob
 import json
 
-from libs.models import dual_lstm, dual_lstm_smooth
+from libs.models import simple_lstm, dual_lstm_smooth
 
 #########################################################################################################
 
@@ -24,13 +24,14 @@ createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
-model_selected = dual_lstm_smooth
-sel_val_rmse = 0.24458 
+model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
+sel_val_rmse = 0.26749
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
 optuna_folder = "optuna_results" 
 models_folder = "trainings" 
+log_file = Path(models_folder) / "training_diagnostics.txt"
 
 save_path  = Path("dfs")
 base_csv = save_path / f"{ticker}_1_base.csv"
@@ -127,8 +128,8 @@ def signal_parameters(ticker):
                          'eng_adx',
                          'hour',
                          'adx_14']
-        trailing_stop_pred = 0.035
-        pred_threshold = 0.35
+        trailing_stop_pred = 0.2
+        pred_threshold = 0.4
         return_threshold = 0.01
         
     return look_back, sess_start_pred, sess_start_shift, features_cols, smooth_sign_win, trailing_stop_pred, pred_threshold, return_threshold
@@ -145,10 +146,10 @@ hparams = {
     # ── Architecture Parameters ────────────────────────────────────────
     "SHORT_UNITS":           128,    # daily LSTM hidden size; ↑capacity for spike detail, ↓overfit & latency
     "LONG_UNITS":            128,    # weekly LSTM hidden size; ↑long-term context, ↓short-term reactivity
-    "DROPOUT_SHORT":         0.15,   # after daily LSTM+attn; ↑regularization (smoother), ↓retains sharp spikes
-    "DROPOUT_LONG":          0.20,   # after weekly LSTM; ↑overfitting guard, ↓lag on trend changes
-    "ATT_HEADS":             8,      # multi-head count; ↑diverse pattern capture, ↓compute & per-head dim
-    "ATT_DROPOUT":           0.10,   # inside attention; ↑map regularity, ↓signal erosion
+    "DROPOUT_SHORT":         0.25,   # after daily LSTM+attn; ↑regularization (smoother), ↓retains sharp spikes
+    "DROPOUT_LONG":          0.35,   # after weekly LSTM; ↑overfitting guard, ↓lag on trend changes
+    "ATT_HEADS":             6,      # multi-head count; ↑diverse pattern capture, ↓compute & per-head dim
+    "ATT_DROPOUT":           0.15,   # inside attention; ↑map regularity, ↓signal erosion
 
     "CONV_K":                3,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
     "CONV_DILATION":         1,      # input conv dilation; ↑receptive field, ↓signal granularity
@@ -157,16 +158,16 @@ hparams = {
 
     # —— Active Loss & Smoothing Hyperparameters —— 
     "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
-    "DIFF2_WEIGHT":          1,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
+    "DIFF2_WEIGHT":          2,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
     "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
-    "SMOOTH_BETA":           25,   # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
+    "SMOOTH_BETA":           100,   # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
     "SMOOTH_DELTA":          0.02,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
     "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight; ↑spike emphasis, ↓regression focus
 
     # ── Optimizer & Scheduler Settings ────────────────────────────────
-    "LR_EPOCHS_WARMUP":      3,      # constant LR before decay; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            7e-5,   # start LR; ↑fast convergence, ↓risk of instability
-    "WEIGHT_DECAY":          1e-3,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "LR_EPOCHS_WARMUP":      1,      # constant LR before decay; ↑stable start, ↓early adaptation
+    "INITIAL_LR":            1e-4,   # start LR; ↑fast convergence, ↓risk of instability
+    "WEIGHT_DECAY":          5e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
     "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
     "T_0":                   100,    # first cycle length; unchanged
