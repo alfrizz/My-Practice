@@ -143,42 +143,55 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 
 hparams = {
-    # ── Architecture Parameters ────────────────────────────────────────
-    "SHORT_UNITS":           128,    # daily LSTM hidden size; ↑capacity for spike detail, ↓overfit & latency
-    "LONG_UNITS":            128,    # weekly LSTM hidden size; ↑long-term context, ↓short-term reactivity
-    "DROPOUT_SHORT":         0.25,   # after daily LSTM+attn; ↑regularization (smoother), ↓retains sharp spikes
-    "DROPOUT_LONG":          0.35,   # after weekly LSTM; ↑overfitting guard, ↓lag on trend changes
-    "ATT_HEADS":             6,      # multi-head count; ↑diverse pattern capture, ↓compute & per-head dim
-    "ATT_DROPOUT":           0.15,   # inside attention; ↑map regularity, ↓signal erosion
-
+    # ── Input conv (first layer) ────────────────────────────────────────
     "CONV_K":                3,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
     "CONV_DILATION":         1,      # input conv dilation; ↑receptive field, ↓signal granularity
-    "SMOOTH_K":              3,      # regression‐head conv kernel; ↑smoothing window, ↓reactivity
-    "SMOOTH_DILATION":       1,      # regression conv dilation; ↑lag smoothing, ↓immediate response
-
+    # "SMOOTH_K":             3,      # regression-head conv kernel (unused in forward); ↑smoothing window, ↓reactivity
+    # "SMOOTH_DILATION":      1,      # regression conv dilation (unused); ↑lag smoothing, ↓immediate response
+    
+    # ── Short-term encoder (short Bi-LSTM) ─────────────────────────────
+    "SHORT_UNITS":           128,    # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
+    "DROPOUT_SHORT":         0.25,   # after short LSTM; ↑regularization, ↓retains sharp spikes
+    
+    # ── Projection (short -> final feature space) ──────────────────────
+    "LONG_UNITS":            256,    # projection / pred input dim (formerly long LSTM size); ↑feature width, ↓bottleneck risk
+    # "PROJ_HIDDEN":          192,    # hidden dim for optional short2long MLP (Option B) -- commented until used
+    # "PROJ_USE_MLP":         False,  # toggle single-linear vs small-MLP (unused) -- commented until used
+    "PRED_HIDDEN":           128,      # optional head hidden dim 
+    
+    # ── Final normalization / dropout (applied to projection before head) ─
+    "DROPOUT_LONG":          0.35,   # after projection; ↑overfitting guard, ↓reactivity at head
+    
+    # ── Regression head (last layer) ───────────────────────────────────
+    # "PRED_HIDDEN":          None,   # optional hidden dim for extra head layer (unused)
+    
+    # ── Attention / classification (kept for backward compatibility; unused) ─
+    # "ATT_HEADS":            6,      # kept for compatibility (attention not used) -- commented
+    # "ATT_DROPOUT":          0.15,   # kept for compatibility (unused) -- commented
+    
     # —— Active Loss & Smoothing Hyperparameters —— 
     "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
-    "DIFF2_WEIGHT":          2,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
+    "DIFF2_WEIGHT":          2.0,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
     "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
-    "SMOOTH_BETA":           100,   # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
+    "SMOOTH_BETA":           100.0,  # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
     "SMOOTH_DELTA":          0.02,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
-    "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight; ↑spike emphasis, ↓regression focus
-
-    # ── Optimizer & Scheduler Settings ────────────────────────────────
-    "LR_EPOCHS_WARMUP":      1,      # constant LR before decay; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            1e-4,   # start LR; ↑fast convergence, ↓risk of instability
+    # "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight (kept but unused); ↑spike emphasis, ↓regression focus
+    
+    # ── Optimizer & Scheduler Settings ──────────────────────────────────
+    "LR_EPOCHS_WARMUP":      1,      # constant LR before scheduler; ↑stable start, ↓early adaptation
+    "INITIAL_LR":            1e-4,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
     "WEIGHT_DECAY":          5e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "CLIPNORM":              1.0,    # max grad norm; ↑training stability, ↓gradient expressivity
     "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
-    "T_0":                   100,    # first cycle length; unchanged
-    "T_MULT":                1,      # cycle length multiplier; unchanged
-
+    "T_0":                   100,    # cosine cycle length (unchanged)
+    "T_MULT":                1,      # cycle multiplier (unchanged)
+    
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
-    "VAL_BATCH":             1,      # sequences per val batch; unchanged
+    "VAL_BATCH":             1,      # sequences per val batch
     "NUM_WORKERS":           12,     # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
-    "MAX_EPOCHS":            100,    # max epochs; unchanged
+    "MAX_EPOCHS":            100,    # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time
 
     # ── ReduceLROnPlateau Scheduler ───
