@@ -1,23 +1,7 @@
 
 --------------------------------------------------------------------------------
 
-RUN START: 2025-10-05T17:09:28.078592Z
-
-HYPERPARAMS:
-  INITIAL_LR = 0.0001
-  SHORT_UNITS = 128
-  LONG_UNITS = 256
-  PRED_HIDDEN = 128
-  DROPOUT_SHORT = 0.25
-  DROPOUT_LONG = 0.35
-  CLIPNORM = 1.0
-  WEIGHT_DECAY = 5e-05
-  TRAIN_BATCH = 64
-  DIFF1_WEIGHT = 1.0
-  DIFF2_WEIGHT = 2.0
-  SMOOTH_ALPHA = 0.05
-  SMOOTH_BETA = 100.0
-  SMOOTH_DELTA = 0.02
+RUN START: 2025-10-06T17:26:38.669150Z
 
 PARAMETER NAMES:
   conv.weight
@@ -43,116 +27,1294 @@ PARAMETER NAMES:
   pred.2.weight
   pred.2.bias
 
-[E01 B000] GradNorm→ reg=0.187  cls=0.000  ter=0.000 | total_norm=0.163 median=0.006 p90=0.075 max=0.090 min=0.000 zero_frac=0.000 param_norm=27.528
-Top6_grads: pred.2.weight:0.090(r=0.150), conv.weight:0.085(r=0.035), pred.0.weight:0.075(r=0.011), short2long.weight:0.053(r=0.006), short_lstm.weight_ih_l0:0.035(r=0.007), short_lstm.weight_ih_l0_reverse:0.020(r=0.004)
-[TUNE] total_grad_norm=0.162780  head_frac=1.150
-[E01 B000] Loss→ MSE=0.0682  BCE=0.0000  HUB=0.0376  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2023,0.0694,0.0652,0.5162 | hub(mean,max)=0.0004,0.0026 | slip_frac=0.481
-[TUNE] opt_lr=9.9976e-05  tr_rmse=0.2867  tr_r2=0.026  vl_rmse=0.2756  vl_r2=0.078  slip_frac=0.481  HUB=0.0376  total_grad_norm=0.162780  head_frac=1.150
+HYPERPARAMS:
+  INITIAL_LR = 1e-05
+  SHORT_UNITS = 128
+  LONG_UNITS = 256
+  PRED_HIDDEN = 128
+  DROPOUT_SHORT = 0.4
+  DROPOUT_LONG = 0.4
+  CLIPNORM = 1.0
+  WEIGHT_DECAY = 0.0004
+  TRAIN_BATCH = 64
+  DIFF1_WEIGHT = 1.0
+  DIFF2_WEIGHT = 2.0
+  SMOOTH_ALPHA = 0.05
+  SMOOTH_BETA = 100.0
+  SMOOTH_DELTA = 0.02
 
-[E02 B000] GradNorm→ reg=0.143  cls=0.000  ter=0.000 | total_norm=0.129 median=0.006 p90=0.055 max=0.072 min=0.000 zero_frac=0.000 param_norm=27.534
-Top6_grads: conv.weight:0.072(r=0.030), pred.2.weight:0.070(r=0.117), pred.0.weight:0.055(r=0.008), short2long.weight:0.038(r=0.004), short_lstm.weight_ih_l0:0.029(r=0.006), short_lstm.weight_ih_l0_reverse:0.018(r=0.004)
-[TUNE] total_grad_norm=0.128582  head_frac=1.116
-[E02 B000] Loss→ MSE=0.0670  BCE=0.0000  HUB=0.0458  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2082,0.0858,0.0724,0.5242 | hub(mean,max)=0.0005,0.0037 | slip_frac=0.470
-[TUNE] opt_lr=9.9902e-05  tr_rmse=0.2740  tr_r2=0.110  vl_rmse=0.2623  vl_r2=0.165  slip_frac=0.470  HUB=0.0458  total_grad_norm=0.128582  head_frac=1.116
+[E01 B000] GradNorm→ reg=1.019  cls=0.000  ter=0.000 | total_norm=0.860 median=0.026 p90=0.386 max=0.554 min=0.000 zero_frac=0.000 param_norm=27.479
+Top6_grads: pred.0.weight:0.554(r=0.085), short2long.weight:0.396(r=0.043), pred.2.weight:0.386(r=0.685), conv.weight:0.258(r=0.109), short_lstm.weight_ih_l0:0.173(r=0.036), short_lstm.weight_ih_l0_reverse:0.126(r=0.026)
+[TUNE] total_grad_norm=0.860240  head_frac=1.184
+[E01 B000] Loss→ MSE=0.0620  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.061993  tr_rmse=0.2490  tr_r2=-0.894  vl_rmse=0.2667  vl_r2=-0.344  vl_loss=0.071145  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E03 B000] GradNorm→ reg=0.142  cls=0.000  ter=0.000 | total_norm=0.132 median=0.006 p90=0.053 max=0.079 min=0.000 zero_frac=0.000 param_norm=27.541
-Top6_grads: conv.weight:0.079(r=0.032), pred.2.weight:0.071(r=0.120), pred.0.weight:0.053(r=0.008), short2long.weight:0.035(r=0.004), short_lstm.weight_ih_l0:0.029(r=0.006), short_lstm.weight_ih_l0_reverse:0.018(r=0.004)
-[TUNE] total_grad_norm=0.131558  head_frac=1.082
-[E03 B000] Loss→ MSE=0.0666  BCE=0.0000  HUB=0.0512  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2050,0.0952,0.0734,0.6515 | hub(mean,max)=0.0005,0.0034 | slip_frac=0.512
-[TUNE] opt_lr=9.9780e-05  tr_rmse=0.2697  tr_r2=0.138  vl_rmse=0.2586  vl_r2=0.188  slip_frac=0.512  HUB=0.0512  total_grad_norm=0.131558  head_frac=1.082
+[E02 B000] GradNorm→ reg=0.668  cls=0.000  ter=0.000 | total_norm=0.627 median=0.018 p90=0.242 max=0.411 min=0.000 zero_frac=0.000 param_norm=27.479
+Top6_grads: pred.0.weight:0.411(r=0.063), short2long.weight:0.302(r=0.033), pred.2.weight:0.242(r=0.430), conv.weight:0.189(r=0.080), short_lstm.weight_ih_l0:0.148(r=0.031), short_lstm.weight_ih_l0_reverse:0.099(r=0.021)
+[TUNE] total_grad_norm=0.627318  head_frac=1.064
+[E02 B000] Loss→ MSE=0.0467  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.046740  tr_rmse=0.2162  tr_r2=-0.639  vl_rmse=0.2361  vl_r2=-0.053  vl_loss=0.055763  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E04 B000] GradNorm→ reg=0.133  cls=0.000  ter=0.000 | total_norm=0.127 median=0.006 p90=0.048 max=0.080 min=0.000 zero_frac=0.000 param_norm=27.549
-Top6_grads: conv.weight:0.080(r=0.033), pred.2.weight:0.068(r=0.115), pred.0.weight:0.048(r=0.007), short2long.weight:0.031(r=0.003), short_lstm.weight_ih_l0:0.027(r=0.006), short_lstm.weight_ih_l0_reverse:0.018(r=0.004)
-[TUNE] total_grad_norm=0.126825  head_frac=1.050
-[E04 B000] Loss→ MSE=0.0649  BCE=0.0000  HUB=0.0523  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2036,0.0964,0.0866,0.6704 | hub(mean,max)=0.0005,0.0035 | slip_frac=0.519
-[TUNE] opt_lr=9.9610e-05  tr_rmse=0.2669  tr_r2=0.156  vl_rmse=0.2568  vl_r2=0.200  slip_frac=0.519  HUB=0.0523  total_grad_norm=0.126825  head_frac=1.050
+[E03 B000] GradNorm→ reg=0.827  cls=0.000  ter=0.000 | total_norm=0.714 median=0.020 p90=0.312 max=0.485 min=0.000 zero_frac=0.000 param_norm=27.478
+Top6_grads: pred.0.weight:0.485(r=0.074), short2long.weight:0.327(r=0.035), pred.2.weight:0.312(r=0.556), conv.weight:0.189(r=0.080), short_lstm.weight_ih_l0:0.134(r=0.028), short_lstm.weight_ih_l0_reverse:0.101(r=0.021)
+[TUNE] total_grad_norm=0.714318  head_frac=1.158
+[E03 B000] Loss→ MSE=0.0564  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.056381  tr_rmse=0.2374  tr_r2=-0.494  vl_rmse=0.2245  vl_r2=0.048  vl_loss=0.050403  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E05 B000] GradNorm→ reg=0.125  cls=0.000  ter=0.000 | total_norm=0.122 median=0.006 p90=0.044 max=0.080 min=0.000 zero_frac=0.000 param_norm=27.557
-Top6_grads: conv.weight:0.080(r=0.033), pred.2.weight:0.064(r=0.109), pred.0.weight:0.044(r=0.007), short2long.weight:0.028(r=0.003), short_lstm.weight_ih_l0:0.025(r=0.005), short_lstm.weight_ih_l0_reverse:0.018(r=0.004)
-[TUNE] total_grad_norm=0.122147  head_frac=1.022
-[E05 B000] Loss→ MSE=0.0651  BCE=0.0000  HUB=0.0578  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2023,0.0993,0.0902,0.6923 | hub(mean,max)=0.0006,0.0034 | slip_frac=0.554
-[TUNE] opt_lr=9.9391e-05  tr_rmse=0.2645  tr_r2=0.171  vl_rmse=0.2555  vl_r2=0.207  slip_frac=0.554  HUB=0.0578  total_grad_norm=0.122147  head_frac=1.022
+[E04 B000] GradNorm→ reg=1.000  cls=0.000  ter=0.000 | total_norm=0.785 median=0.027 p90=0.355 max=0.521 min=0.000 zero_frac=0.000 param_norm=27.477
+Top6_grads: pred.0.weight:0.521(r=0.080), pred.2.weight:0.389(r=0.693), short2long.weight:0.355(r=0.038), conv.weight:0.151(r=0.064), short_lstm.weight_ih_l0:0.138(r=0.029), short_lstm.weight_ih_l0_reverse:0.115(r=0.024)
+[TUNE] total_grad_norm=0.784793  head_frac=1.274
+[E04 B000] Loss→ MSE=0.0458  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.045826  tr_rmse=0.2141  tr_r2=-0.386  vl_rmse=0.2192  vl_r2=0.092  vl_loss=0.048060  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E06 B000] GradNorm→ reg=0.112  cls=0.000  ter=0.000 | total_norm=0.114 median=0.006 p90=0.040 max=0.078 min=0.000 zero_frac=0.000 param_norm=27.565
-Top6_grads: conv.weight:0.078(r=0.032), pred.2.weight:0.058(r=0.098), pred.0.weight:0.040(r=0.006), short2long.weight:0.025(r=0.003), short_lstm.weight_ih_l0:0.023(r=0.005), short_lstm.weight_ih_l0_reverse:0.017(r=0.004)
-[TUNE] total_grad_norm=0.114028  head_frac=0.982
-[E06 B000] Loss→ MSE=0.0641  BCE=0.0000  HUB=0.0614  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2038,0.1051,0.0867,0.7347 | hub(mean,max)=0.0006,0.0032 | slip_frac=0.570
-[TUNE] opt_lr=9.9123e-05  tr_rmse=0.2626  tr_r2=0.183  vl_rmse=0.2544  vl_r2=0.214  slip_frac=0.570  HUB=0.0614  total_grad_norm=0.114028  head_frac=0.982
+[E05 B000] GradNorm→ reg=0.577  cls=0.000  ter=0.000 | total_norm=0.512 median=0.016 p90=0.201 max=0.358 min=0.000 zero_frac=0.000 param_norm=27.477
+Top6_grads: pred.0.weight:0.358(r=0.055), short2long.weight:0.237(r=0.026), pred.2.weight:0.201(r=0.360), conv.weight:0.131(r=0.055), short_lstm.weight_ih_l0:0.106(r=0.022), short_lstm.weight_ih_l0_reverse:0.068(r=0.014)
+[TUNE] total_grad_norm=0.512021  head_frac=1.127
+[E05 B000] Loss→ MSE=0.0338  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.033765  tr_rmse=0.1838  tr_r2=-0.307  vl_rmse=0.2109  vl_r2=0.160  vl_loss=0.044472  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E07 B000] GradNorm→ reg=0.099  cls=0.000  ter=0.000 | total_norm=0.105 median=0.005 p90=0.035 max=0.075 min=0.000 zero_frac=0.000 param_norm=27.575
-Top6_grads: conv.weight:0.075(r=0.031), pred.2.weight:0.051(r=0.087), pred.0.weight:0.035(r=0.005), short_lstm.weight_ih_l0:0.022(r=0.005), short2long.weight:0.022(r=0.002), short_lstm.weight_ih_l0_reverse:0.016(r=0.003)
-[TUNE] total_grad_norm=0.105345  head_frac=0.940
-[E07 B000] Loss→ MSE=0.0625  BCE=0.0000  HUB=0.0658  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2048,0.1054,0.0807,0.6849 | hub(mean,max)=0.0007,0.0038 | slip_frac=0.532
-[TUNE] opt_lr=9.8808e-05  tr_rmse=0.2609  tr_r2=0.193  vl_rmse=0.2535  vl_r2=0.220  slip_frac=0.532  HUB=0.0658  total_grad_norm=0.105345  head_frac=0.940
+[E06 B000] GradNorm→ reg=0.720  cls=0.000  ter=0.000 | total_norm=0.582 median=0.018 p90=0.260 max=0.369 min=0.000 zero_frac=0.000 param_norm=27.476
+Top6_grads: pred.0.weight:0.369(r=0.057), pred.2.weight:0.287(r=0.514), short2long.weight:0.260(r=0.028), conv.weight:0.153(r=0.065), short_lstm.weight_ih_l0:0.130(r=0.027), short_lstm.weight_ih_l0_reverse:0.070(r=0.015)
+[TUNE] total_grad_norm=0.582085  head_frac=1.237
+[E06 B000] Loss→ MSE=0.0375  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.037529  tr_rmse=0.1937  tr_r2=-0.210  vl_rmse=0.2048  vl_r2=0.208  vl_loss=0.041936  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E08 B000] GradNorm→ reg=0.088  cls=0.000  ter=0.000 | total_norm=0.094 median=0.005 p90=0.031 max=0.067 min=0.000 zero_frac=0.000 param_norm=27.586
-Top6_grads: conv.weight:0.067(r=0.027), pred.2.weight:0.046(r=0.078), pred.0.weight:0.031(r=0.005), short_lstm.weight_ih_l0:0.021(r=0.004), short2long.weight:0.019(r=0.002), short_lstm.weight_ih_l0_reverse:0.014(r=0.003)
-[TUNE] total_grad_norm=0.094461  head_frac=0.936
-[E08 B000] Loss→ MSE=0.0620  BCE=0.0000  HUB=0.0685  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2042,0.1002,0.0769,0.6916 | hub(mean,max)=0.0007,0.0036 | slip_frac=0.579
-[TUNE] opt_lr=9.8445e-05  tr_rmse=0.2595  tr_r2=0.202  vl_rmse=0.2529  vl_r2=0.224  slip_frac=0.579  HUB=0.0685  total_grad_norm=0.094461  head_frac=0.936
+[E07 B000] GradNorm→ reg=0.512  cls=0.000  ter=0.000 | total_norm=0.438 median=0.012 p90=0.187 max=0.300 min=0.000 zero_frac=0.000 param_norm=27.476
+Top6_grads: pred.0.weight:0.300(r=0.046), short2long.weight:0.201(r=0.022), pred.2.weight:0.187(r=0.336), conv.weight:0.111(r=0.047), short_lstm.weight_ih_l0:0.089(r=0.019), short_lstm.weight_ih_l0_reverse:0.059(r=0.012)
+[TUNE] total_grad_norm=0.438334  head_frac=1.168
+[E07 B000] Loss→ MSE=0.0308  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.030799  tr_rmse=0.1755  tr_r2=-0.160  vl_rmse=0.2024  vl_r2=0.226  vl_loss=0.040969  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E09 B000] GradNorm→ reg=0.079  cls=0.000  ter=0.000 | total_norm=0.088 median=0.005 p90=0.028 max=0.064 min=0.000 zero_frac=0.000 param_norm=27.597
-Top6_grads: conv.weight:0.064(r=0.026), pred.2.weight:0.041(r=0.070), pred.0.weight:0.028(r=0.004), short_lstm.weight_ih_l0:0.021(r=0.004), short2long.weight:0.017(r=0.002), short_lstm.weight_ih_l0_reverse:0.014(r=0.003)
-[TUNE] total_grad_norm=0.088263  head_frac=0.893
-[E09 B000] Loss→ MSE=0.0622  BCE=0.0000  HUB=0.0704  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2051,0.1039,0.0684,0.7475 | hub(mean,max)=0.0007,0.0039 | slip_frac=0.559
-[TUNE] opt_lr=9.8035e-05  tr_rmse=0.2582  tr_r2=0.210  vl_rmse=0.2523  vl_r2=0.227  slip_frac=0.559  HUB=0.0704  total_grad_norm=0.088263  head_frac=0.893
+[E08 B000] GradNorm→ reg=0.499  cls=0.000  ter=0.000 | total_norm=0.424 median=0.013 p90=0.182 max=0.290 min=0.000 zero_frac=0.000 param_norm=27.475
+Top6_grads: pred.0.weight:0.290(r=0.044), pred.2.weight:0.186(r=0.335), short2long.weight:0.182(r=0.020), conv.weight:0.126(r=0.053), short_lstm.weight_ih_l0:0.078(r=0.016), short_lstm.weight_ih_l0_reverse:0.059(r=0.012)
+[TUNE] total_grad_norm=0.423945  head_frac=1.177
+[E08 B000] Loss→ MSE=0.0258  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.025781  tr_rmse=0.1606  tr_r2=-0.122  vl_rmse=0.1937  vl_r2=0.291  vl_loss=0.037519  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E10 B000] GradNorm→ reg=0.068  cls=0.000  ter=0.000 | total_norm=0.080 median=0.004 p90=0.024 max=0.059 min=0.000 zero_frac=0.000 param_norm=27.608
-Top6_grads: conv.weight:0.059(r=0.024), pred.2.weight:0.035(r=0.060), pred.0.weight:0.024(r=0.004), short_lstm.weight_ih_l0:0.021(r=0.004), short2long.weight:0.015(r=0.002), short_lstm.weight_ih_l0_reverse:0.013(r=0.003)
-[TUNE] total_grad_norm=0.080013  head_frac=0.854
-[E10 B000] Loss→ MSE=0.0602  BCE=0.0000  HUB=0.0766  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2079,0.1099,0.0763,0.7381 | hub(mean,max)=0.0008,0.0039 | slip_frac=0.590
-[TUNE] opt_lr=9.7577e-05  tr_rmse=0.2572  tr_r2=0.216  vl_rmse=0.2517  vl_r2=0.231  slip_frac=0.590  HUB=0.0766  total_grad_norm=0.080013  head_frac=0.854
+[E09 B000] GradNorm→ reg=0.534  cls=0.000  ter=0.000 | total_norm=0.437 median=0.014 p90=0.193 max=0.300 min=0.000 zero_frac=0.000 param_norm=27.474
+Top6_grads: pred.0.weight:0.300(r=0.046), short2long.weight:0.207(r=0.022), pred.2.weight:0.193(r=0.348), conv.weight:0.092(r=0.039), short_lstm.weight_ih_l0:0.076(r=0.016), short_lstm.weight_ih_l0_reverse:0.060(r=0.013)
+[TUNE] total_grad_norm=0.437181  head_frac=1.222
+[E09 B000] Loss→ MSE=0.0281  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.028057  tr_rmse=0.1675  tr_r2=-0.042  vl_rmse=0.1902  vl_r2=0.317  vl_loss=0.036162  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E11 B000] GradNorm→ reg=0.059  cls=0.000  ter=0.000 | total_norm=0.075 median=0.004 p90=0.024 max=0.055 min=0.000 zero_frac=0.000 param_norm=27.619
-Top6_grads: conv.weight:0.055(r=0.022), pred.2.weight:0.030(r=0.052), short_lstm.weight_ih_l0:0.024(r=0.005), pred.0.weight:0.021(r=0.003), short2long.weight:0.014(r=0.001), short_lstm.weight_ih_l0_reverse:0.011(r=0.002)
-[TUNE] total_grad_norm=0.074534  head_frac=0.794
-[E11 B000] Loss→ MSE=0.0606  BCE=0.0000  HUB=0.0723  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2120,0.1102,0.0728,0.7895 | hub(mean,max)=0.0007,0.0039 | slip_frac=0.530
-[TUNE] opt_lr=9.7074e-05  tr_rmse=0.2563  tr_r2=0.221  vl_rmse=0.2512  vl_r2=0.234  slip_frac=0.530  HUB=0.0723  total_grad_norm=0.074534  head_frac=0.794
+[E10 B000] GradNorm→ reg=0.576  cls=0.000  ter=0.000 | total_norm=0.474 median=0.015 p90=0.208 max=0.318 min=0.000 zero_frac=0.000 param_norm=27.474
+Top6_grads: pred.0.weight:0.318(r=0.049), pred.2.weight:0.208(r=0.376), short2long.weight:0.208(r=0.022), conv.weight:0.139(r=0.059), short_lstm.weight_ih_l0:0.089(r=0.019), short_lstm.weight_ih_l0_reverse:0.067(r=0.014)
+[TUNE] total_grad_norm=0.473604  head_frac=1.216
+[E10 B000] Loss→ MSE=0.0313  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.031302  tr_rmse=0.1769  tr_r2=-0.052  vl_rmse=0.1884  vl_r2=0.330  vl_loss=0.035486  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E12 B000] GradNorm→ reg=0.050  cls=0.000  ter=0.000 | total_norm=0.069 median=0.004 p90=0.026 max=0.050 min=0.000 zero_frac=0.000 param_norm=27.632
-Top6_grads: conv.weight:0.050(r=0.020), short_lstm.weight_ih_l0:0.027(r=0.006), pred.2.weight:0.026(r=0.044), pred.0.weight:0.018(r=0.003), short2long.weight:0.012(r=0.001), short_lstm.bias_ih_l0:0.010(r=0.009)
-[TUNE] total_grad_norm=0.069432  head_frac=0.722
-[E12 B000] Loss→ MSE=0.0573  BCE=0.0000  HUB=0.0797  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2103,0.1137,0.0797,0.7960 | hub(mean,max)=0.0008,0.0043 | slip_frac=0.570
-[TUNE] opt_lr=9.6524e-05  tr_rmse=0.2555  tr_r2=0.226  vl_rmse=0.2509  vl_r2=0.236  slip_frac=0.570  HUB=0.0797  total_grad_norm=0.069432  head_frac=0.722
+[E11 B000] GradNorm→ reg=0.628  cls=0.000  ter=0.000 | total_norm=0.515 median=0.017 p90=0.231 max=0.343 min=0.000 zero_frac=0.000 param_norm=27.474
+Top6_grads: pred.0.weight:0.343(r=0.053), pred.2.weight:0.236(r=0.426), short2long.weight:0.231(r=0.025), conv.weight:0.132(r=0.056), short_lstm.weight_ih_l0:0.095(r=0.020), short_lstm.weight_ih_l0_reverse:0.084(r=0.017)
+[TUNE] total_grad_norm=0.514652  head_frac=1.220
+[E11 B000] Loss→ MSE=0.0383  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.038290  tr_rmse=0.1957  tr_r2=-0.005  vl_rmse=0.1839  vl_r2=0.361  vl_loss=0.033809  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E13 B000] GradNorm→ reg=0.040  cls=0.000  ter=0.000 | total_norm=0.066 median=0.004 p90=0.020 max=0.045 min=0.000 zero_frac=0.000 param_norm=27.644
-Top6_grads: conv.weight:0.045(r=0.018), short_lstm.weight_ih_l0:0.035(r=0.007), pred.2.weight:0.020(r=0.035), pred.0.weight:0.014(r=0.002), short_lstm.bias_ih_l0:0.011(r=0.010), short_lstm.bias_hh_l0:0.011(r=0.010)
-[TUNE] total_grad_norm=0.066093  head_frac=0.602
-[E13 B000] Loss→ MSE=0.0532  BCE=0.0000  HUB=0.0820  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2154,0.1181,0.0742,0.7736 | hub(mean,max)=0.0008,0.0043 | slip_frac=0.572
-[TUNE] opt_lr=9.5929e-05  tr_rmse=0.2546  tr_r2=0.231  vl_rmse=0.2512  vl_r2=0.234  slip_frac=0.572  HUB=0.0820  total_grad_norm=0.066093  head_frac=0.602
+[E12 B000] GradNorm→ reg=0.434  cls=0.000  ter=0.000 | total_norm=0.370 median=0.012 p90=0.161 max=0.244 min=0.000 zero_frac=0.000 param_norm=27.473
+Top6_grads: pred.0.weight:0.244(r=0.037), pred.2.weight:0.173(r=0.313), short2long.weight:0.161(r=0.017), conv.weight:0.114(r=0.048), short_lstm.weight_ih_l0_reverse:0.061(r=0.013), short_lstm.weight_ih_l0:0.057(r=0.012)
+[TUNE] total_grad_norm=0.370202  head_frac=1.173
+[E12 B000] Loss→ MSE=0.0226  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.022583  tr_rmse=0.1503  tr_r2=0.023  vl_rmse=0.1830  vl_r2=0.367  vl_loss=0.033501  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E14 B000] GradNorm→ reg=0.033  cls=0.000  ter=0.000 | total_norm=0.079 median=0.004 p90=0.017 max=0.052 min=0.000 zero_frac=0.000 param_norm=27.654
-Top6_grads: short_lstm.weight_ih_l0:0.052(r=0.011), conv.weight:0.048(r=0.020), pred.2.weight:0.017(r=0.030), short_lstm.weight_hh_l0:0.014(r=0.001), short_lstm.bias_ih_l0:0.013(r=0.012), short_lstm.bias_hh_l0:0.013(r=0.012)
-[TUNE] total_grad_norm=0.078661  head_frac=0.426
-[E14 B000] Loss→ MSE=0.0507  BCE=0.0000  HUB=0.0736  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2257,0.1273,0.0718,0.8453 | hub(mean,max)=0.0007,0.0040 | slip_frac=0.525
-[TUNE] opt_lr=9.5289e-05  tr_rmse=0.2536  tr_r2=0.238  vl_rmse=0.2516  vl_r2=0.231  slip_frac=0.525  HUB=0.0736  total_grad_norm=0.078661  head_frac=0.426
+[E13 B000] GradNorm→ reg=0.729  cls=0.000  ter=0.000 | total_norm=0.555 median=0.018 p90=0.225 max=0.352 min=0.000 zero_frac=0.000 param_norm=27.473
+Top6_grads: pred.0.weight:0.352(r=0.054), pred.2.weight:0.301(r=0.546), short2long.weight:0.225(r=0.024), conv.weight:0.136(r=0.057), short_lstm.weight_ih_l0:0.099(r=0.021), short_lstm.weight_ih_l0_reverse:0.084(r=0.018)
+[TUNE] total_grad_norm=0.555196  head_frac=1.313
+[E13 B000] Loss→ MSE=0.0351  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.035119  tr_rmse=0.1874  tr_r2=0.071  vl_rmse=0.1839  vl_r2=0.361  vl_loss=0.033806  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E15 B000] GradNorm→ reg=0.030  cls=0.000  ter=0.000 | total_norm=0.056 median=0.003 p90=0.015 max=0.036 min=0.000 zero_frac=0.000 param_norm=27.662
-Top6_grads: conv.weight:0.036(r=0.015), short_lstm.weight_ih_l0:0.034(r=0.007), pred.2.weight:0.015(r=0.026), pred.0.weight:0.011(r=0.002), short_lstm.weight_hh_l0:0.008(r=0.001), short_lstm.bias_ih_l0:0.008(r=0.007)
-[TUNE] total_grad_norm=0.055892  head_frac=0.532
-[E15 B000] Loss→ MSE=0.0482  BCE=0.0000  HUB=0.0750  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2269,0.1282,0.0635,0.7952 | hub(mean,max)=0.0007,0.0042 | slip_frac=0.550
-[TUNE] opt_lr=9.4605e-05  tr_rmse=0.2526  tr_r2=0.244  vl_rmse=0.2519  vl_r2=0.230  slip_frac=0.550  HUB=0.0750  total_grad_norm=0.055892  head_frac=0.532
+[E14 B000] GradNorm→ reg=0.425  cls=0.000  ter=0.000 | total_norm=0.377 median=0.012 p90=0.160 max=0.242 min=0.000 zero_frac=0.000 param_norm=27.473
+Top6_grads: pred.0.weight:0.242(r=0.037), short2long.weight:0.168(r=0.018), pred.2.weight:0.160(r=0.290), conv.weight:0.130(r=0.055), short_lstm.weight_ih_l0:0.084(r=0.018), short_lstm.weight_ih_l0_reverse:0.054(r=0.011)
+[TUNE] total_grad_norm=0.376950  head_frac=1.129
+[E14 B000] Loss→ MSE=0.0203  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.020306  tr_rmse=0.1425  tr_r2=0.107  vl_rmse=0.1805  vl_r2=0.384  vl_loss=0.032598  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E16 B000] GradNorm→ reg=0.029  cls=0.000  ter=0.000 | total_norm=0.072 median=0.004 p90=0.014 max=0.048 min=0.000 zero_frac=0.000 param_norm=27.668
-Top6_grads: short_lstm.weight_ih_l0:0.048(r=0.010), conv.weight:0.045(r=0.019), pred.2.weight:0.014(r=0.025), short_lstm.weight_hh_l0:0.012(r=0.001), short_lstm.bias_ih_l0:0.012(r=0.011), short_lstm.bias_hh_l0:0.012(r=0.011)
-[TUNE] total_grad_norm=0.072215  head_frac=0.395
-[E16 B000] Loss→ MSE=0.0510  BCE=0.0000  HUB=0.0769  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2252,0.1269,0.0728,0.8279 | hub(mean,max)=0.0008,0.0040 | slip_frac=0.550
-[TUNE] opt_lr=9.3877e-05  tr_rmse=0.2519  tr_r2=0.248  vl_rmse=0.2519  vl_r2=0.230  slip_frac=0.550  HUB=0.0769  total_grad_norm=0.072215  head_frac=0.395
+[E15 B000] GradNorm→ reg=0.428  cls=0.000  ter=0.000 | total_norm=0.354 median=0.011 p90=0.153 max=0.240 min=0.000 zero_frac=0.000 param_norm=27.472
+Top6_grads: pred.0.weight:0.240(r=0.037), pred.2.weight:0.168(r=0.306), short2long.weight:0.153(r=0.017), conv.weight:0.081(r=0.034), short_lstm.weight_ih_l0:0.062(r=0.013), short_lstm.weight_ih_l0_reverse:0.060(r=0.012)
+[TUNE] total_grad_norm=0.353961  head_frac=1.208
+[E15 B000] Loss→ MSE=0.0208  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.020778  tr_rmse=0.1441  tr_r2=0.082  vl_rmse=0.1791  vl_r2=0.394  vl_loss=0.032066  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E17 B000] GradNorm→ reg=0.019  cls=0.000  ter=0.000 | total_norm=0.107 median=0.005 p90=0.019 max=0.079 min=0.000 zero_frac=0.000 param_norm=27.674
-Top6_grads: short_lstm.weight_ih_l0:0.079(r=0.016), conv.weight:0.062(r=0.025), short_lstm.weight_hh_l0:0.019(r=0.002), short_lstm.bias_ih_l0:0.018(r=0.016), short_lstm.bias_hh_l0:0.018(r=0.016), pred.2.weight:0.009(r=0.016)
-[TUNE] total_grad_norm=0.106588  head_frac=0.182
-[E17 B000] Loss→ MSE=0.0488  BCE=0.0000  HUB=0.0736  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2314,0.1312,0.0833,0.7759 | hub(mean,max)=0.0007,0.0043 | slip_frac=0.530
-[TUNE] opt_lr=9.3107e-05  tr_rmse=0.2514  tr_r2=0.251  vl_rmse=0.2524  vl_r2=0.226  slip_frac=0.530  HUB=0.0736  total_grad_norm=0.106588  head_frac=0.182
+[E16 B000] GradNorm→ reg=0.804  cls=0.000  ter=0.000 | total_norm=0.578 median=0.021 p90=0.205 max=0.352 min=0.000 zero_frac=0.000 param_norm=27.472
+Top6_grads: pred.2.weight:0.352(r=0.641), pred.0.weight:0.350(r=0.054), short2long.weight:0.205(r=0.022), conv.weight:0.150(r=0.063), short_lstm.weight_ih_l0:0.091(r=0.019), pred.2.bias:0.081(r=0.921)
+[TUNE] total_grad_norm=0.577883  head_frac=1.392
+[E16 B000] Loss→ MSE=0.0272  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.027162  tr_rmse=0.1648  tr_r2=0.139  vl_rmse=0.1784  vl_r2=0.399  vl_loss=0.031814  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E18 B000] GradNorm→ reg=0.021  cls=0.000  ter=0.000 | total_norm=0.102 median=0.005 p90=0.018 max=0.075 min=0.000 zero_frac=0.000 param_norm=27.680
-Top6_grads: short_lstm.weight_ih_l0:0.075(r=0.015), conv.weight:0.060(r=0.025), short_lstm.weight_hh_l0:0.018(r=0.002), short_lstm.bias_ih_l0:0.017(r=0.016), short_lstm.bias_hh_l0:0.017(r=0.015), pred.2.weight:0.010(r=0.018)
-[TUNE] total_grad_norm=0.102240  head_frac=0.203
-[E18 B000] Loss→ MSE=0.0491  BCE=0.0000  HUB=0.0761  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2289,0.1299,0.0682,0.8302 | hub(mean,max)=0.0008,0.0041 | slip_frac=0.550
-[TUNE] opt_lr=9.2294e-05  tr_rmse=0.2509  tr_r2=0.254  vl_rmse=0.2522  vl_r2=0.228  slip_frac=0.550  HUB=0.0761  total_grad_norm=0.102240  head_frac=0.203
+[E17 B000] GradNorm→ reg=0.430  cls=0.000  ter=0.000 | total_norm=0.364 median=0.011 p90=0.157 max=0.244 min=0.000 zero_frac=0.000 param_norm=27.471
+Top6_grads: pred.0.weight:0.244(r=0.037), short2long.weight:0.162(r=0.018), pred.2.weight:0.157(r=0.286), conv.weight:0.106(r=0.045), short_lstm.weight_ih_l0:0.074(r=0.016), short_lstm.weight_ih_l0_reverse:0.055(r=0.011)
+[TUNE] total_grad_norm=0.364417  head_frac=1.181
+[E17 B000] Loss→ MSE=0.0239  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.023914  tr_rmse=0.1546  tr_r2=0.127  vl_rmse=0.1772  vl_r2=0.407  vl_loss=0.031402  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
 
-[E19 B000] GradNorm→ reg=0.017  cls=0.000  ter=0.000 | total_norm=0.082 median=0.004 p90=0.014 max=0.059 min=0.000 zero_frac=0.000 param_norm=27.686
-Top6_grads: short_lstm.weight_ih_l0:0.059(r=0.012), conv.weight:0.050(r=0.021), short_lstm.weight_hh_l0:0.014(r=0.002), short_lstm.bias_ih_l0:0.014(r=0.012), short_lstm.bias_hh_l0:0.014(r=0.012), pred.2.weight:0.008(r=0.014)
-[TUNE] total_grad_norm=0.082358  head_frac=0.206
-[E19 B000] Loss→ MSE=0.0495  BCE=0.0000  HUB=0.0753  D1=0.0000  D2=0.0000 | lr(mean,sd,min,max)=0.2325,0.1352,0.0814,0.8507 | hub(mean,max)=0.0008,0.0043 | slip_frac=0.541
-[TUNE] opt_lr=9.1440e-05  tr_rmse=0.2504  tr_r2=0.257  vl_rmse=0.2525  vl_r2=0.226  slip_frac=0.541  HUB=0.0753  total_grad_norm=0.082358  head_frac=0.206
+[E18 B000] GradNorm→ reg=0.391  cls=0.000  ter=0.000 | total_norm=0.333 median=0.010 p90=0.136 max=0.232 min=0.000 zero_frac=0.000 param_norm=27.471
+Top6_grads: pred.0.weight:0.232(r=0.036), short2long.weight:0.148(r=0.016), pred.2.weight:0.136(r=0.248), conv.weight:0.085(r=0.036), short_lstm.weight_ih_l0:0.071(r=0.015), short_lstm.weight_ih_l0_reverse:0.043(r=0.009)
+[TUNE] total_grad_norm=0.332599  head_frac=1.176
+[E18 B000] Loss→ MSE=0.0217  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.021742  tr_rmse=0.1475  tr_r2=0.135  vl_rmse=0.1748  vl_r2=0.423  vl_loss=0.030553  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E19 B000] GradNorm→ reg=0.535  cls=0.000  ter=0.000 | total_norm=0.412 median=0.013 p90=0.168 max=0.280 min=0.000 zero_frac=0.000 param_norm=27.471
+Top6_grads: pred.0.weight:0.280(r=0.043), pred.2.weight:0.205(r=0.376), short2long.weight:0.168(r=0.018), conv.weight:0.088(r=0.037), short_lstm.weight_ih_l0:0.075(r=0.016), short_lstm.weight_ih_l0_reverse:0.061(r=0.013)
+[TUNE] total_grad_norm=0.411990  head_frac=1.298
+[E19 B000] Loss→ MSE=0.0245  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.024476  tr_rmse=0.1564  tr_r2=0.165  vl_rmse=0.1711  vl_r2=0.447  vl_loss=0.029276  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E20 B000] GradNorm→ reg=0.355  cls=0.000  ter=0.000 | total_norm=0.289 median=0.009 p90=0.122 max=0.197 min=0.000 zero_frac=0.000 param_norm=27.470
+Top6_grads: pred.0.weight:0.197(r=0.030), pred.2.weight:0.144(r=0.264), short2long.weight:0.122(r=0.013), conv.weight:0.057(r=0.024), short_lstm.weight_ih_l0:0.050(r=0.011), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.288743  head_frac=1.230
+[E20 B000] Loss→ MSE=0.0165  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.016474  tr_rmse=0.1284  tr_r2=0.139  vl_rmse=0.1717  vl_r2=0.443  vl_loss=0.029493  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E21 B000] GradNorm→ reg=0.526  cls=0.000  ter=0.000 | total_norm=0.403 median=0.014 p90=0.146 max=0.249 min=0.000 zero_frac=0.000 param_norm=27.470
+Top6_grads: pred.0.weight:0.249(r=0.038), pred.2.weight:0.222(r=0.409), short2long.weight:0.146(r=0.016), conv.weight:0.132(r=0.056), short_lstm.weight_ih_l0:0.073(r=0.015), short_lstm.weight_ih_l0_reverse:0.048(r=0.010)
+[TUNE] total_grad_norm=0.402849  head_frac=1.306
+[E21 B000] Loss→ MSE=0.0165  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.016518  tr_rmse=0.1285  tr_r2=0.180  vl_rmse=0.1713  vl_r2=0.446  vl_loss=0.029340  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E22 B000] GradNorm→ reg=0.688  cls=0.000  ter=0.000 | total_norm=0.506 median=0.018 p90=0.183 max=0.317 min=0.000 zero_frac=0.000 param_norm=27.470
+Top6_grads: pred.0.weight:0.317(r=0.049), pred.2.weight:0.293(r=0.539), short2long.weight:0.183(r=0.020), conv.weight:0.141(r=0.060), short_lstm.weight_ih_l0:0.083(r=0.017), pred.2.bias:0.060(r=0.682)
+[TUNE] total_grad_norm=0.506363  head_frac=1.359
+[E22 B000] Loss→ MSE=0.0260  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.025952  tr_rmse=0.1611  tr_r2=0.193  vl_rmse=0.1727  vl_r2=0.437  vl_loss=0.029813  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E23 B000] GradNorm→ reg=0.491  cls=0.000  ter=0.000 | total_norm=0.399 median=0.011 p90=0.156 max=0.268 min=0.000 zero_frac=0.000 param_norm=27.469
+Top6_grads: pred.0.weight:0.268(r=0.041), pred.2.weight:0.189(r=0.349), short2long.weight:0.156(r=0.017), conv.weight:0.129(r=0.054), short_lstm.weight_ih_l0:0.071(r=0.015), short_lstm.weight_ih_l0_reverse:0.052(r=0.011)
+[TUNE] total_grad_norm=0.398914  head_frac=1.230
+[E23 B000] Loss→ MSE=0.0244  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.024413  tr_rmse=0.1562  tr_r2=0.200  vl_rmse=0.1697  vl_r2=0.456  vl_loss=0.028813  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E24 B000] GradNorm→ reg=0.530  cls=0.000  ter=0.000 | total_norm=0.393 median=0.011 p90=0.146 max=0.260 min=0.000 zero_frac=0.000 param_norm=27.469
+Top6_grads: pred.0.weight:0.260(r=0.040), pred.2.weight:0.219(r=0.405), short2long.weight:0.146(r=0.016), conv.weight:0.095(r=0.040), short_lstm.weight_ih_l0:0.057(r=0.012), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.393322  head_frac=1.348
+[E24 B000] Loss→ MSE=0.0218  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.021841  tr_rmse=0.1478  tr_r2=0.210  vl_rmse=0.1680  vl_r2=0.467  vl_loss=0.028222  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E25 B000] GradNorm→ reg=0.419  cls=0.000  ter=0.000 | total_norm=0.337 median=0.010 p90=0.137 max=0.239 min=0.000 zero_frac=0.000 param_norm=27.469
+Top6_grads: pred.0.weight:0.239(r=0.037), pred.2.weight:0.166(r=0.307), short2long.weight:0.137(r=0.015), conv.weight:0.061(r=0.026), short_lstm.weight_ih_l0:0.052(r=0.011), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.336730  head_frac=1.244
+[E25 B000] Loss→ MSE=0.0209  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.020883  tr_rmse=0.1445  tr_r2=0.216  vl_rmse=0.1674  vl_r2=0.471  vl_loss=0.028023  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E26 B000] GradNorm→ reg=0.488  cls=0.000  ter=0.000 | total_norm=0.381 median=0.013 p90=0.140 max=0.246 min=0.000 zero_frac=0.000 param_norm=27.468
+Top6_grads: pred.0.weight:0.246(r=0.038), pred.2.weight:0.192(r=0.355), conv.weight:0.140(r=0.059), short2long.weight:0.139(r=0.015), short_lstm.weight_ih_l0:0.061(r=0.013), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.380860  head_frac=1.280
+[E26 B000] Loss→ MSE=0.0176  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.017594  tr_rmse=0.1326  tr_r2=0.253  vl_rmse=0.1686  vl_r2=0.463  vl_loss=0.028409  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E27 B000] GradNorm→ reg=0.355  cls=0.000  ter=0.000 | total_norm=0.286 median=0.008 p90=0.123 max=0.191 min=0.000 zero_frac=0.000 param_norm=27.468
+Top6_grads: pred.0.weight:0.191(r=0.029), pred.2.weight:0.140(r=0.260), short2long.weight:0.123(r=0.013), short_lstm.weight_ih_l0:0.063(r=0.013), conv.weight:0.055(r=0.023), short_lstm.weight_ih_l0_reverse:0.040(r=0.008)
+[TUNE] total_grad_norm=0.286287  head_frac=1.240
+[E27 B000] Loss→ MSE=0.0185  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.018471  tr_rmse=0.1359  tr_r2=0.234  vl_rmse=0.1668  vl_r2=0.475  vl_loss=0.027808  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E28 B000] GradNorm→ reg=0.423  cls=0.000  ter=0.000 | total_norm=0.326 median=0.011 p90=0.125 max=0.225 min=0.000 zero_frac=0.000 param_norm=27.468
+Top6_grads: pred.0.weight:0.225(r=0.035), pred.2.weight:0.162(r=0.301), short2long.weight:0.125(r=0.014), conv.weight:0.074(r=0.031), short_lstm.weight_ih_l0:0.057(r=0.012), short_lstm.weight_ih_l0_reverse:0.049(r=0.010)
+[TUNE] total_grad_norm=0.325501  head_frac=1.300
+[E28 B000] Loss→ MSE=0.0172  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.017175  tr_rmse=0.1311  tr_r2=0.269  vl_rmse=0.1649  vl_r2=0.486  vl_loss=0.027186  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E29 B000] GradNorm→ reg=0.415  cls=0.000  ter=0.000 | total_norm=0.320 median=0.009 p90=0.115 max=0.201 min=0.000 zero_frac=0.000 param_norm=27.467
+Top6_grads: pred.0.weight:0.201(r=0.031), pred.2.weight:0.178(r=0.330), short2long.weight:0.115(r=0.012), conv.weight:0.100(r=0.042), short_lstm.weight_ih_l0:0.056(r=0.012), short_lstm.weight_ih_l0_reverse:0.042(r=0.009)
+[TUNE] total_grad_norm=0.319911  head_frac=1.296
+[E29 B000] Loss→ MSE=0.0159  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.015860  tr_rmse=0.1259  tr_r2=0.256  vl_rmse=0.1668  vl_r2=0.474  vl_loss=0.027831  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E30 B000] GradNorm→ reg=0.388  cls=0.000  ter=0.000 | total_norm=0.315 median=0.009 p90=0.128 max=0.218 min=0.000 zero_frac=0.000 param_norm=27.467
+Top6_grads: pred.0.weight:0.218(r=0.033), pred.2.weight:0.151(r=0.281), short2long.weight:0.128(r=0.014), conv.weight:0.080(r=0.034), short_lstm.weight_ih_l0:0.060(r=0.013), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.315294  head_frac=1.230
+[E30 B000] Loss→ MSE=0.0197  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.019693  tr_rmse=0.1403  tr_r2=0.242  vl_rmse=0.1652  vl_r2=0.484  vl_loss=0.027291  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E31 B000] GradNorm→ reg=0.385  cls=0.000  ter=0.000 | total_norm=0.317 median=0.008 p90=0.126 max=0.222 min=0.000 zero_frac=0.000 param_norm=27.467
+Top6_grads: pred.0.weight:0.222(r=0.034), pred.2.weight:0.150(r=0.279), short2long.weight:0.126(r=0.014), conv.weight:0.078(r=0.033), short_lstm.weight_ih_l0:0.056(r=0.012), short_lstm.weight_ih_l0_reverse:0.043(r=0.009)
+[TUNE] total_grad_norm=0.316666  head_frac=1.215
+[E31 B000] Loss→ MSE=0.0204  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.020381  tr_rmse=0.1428  tr_r2=0.254  vl_rmse=0.1643  vl_r2=0.490  vl_loss=0.026984  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E32 B000] GradNorm→ reg=0.362  cls=0.000  ter=0.000 | total_norm=0.283 median=0.008 p90=0.110 max=0.196 min=0.000 zero_frac=0.000 param_norm=27.467
+Top6_grads: pred.0.weight:0.196(r=0.030), pred.2.weight:0.136(r=0.253), short2long.weight:0.110(r=0.012), conv.weight:0.077(r=0.033), short_lstm.weight_ih_l0:0.047(r=0.010), short_lstm.weight_ih_l0_reverse:0.036(r=0.007)
+[TUNE] total_grad_norm=0.282842  head_frac=1.279
+[E32 B000] Loss→ MSE=0.0158  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.015789  tr_rmse=0.1257  tr_r2=0.264  vl_rmse=0.1631  vl_r2=0.498  vl_loss=0.026590  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E33 B000] GradNorm→ reg=0.366  cls=0.000  ter=0.000 | total_norm=0.304 median=0.009 p90=0.124 max=0.220 min=0.000 zero_frac=0.000 param_norm=27.466
+Top6_grads: pred.0.weight:0.220(r=0.034), pred.2.weight:0.128(r=0.239), short2long.weight:0.124(r=0.013), conv.weight:0.072(r=0.030), short_lstm.weight_ih_l0:0.056(r=0.012), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.303814  head_frac=1.204
+[E33 B000] Loss→ MSE=0.0201  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.020059  tr_rmse=0.1416  tr_r2=0.289  vl_rmse=0.1634  vl_r2=0.495  vl_loss=0.026715  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E34 B000] GradNorm→ reg=0.453  cls=0.000  ter=0.000 | total_norm=0.363 median=0.010 p90=0.141 max=0.248 min=0.000 zero_frac=0.000 param_norm=27.466
+Top6_grads: pred.0.weight:0.248(r=0.038), pred.2.weight:0.176(r=0.329), short2long.weight:0.141(r=0.015), conv.weight:0.103(r=0.043), short_lstm.weight_ih_l0:0.067(r=0.014), short_lstm.weight_ih_l0_reverse:0.047(r=0.010)
+[TUNE] total_grad_norm=0.363389  head_frac=1.247
+[E34 B000] Loss→ MSE=0.0250  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.025042  tr_rmse=0.1582  tr_r2=0.280  vl_rmse=0.1613  vl_r2=0.509  vl_loss=0.026003  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E35 B000] GradNorm→ reg=0.383  cls=0.000  ter=0.000 | total_norm=0.317 median=0.009 p90=0.126 max=0.212 min=0.000 zero_frac=0.000 param_norm=27.466
+Top6_grads: pred.0.weight:0.212(r=0.033), pred.2.weight:0.153(r=0.286), short2long.weight:0.126(r=0.014), conv.weight:0.090(r=0.038), short_lstm.weight_ih_l0:0.068(r=0.014), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.317419  head_frac=1.206
+[E35 B000] Loss→ MSE=0.0204  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.020365  tr_rmse=0.1427  tr_r2=0.259  vl_rmse=0.1631  vl_r2=0.498  vl_loss=0.026595  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E36 B000] GradNorm→ reg=0.354  cls=0.000  ter=0.000 | total_norm=0.285 median=0.009 p90=0.107 max=0.193 min=0.000 zero_frac=0.000 param_norm=27.465
+Top6_grads: pred.0.weight:0.193(r=0.030), pred.2.weight:0.135(r=0.252), short2long.weight:0.107(r=0.012), conv.weight:0.088(r=0.037), short_lstm.weight_ih_l0:0.055(r=0.012), short_lstm.weight_ih_l0_reverse:0.039(r=0.008)
+[TUNE] total_grad_norm=0.284663  head_frac=1.245
+[E36 B000] Loss→ MSE=0.0157  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.015674  tr_rmse=0.1252  tr_r2=0.303  vl_rmse=0.1618  vl_r2=0.505  vl_loss=0.026179  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E37 B000] GradNorm→ reg=0.384  cls=0.000  ter=0.000 | total_norm=0.333 median=0.010 p90=0.129 max=0.211 min=0.000 zero_frac=0.000 param_norm=27.465
+Top6_grads: pred.0.weight:0.211(r=0.032), pred.2.weight:0.161(r=0.302), short2long.weight:0.129(r=0.014), conv.weight:0.115(r=0.048), short_lstm.weight_ih_l0:0.076(r=0.016), short_lstm.weight_ih_l0_reverse:0.050(r=0.010)
+[TUNE] total_grad_norm=0.333299  head_frac=1.151
+[E37 B000] Loss→ MSE=0.0199  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.019878  tr_rmse=0.1410  tr_r2=0.302  vl_rmse=0.1621  vl_r2=0.503  vl_loss=0.026291  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E38 B000] GradNorm→ reg=0.418  cls=0.000  ter=0.000 | total_norm=0.332 median=0.010 p90=0.132 max=0.227 min=0.000 zero_frac=0.000 param_norm=27.465
+Top6_grads: pred.0.weight:0.227(r=0.035), pred.2.weight:0.169(r=0.318), short2long.weight:0.132(r=0.014), short_lstm.weight_ih_l0:0.070(r=0.015), conv.weight:0.064(r=0.027), short_lstm.weight_ih_l0_reverse:0.040(r=0.008)
+[TUNE] total_grad_norm=0.332457  head_frac=1.257
+[E38 B000] Loss→ MSE=0.0222  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.022167  tr_rmse=0.1489  tr_r2=0.302  vl_rmse=0.1621  vl_r2=0.503  vl_loss=0.026282  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E39 B000] GradNorm→ reg=0.313  cls=0.000  ter=0.000 | total_norm=0.263 median=0.007 p90=0.105 max=0.193 min=0.000 zero_frac=0.000 param_norm=27.465
+Top6_grads: pred.0.weight:0.193(r=0.030), pred.2.weight:0.106(r=0.200), short2long.weight:0.105(r=0.011), conv.weight:0.064(r=0.027), short_lstm.weight_ih_l0:0.054(r=0.011), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.262682  head_frac=1.191
+[E39 B000] Loss→ MSE=0.0183  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.018270  tr_rmse=0.1352  tr_r2=0.318  vl_rmse=0.1606  vl_r2=0.513  vl_loss=0.025786  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E40 B000] GradNorm→ reg=0.784  cls=0.000  ter=0.000 | total_norm=0.551 median=0.019 p90=0.170 max=0.345 min=0.000 zero_frac=0.000 param_norm=27.464
+Top6_grads: pred.2.weight:0.345(r=0.649), pred.0.weight:0.337(r=0.052), short2long.weight:0.170(r=0.018), conv.weight:0.152(r=0.064), pred.2.bias:0.081(r=0.920), short_lstm.weight_ih_l0:0.078(r=0.016)
+[TUNE] total_grad_norm=0.551242  head_frac=1.422
+[E40 B000] Loss→ MSE=0.0245  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.024534  tr_rmse=0.1566  tr_r2=0.297  vl_rmse=0.1617  vl_r2=0.506  vl_loss=0.026153  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E41 B000] GradNorm→ reg=0.327  cls=0.000  ter=0.000 | total_norm=0.283 median=0.008 p90=0.118 max=0.201 min=0.000 zero_frac=0.000 param_norm=27.464
+Top6_grads: pred.0.weight:0.201(r=0.031), pred.2.weight:0.118(r=0.223), short2long.weight:0.118(r=0.013), conv.weight:0.072(r=0.030), short_lstm.weight_ih_l0:0.061(r=0.013), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.283027  head_frac=1.154
+[E41 B000] Loss→ MSE=0.0191  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.019085  tr_rmse=0.1381  tr_r2=0.325  vl_rmse=0.1605  vl_r2=0.513  vl_loss=0.025773  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E42 B000] GradNorm→ reg=0.296  cls=0.000  ter=0.000 | total_norm=0.249 median=0.006 p90=0.097 max=0.171 min=0.000 zero_frac=0.000 param_norm=27.464
+Top6_grads: pred.0.weight:0.171(r=0.026), pred.2.weight:0.114(r=0.215), short2long.weight:0.097(r=0.010), conv.weight:0.081(r=0.034), short_lstm.weight_ih_l0:0.042(r=0.009), short_lstm.weight_ih_l0_reverse:0.031(r=0.006)
+[TUNE] total_grad_norm=0.248553  head_frac=1.189
+[E42 B000] Loss→ MSE=0.0141  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.014119  tr_rmse=0.1188  tr_r2=0.331  vl_rmse=0.1601  vl_r2=0.516  vl_loss=0.025626  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E43 B000] GradNorm→ reg=0.375  cls=0.000  ter=0.000 | total_norm=0.313 median=0.009 p90=0.131 max=0.218 min=0.000 zero_frac=0.000 param_norm=27.463
+Top6_grads: pred.0.weight:0.218(r=0.034), pred.2.weight:0.140(r=0.264), short2long.weight:0.131(r=0.014), conv.weight:0.075(r=0.032), short_lstm.weight_ih_l0:0.066(r=0.014), short_lstm.weight_ih_l0_reverse:0.042(r=0.009)
+[TUNE] total_grad_norm=0.313074  head_frac=1.196
+[E43 B000] Loss→ MSE=0.0202  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.020213  tr_rmse=0.1422  tr_r2=0.323  vl_rmse=0.1604  vl_r2=0.514  vl_loss=0.025715  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E44 B000] GradNorm→ reg=0.318  cls=0.000  ter=0.000 | total_norm=0.261 median=0.007 p90=0.104 max=0.184 min=0.000 zero_frac=0.000 param_norm=27.463
+Top6_grads: pred.0.weight:0.184(r=0.028), pred.2.weight:0.117(r=0.222), short2long.weight:0.104(r=0.011), conv.weight:0.071(r=0.030), short_lstm.weight_ih_l0:0.047(r=0.010), short_lstm.weight_ih_l0_reverse:0.031(r=0.006)
+[TUNE] total_grad_norm=0.260541  head_frac=1.221
+[E44 B000] Loss→ MSE=0.0154  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.015354  tr_rmse=0.1239  tr_r2=0.332  vl_rmse=0.1587  vl_r2=0.524  vl_loss=0.025193  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E45 B000] GradNorm→ reg=0.311  cls=0.000  ter=0.000 | total_norm=0.283 median=0.008 p90=0.114 max=0.188 min=0.000 zero_frac=0.000 param_norm=27.463
+Top6_grads: pred.0.weight:0.188(r=0.029), short2long.weight:0.118(r=0.013), pred.2.weight:0.114(r=0.216), conv.weight:0.107(r=0.045), short_lstm.weight_ih_l0:0.054(r=0.011), short_lstm.weight_ih_l0_reverse:0.042(r=0.009)
+[TUNE] total_grad_norm=0.282742  head_frac=1.100
+[E45 B000] Loss→ MSE=0.0175  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.017478  tr_rmse=0.1322  tr_r2=0.352  vl_rmse=0.1598  vl_r2=0.518  vl_loss=0.025538  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E46 B000] GradNorm→ reg=0.441  cls=0.000  ter=0.000 | total_norm=0.314 median=0.011 p90=0.102 max=0.199 min=0.000 zero_frac=0.000 param_norm=27.462
+Top6_grads: pred.0.weight:0.199(r=0.031), pred.2.weight:0.193(r=0.366), short2long.weight:0.102(r=0.011), conv.weight:0.074(r=0.031), short_lstm.weight_ih_l0:0.048(r=0.010), pred.2.bias:0.039(r=0.440)
+[TUNE] total_grad_norm=0.314159  head_frac=1.404
+[E46 B000] Loss→ MSE=0.0125  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.012536  tr_rmse=0.1120  tr_r2=0.331  vl_rmse=0.1595  vl_r2=0.520  vl_loss=0.025426  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E47 B000] GradNorm→ reg=0.416  cls=0.000  ter=0.000 | total_norm=0.358 median=0.012 p90=0.141 max=0.237 min=0.000 zero_frac=0.000 param_norm=27.462
+Top6_grads: pred.0.weight:0.237(r=0.036), pred.2.weight:0.167(r=0.317), short2long.weight:0.141(r=0.015), conv.weight:0.112(r=0.047), short_lstm.weight_ih_l0:0.077(r=0.016), short_lstm.weight_ih_l0_reverse:0.058(r=0.012)
+[TUNE] total_grad_norm=0.358044  head_frac=1.161
+[E47 B000] Loss→ MSE=0.0266  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.026645  tr_rmse=0.1632  tr_r2=0.340  vl_rmse=0.1595  vl_r2=0.519  vl_loss=0.025435  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E48 B000] GradNorm→ reg=0.330  cls=0.000  ter=0.000 | total_norm=0.269 median=0.008 p90=0.102 max=0.185 min=0.000 zero_frac=0.000 param_norm=27.462
+Top6_grads: pred.0.weight:0.185(r=0.028), pred.2.weight:0.129(r=0.245), short2long.weight:0.102(r=0.011), conv.weight:0.081(r=0.034), short_lstm.weight_ih_l0:0.044(r=0.009), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.268565  head_frac=1.229
+[E48 B000] Loss→ MSE=0.0171  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.017057  tr_rmse=0.1306  tr_r2=0.338  vl_rmse=0.1590  vl_r2=0.523  vl_loss=0.025270  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E49 B000] GradNorm→ reg=0.477  cls=0.000  ter=0.000 | total_norm=0.349 median=0.012 p90=0.112 max=0.225 min=0.000 zero_frac=0.000 param_norm=27.462
+Top6_grads: pred.0.weight:0.225(r=0.035), pred.2.weight:0.192(r=0.366), short2long.weight:0.112(r=0.012), conv.weight:0.110(r=0.046), short_lstm.weight_ih_l0:0.062(r=0.013), pred.2.bias:0.047(r=0.533)
+[TUNE] total_grad_norm=0.348604  head_frac=1.369
+[E49 B000] Loss→ MSE=0.0168  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.016791  tr_rmse=0.1296  tr_r2=0.354  vl_rmse=0.1581  vl_r2=0.528  vl_loss=0.025001  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E50 B000] GradNorm→ reg=0.469  cls=0.000  ter=0.000 | total_norm=0.359 median=0.012 p90=0.148 max=0.214 min=0.000 zero_frac=0.000 param_norm=27.461
+Top6_grads: pred.2.weight:0.214(r=0.408), pred.0.weight:0.198(r=0.030), conv.weight:0.148(r=0.062), short2long.weight:0.106(r=0.011), short_lstm.weight_ih_l0:0.067(r=0.014), short_lstm.weight_ih_l0_reverse:0.045(r=0.009)
+[TUNE] total_grad_norm=0.358687  head_frac=1.307
+[E50 B000] Loss→ MSE=0.0142  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.014162  tr_rmse=0.1190  tr_r2=0.355  vl_rmse=0.1579  vl_r2=0.529  vl_loss=0.024944  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E51 B000] GradNorm→ reg=0.347  cls=0.000  ter=0.000 | total_norm=0.272 median=0.007 p90=0.103 max=0.190 min=0.000 zero_frac=0.000 param_norm=27.461
+Top6_grads: pred.0.weight:0.190(r=0.029), pred.2.weight:0.133(r=0.253), short2long.weight:0.103(r=0.011), conv.weight:0.062(r=0.026), short_lstm.weight_ih_l0:0.055(r=0.011), short_lstm.weight_ih_l0_reverse:0.031(r=0.006)
+[TUNE] total_grad_norm=0.271558  head_frac=1.279
+[E51 B000] Loss→ MSE=0.0184  lr=9.0000e-06  slip_frac=0.000
+[TUNE] opt_lr=9.0000e-06  batch_loss=0.018358  tr_rmse=0.1355  tr_r2=0.352  vl_rmse=0.1585  vl_r2=0.525  vl_loss=0.025117  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E52 B000] GradNorm→ reg=0.506  cls=0.000  ter=0.000 | total_norm=0.369 median=0.013 p90=0.131 max=0.224 min=0.000 zero_frac=0.000 param_norm=27.461
+Top6_grads: pred.0.weight:0.224(r=0.034), pred.2.weight:0.214(r=0.409), conv.weight:0.131(r=0.055), short2long.weight:0.114(r=0.012), short_lstm.weight_ih_l0:0.061(r=0.013), pred.2.bias:0.055(r=0.624)
+[TUNE] total_grad_norm=0.368894  head_frac=1.372
+[E52 B000] Loss→ MSE=0.0150  lr=1.0000e-05  slip_frac=0.000
+[TUNE] opt_lr=1.0000e-05  batch_loss=0.015008  tr_rmse=0.1225  tr_r2=0.368  vl_rmse=0.1577  vl_r2=0.530  vl_loss=0.024866  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+--------------------------------------------------------------------------------
+
+RUN START: 2025-10-06T17:45:40.733933Z
+
+PARAMETER NAMES:
+  conv.weight
+  conv.bias
+  bn.weight
+  bn.bias
+  short_lstm.weight_ih_l0
+  short_lstm.weight_hh_l0
+  short_lstm.bias_ih_l0
+  short_lstm.bias_hh_l0
+  short_lstm.weight_ih_l0_reverse
+  short_lstm.weight_hh_l0_reverse
+  short_lstm.bias_ih_l0_reverse
+  short_lstm.bias_hh_l0_reverse
+  ln_short.weight
+  ln_short.bias
+  short2long.weight
+  short2long.bias
+  ln_long.weight
+  ln_long.bias
+  pred.0.weight
+  pred.0.bias
+  pred.2.weight
+  pred.2.bias
+
+HYPERPARAMS:
+  INITIAL_LR = 5e-06
+  SHORT_UNITS = 128
+  LONG_UNITS = 256
+  PRED_HIDDEN = 128
+  DROPOUT_SHORT = 0.3
+  DROPOUT_LONG = 0.3
+  CLIPNORM = 1.0
+  WEIGHT_DECAY = 0.0003
+  TRAIN_BATCH = 64
+  DIFF1_WEIGHT = 1.0
+  DIFF2_WEIGHT = 2.0
+  SMOOTH_ALPHA = 0.05
+  SMOOTH_BETA = 100.0
+  SMOOTH_DELTA = 0.02
+
+[E01 B000] GradNorm→ reg=0.910  cls=0.000  ter=0.000 | total_norm=0.749 median=0.025 p90=0.323 max=0.474 min=0.000 zero_frac=0.000 param_norm=27.529
+Top6_grads: pred.0.weight:0.474(r=0.073), pred.2.weight:0.343(r=0.606), short2long.weight:0.323(r=0.035), conv.weight:0.233(r=0.103), short_lstm.weight_ih_l0:0.175(r=0.036), short_lstm.weight_ih_l0_reverse:0.125(r=0.026)
+[TUNE] total_grad_norm=0.749222  head_frac=1.215
+
+--------------------------------------------------------------------------------
+
+RUN START: 2025-10-06T17:51:32.732116Z
+
+PARAMETER NAMES:
+  conv.weight
+  conv.bias
+  bn.weight
+  bn.bias
+  short_lstm.weight_ih_l0
+  short_lstm.weight_hh_l0
+  short_lstm.bias_ih_l0
+  short_lstm.bias_hh_l0
+  short_lstm.weight_ih_l0_reverse
+  short_lstm.weight_hh_l0_reverse
+  short_lstm.bias_ih_l0_reverse
+  short_lstm.bias_hh_l0_reverse
+  ln_short.weight
+  ln_short.bias
+  short2long.weight
+  short2long.bias
+  ln_long.weight
+  ln_long.bias
+  pred.0.weight
+  pred.0.bias
+  pred.2.weight
+  pred.2.bias
+
+HYPERPARAMS:
+  INITIAL_LR = 5e-06
+  SHORT_UNITS = 128
+  LONG_UNITS = 256
+  PRED_HIDDEN = 128
+  DROPOUT_SHORT = 0.3
+  DROPOUT_LONG = 0.3
+  CLIPNORM = 1.0
+  WEIGHT_DECAY = 0.0003
+  TRAIN_BATCH = 64
+  DIFF1_WEIGHT = 1.0
+  DIFF2_WEIGHT = 2.0
+  SMOOTH_ALPHA = 0.05
+  SMOOTH_BETA = 100.0
+  SMOOTH_DELTA = 0.02
+
+[E01 B000] GradNorm→ reg=0.877  cls=0.000  ter=0.000 | total_norm=0.770 median=0.027 p90=0.316 max=0.499 min=0.000 zero_frac=0.000 param_norm=27.537
+Top6_grads: pred.0.weight:0.499(r=0.076), short2long.weight:0.339(r=0.037), pred.2.weight:0.316(r=0.532), conv.weight:0.265(r=0.112), short_lstm.weight_ih_l0:0.171(r=0.036), short_lstm.weight_ih_l0_reverse:0.128(r=0.027)
+[TUNE] total_grad_norm=0.769887  head_frac=1.139
+[E01 B000] Loss→ MSE=0.0624  lr=4.9988e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9988e-06  batch_loss=0.062380  tr_rmse=0.2498  tr_r2=-0.583  vl_rmse=0.2475  vl_r2=-0.158  vl_loss=0.061271  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E02 B000] GradNorm→ reg=0.686  cls=0.000  ter=0.000 | total_norm=0.579 median=0.017 p90=0.251 max=0.387 min=0.000 zero_frac=0.000 param_norm=27.537
+Top6_grads: pred.0.weight:0.387(r=0.059), short2long.weight:0.259(r=0.028), pred.2.weight:0.251(r=0.422), conv.weight:0.165(r=0.070), short_lstm.weight_ih_l0:0.118(r=0.025), short_lstm.weight_ih_l0_reverse:0.087(r=0.018)
+[TUNE] total_grad_norm=0.578570  head_frac=1.186
+[E02 B000] Loss→ MSE=0.0417  lr=4.9952e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9952e-06  batch_loss=0.041726  tr_rmse=0.2043  tr_r2=-0.437  vl_rmse=0.2339  vl_r2=-0.034  vl_loss=0.054707  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E03 B000] GradNorm→ reg=0.559  cls=0.000  ter=0.000 | total_norm=0.508 median=0.016 p90=0.188 max=0.351 min=0.000 zero_frac=0.000 param_norm=27.537
+Top6_grads: pred.0.weight:0.351(r=0.054), short2long.weight:0.244(r=0.026), pred.2.weight:0.188(r=0.317), short_lstm.weight_ih_l0:0.132(r=0.028), conv.weight:0.099(r=0.042), short_lstm.weight_ih_l0_reverse:0.084(r=0.017)
+[TUNE] total_grad_norm=0.508026  head_frac=1.101
+[E03 B000] Loss→ MSE=0.0401  lr=4.9891e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9891e-06  batch_loss=0.040059  tr_rmse=0.2001  tr_r2=-0.369  vl_rmse=0.2245  vl_r2=0.047  vl_loss=0.050419  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E04 B000] GradNorm→ reg=0.783  cls=0.000  ter=0.000 | total_norm=0.606 median=0.023 p90=0.277 max=0.406 min=0.000 zero_frac=0.000 param_norm=27.536
+Top6_grads: pred.0.weight:0.406(r=0.062), pred.2.weight:0.287(r=0.484), short2long.weight:0.277(r=0.030), short_lstm.weight_ih_l0:0.132(r=0.028), conv.weight:0.091(r=0.038), short_lstm.weight_ih_l0_reverse:0.078(r=0.016)
+[TUNE] total_grad_norm=0.605606  head_frac=1.294
+[E04 B000] Loss→ MSE=0.0362  lr=4.9807e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9807e-06  batch_loss=0.036178  tr_rmse=0.1902  tr_r2=-0.246  vl_rmse=0.2171  vl_r2=0.110  vl_loss=0.047112  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E05 B000] GradNorm→ reg=0.666  cls=0.000  ter=0.000 | total_norm=0.561 median=0.019 p90=0.238 max=0.365 min=0.000 zero_frac=0.000 param_norm=27.536
+Top6_grads: pred.0.weight:0.365(r=0.056), short2long.weight:0.248(r=0.027), pred.2.weight:0.238(r=0.401), conv.weight:0.191(r=0.081), short_lstm.weight_ih_l0:0.110(r=0.023), short_lstm.weight_ih_l0_reverse:0.093(r=0.019)
+[TUNE] total_grad_norm=0.561244  head_frac=1.187
+[E05 B000] Loss→ MSE=0.0313  lr=4.9698e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9698e-06  batch_loss=0.031261  tr_rmse=0.1768  tr_r2=-0.264  vl_rmse=0.2099  vl_r2=0.167  vl_loss=0.044069  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E06 B000] GradNorm→ reg=0.600  cls=0.000  ter=0.000 | total_norm=0.500 median=0.016 p90=0.221 max=0.319 min=0.000 zero_frac=0.000 param_norm=27.536
+Top6_grads: pred.0.weight:0.319(r=0.049), pred.2.weight:0.230(r=0.388), short2long.weight:0.221(r=0.024), conv.weight:0.146(r=0.062), short_lstm.weight_ih_l0:0.116(r=0.024), short_lstm.weight_ih_l0_reverse:0.074(r=0.015)
+[TUNE] total_grad_norm=0.500471  head_frac=1.199
+[E06 B000] Loss→ MSE=0.0356  lr=4.9566e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9566e-06  batch_loss=0.035576  tr_rmse=0.1886  tr_r2=-0.222  vl_rmse=0.2066  vl_r2=0.194  vl_loss=0.042667  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E07 B000] GradNorm→ reg=0.559  cls=0.000  ter=0.000 | total_norm=0.482 median=0.016 p90=0.216 max=0.302 min=0.000 zero_frac=0.000 param_norm=27.536
+Top6_grads: pred.0.weight:0.302(r=0.046), short2long.weight:0.221(r=0.024), pred.2.weight:0.216(r=0.365), conv.weight:0.138(r=0.058), short_lstm.weight_ih_l0:0.124(r=0.026), short_lstm.weight_ih_l0_reverse:0.070(r=0.015)
+[TUNE] total_grad_norm=0.481792  head_frac=1.160
+[E07 B000] Loss→ MSE=0.0338  lr=4.9410e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9410e-06  batch_loss=0.033826  tr_rmse=0.1839  tr_r2=-0.100  vl_rmse=0.2024  vl_r2=0.226  vl_loss=0.040964  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E08 B000] GradNorm→ reg=0.394  cls=0.000  ter=0.000 | total_norm=0.359 median=0.010 p90=0.141 max=0.242 min=0.000 zero_frac=0.000 param_norm=27.536
+Top6_grads: pred.0.weight:0.242(r=0.037), short2long.weight:0.168(r=0.018), pred.2.weight:0.141(r=0.239), conv.weight:0.099(r=0.042), short_lstm.weight_ih_l0:0.085(r=0.018), short_lstm.weight_ih_l0_reverse:0.049(r=0.010)
+[TUNE] total_grad_norm=0.358522  head_frac=1.100
+[E08 B000] Loss→ MSE=0.0197  lr=4.9230e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9230e-06  batch_loss=0.019692  tr_rmse=0.1403  tr_r2=-0.101  vl_rmse=0.1977  vl_r2=0.262  vl_loss=0.039089  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E09 B000] GradNorm→ reg=0.480  cls=0.000  ter=0.000 | total_norm=0.413 median=0.013 p90=0.171 max=0.272 min=0.000 zero_frac=0.000 param_norm=27.535
+Top6_grads: pred.0.weight:0.272(r=0.042), short2long.weight:0.191(r=0.021), pred.2.weight:0.171(r=0.290), conv.weight:0.122(r=0.051), short_lstm.weight_ih_l0:0.093(r=0.020), short_lstm.weight_ih_l0_reverse:0.063(r=0.013)
+[TUNE] total_grad_norm=0.413448  head_frac=1.162
+[E09 B000] Loss→ MSE=0.0250  lr=4.9027e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9027e-06  batch_loss=0.025023  tr_rmse=0.1582  tr_r2=-0.046  vl_rmse=0.1943  vl_r2=0.287  vl_loss=0.037761  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E10 B000] GradNorm→ reg=0.567  cls=0.000  ter=0.000 | total_norm=0.479 median=0.017 p90=0.200 max=0.311 min=0.000 zero_frac=0.000 param_norm=27.535
+Top6_grads: pred.0.weight:0.311(r=0.048), short2long.weight:0.205(r=0.022), pred.2.weight:0.200(r=0.339), conv.weight:0.164(r=0.069), short_lstm.weight_ih_l0:0.109(r=0.023), short_lstm.weight_ih_l0_reverse:0.074(r=0.015)
+[TUNE] total_grad_norm=0.479351  head_frac=1.183
+[E10 B000] Loss→ MSE=0.0315  lr=4.8801e-06  slip_frac=0.000
+[TUNE] opt_lr=4.8801e-06  batch_loss=0.031462  tr_rmse=0.1774  tr_r2=-0.034  vl_rmse=0.1920  vl_r2=0.304  vl_loss=0.036861  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E11 B000] GradNorm→ reg=0.561  cls=0.000  ter=0.000 | total_norm=0.467 median=0.016 p90=0.194 max=0.313 min=0.000 zero_frac=0.000 param_norm=27.535
+Top6_grads: pred.0.weight:0.313(r=0.048), short2long.weight:0.221(r=0.024), pred.2.weight:0.194(r=0.330), conv.weight:0.111(r=0.047), short_lstm.weight_ih_l0:0.107(r=0.022), short_lstm.weight_ih_l0_reverse:0.065(r=0.014)
+[TUNE] total_grad_norm=0.467216  head_frac=1.201
+[E11 B000] Loss→ MSE=0.0336  lr=4.8552e-06  slip_frac=0.000
+[TUNE] opt_lr=4.8552e-06  batch_loss=0.033593  tr_rmse=0.1833  tr_r2=-0.032  vl_rmse=0.1890  vl_r2=0.325  vl_loss=0.035706  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E12 B000] GradNorm→ reg=0.632  cls=0.000  ter=0.000 | total_norm=0.489 median=0.017 p90=0.209 max=0.307 min=0.000 zero_frac=0.000 param_norm=27.535
+Top6_grads: pred.0.weight:0.307(r=0.047), pred.2.weight:0.251(r=0.426), short2long.weight:0.209(r=0.022), conv.weight:0.126(r=0.053), short_lstm.weight_ih_l0:0.105(r=0.022), short_lstm.weight_ih_l0_reverse:0.064(r=0.013)
+[TUNE] total_grad_norm=0.489119  head_frac=1.293
+[E12 B000] Loss→ MSE=0.0284  lr=4.8280e-06  slip_frac=0.000
+[TUNE] opt_lr=4.8280e-06  batch_loss=0.028357  tr_rmse=0.1684  tr_r2=0.023  vl_rmse=0.1873  vl_r2=0.338  vl_loss=0.035063  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E13 B000] GradNorm→ reg=0.432  cls=0.000  ter=0.000 | total_norm=0.390 median=0.013 p90=0.143 max=0.275 min=0.000 zero_frac=0.000 param_norm=27.535
+Top6_grads: pred.0.weight:0.275(r=0.042), short2long.weight:0.178(r=0.019), pred.2.weight:0.143(r=0.243), conv.weight:0.100(r=0.042), short_lstm.weight_ih_l0:0.086(r=0.018), short_lstm.weight_ih_l0_reverse:0.066(r=0.014)
+[TUNE] total_grad_norm=0.390346  head_frac=1.106
+[E13 B000] Loss→ MSE=0.0314  lr=4.7985e-06  slip_frac=0.000
+[TUNE] opt_lr=4.7985e-06  batch_loss=0.031381  tr_rmse=0.1771  tr_r2=-0.021  vl_rmse=0.1858  vl_r2=0.348  vl_loss=0.034514  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E14 B000] GradNorm→ reg=0.398  cls=0.000  ter=0.000 | total_norm=0.376 median=0.011 p90=0.124 max=0.255 min=0.000 zero_frac=0.000 param_norm=27.535
+Top6_grads: pred.0.weight:0.255(r=0.039), short2long.weight:0.177(r=0.019), pred.2.weight:0.124(r=0.211), conv.weight:0.120(r=0.051), short_lstm.weight_ih_l0:0.096(r=0.020), short_lstm.weight_ih_l0_reverse:0.053(r=0.011)
+[TUNE] total_grad_norm=0.376272  head_frac=1.058
+[E14 B000] Loss→ MSE=0.0263  lr=4.7668e-06  slip_frac=0.000
+[TUNE] opt_lr=4.7668e-06  batch_loss=0.026293  tr_rmse=0.1622  tr_r2=0.067  vl_rmse=0.1837  vl_r2=0.362  vl_loss=0.033764  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E15 B000] GradNorm→ reg=0.441  cls=0.000  ter=0.000 | total_norm=0.400 median=0.012 p90=0.147 max=0.273 min=0.000 zero_frac=0.000 param_norm=27.534
+Top6_grads: pred.0.weight:0.273(r=0.042), short2long.weight:0.186(r=0.020), pred.2.weight:0.147(r=0.251), short_lstm.weight_ih_l0:0.104(r=0.022), conv.weight:0.101(r=0.043), short_lstm.weight_ih_l0_reverse:0.063(r=0.013)
+[TUNE] total_grad_norm=0.399636  head_frac=1.103
+[E15 B000] Loss→ MSE=0.0259  lr=4.7330e-06  slip_frac=0.000
+[TUNE] opt_lr=4.7330e-06  batch_loss=0.025911  tr_rmse=0.1610  tr_r2=0.049  vl_rmse=0.1826  vl_r2=0.370  vl_loss=0.033339  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E16 B000] GradNorm→ reg=0.827  cls=0.000  ter=0.000 | total_norm=0.622 median=0.026 p90=0.245 max=0.387 min=0.000 zero_frac=0.000 param_norm=27.534
+Top6_grads: pred.0.weight:0.387(r=0.059), pred.2.weight:0.329(r=0.561), short2long.weight:0.245(r=0.026), conv.weight:0.192(r=0.081), short_lstm.weight_ih_l0:0.119(r=0.025), pred.2.bias:0.084(r=3.085)
+[TUNE] total_grad_norm=0.622363  head_frac=1.329
+[E16 B000] Loss→ MSE=0.0262  lr=4.6970e-06  slip_frac=0.000
+[TUNE] opt_lr=4.6970e-06  batch_loss=0.026187  tr_rmse=0.1618  tr_r2=0.031  vl_rmse=0.1817  vl_r2=0.376  vl_loss=0.033022  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E17 B000] GradNorm→ reg=0.446  cls=0.000  ter=0.000 | total_norm=0.397 median=0.012 p90=0.160 max=0.273 min=0.000 zero_frac=0.000 param_norm=27.534
+Top6_grads: pred.0.weight:0.273(r=0.042), short2long.weight:0.177(r=0.019), pred.2.weight:0.160(r=0.273), conv.weight:0.112(r=0.047), short_lstm.weight_ih_l0:0.081(r=0.017), short_lstm.weight_ih_l0_reverse:0.066(r=0.014)
+[TUNE] total_grad_norm=0.396663  head_frac=1.125
+[E17 B000] Loss→ MSE=0.0299  lr=4.6588e-06  slip_frac=0.000
+[TUNE] opt_lr=4.6588e-06  batch_loss=0.029913  tr_rmse=0.1730  tr_r2=0.083  vl_rmse=0.1810  vl_r2=0.381  vl_loss=0.032761  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E18 B000] GradNorm→ reg=0.536  cls=0.000  ter=0.000 | total_norm=0.425 median=0.013 p90=0.176 max=0.293 min=0.000 zero_frac=0.000 param_norm=27.534
+Top6_grads: pred.0.weight:0.293(r=0.045), pred.2.weight:0.206(r=0.352), short2long.weight:0.176(r=0.019), short_lstm.weight_ih_l0:0.093(r=0.020), conv.weight:0.078(r=0.033), short_lstm.weight_ih_l0_reverse:0.052(r=0.011)
+[TUNE] total_grad_norm=0.424548  head_frac=1.264
+[E18 B000] Loss→ MSE=0.0311  lr=4.6186e-06  slip_frac=0.000
+[TUNE] opt_lr=4.6186e-06  batch_loss=0.031118  tr_rmse=0.1764  tr_r2=0.109  vl_rmse=0.1795  vl_r2=0.391  vl_loss=0.032237  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E19 B000] GradNorm→ reg=0.392  cls=0.000  ter=0.000 | total_norm=0.341 median=0.010 p90=0.151 max=0.227 min=0.000 zero_frac=0.000 param_norm=27.534
+Top6_grads: pred.0.weight:0.227(r=0.035), pred.2.weight:0.156(r=0.267), short2long.weight:0.151(r=0.016), conv.weight:0.088(r=0.037), short_lstm.weight_ih_l0:0.075(r=0.016), short_lstm.weight_ih_l0_reverse:0.049(r=0.010)
+[TUNE] total_grad_norm=0.341074  head_frac=1.149
+[E19 B000] Loss→ MSE=0.0231  lr=4.1187e-06  slip_frac=0.000
+[TUNE] opt_lr=4.1187e-06  batch_loss=0.023079  tr_rmse=0.1519  tr_r2=0.130  vl_rmse=0.1804  vl_r2=0.385  vl_loss=0.032540  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E20 B000] GradNorm→ reg=0.630  cls=0.000  ter=0.000 | total_norm=0.483 median=0.019 p90=0.189 max=0.311 min=0.000 zero_frac=0.000 param_norm=27.534
+Top6_grads: pred.0.weight:0.311(r=0.048), pred.2.weight:0.244(r=0.418), short2long.weight:0.189(r=0.020), conv.weight:0.126(r=0.053), short_lstm.weight_ih_l0:0.118(r=0.025), short_lstm.weight_ih_l0_reverse:0.057(r=0.012)
+[TUNE] total_grad_norm=0.483040  head_frac=1.303
+[E20 B000] Loss→ MSE=0.0202  lr=4.5321e-06  slip_frac=0.000
+[TUNE] opt_lr=4.5321e-06  batch_loss=0.020188  tr_rmse=0.1421  tr_r2=0.135  vl_rmse=0.1774  vl_r2=0.406  vl_loss=0.031462  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E21 B000] GradNorm→ reg=0.502  cls=0.000  ter=0.000 | total_norm=0.398 median=0.013 p90=0.167 max=0.276 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.276(r=0.042), pred.2.weight:0.179(r=0.307), short2long.weight:0.167(r=0.018), conv.weight:0.101(r=0.043), short_lstm.weight_ih_l0:0.075(r=0.016), short_lstm.weight_ih_l0_reverse:0.053(r=0.011)
+[TUNE] total_grad_norm=0.397956  head_frac=1.260
+[E21 B000] Loss→ MSE=0.0244  lr=4.0373e-06  slip_frac=0.000
+[TUNE] opt_lr=4.0373e-06  batch_loss=0.024389  tr_rmse=0.1562  tr_r2=0.134  vl_rmse=0.1776  vl_r2=0.404  vl_loss=0.031552  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E22 B000] GradNorm→ reg=0.531  cls=0.000  ter=0.000 | total_norm=0.432 median=0.013 p90=0.181 max=0.296 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.296(r=0.045), pred.2.weight:0.198(r=0.338), short2long.weight:0.181(r=0.020), conv.weight:0.112(r=0.047), short_lstm.weight_ih_l0:0.088(r=0.019), short_lstm.weight_ih_l0_reverse:0.057(r=0.012)
+[TUNE] total_grad_norm=0.432232  head_frac=1.229
+[E22 B000] Loss→ MSE=0.0292  lr=4.4378e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4378e-06  batch_loss=0.029221  tr_rmse=0.1709  tr_r2=0.156  vl_rmse=0.1772  vl_r2=0.407  vl_loss=0.031384  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E23 B000] GradNorm→ reg=0.492  cls=0.000  ter=0.000 | total_norm=0.428 median=0.013 p90=0.172 max=0.300 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.300(r=0.046), short2long.weight:0.194(r=0.021), pred.2.weight:0.172(r=0.295), conv.weight:0.102(r=0.043), short_lstm.weight_ih_l0:0.092(r=0.019), short_lstm.weight_ih_l0_reverse:0.063(r=0.013)
+[TUNE] total_grad_norm=0.428441  head_frac=1.148
+[E23 B000] Loss→ MSE=0.0383  lr=4.3878e-06  slip_frac=0.000
+[TUNE] opt_lr=4.3878e-06  batch_loss=0.038326  tr_rmse=0.1958  tr_r2=0.122  vl_rmse=0.1769  vl_r2=0.409  vl_loss=0.031296  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E24 B000] GradNorm→ reg=0.345  cls=0.000  ter=0.000 | total_norm=0.313 median=0.009 p90=0.113 max=0.217 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.217(r=0.033), short2long.weight:0.134(r=0.014), pred.2.weight:0.113(r=0.193), conv.weight:0.113(r=0.048), short_lstm.weight_ih_l0:0.066(r=0.014), short_lstm.weight_ih_l0_reverse:0.045(r=0.009)
+[TUNE] total_grad_norm=0.313213  head_frac=1.103
+[E24 B000] Loss→ MSE=0.0177  lr=4.3360e-06  slip_frac=0.000
+[TUNE] opt_lr=4.3360e-06  batch_loss=0.017739  tr_rmse=0.1332  tr_r2=0.169  vl_rmse=0.1754  vl_r2=0.419  vl_loss=0.030761  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E25 B000] GradNorm→ reg=0.383  cls=0.000  ter=0.000 | total_norm=0.357 median=0.010 p90=0.141 max=0.239 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.239(r=0.037), short2long.weight:0.147(r=0.016), conv.weight:0.141(r=0.060), pred.2.weight:0.132(r=0.226), short_lstm.weight_ih_l0:0.084(r=0.018), short_lstm.weight_ih_l0_reverse:0.049(r=0.010)
+[TUNE] total_grad_norm=0.357362  head_frac=1.071
+[E25 B000] Loss→ MSE=0.0249  lr=3.8542e-06  slip_frac=0.000
+[TUNE] opt_lr=3.8542e-06  batch_loss=0.024947  tr_rmse=0.1579  tr_r2=0.158  vl_rmse=0.1756  vl_r2=0.417  vl_loss=0.030853  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E26 B000] GradNorm→ reg=0.460  cls=0.000  ter=0.000 | total_norm=0.394 median=0.012 p90=0.154 max=0.269 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.269(r=0.041), short2long.weight:0.170(r=0.018), pred.2.weight:0.154(r=0.265), conv.weight:0.120(r=0.051), short_lstm.weight_ih_l0:0.095(r=0.020), short_lstm.weight_ih_l0_reverse:0.061(r=0.013)
+[TUNE] total_grad_norm=0.393952  head_frac=1.167
+[E26 B000] Loss→ MSE=0.0254  lr=4.2271e-06  slip_frac=0.000
+[TUNE] opt_lr=4.2271e-06  batch_loss=0.025446  tr_rmse=0.1595  tr_r2=0.174  vl_rmse=0.1748  vl_r2=0.423  vl_loss=0.030545  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E27 B000] GradNorm→ reg=0.595  cls=0.000  ter=0.000 | total_norm=0.461 median=0.018 p90=0.168 max=0.293 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.293(r=0.045), pred.2.weight:0.230(r=0.395), short2long.weight:0.168(r=0.018), conv.weight:0.164(r=0.069), short_lstm.weight_ih_l0:0.095(r=0.020), pred.2.bias:0.054(r=2.012)
+[TUNE] total_grad_norm=0.460674  head_frac=1.292
+[E27 B000] Loss→ MSE=0.0202  lr=4.1702e-06  slip_frac=0.000
+[TUNE] opt_lr=4.1702e-06  batch_loss=0.020215  tr_rmse=0.1422  tr_r2=0.175  vl_rmse=0.1747  vl_r2=0.423  vl_loss=0.030534  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E28 B000] GradNorm→ reg=0.547  cls=0.000  ter=0.000 | total_norm=0.428 median=0.015 p90=0.168 max=0.267 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.267(r=0.041), pred.2.weight:0.221(r=0.379), short2long.weight:0.168(r=0.018), conv.weight:0.135(r=0.057), short_lstm.weight_ih_l0:0.097(r=0.020), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.427960  head_frac=1.277
+[E28 B000] Loss→ MSE=0.0250  lr=4.1117e-06  slip_frac=0.000
+[TUNE] opt_lr=4.1117e-06  batch_loss=0.025008  tr_rmse=0.1581  tr_r2=0.185  vl_rmse=0.1741  vl_r2=0.427  vl_loss=0.030314  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E29 B000] GradNorm→ reg=0.665  cls=0.000  ter=0.000 | total_norm=0.497 median=0.019 p90=0.192 max=0.326 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.326(r=0.050), pred.2.weight:0.265(r=0.455), short2long.weight:0.192(r=0.021), conv.weight:0.113(r=0.048), short_lstm.weight_ih_l0:0.100(r=0.021), short_lstm.weight_ih_l0_reverse:0.063(r=0.013)
+[TUNE] total_grad_norm=0.497354  head_frac=1.338
+[E29 B000] Loss→ MSE=0.0251  lr=4.0516e-06  slip_frac=0.000
+[TUNE] opt_lr=4.0516e-06  batch_loss=0.025145  tr_rmse=0.1586  tr_r2=0.178  vl_rmse=0.1741  vl_r2=0.427  vl_loss=0.030306  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E30 B000] GradNorm→ reg=0.410  cls=0.000  ter=0.000 | total_norm=0.341 median=0.011 p90=0.141 max=0.217 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.217(r=0.033), pred.2.weight:0.157(r=0.270), short2long.weight:0.141(r=0.015), conv.weight:0.110(r=0.047), short_lstm.weight_ih_l0:0.083(r=0.017), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.340915  head_frac=1.202
+[E30 B000] Loss→ MSE=0.0215  lr=3.9901e-06  slip_frac=0.000
+[TUNE] opt_lr=3.9901e-06  batch_loss=0.021546  tr_rmse=0.1468  tr_r2=0.203  vl_rmse=0.1738  vl_r2=0.429  vl_loss=0.030204  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E31 B000] GradNorm→ reg=0.412  cls=0.000  ter=0.000 | total_norm=0.338 median=0.010 p90=0.138 max=0.230 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.230(r=0.035), pred.2.weight:0.145(r=0.250), short2long.weight:0.138(r=0.015), conv.weight:0.102(r=0.043), short_lstm.weight_ih_l0:0.077(r=0.016), short_lstm.weight_ih_l0_reverse:0.050(r=0.010)
+[TUNE] total_grad_norm=0.338077  head_frac=1.218
+[E31 B000] Loss→ MSE=0.0199  lr=3.5344e-06  slip_frac=0.000
+[TUNE] opt_lr=3.5344e-06  batch_loss=0.019935  tr_rmse=0.1412  tr_r2=0.214  vl_rmse=0.1739  vl_r2=0.428  vl_loss=0.030254  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E32 B000] GradNorm→ reg=0.471  cls=0.000  ter=0.000 | total_norm=0.370 median=0.012 p90=0.150 max=0.254 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.254(r=0.039), pred.2.weight:0.174(r=0.300), short2long.weight:0.150(r=0.016), conv.weight:0.090(r=0.038), short_lstm.weight_ih_l0:0.077(r=0.016), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.369851  head_frac=1.273
+[E32 B000] Loss→ MSE=0.0219  lr=3.8628e-06  slip_frac=0.000
+[TUNE] opt_lr=3.8628e-06  batch_loss=0.021856  tr_rmse=0.1478  tr_r2=0.201  vl_rmse=0.1736  vl_r2=0.431  vl_loss=0.030136  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E33 B000] GradNorm→ reg=0.670  cls=0.000  ter=0.000 | total_norm=0.506 median=0.020 p90=0.185 max=0.321 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.321(r=0.049), pred.2.weight:0.265(r=0.457), short2long.weight:0.185(r=0.020), conv.weight:0.150(r=0.064), short_lstm.weight_ih_l0:0.119(r=0.025), pred.2.bias:0.064(r=2.373)
+[TUNE] total_grad_norm=0.506466  head_frac=1.322
+[E33 B000] Loss→ MSE=0.0217  lr=3.4174e-06  slip_frac=0.000
+[TUNE] opt_lr=3.4174e-06  batch_loss=0.021735  tr_rmse=0.1474  tr_r2=0.225  vl_rmse=0.1736  vl_r2=0.430  vl_loss=0.030153  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E34 B000] GradNorm→ reg=0.407  cls=0.000  ter=0.000 | total_norm=0.343 median=0.011 p90=0.140 max=0.227 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.227(r=0.035), short2long.weight:0.146(r=0.016), pred.2.weight:0.140(r=0.241), conv.weight:0.117(r=0.050), short_lstm.weight_ih_l0:0.076(r=0.016), short_lstm.weight_ih_l0_reverse:0.053(r=0.011)
+[TUNE] total_grad_norm=0.343120  head_frac=1.186
+[E34 B000] Loss→ MSE=0.0215  lr=3.7303e-06  slip_frac=0.000
+[TUNE] opt_lr=3.7303e-06  batch_loss=0.021527  tr_rmse=0.1467  tr_r2=0.239  vl_rmse=0.1733  vl_r2=0.433  vl_loss=0.030017  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E35 B000] GradNorm→ reg=0.764  cls=0.000  ter=0.000 | total_norm=0.553 median=0.022 p90=0.184 max=0.354 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.354(r=0.054), pred.2.weight:0.317(r=0.547), short2long.weight:0.184(r=0.020), conv.weight:0.139(r=0.059), short_lstm.weight_ih_l0:0.111(r=0.023), pred.2.bias:0.071(r=2.642)
+[TUNE] total_grad_norm=0.552562  head_frac=1.382
+[E35 B000] Loss→ MSE=0.0188  lr=3.2960e-06  slip_frac=0.000
+[TUNE] opt_lr=3.2960e-06  batch_loss=0.018836  tr_rmse=0.1372  tr_r2=0.227  vl_rmse=0.1735  vl_r2=0.431  vl_loss=0.030111  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E36 B000] GradNorm→ reg=0.643  cls=0.000  ter=0.000 | total_norm=0.482 median=0.019 p90=0.177 max=0.301 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.301(r=0.046), pred.2.weight:0.261(r=0.450), short2long.weight:0.177(r=0.019), conv.weight:0.153(r=0.065), short_lstm.weight_ih_l0:0.086(r=0.018), short_lstm.weight_ih_l0_reverse:0.064(r=0.013)
+[TUNE] total_grad_norm=0.481641  head_frac=1.334
+[E36 B000] Loss→ MSE=0.0211  lr=3.5932e-06  slip_frac=0.000
+[TUNE] opt_lr=3.5932e-06  batch_loss=0.021092  tr_rmse=0.1452  tr_r2=0.240  vl_rmse=0.1721  vl_r2=0.441  vl_loss=0.029601  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E37 B000] GradNorm→ reg=0.357  cls=0.000  ter=0.000 | total_norm=0.307 median=0.010 p90=0.130 max=0.206 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.206(r=0.032), pred.2.weight:0.131(r=0.225), short2long.weight:0.130(r=0.014), conv.weight:0.090(r=0.038), short_lstm.weight_ih_l0:0.073(r=0.015), short_lstm.weight_ih_l0_reverse:0.049(r=0.010)
+[TUNE] total_grad_norm=0.307261  head_frac=1.162
+[E37 B000] Loss→ MSE=0.0206  lr=3.1707e-06  slip_frac=0.000
+[TUNE] opt_lr=3.1707e-06  batch_loss=0.020602  tr_rmse=0.1435  tr_r2=0.230  vl_rmse=0.1726  vl_r2=0.437  vl_loss=0.029795  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E38 B000] GradNorm→ reg=0.424  cls=0.000  ter=0.000 | total_norm=0.355 median=0.011 p90=0.153 max=0.237 min=0.000 zero_frac=0.000 param_norm=27.531
+Top6_grads: pred.0.weight:0.237(r=0.036), pred.2.weight:0.154(r=0.266), short2long.weight:0.153(r=0.016), conv.weight:0.105(r=0.044), short_lstm.weight_ih_l0:0.082(r=0.017), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.354591  head_frac=1.196
+[E38 B000] Loss→ MSE=0.0218  lr=3.1067e-06  slip_frac=0.000
+[TUNE] opt_lr=3.1067e-06  batch_loss=0.021766  tr_rmse=0.1475  tr_r2=0.217  vl_rmse=0.1734  vl_r2=0.432  vl_loss=0.030066  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+--------------------------------------------------------------------------------
+
+RUN START: 2025-10-06T18:05:53.449909Z
+
+PARAMETER NAMES:
+  conv.weight
+  conv.bias
+  bn.weight
+  bn.bias
+  short_lstm.weight_ih_l0
+  short_lstm.weight_hh_l0
+  short_lstm.bias_ih_l0
+  short_lstm.bias_hh_l0
+  short_lstm.weight_ih_l0_reverse
+  short_lstm.weight_hh_l0_reverse
+  short_lstm.bias_ih_l0_reverse
+  short_lstm.bias_hh_l0_reverse
+  ln_short.weight
+  ln_short.bias
+  short2long.weight
+  short2long.bias
+  ln_long.weight
+  ln_long.bias
+  pred.0.weight
+  pred.0.bias
+  pred.2.weight
+  pred.2.bias
+
+HYPERPARAMS:
+  INITIAL_LR = 5e-06
+  SHORT_UNITS = 128
+  LONG_UNITS = 256
+  PRED_HIDDEN = 128
+  DROPOUT_SHORT = 0.3
+  DROPOUT_LONG = 0.3
+  CLIPNORM = 1.0
+  WEIGHT_DECAY = 0.0003
+  TRAIN_BATCH = 64
+  DIFF1_WEIGHT = 1.0
+  DIFF2_WEIGHT = 2.0
+  SMOOTH_ALPHA = 0.05
+  SMOOTH_BETA = 100.0
+  SMOOTH_DELTA = 0.02
+
+[E01 B000] GradNorm→ reg=1.404  cls=0.000  ter=0.000 | total_norm=1.000 median=0.042 p90=0.379 max=0.660 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.660(r=0.100), pred.2.weight:0.576(r=0.979), short2long.weight:0.379(r=0.041), short_lstm.weight_ih_l0:0.174(r=0.037), conv.weight:0.136(r=0.056), pred.2.bias:0.123(r=1.802)
+[TUNE] total_grad_norm=0.999999  head_frac=1.404
+[E01 B000] Loss→ MSE=0.1175  lr=4.9988e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9988e-06  batch_loss=0.117550  tr_rmse=0.3429  tr_r2=-1.690  vl_rmse=0.2347  vl_r2=-0.041  vl_loss=0.055080  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E02 B000] GradNorm→ reg=0.949  cls=0.000  ter=0.000 | total_norm=0.734 median=0.029 p90=0.320 max=0.490 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.490(r=0.074), pred.2.weight:0.361(r=0.613), short2long.weight:0.320(r=0.035), short_lstm.weight_ih_l0:0.149(r=0.032), conv.weight:0.144(r=0.060), short_lstm.weight_ih_l0_reverse:0.094(r=0.020)
+[TUNE] total_grad_norm=0.733554  head_frac=1.293
+[E02 B000] Loss→ MSE=0.0692  lr=4.4956e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4956e-06  batch_loss=0.069171  tr_rmse=0.2630  tr_r2=-0.583  vl_rmse=0.2472  vl_r2=-0.154  vl_loss=0.061109  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E03 B000] GradNorm→ reg=0.605  cls=0.000  ter=0.000 | total_norm=0.508 median=0.015 p90=0.214 max=0.348 min=0.000 zero_frac=0.000 param_norm=27.533
+Top6_grads: pred.0.weight:0.348(r=0.053), short2long.weight:0.226(r=0.024), pred.2.weight:0.214(r=0.364), short_lstm.weight_ih_l0:0.125(r=0.027), conv.weight:0.117(r=0.049), short_lstm.weight_ih_l0_reverse:0.068(r=0.014)
+[TUNE] total_grad_norm=0.507787  head_frac=1.191
+[E03 B000] Loss→ MSE=0.0616  lr=4.4902e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4902e-06  batch_loss=0.061595  tr_rmse=0.2482  tr_r2=-0.409  vl_rmse=0.2455  vl_r2=-0.139  vl_loss=0.060273  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E04 B000] GradNorm→ reg=0.827  cls=0.000  ter=0.000 | total_norm=0.642 median=0.022 p90=0.262 max=0.426 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.426(r=0.065), pred.2.weight:0.329(r=0.561), short2long.weight:0.262(r=0.028), conv.weight:0.146(r=0.060), short_lstm.weight_ih_l0:0.125(r=0.026), short_lstm.weight_ih_l0_reverse:0.085(r=0.018)
+[TUNE] total_grad_norm=0.642070  head_frac=1.289
+[E04 B000] Loss→ MSE=0.0588  lr=4.4826e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4826e-06  batch_loss=0.058773  tr_rmse=0.2424  tr_r2=-0.345  vl_rmse=0.2396  vl_r2=-0.085  vl_loss=0.057423  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E05 B000] GradNorm→ reg=1.069  cls=0.000  ter=0.000 | total_norm=0.802 median=0.034 p90=0.320 max=0.527 min=0.000 zero_frac=0.000 param_norm=27.532
+Top6_grads: pred.0.weight:0.527(r=0.080), pred.2.weight:0.415(r=0.708), short2long.weight:0.320(r=0.035), conv.weight:0.205(r=0.085), short_lstm.weight_ih_l0:0.147(r=0.031), pred.2.bias:0.093(r=1.360)
+[TUNE] total_grad_norm=0.802010  head_frac=1.333
+[E05 B000] Loss→ MSE=0.0589  lr=4.4729e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4729e-06  batch_loss=0.058949  tr_rmse=0.2428  tr_r2=-0.349  vl_rmse=0.2366  vl_r2=-0.057  vl_loss=0.055971  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E06 B000] GradNorm→ reg=0.508  cls=0.000  ter=0.000 | total_norm=0.435 median=0.012 p90=0.191 max=0.298 min=0.000 zero_frac=0.000 param_norm=27.531
+Top6_grads: pred.0.weight:0.298(r=0.045), pred.2.weight:0.192(r=0.328), short2long.weight:0.191(r=0.021), conv.weight:0.111(r=0.046), short_lstm.weight_ih_l0:0.091(r=0.019), short_lstm.weight_ih_l0_reverse:0.060(r=0.013)
+[TUNE] total_grad_norm=0.434812  head_frac=1.169
+[E06 B000] Loss→ MSE=0.0559  lr=4.4609e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4609e-06  batch_loss=0.055907  tr_rmse=0.2364  tr_r2=-0.279  vl_rmse=0.2367  vl_r2=-0.059  vl_loss=0.056030  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E07 B000] GradNorm→ reg=0.331  cls=0.000  ter=0.000 | total_norm=0.300 median=0.009 p90=0.111 max=0.211 min=0.000 zero_frac=0.000 param_norm=27.531
+Top6_grads: pred.0.weight:0.211(r=0.032), short2long.weight:0.139(r=0.015), pred.2.weight:0.111(r=0.190), short_lstm.weight_ih_l0:0.076(r=0.016), conv.weight:0.068(r=0.028), short_lstm.weight_ih_l0_reverse:0.045(r=0.009)
+[TUNE] total_grad_norm=0.300448  head_frac=1.102
+[E07 B000] Loss→ MSE=0.0529  lr=4.9410e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9410e-06  batch_loss=0.052874  tr_rmse=0.2299  tr_r2=-0.210  vl_rmse=0.2245  vl_r2=0.048  vl_loss=0.050415  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E08 B000] GradNorm→ reg=0.510  cls=0.000  ter=0.000 | total_norm=0.451 median=0.013 p90=0.179 max=0.317 min=0.000 zero_frac=0.000 param_norm=27.531
+Top6_grads: pred.0.weight:0.317(r=0.048), short2long.weight:0.197(r=0.021), pred.2.weight:0.179(r=0.306), conv.weight:0.128(r=0.053), short_lstm.weight_ih_l0:0.098(r=0.021), short_lstm.weight_ih_l0_reverse:0.055(r=0.012)
+[TUNE] total_grad_norm=0.451145  head_frac=1.130
+[E08 B000] Loss→ MSE=0.0506  lr=4.9230e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9230e-06  batch_loss=0.050619  tr_rmse=0.2250  tr_r2=-0.158  vl_rmse=0.2210  vl_r2=0.078  vl_loss=0.048821  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E09 B000] GradNorm→ reg=1.180  cls=0.000  ter=0.000 | total_norm=0.850 median=0.035 p90=0.314 max=0.537 min=0.000 zero_frac=0.000 param_norm=27.531
+Top6_grads: pred.0.weight:0.537(r=0.082), pred.2.weight:0.498(r=0.853), short2long.weight:0.314(r=0.034), conv.weight:0.193(r=0.080), short_lstm.weight_ih_l0:0.139(r=0.029), pred.2.bias:0.108(r=1.585)
+[TUNE] total_grad_norm=0.850210  head_frac=1.388
+[E09 B000] Loss→ MSE=0.0492  lr=4.9027e-06  slip_frac=0.000
+[TUNE] opt_lr=4.9027e-06  batch_loss=0.049178  tr_rmse=0.2218  tr_r2=-0.125  vl_rmse=0.2153  vl_r2=0.124  vl_loss=0.046344  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E10 B000] GradNorm→ reg=0.551  cls=0.000  ter=0.000 | total_norm=0.459 median=0.014 p90=0.198 max=0.316 min=0.000 zero_frac=0.000 param_norm=27.530
+Top6_grads: pred.0.weight:0.316(r=0.048), pred.2.weight:0.207(r=0.355), short2long.weight:0.198(r=0.021), conv.weight:0.113(r=0.047), short_lstm.weight_ih_l0:0.093(r=0.020), short_lstm.weight_ih_l0_reverse:0.066(r=0.014)
+[TUNE] total_grad_norm=0.459186  head_frac=1.200
+[E10 B000] Loss→ MSE=0.0490  lr=4.3921e-06  slip_frac=0.000
+[TUNE] opt_lr=4.3921e-06  batch_loss=0.049010  tr_rmse=0.2214  tr_r2=-0.121  vl_rmse=0.2175  vl_r2=0.107  vl_loss=0.047290  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E11 B000] GradNorm→ reg=0.972  cls=0.000  ter=0.000 | total_norm=0.696 median=0.028 p90=0.257 max=0.467 min=0.000 zero_frac=0.000 param_norm=27.530
+Top6_grads: pred.0.weight:0.467(r=0.071), pred.2.weight:0.385(r=0.661), short2long.weight:0.257(r=0.028), conv.weight:0.133(r=0.055), short_lstm.weight_ih_l0:0.121(r=0.026), pred.2.bias:0.088(r=1.279)
+[TUNE] total_grad_norm=0.695928  head_frac=1.396
+[E11 B000] Loss→ MSE=0.0463  lr=4.8552e-06  slip_frac=0.000
+[TUNE] opt_lr=4.8552e-06  batch_loss=0.046285  tr_rmse=0.2151  tr_r2=-0.059  vl_rmse=0.2116  vl_r2=0.154  vl_loss=0.044773  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E12 B000] GradNorm→ reg=0.514  cls=0.000  ter=0.000 | total_norm=0.412 median=0.013 p90=0.171 max=0.283 min=0.000 zero_frac=0.000 param_norm=27.530
+Top6_grads: pred.0.weight:0.283(r=0.043), pred.2.weight:0.187(r=0.321), short2long.weight:0.171(r=0.018), conv.weight:0.112(r=0.046), short_lstm.weight_ih_l0:0.086(r=0.018), short_lstm.weight_ih_l0_reverse:0.047(r=0.010)
+[TUNE] total_grad_norm=0.411987  head_frac=1.247
+[E12 B000] Loss→ MSE=0.0462  lr=4.8280e-06  slip_frac=0.000
+[TUNE] opt_lr=4.8280e-06  batch_loss=0.046184  tr_rmse=0.2149  tr_r2=-0.057  vl_rmse=0.2100  vl_r2=0.167  vl_loss=0.044109  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E13 B000] GradNorm→ reg=0.665  cls=0.000  ter=0.000 | total_norm=0.500 median=0.020 p90=0.193 max=0.347 min=0.000 zero_frac=0.000 param_norm=27.530
+Top6_grads: pred.0.weight:0.347(r=0.053), pred.2.weight:0.249(r=0.428), short2long.weight:0.193(r=0.021), short_lstm.weight_ih_l0:0.108(r=0.023), conv.weight:0.094(r=0.039), short_lstm.weight_ih_l0_reverse:0.059(r=0.013)
+[TUNE] total_grad_norm=0.500386  head_frac=1.330
+[E13 B000] Loss→ MSE=0.0461  lr=4.7985e-06  slip_frac=0.000
+[TUNE] opt_lr=4.7985e-06  batch_loss=0.046085  tr_rmse=0.2147  tr_r2=-0.054  vl_rmse=0.2065  vl_r2=0.194  vl_loss=0.042659  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E14 B000] GradNorm→ reg=0.418  cls=0.000  ter=0.000 | total_norm=0.355 median=0.010 p90=0.151 max=0.242 min=0.000 zero_frac=0.000 param_norm=27.529
+Top6_grads: pred.0.weight:0.242(r=0.037), short2long.weight:0.153(r=0.017), pred.2.weight:0.151(r=0.260), conv.weight:0.104(r=0.043), short_lstm.weight_ih_l0:0.078(r=0.016), short_lstm.weight_ih_l0_reverse:0.043(r=0.009)
+[TUNE] total_grad_norm=0.354684  head_frac=1.178
+[E14 B000] Loss→ MSE=0.0445  lr=4.7668e-06  slip_frac=0.000
+[TUNE] opt_lr=4.7668e-06  batch_loss=0.044506  tr_rmse=0.2110  tr_r2=-0.018  vl_rmse=0.2049  vl_r2=0.207  vl_loss=0.041991  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E15 B000] GradNorm→ reg=0.315  cls=0.000  ter=0.000 | total_norm=0.280 median=0.008 p90=0.109 max=0.197 min=0.000 zero_frac=0.000 param_norm=27.529
+Top6_grads: pred.0.weight:0.197(r=0.030), short2long.weight:0.129(r=0.014), pred.2.weight:0.109(r=0.188), conv.weight:0.066(r=0.027), short_lstm.weight_ih_l0:0.065(r=0.014), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.279966  head_frac=1.125
+[E15 B000] Loss→ MSE=0.0425  lr=4.7330e-06  slip_frac=0.000
+[TUNE] opt_lr=4.7330e-06  batch_loss=0.042531  tr_rmse=0.2062  tr_r2=0.027  vl_rmse=0.2010  vl_r2=0.237  vl_loss=0.040401  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E16 B000] GradNorm→ reg=0.901  cls=0.000  ter=0.000 | total_norm=0.650 median=0.027 p90=0.244 max=0.432 min=0.000 zero_frac=0.000 param_norm=27.529
+Top6_grads: pred.0.weight:0.432(r=0.066), pred.2.weight:0.364(r=0.626), short2long.weight:0.244(r=0.026), conv.weight:0.131(r=0.054), short_lstm.weight_ih_l0:0.106(r=0.022), pred.2.bias:0.079(r=1.147)
+[TUNE] total_grad_norm=0.649600  head_frac=1.388
+[E16 B000] Loss→ MSE=0.0418  lr=4.6970e-06  slip_frac=0.000
+[TUNE] opt_lr=4.6970e-06  batch_loss=0.041843  tr_rmse=0.2046  tr_r2=0.043  vl_rmse=0.1971  vl_r2=0.266  vl_loss=0.038853  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E17 B000] GradNorm→ reg=0.367  cls=0.000  ter=0.000 | total_norm=0.320 median=0.010 p90=0.123 max=0.227 min=0.000 zero_frac=0.000 param_norm=27.529
+Top6_grads: pred.0.weight:0.227(r=0.034), short2long.weight:0.133(r=0.014), pred.2.weight:0.123(r=0.213), conv.weight:0.096(r=0.039), short_lstm.weight_ih_l0:0.067(r=0.014), short_lstm.weight_ih_l0_reverse:0.050(r=0.011)
+[TUNE] total_grad_norm=0.319990  head_frac=1.148
+[E17 B000] Loss→ MSE=0.0417  lr=4.6588e-06  slip_frac=0.000
+[TUNE] opt_lr=4.6588e-06  batch_loss=0.041661  tr_rmse=0.2041  tr_r2=0.047  vl_rmse=0.1963  vl_r2=0.272  vl_loss=0.038534  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E18 B000] GradNorm→ reg=0.379  cls=0.000  ter=0.000 | total_norm=0.325 median=0.009 p90=0.137 max=0.227 min=0.000 zero_frac=0.000 param_norm=27.528
+Top6_grads: pred.0.weight:0.227(r=0.034), pred.2.weight:0.140(r=0.242), short2long.weight:0.137(r=0.015), conv.weight:0.082(r=0.034), short_lstm.weight_ih_l0:0.073(r=0.015), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.325142  head_frac=1.165
+[E18 B000] Loss→ MSE=0.0415  lr=4.6186e-06  slip_frac=0.000
+[TUNE] opt_lr=4.6186e-06  batch_loss=0.041542  tr_rmse=0.2038  tr_r2=0.049  vl_rmse=0.1941  vl_r2=0.288  vl_loss=0.037680  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E19 B000] GradNorm→ reg=0.514  cls=0.000  ter=0.000 | total_norm=0.412 median=0.013 p90=0.162 max=0.277 min=0.000 zero_frac=0.000 param_norm=27.528
+Top6_grads: pred.0.weight:0.277(r=0.042), pred.2.weight:0.191(r=0.329), short2long.weight:0.162(r=0.018), conv.weight:0.132(r=0.055), short_lstm.weight_ih_l0:0.086(r=0.018), short_lstm.weight_ih_l0_reverse:0.045(r=0.009)
+[TUNE] total_grad_norm=0.412324  head_frac=1.246
+[E19 B000] Loss→ MSE=0.0406  lr=4.5763e-06  slip_frac=0.000
+[TUNE] opt_lr=4.5763e-06  batch_loss=0.040641  tr_rmse=0.2016  tr_r2=0.070  vl_rmse=0.1940  vl_r2=0.289  vl_loss=0.037645  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E20 B000] GradNorm→ reg=0.389  cls=0.000  ter=0.000 | total_norm=0.325 median=0.008 p90=0.132 max=0.230 min=0.000 zero_frac=0.000 param_norm=27.528
+Top6_grads: pred.0.weight:0.230(r=0.035), pred.2.weight:0.146(r=0.251), short2long.weight:0.132(r=0.014), conv.weight:0.086(r=0.036), short_lstm.weight_ih_l0:0.061(r=0.013), short_lstm.weight_ih_l0_reverse:0.043(r=0.009)
+[TUNE] total_grad_norm=0.325194  head_frac=1.196
+[E20 B000] Loss→ MSE=0.0392  lr=4.5321e-06  slip_frac=0.000
+[TUNE] opt_lr=4.5321e-06  batch_loss=0.039164  tr_rmse=0.1979  tr_r2=0.104  vl_rmse=0.1905  vl_r2=0.314  vl_loss=0.036302  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E21 B000] GradNorm→ reg=0.485  cls=0.000  ter=0.000 | total_norm=0.386 median=0.012 p90=0.151 max=0.260 min=0.000 zero_frac=0.000 param_norm=27.528
+Top6_grads: pred.0.weight:0.260(r=0.040), pred.2.weight:0.194(r=0.335), short2long.weight:0.151(r=0.016), conv.weight:0.097(r=0.040), short_lstm.weight_ih_l0:0.082(r=0.017), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.385723  head_frac=1.257
+[E21 B000] Loss→ MSE=0.0388  lr=4.4859e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4859e-06  batch_loss=0.038761  tr_rmse=0.1969  tr_r2=0.113  vl_rmse=0.1889  vl_r2=0.326  vl_loss=0.035695  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E22 B000] GradNorm→ reg=0.394  cls=0.000  ter=0.000 | total_norm=0.330 median=0.009 p90=0.132 max=0.235 min=0.000 zero_frac=0.000 param_norm=27.528
+Top6_grads: pred.0.weight:0.235(r=0.036), pred.2.weight:0.142(r=0.245), short2long.weight:0.132(r=0.014), conv.weight:0.083(r=0.034), short_lstm.weight_ih_l0:0.073(r=0.016), short_lstm.weight_ih_l0_reverse:0.043(r=0.009)
+[TUNE] total_grad_norm=0.330048  head_frac=1.194
+[E22 B000] Loss→ MSE=0.0388  lr=4.4378e-06  slip_frac=0.000
+[TUNE] opt_lr=4.4378e-06  batch_loss=0.038812  tr_rmse=0.1970  tr_r2=0.112  vl_rmse=0.1876  vl_r2=0.335  vl_loss=0.035181  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E23 B000] GradNorm→ reg=0.324  cls=0.000  ter=0.000 | total_norm=0.274 median=0.007 p90=0.113 max=0.197 min=0.000 zero_frac=0.000 param_norm=27.527
+Top6_grads: pred.0.weight:0.197(r=0.030), pred.2.weight:0.119(r=0.206), short2long.weight:0.113(r=0.012), conv.weight:0.063(r=0.026), short_lstm.weight_ih_l0:0.055(r=0.012), short_lstm.weight_ih_l0_reverse:0.035(r=0.007)
+[TUNE] total_grad_norm=0.273725  head_frac=1.185
+[E23 B000] Loss→ MSE=0.0382  lr=4.3878e-06  slip_frac=0.000
+[TUNE] opt_lr=4.3878e-06  batch_loss=0.038162  tr_rmse=0.1954  tr_r2=0.127  vl_rmse=0.1865  vl_r2=0.343  vl_loss=0.034769  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E24 B000] GradNorm→ reg=0.736  cls=0.000  ter=0.000 | total_norm=0.544 median=0.023 p90=0.185 max=0.361 min=0.000 zero_frac=0.000 param_norm=27.527
+Top6_grads: pred.0.weight:0.361(r=0.055), pred.2.weight:0.283(r=0.491), short2long.weight:0.185(r=0.020), conv.weight:0.173(r=0.071), short_lstm.weight_ih_l0:0.094(r=0.020), pred.2.bias:0.069(r=1.005)
+[TUNE] total_grad_norm=0.544339  head_frac=1.353
+[E24 B000] Loss→ MSE=0.0372  lr=4.3360e-06  slip_frac=0.000
+[TUNE] opt_lr=4.3360e-06  batch_loss=0.037213  tr_rmse=0.1929  tr_r2=0.149  vl_rmse=0.1855  vl_r2=0.350  vl_loss=0.034405  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E25 B000] GradNorm→ reg=0.638  cls=0.000  ter=0.000 | total_norm=0.449 median=0.017 p90=0.142 max=0.290 min=0.000 zero_frac=0.000 param_norm=27.527
+Top6_grads: pred.0.weight:0.290(r=0.044), pred.2.weight:0.272(r=0.471), short2long.weight:0.142(r=0.015), conv.weight:0.111(r=0.046), short_lstm.weight_ih_l0:0.070(r=0.015), pred.2.bias:0.058(r=0.839)
+[TUNE] total_grad_norm=0.449264  head_frac=1.420
+[E25 B000] Loss→ MSE=0.0372  lr=3.8542e-06  slip_frac=0.000
+[TUNE] opt_lr=3.8542e-06  batch_loss=0.037150  tr_rmse=0.1927  tr_r2=0.150  vl_rmse=0.1855  vl_r2=0.350  vl_loss=0.034428  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E26 B000] GradNorm→ reg=0.432  cls=0.000  ter=0.000 | total_norm=0.333 median=0.012 p90=0.127 max=0.235 min=0.000 zero_frac=0.000 param_norm=27.527
+Top6_grads: pred.0.weight:0.235(r=0.036), pred.2.weight:0.159(r=0.275), short2long.weight:0.127(r=0.014), conv.weight:0.073(r=0.030), short_lstm.weight_ih_l0:0.067(r=0.014), short_lstm.weight_ih_l0_reverse:0.041(r=0.009)
+[TUNE] total_grad_norm=0.332524  head_frac=1.299
+[E26 B000] Loss→ MSE=0.0377  lr=4.2271e-06  slip_frac=0.000
+[TUNE] opt_lr=4.2271e-06  batch_loss=0.037657  tr_rmse=0.1941  tr_r2=0.138  vl_rmse=0.1831  vl_r2=0.367  vl_loss=0.033519  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E27 B000] GradNorm→ reg=0.555  cls=0.000  ter=0.000 | total_norm=0.407 median=0.016 p90=0.157 max=0.282 min=0.000 zero_frac=0.000 param_norm=27.527
+Top6_grads: pred.0.weight:0.282(r=0.043), pred.2.weight:0.211(r=0.366), short2long.weight:0.157(r=0.017), conv.weight:0.080(r=0.033), short_lstm.weight_ih_l0:0.068(r=0.014), short_lstm.weight_ih_l0_reverse:0.046(r=0.010)
+[TUNE] total_grad_norm=0.407245  head_frac=1.362
+[E27 B000] Loss→ MSE=0.0377  lr=4.1702e-06  slip_frac=0.000
+[TUNE] opt_lr=4.1702e-06  batch_loss=0.037704  tr_rmse=0.1942  tr_r2=0.137  vl_rmse=0.1826  vl_r2=0.370  vl_loss=0.033342  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E28 B000] GradNorm→ reg=0.592  cls=0.000  ter=0.000 | total_norm=0.450 median=0.015 p90=0.165 max=0.294 min=0.000 zero_frac=0.000 param_norm=27.526
+Top6_grads: pred.0.weight:0.294(r=0.045), pred.2.weight:0.243(r=0.422), short2long.weight:0.165(r=0.018), conv.weight:0.136(r=0.056), short_lstm.weight_ih_l0:0.069(r=0.015), short_lstm.weight_ih_l0_reverse:0.051(r=0.011)
+[TUNE] total_grad_norm=0.449873  head_frac=1.317
+[E28 B000] Loss→ MSE=0.0373  lr=4.1117e-06  slip_frac=0.000
+[TUNE] opt_lr=4.1117e-06  batch_loss=0.037267  tr_rmse=0.1930  tr_r2=0.147  vl_rmse=0.1824  vl_r2=0.371  vl_loss=0.033288  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E29 B000] GradNorm→ reg=0.373  cls=0.000  ter=0.000 | total_norm=0.311 median=0.010 p90=0.118 max=0.199 min=0.000 zero_frac=0.000 param_norm=27.526
+Top6_grads: pred.0.weight:0.199(r=0.030), pred.2.weight:0.140(r=0.243), short2long.weight:0.118(r=0.013), conv.weight:0.116(r=0.048), short_lstm.weight_ih_l0:0.076(r=0.016), short_lstm.weight_ih_l0_reverse:0.041(r=0.009)
+[TUNE] total_grad_norm=0.311116  head_frac=1.198
+[E29 B000] Loss→ MSE=0.0366  lr=4.0516e-06  slip_frac=0.000
+[TUNE] opt_lr=4.0516e-06  batch_loss=0.036643  tr_rmse=0.1914  tr_r2=0.162  vl_rmse=0.1793  vl_r2=0.392  vl_loss=0.032158  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E30 B000] GradNorm→ reg=0.564  cls=0.000  ter=0.000 | total_norm=0.434 median=0.019 p90=0.162 max=0.297 min=0.000 zero_frac=0.000 param_norm=27.526
+Top6_grads: pred.0.weight:0.297(r=0.045), pred.2.weight:0.201(r=0.348), short2long.weight:0.162(r=0.018), conv.weight:0.135(r=0.056), short_lstm.weight_ih_l0:0.089(r=0.019), pred.2.bias:0.048(r=0.694)
+[TUNE] total_grad_norm=0.433796  head_frac=1.299
+[E30 B000] Loss→ MSE=0.0364  lr=3.5911e-06  slip_frac=0.000
+[TUNE] opt_lr=3.5911e-06  batch_loss=0.036400  tr_rmse=0.1908  tr_r2=0.167  vl_rmse=0.1796  vl_r2=0.390  vl_loss=0.032267  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E31 B000] GradNorm→ reg=0.516  cls=0.000  ter=0.000 | total_norm=0.382 median=0.015 p90=0.147 max=0.264 min=0.000 zero_frac=0.000 param_norm=27.526
+Top6_grads: pred.0.weight:0.264(r=0.040), pred.2.weight:0.200(r=0.347), short2long.weight:0.147(r=0.016), conv.weight:0.068(r=0.028), short_lstm.weight_ih_l0:0.063(r=0.013), short_lstm.weight_ih_l0_reverse:0.054(r=0.011)
+[TUNE] total_grad_norm=0.382047  head_frac=1.351
+[E31 B000] Loss→ MSE=0.0357  lr=3.9271e-06  slip_frac=0.000
+[TUNE] opt_lr=3.9271e-06  batch_loss=0.035698  tr_rmse=0.1889  tr_r2=0.183  vl_rmse=0.1771  vl_r2=0.407  vl_loss=0.031370  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E32 B000] GradNorm→ reg=0.433  cls=0.000  ter=0.000 | total_norm=0.348 median=0.010 p90=0.126 max=0.249 min=0.000 zero_frac=0.000 param_norm=27.526
+Top6_grads: pred.0.weight:0.249(r=0.038), pred.2.weight:0.160(r=0.278), short2long.weight:0.126(r=0.014), conv.weight:0.101(r=0.042), short_lstm.weight_ih_l0:0.064(r=0.014), short_lstm.weight_ih_l0_reverse:0.041(r=0.009)
+[TUNE] total_grad_norm=0.348245  head_frac=1.244
+[E32 B000] Loss→ MSE=0.0352  lr=3.8628e-06  slip_frac=0.000
+[TUNE] opt_lr=3.8628e-06  batch_loss=0.035204  tr_rmse=0.1876  tr_r2=0.194  vl_rmse=0.1760  vl_r2=0.415  vl_loss=0.030972  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E33 B000] GradNorm→ reg=0.323  cls=0.000  ter=0.000 | total_norm=0.273 median=0.008 p90=0.107 max=0.197 min=0.000 zero_frac=0.000 param_norm=27.526
+Top6_grads: pred.0.weight:0.197(r=0.030), short2long.weight:0.109(r=0.012), pred.2.weight:0.107(r=0.186), conv.weight:0.073(r=0.030), short_lstm.weight_ih_l0:0.062(r=0.013), short_lstm.weight_ih_l0_reverse:0.041(r=0.009)
+[TUNE] total_grad_norm=0.273186  head_frac=1.183
+[E33 B000] Loss→ MSE=0.0345  lr=3.4174e-06  slip_frac=0.000
+[TUNE] opt_lr=3.4174e-06  batch_loss=0.034496  tr_rmse=0.1857  tr_r2=0.211  vl_rmse=0.1773  vl_r2=0.406  vl_loss=0.031423  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E34 B000] GradNorm→ reg=0.424  cls=0.000  ter=0.000 | total_norm=0.328 median=0.011 p90=0.131 max=0.232 min=0.000 zero_frac=0.000 param_norm=27.526
+Top6_grads: pred.0.weight:0.232(r=0.035), pred.2.weight:0.154(r=0.267), short2long.weight:0.131(r=0.014), conv.weight:0.078(r=0.032), short_lstm.weight_ih_l0:0.057(r=0.012), short_lstm.weight_ih_l0_reverse:0.035(r=0.007)
+[TUNE] total_grad_norm=0.327600  head_frac=1.295
+[E34 B000] Loss→ MSE=0.0350  lr=3.7303e-06  slip_frac=0.000
+[TUNE] opt_lr=3.7303e-06  batch_loss=0.035039  tr_rmse=0.1872  tr_r2=0.198  vl_rmse=0.1750  vl_r2=0.422  vl_loss=0.030611  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E35 B000] GradNorm→ reg=0.439  cls=0.000  ter=0.000 | total_norm=0.338 median=0.011 p90=0.121 max=0.224 min=0.000 zero_frac=0.000 param_norm=27.525
+Top6_grads: pred.0.weight:0.224(r=0.034), pred.2.weight:0.176(r=0.307), short2long.weight:0.121(r=0.013), conv.weight:0.099(r=0.041), short_lstm.weight_ih_l0:0.064(r=0.014), short_lstm.weight_ih_l0_reverse:0.039(r=0.008)
+[TUNE] total_grad_norm=0.337506  head_frac=1.300
+[E35 B000] Loss→ MSE=0.0337  lr=3.6623e-06  slip_frac=0.000
+[TUNE] opt_lr=3.6623e-06  batch_loss=0.033651  tr_rmse=0.1834  tr_r2=0.230  vl_rmse=0.1743  vl_r2=0.426  vl_loss=0.030395  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E36 B000] GradNorm→ reg=0.589  cls=0.000  ter=0.000 | total_norm=0.433 median=0.016 p90=0.159 max=0.291 min=0.000 zero_frac=0.000 param_norm=27.525
+Top6_grads: pred.0.weight:0.291(r=0.044), pred.2.weight:0.240(r=0.417), short2long.weight:0.159(r=0.017), conv.weight:0.089(r=0.037), short_lstm.weight_ih_l0:0.071(r=0.015), short_lstm.weight_ih_l0_reverse:0.057(r=0.012)
+[TUNE] total_grad_norm=0.433101  head_frac=1.361
+[E36 B000] Loss→ MSE=0.0350  lr=3.5932e-06  slip_frac=0.000
+[TUNE] opt_lr=3.5932e-06  batch_loss=0.034958  tr_rmse=0.1870  tr_r2=0.200  vl_rmse=0.1732  vl_r2=0.433  vl_loss=0.029994  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E37 B000] GradNorm→ reg=0.346  cls=0.000  ter=0.000 | total_norm=0.291 median=0.009 p90=0.114 max=0.203 min=0.000 zero_frac=0.000 param_norm=27.525
+Top6_grads: pred.0.weight:0.203(r=0.031), pred.2.weight:0.120(r=0.210), short2long.weight:0.114(r=0.012), conv.weight:0.094(r=0.039), short_lstm.weight_ih_l0:0.057(r=0.012), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.290710  head_frac=1.189
+[E37 B000] Loss→ MSE=0.0344  lr=3.5230e-06  slip_frac=0.000
+[TUNE] opt_lr=3.5230e-06  batch_loss=0.034351  tr_rmse=0.1853  tr_r2=0.214  vl_rmse=0.1726  vl_r2=0.437  vl_loss=0.029804  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E38 B000] GradNorm→ reg=0.289  cls=0.000  ter=0.000 | total_norm=0.240 median=0.006 p90=0.095 max=0.176 min=0.000 zero_frac=0.000 param_norm=27.525
+Top6_grads: pred.0.weight:0.176(r=0.027), pred.2.weight:0.105(r=0.183), short2long.weight:0.095(r=0.010), conv.weight:0.052(r=0.022), short_lstm.weight_ih_l0:0.046(r=0.010), short_lstm.weight_ih_l0_reverse:0.030(r=0.006)
+[TUNE] total_grad_norm=0.239940  head_frac=1.204
+[E38 B000] Loss→ MSE=0.0336  lr=3.4519e-06  slip_frac=0.000
+[TUNE] opt_lr=3.4519e-06  batch_loss=0.033612  tr_rmse=0.1833  tr_r2=0.231  vl_rmse=0.1719  vl_r2=0.442  vl_loss=0.029559  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E39 B000] GradNorm→ reg=0.421  cls=0.000  ter=0.000 | total_norm=0.351 median=0.010 p90=0.139 max=0.264 min=0.000 zero_frac=0.000 param_norm=27.525
+Top6_grads: pred.0.weight:0.264(r=0.040), short2long.weight:0.142(r=0.015), pred.2.weight:0.139(r=0.242), short_lstm.weight_ih_l0:0.074(r=0.016), conv.weight:0.067(r=0.028), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.350523  head_frac=1.202
+[E39 B000] Loss→ MSE=0.0334  lr=3.3799e-06  slip_frac=0.000
+[TUNE] opt_lr=3.3799e-06  batch_loss=0.033387  tr_rmse=0.1827  tr_r2=0.236  vl_rmse=0.1714  vl_r2=0.445  vl_loss=0.029382  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E40 B000] GradNorm→ reg=0.404  cls=0.000  ter=0.000 | total_norm=0.324 median=0.010 p90=0.119 max=0.222 min=0.000 zero_frac=0.000 param_norm=27.525
+Top6_grads: pred.0.weight:0.222(r=0.034), pred.2.weight:0.148(r=0.258), short2long.weight:0.119(r=0.013), conv.weight:0.105(r=0.043), short_lstm.weight_ih_l0:0.068(r=0.014), short_lstm.weight_ih_l0_reverse:0.042(r=0.009)
+[TUNE] total_grad_norm=0.323500  head_frac=1.250
+[E40 B000] Loss→ MSE=0.0342  lr=3.3071e-06  slip_frac=0.000
+[TUNE] opt_lr=3.3071e-06  batch_loss=0.034204  tr_rmse=0.1849  tr_r2=0.217  vl_rmse=0.1710  vl_r2=0.447  vl_loss=0.029247  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E41 B000] GradNorm→ reg=0.339  cls=0.000  ter=0.000 | total_norm=0.280 median=0.009 p90=0.107 max=0.192 min=0.000 zero_frac=0.000 param_norm=27.525
+Top6_grads: pred.0.weight:0.192(r=0.029), pred.2.weight:0.121(r=0.211), short2long.weight:0.107(r=0.012), conv.weight:0.101(r=0.042), short_lstm.weight_ih_l0:0.053(r=0.011), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.279811  head_frac=1.211
+[E41 B000] Loss→ MSE=0.0337  lr=3.2335e-06  slip_frac=0.000
+[TUNE] opt_lr=3.2335e-06  batch_loss=0.033736  tr_rmse=0.1837  tr_r2=0.228  vl_rmse=0.1706  vl_r2=0.450  vl_loss=0.029099  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E42 B000] GradNorm→ reg=0.367  cls=0.000  ter=0.000 | total_norm=0.313 median=0.008 p90=0.123 max=0.227 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.227(r=0.034), pred.2.weight:0.129(r=0.226), short2long.weight:0.123(r=0.013), conv.weight:0.079(r=0.033), short_lstm.weight_ih_l0:0.075(r=0.016), short_lstm.weight_ih_l0_reverse:0.035(r=0.007)
+[TUNE] total_grad_norm=0.312906  head_frac=1.174
+[E42 B000] Loss→ MSE=0.0340  lr=3.1593e-06  slip_frac=0.000
+[TUNE] opt_lr=3.1593e-06  batch_loss=0.033982  tr_rmse=0.1843  tr_r2=0.222  vl_rmse=0.1697  vl_r2=0.456  vl_loss=0.028787  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E43 B000] GradNorm→ reg=0.481  cls=0.000  ter=0.000 | total_norm=0.366 median=0.012 p90=0.134 max=0.267 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.267(r=0.041), pred.2.weight:0.179(r=0.312), short2long.weight:0.134(r=0.015), conv.weight:0.086(r=0.035), short_lstm.weight_ih_l0:0.052(r=0.011), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.366432  head_frac=1.313
+[E43 B000] Loss→ MSE=0.0333  lr=2.7760e-06  slip_frac=0.000
+[TUNE] opt_lr=2.7760e-06  batch_loss=0.033347  tr_rmse=0.1826  tr_r2=0.237  vl_rmse=0.1700  vl_r2=0.454  vl_loss=0.028910  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E44 B000] GradNorm→ reg=0.491  cls=0.000  ter=0.000 | total_norm=0.362 median=0.014 p90=0.117 max=0.230 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.230(r=0.035), pred.2.weight:0.204(r=0.357), short2long.weight:0.117(r=0.013), conv.weight:0.116(r=0.048), short_lstm.weight_ih_l0:0.063(r=0.013), pred.2.bias:0.043(r=0.620)
+[TUNE] total_grad_norm=0.361519  head_frac=1.357
+[E44 B000] Loss→ MSE=0.0333  lr=3.0091e-06  slip_frac=0.000
+[TUNE] opt_lr=3.0091e-06  batch_loss=0.033331  tr_rmse=0.1826  tr_r2=0.237  vl_rmse=0.1689  vl_r2=0.461  vl_loss=0.028512  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E45 B000] GradNorm→ reg=0.420  cls=0.000  ter=0.000 | total_norm=0.316 median=0.010 p90=0.111 max=0.214 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.214(r=0.032), pred.2.weight:0.169(r=0.295), short2long.weight:0.111(r=0.012), conv.weight:0.084(r=0.035), short_lstm.weight_ih_l0:0.054(r=0.012), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.315525  head_frac=1.331
+[E45 B000] Loss→ MSE=0.0332  lr=2.6399e-06  slip_frac=0.000
+[TUNE] opt_lr=2.6399e-06  batch_loss=0.033153  tr_rmse=0.1821  tr_r2=0.241  vl_rmse=0.1692  vl_r2=0.459  vl_loss=0.028639  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E46 B000] GradNorm→ reg=0.370  cls=0.000  ter=0.000 | total_norm=0.323 median=0.009 p90=0.124 max=0.215 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.215(r=0.033), pred.2.weight:0.141(r=0.246), short2long.weight:0.124(r=0.013), conv.weight:0.113(r=0.046), short_lstm.weight_ih_l0:0.082(r=0.017), short_lstm.weight_ih_l0_reverse:0.038(r=0.008)
+[TUNE] total_grad_norm=0.322972  head_frac=1.146
+[E46 B000] Loss→ MSE=0.0325  lr=2.5714e-06  slip_frac=0.000
+[TUNE] opt_lr=2.5714e-06  batch_loss=0.032489  tr_rmse=0.1802  tr_r2=0.257  vl_rmse=0.1689  vl_r2=0.461  vl_loss=0.028529  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E47 B000] GradNorm→ reg=0.346  cls=0.000  ter=0.000 | total_norm=0.295 median=0.008 p90=0.116 max=0.216 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.216(r=0.033), pred.2.weight:0.120(r=0.210), short2long.weight:0.116(r=0.013), short_lstm.weight_ih_l0:0.068(r=0.014), conv.weight:0.065(r=0.027), short_lstm.weight_ih_l0_reverse:0.043(r=0.009)
+[TUNE] total_grad_norm=0.294687  head_frac=1.173
+[E47 B000] Loss→ MSE=0.0325  lr=2.7806e-06  slip_frac=0.000
+[TUNE] opt_lr=2.7806e-06  batch_loss=0.032501  tr_rmse=0.1803  tr_r2=0.256  vl_rmse=0.1686  vl_r2=0.463  vl_loss=0.028415  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E48 B000] GradNorm→ reg=0.290  cls=0.000  ter=0.000 | total_norm=0.235 median=0.007 p90=0.097 max=0.172 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.172(r=0.026), short2long.weight:0.097(r=0.011), pred.2.weight:0.097(r=0.170), conv.weight:0.052(r=0.021), short_lstm.weight_ih_l0:0.047(r=0.010), short_lstm.weight_ih_l0_reverse:0.031(r=0.006)
+[TUNE] total_grad_norm=0.235297  head_frac=1.232
+[E48 B000] Loss→ MSE=0.0333  lr=2.7038e-06  slip_frac=0.000
+[TUNE] opt_lr=2.7038e-06  batch_loss=0.033295  tr_rmse=0.1825  tr_r2=0.238  vl_rmse=0.1672  vl_r2=0.472  vl_loss=0.027957  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E49 B000] GradNorm→ reg=0.412  cls=0.000  ter=0.000 | total_norm=0.314 median=0.011 p90=0.111 max=0.214 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.214(r=0.032), pred.2.weight:0.161(r=0.281), short2long.weight:0.111(r=0.012), conv.weight:0.092(r=0.038), short_lstm.weight_ih_l0:0.060(r=0.013), short_lstm.weight_ih_l0_reverse:0.030(r=0.006)
+[TUNE] total_grad_norm=0.314061  head_frac=1.311
+[E49 B000] Loss→ MSE=0.0320  lr=2.3643e-06  slip_frac=0.000
+[TUNE] opt_lr=2.3643e-06  batch_loss=0.032036  tr_rmse=0.1790  tr_r2=0.267  vl_rmse=0.1674  vl_r2=0.471  vl_loss=0.028018  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E50 B000] GradNorm→ reg=0.415  cls=0.000  ter=0.000 | total_norm=0.312 median=0.011 p90=0.116 max=0.223 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.223(r=0.034), pred.2.weight:0.152(r=0.265), short2long.weight:0.116(r=0.013), conv.weight:0.066(r=0.027), short_lstm.weight_ih_l0:0.057(r=0.012), short_lstm.weight_ih_l0_reverse:0.037(r=0.008)
+[TUNE] total_grad_norm=0.312329  head_frac=1.328
+[E50 B000] Loss→ MSE=0.0322  lr=2.2950e-06  slip_frac=0.000
+[TUNE] opt_lr=2.2950e-06  batch_loss=0.032179  tr_rmse=0.1794  tr_r2=0.264  vl_rmse=0.1679  vl_r2=0.467  vl_loss=0.028198  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E51 B000] GradNorm→ reg=0.332  cls=0.000  ter=0.000 | total_norm=0.266 median=0.008 p90=0.099 max=0.191 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.191(r=0.029), pred.2.weight:0.121(r=0.211), short2long.weight:0.099(r=0.011), conv.weight:0.068(r=0.028), short_lstm.weight_ih_l0:0.053(r=0.011), short_lstm.weight_ih_l0_reverse:0.034(r=0.007)
+[TUNE] total_grad_norm=0.265845  head_frac=1.248
+[E51 B000] Loss→ MSE=0.0326  lr=2.4730e-06  slip_frac=0.000
+[TUNE] opt_lr=2.4730e-06  batch_loss=0.032606  tr_rmse=0.1806  tr_r2=0.254  vl_rmse=0.1669  vl_r2=0.473  vl_loss=0.027871  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E52 B000] GradNorm→ reg=0.391  cls=0.000  ter=0.000 | total_norm=0.300 median=0.010 p90=0.115 max=0.210 min=0.000 zero_frac=0.000 param_norm=27.524
+Top6_grads: pred.0.weight:0.210(r=0.032), pred.2.weight:0.150(r=0.263), short2long.weight:0.115(r=0.013), short_lstm.weight_ih_l0:0.061(r=0.013), conv.weight:0.054(r=0.022), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.299728  head_frac=1.303
+[E52 B000] Loss→ MSE=0.0320  lr=2.1565e-06  slip_frac=0.000
+[TUNE] opt_lr=2.1565e-06  batch_loss=0.032014  tr_rmse=0.1789  tr_r2=0.267  vl_rmse=0.1670  vl_r2=0.473  vl_loss=0.027896  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E53 B000] GradNorm→ reg=0.371  cls=0.000  ter=0.000 | total_norm=0.309 median=0.009 p90=0.121 max=0.221 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.221(r=0.034), pred.2.weight:0.130(r=0.228), short2long.weight:0.121(r=0.013), conv.weight:0.091(r=0.037), short_lstm.weight_ih_l0:0.062(r=0.013), short_lstm.weight_ih_l0_reverse:0.038(r=0.008)
+[TUNE] total_grad_norm=0.308776  head_frac=1.203
+[E53 B000] Loss→ MSE=0.0323  lr=2.3194e-06  slip_frac=0.000
+[TUNE] opt_lr=2.3194e-06  batch_loss=0.032257  tr_rmse=0.1796  tr_r2=0.262  vl_rmse=0.1667  vl_r2=0.475  vl_loss=0.027776  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E54 B000] GradNorm→ reg=0.323  cls=0.000  ter=0.000 | total_norm=0.282 median=0.007 p90=0.110 max=0.192 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.192(r=0.029), pred.2.weight:0.116(r=0.204), short2long.weight:0.110(r=0.012), conv.weight:0.107(r=0.044), short_lstm.weight_ih_l0:0.059(r=0.012), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.282097  head_frac=1.144
+[E54 B000] Loss→ MSE=0.0314  lr=2.2429e-06  slip_frac=0.000
+[TUNE] opt_lr=2.2429e-06  batch_loss=0.031406  tr_rmse=0.1772  tr_r2=0.281  vl_rmse=0.1665  vl_r2=0.477  vl_loss=0.027709  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E55 B000] GradNorm→ reg=0.259  cls=0.000  ter=0.000 | total_norm=0.219 median=0.006 p90=0.082 max=0.155 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.155(r=0.024), pred.2.weight:0.092(r=0.161), short2long.weight:0.082(r=0.009), conv.weight:0.072(r=0.030), short_lstm.weight_ih_l0:0.044(r=0.009), short_lstm.weight_ih_l0_reverse:0.027(r=0.006)
+[TUNE] total_grad_norm=0.218545  head_frac=1.185
+[E55 B000] Loss→ MSE=0.0318  lr=2.1667e-06  slip_frac=0.000
+[TUNE] opt_lr=2.1667e-06  batch_loss=0.031779  tr_rmse=0.1783  tr_r2=0.273  vl_rmse=0.1656  vl_r2=0.482  vl_loss=0.027413  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E56 B000] GradNorm→ reg=0.560  cls=0.000  ter=0.000 | total_norm=0.402 median=0.015 p90=0.122 max=0.256 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.256(r=0.039), pred.2.weight:0.241(r=0.422), conv.weight:0.122(r=0.050), short2long.weight:0.121(r=0.013), short_lstm.weight_ih_l0:0.061(r=0.013), pred.2.bias:0.049(r=0.702)
+[TUNE] total_grad_norm=0.402472  head_frac=1.392
+[E56 B000] Loss→ MSE=0.0308  lr=1.8818e-06  slip_frac=0.000
+[TUNE] opt_lr=1.8818e-06  batch_loss=0.030842  tr_rmse=0.1756  tr_r2=0.294  vl_rmse=0.1656  vl_r2=0.482  vl_loss=0.027418  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E57 B000] GradNorm→ reg=0.313  cls=0.000  ter=0.000 | total_norm=0.266 median=0.007 p90=0.102 max=0.185 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.185(r=0.028), pred.2.weight:0.113(r=0.198), short2long.weight:0.102(r=0.011), conv.weight:0.084(r=0.035), short_lstm.weight_ih_l0:0.061(r=0.013), short_lstm.weight_ih_l0_reverse:0.030(r=0.006)
+[TUNE] total_grad_norm=0.265655  head_frac=1.178
+[E57 B000] Loss→ MSE=0.0306  lr=1.8140e-06  slip_frac=0.000
+[TUNE] opt_lr=1.8140e-06  batch_loss=0.030638  tr_rmse=0.1750  tr_r2=0.299  vl_rmse=0.1659  vl_r2=0.480  vl_loss=0.027522  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E58 B000] GradNorm→ reg=0.333  cls=0.000  ter=0.000 | total_norm=0.258 median=0.008 p90=0.092 max=0.187 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.187(r=0.028), pred.2.weight:0.119(r=0.208), short2long.weight:0.092(r=0.010), conv.weight:0.071(r=0.029), short_lstm.weight_ih_l0:0.045(r=0.010), short_lstm.weight_ih_l0_reverse:0.032(r=0.007)
+[TUNE] total_grad_norm=0.258336  head_frac=1.288
+[E58 B000] Loss→ MSE=0.0315  lr=1.7466e-06  slip_frac=0.000
+[TUNE] opt_lr=1.7466e-06  batch_loss=0.031506  tr_rmse=0.1775  tr_r2=0.279  vl_rmse=0.1657  vl_r2=0.481  vl_loss=0.027457  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E59 B000] GradNorm→ reg=0.303  cls=0.000  ter=0.000 | total_norm=0.275 median=0.008 p90=0.098 max=0.192 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.192(r=0.029), short2long.weight:0.119(r=0.013), pred.2.weight:0.098(r=0.172), conv.weight:0.092(r=0.038), short_lstm.weight_ih_l0:0.059(r=0.013), short_lstm.weight_ih_l0_reverse:0.040(r=0.008)
+[TUNE] total_grad_norm=0.274740  head_frac=1.102
+[E59 B000] Loss→ MSE=0.0317  lr=1.6798e-06  slip_frac=0.000
+[TUNE] opt_lr=1.6798e-06  batch_loss=0.031738  tr_rmse=0.1782  tr_r2=0.274  vl_rmse=0.1658  vl_r2=0.481  vl_loss=0.027491  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E60 B000] GradNorm→ reg=0.292  cls=0.000  ter=0.000 | total_norm=0.240 median=0.006 p90=0.091 max=0.170 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.170(r=0.026), pred.2.weight:0.110(r=0.193), short2long.weight:0.091(r=0.010), conv.weight:0.064(r=0.026), short_lstm.weight_ih_l0:0.049(r=0.010), short_lstm.weight_ih_l0_reverse:0.032(r=0.007)
+[TUNE] total_grad_norm=0.240113  head_frac=1.215
+[E60 B000] Loss→ MSE=0.0326  lr=1.7929e-06  slip_frac=0.000
+[TUNE] opt_lr=1.7929e-06  batch_loss=0.032630  tr_rmse=0.1806  tr_r2=0.253  vl_rmse=0.1651  vl_r2=0.485  vl_loss=0.027263  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E61 B000] GradNorm→ reg=0.370  cls=0.000  ter=0.000 | total_norm=0.306 median=0.008 p90=0.119 max=0.223 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.223(r=0.034), pred.2.weight:0.137(r=0.241), short2long.weight:0.119(r=0.013), conv.weight:0.071(r=0.029), short_lstm.weight_ih_l0:0.057(r=0.012), short_lstm.weight_ih_l0_reverse:0.040(r=0.008)
+[TUNE] total_grad_norm=0.305721  head_frac=1.212
+[E61 B000] Loss→ MSE=0.0317  lr=1.7201e-06  slip_frac=0.000
+[TUNE] opt_lr=1.7201e-06  batch_loss=0.031700  tr_rmse=0.1780  tr_r2=0.275  vl_rmse=0.1651  vl_r2=0.485  vl_loss=0.027249  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E62 B000] GradNorm→ reg=0.301  cls=0.000  ter=0.000 | total_norm=0.274 median=0.007 p90=0.105 max=0.186 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.186(r=0.028), pred.2.weight:0.105(r=0.185), short2long.weight:0.105(r=0.011), conv.weight:0.096(r=0.040), short_lstm.weight_ih_l0:0.078(r=0.016), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.274013  head_frac=1.098
+[E62 B000] Loss→ MSE=0.0317  lr=1.6481e-06  slip_frac=0.000
+[TUNE] opt_lr=1.6481e-06  batch_loss=0.031748  tr_rmse=0.1782  tr_r2=0.274  vl_rmse=0.1647  vl_r2=0.488  vl_loss=0.027117  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E63 B000] GradNorm→ reg=0.316  cls=0.000  ter=0.000 | total_norm=0.263 median=0.008 p90=0.108 max=0.194 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.194(r=0.030), pred.2.weight:0.110(r=0.193), short2long.weight:0.108(r=0.012), conv.weight:0.055(r=0.023), short_lstm.weight_ih_l0:0.047(r=0.010), short_lstm.weight_ih_l0_reverse:0.038(r=0.008)
+[TUNE] total_grad_norm=0.262843  head_frac=1.203
+[E63 B000] Loss→ MSE=0.0319  lr=1.5770e-06  slip_frac=0.000
+[TUNE] opt_lr=1.5770e-06  batch_loss=0.031914  tr_rmse=0.1786  tr_r2=0.270  vl_rmse=0.1645  vl_r2=0.489  vl_loss=0.027061  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E64 B000] GradNorm→ reg=0.357  cls=0.000  ter=0.000 | total_norm=0.273 median=0.009 p90=0.105 max=0.188 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.188(r=0.029), pred.2.weight:0.138(r=0.242), short2long.weight:0.105(r=0.011), conv.weight:0.058(r=0.024), short_lstm.weight_ih_l0:0.055(r=0.012), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.272635  head_frac=1.308
+[E64 B000] Loss→ MSE=0.0305  lr=1.3562e-06  slip_frac=0.000
+[TUNE] opt_lr=1.3562e-06  batch_loss=0.030543  tr_rmse=0.1748  tr_r2=0.301  vl_rmse=0.1647  vl_r2=0.487  vl_loss=0.027130  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E65 B000] GradNorm→ reg=0.349  cls=0.000  ter=0.000 | total_norm=0.286 median=0.007 p90=0.111 max=0.211 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.211(r=0.032), pred.2.weight:0.124(r=0.217), short2long.weight:0.111(r=0.012), conv.weight:0.068(r=0.028), short_lstm.weight_ih_l0:0.051(r=0.011), short_lstm.weight_ih_l0_reverse:0.039(r=0.008)
+[TUNE] total_grad_norm=0.285814  head_frac=1.221
+[E65 B000] Loss→ MSE=0.0315  lr=1.4377e-06  slip_frac=0.000
+[TUNE] opt_lr=1.4377e-06  batch_loss=0.031531  tr_rmse=0.1776  tr_r2=0.279  vl_rmse=0.1642  vl_r2=0.490  vl_loss=0.026976  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E66 B000] GradNorm→ reg=0.304  cls=0.000  ter=0.000 | total_norm=0.260 median=0.008 p90=0.103 max=0.174 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.174(r=0.026), short2long.weight:0.103(r=0.011), pred.2.weight:0.103(r=0.181), conv.weight:0.098(r=0.040), short_lstm.weight_ih_l0:0.059(r=0.012), short_lstm.weight_ih_l0_reverse:0.037(r=0.008)
+[TUNE] total_grad_norm=0.260233  head_frac=1.166
+[E66 B000] Loss→ MSE=0.0308  lr=1.2327e-06  slip_frac=0.000
+[TUNE] opt_lr=1.2327e-06  batch_loss=0.030783  tr_rmse=0.1755  tr_r2=0.296  vl_rmse=0.1644  vl_r2=0.489  vl_loss=0.027035  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E67 B000] GradNorm→ reg=0.329  cls=0.000  ter=0.000 | total_norm=0.262 median=0.008 p90=0.097 max=0.179 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.179(r=0.027), pred.2.weight:0.124(r=0.219), short2long.weight:0.097(r=0.011), conv.weight:0.080(r=0.033), short_lstm.weight_ih_l0:0.050(r=0.011), short_lstm.weight_ih_l0_reverse:0.037(r=0.008)
+[TUNE] total_grad_norm=0.261922  head_frac=1.256
+[E67 B000] Loss→ MSE=0.0302  lr=1.3028e-06  slip_frac=0.000
+[TUNE] opt_lr=1.3028e-06  batch_loss=0.030212  tr_rmse=0.1738  tr_r2=0.309  vl_rmse=0.1640  vl_r2=0.492  vl_loss=0.026899  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E68 B000] GradNorm→ reg=0.349  cls=0.000  ter=0.000 | total_norm=0.275 median=0.008 p90=0.104 max=0.189 min=0.000 zero_frac=0.000 param_norm=27.523
+Top6_grads: pred.0.weight:0.189(r=0.029), pred.2.weight:0.142(r=0.249), short2long.weight:0.104(r=0.011), conv.weight:0.061(r=0.025), short_lstm.weight_ih_l0:0.054(r=0.011), short_lstm.weight_ih_l0_reverse:0.034(r=0.007)
+[TUNE] total_grad_norm=0.274810  head_frac=1.269
+[E68 B000] Loss→ MSE=0.0313  lr=1.2372e-06  slip_frac=0.000
+[TUNE] opt_lr=1.2372e-06  batch_loss=0.031342  tr_rmse=0.1770  tr_r2=0.283  vl_rmse=0.1639  vl_r2=0.492  vl_loss=0.026868  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E69 B000] GradNorm→ reg=0.321  cls=0.000  ter=0.000 | total_norm=0.270 median=0.007 p90=0.107 max=0.186 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.186(r=0.028), pred.2.weight:0.123(r=0.217), short2long.weight:0.107(r=0.012), conv.weight:0.077(r=0.032), short_lstm.weight_ih_l0:0.055(r=0.012), short_lstm.weight_ih_l0_reverse:0.035(r=0.007)
+[TUNE] total_grad_norm=0.269566  head_frac=1.191
+[E69 B000] Loss→ MSE=0.0305  lr=1.0556e-06  slip_frac=0.000
+[TUNE] opt_lr=1.0556e-06  batch_loss=0.030534  tr_rmse=0.1747  tr_r2=0.301  vl_rmse=0.1640  vl_r2=0.492  vl_loss=0.026905  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E70 B000] GradNorm→ reg=0.274  cls=0.000  ter=0.000 | total_norm=0.243 median=0.005 p90=0.094 max=0.170 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.170(r=0.026), conv.weight:0.097(r=0.040), pred.2.weight:0.094(r=0.166), short2long.weight:0.090(r=0.010), short_lstm.weight_ih_l0:0.050(r=0.010), short_lstm.weight_ih_l0_reverse:0.025(r=0.005)
+[TUNE] total_grad_norm=0.242862  head_frac=1.129
+[E70 B000] Loss→ MSE=0.0307  lr=1.1099e-06  slip_frac=0.000
+[TUNE] opt_lr=1.1099e-06  batch_loss=0.030733  tr_rmse=0.1753  tr_r2=0.297  vl_rmse=0.1638  vl_r2=0.493  vl_loss=0.026826  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E71 B000] GradNorm→ reg=0.488  cls=0.000  ter=0.000 | total_norm=0.355 median=0.014 p90=0.113 max=0.236 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.236(r=0.036), pred.2.weight:0.196(r=0.344), short2long.weight:0.113(r=0.012), conv.weight:0.103(r=0.043), short_lstm.weight_ih_l0:0.062(r=0.013), pred.2.bias:0.043(r=0.617)
+[TUNE] total_grad_norm=0.354500  head_frac=1.376
+[E71 B000] Loss→ MSE=0.0312  lr=1.0484e-06  slip_frac=0.000
+[TUNE] opt_lr=1.0484e-06  batch_loss=0.031223  tr_rmse=0.1767  tr_r2=0.286  vl_rmse=0.1637  vl_r2=0.494  vl_loss=0.026799  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E72 B000] GradNorm→ reg=0.300  cls=0.000  ter=0.000 | total_norm=0.243 median=0.007 p90=0.091 max=0.171 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.171(r=0.026), pred.2.weight:0.113(r=0.198), short2long.weight:0.091(r=0.010), conv.weight:0.068(r=0.028), short_lstm.weight_ih_l0:0.045(r=0.009), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.242624  head_frac=1.237
+[E72 B000] Loss→ MSE=0.0310  lr=9.8831e-07  slip_frac=0.000
+[TUNE] opt_lr=9.8831e-07  batch_loss=0.031029  tr_rmse=0.1762  tr_r2=0.290  vl_rmse=0.1637  vl_r2=0.494  vl_loss=0.026794  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E73 B000] GradNorm→ reg=0.263  cls=0.000  ter=0.000 | total_norm=0.221 median=0.006 p90=0.088 max=0.161 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.161(r=0.024), pred.2.weight:0.094(r=0.166), short2long.weight:0.088(r=0.009), conv.weight:0.057(r=0.023), short_lstm.weight_ih_l0:0.042(r=0.009), short_lstm.weight_ih_l0_reverse:0.030(r=0.006)
+[TUNE] total_grad_norm=0.221439  head_frac=1.189
+[E73 B000] Loss→ MSE=0.0315  lr=9.2979e-07  slip_frac=0.000
+[TUNE] opt_lr=9.2979e-07  batch_loss=0.031508  tr_rmse=0.1775  tr_r2=0.279  vl_rmse=0.1637  vl_r2=0.494  vl_loss=0.026807  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E74 B000] GradNorm→ reg=0.318  cls=0.000  ter=0.000 | total_norm=0.265 median=0.008 p90=0.107 max=0.189 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.189(r=0.029), pred.2.weight:0.119(r=0.209), short2long.weight:0.107(r=0.012), conv.weight:0.058(r=0.024), short_lstm.weight_ih_l0:0.055(r=0.012), short_lstm.weight_ih_l0_reverse:0.038(r=0.008)
+[TUNE] total_grad_norm=0.265140  head_frac=1.201
+[E74 B000] Loss→ MSE=0.0306  lr=8.7286e-07  slip_frac=0.000
+[TUNE] opt_lr=8.7286e-07  batch_loss=0.030617  tr_rmse=0.1750  tr_r2=0.299  vl_rmse=0.1637  vl_r2=0.494  vl_loss=0.026788  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E75 B000] GradNorm→ reg=0.428  cls=0.000  ter=0.000 | total_norm=0.312 median=0.011 p90=0.111 max=0.213 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.213(r=0.032), pred.2.weight:0.171(r=0.302), short2long.weight:0.111(r=0.012), conv.weight:0.072(r=0.030), short_lstm.weight_ih_l0:0.049(r=0.010), pred.2.bias:0.033(r=0.472)
+[TUNE] total_grad_norm=0.312433  head_frac=1.370
+[E75 B000] Loss→ MSE=0.0304  lr=8.1759e-07  slip_frac=0.000
+[TUNE] opt_lr=8.1759e-07  batch_loss=0.030355  tr_rmse=0.1742  tr_r2=0.305  vl_rmse=0.1634  vl_r2=0.496  vl_loss=0.026703  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E76 B000] GradNorm→ reg=0.282  cls=0.000  ter=0.000 | total_norm=0.243 median=0.007 p90=0.094 max=0.170 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.170(r=0.026), pred.2.weight:0.101(r=0.178), short2long.weight:0.094(r=0.010), conv.weight:0.076(r=0.031), short_lstm.weight_ih_l0:0.054(r=0.011), short_lstm.weight_ih_l0_reverse:0.035(r=0.007)
+[TUNE] total_grad_norm=0.243189  head_frac=1.160
+[E76 B000] Loss→ MSE=0.0308  lr=7.6403e-07  slip_frac=0.000
+[TUNE] opt_lr=7.6403e-07  batch_loss=0.030820  tr_rmse=0.1756  tr_r2=0.295  vl_rmse=0.1634  vl_r2=0.496  vl_loss=0.026686  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E77 B000] GradNorm→ reg=0.323  cls=0.000  ter=0.000 | total_norm=0.256 median=0.007 p90=0.092 max=0.172 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.172(r=0.026), pred.2.weight:0.130(r=0.229), short2long.weight:0.092(r=0.010), conv.weight:0.079(r=0.033), short_lstm.weight_ih_l0:0.048(r=0.010), short_lstm.weight_ih_l0_reverse:0.030(r=0.006)
+[TUNE] total_grad_norm=0.255668  head_frac=1.264
+[E77 B000] Loss→ MSE=0.0307  lr=7.1223e-07  slip_frac=0.000
+[TUNE] opt_lr=7.1223e-07  batch_loss=0.030750  tr_rmse=0.1754  tr_r2=0.296  vl_rmse=0.1633  vl_r2=0.496  vl_loss=0.026679  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E78 B000] GradNorm→ reg=0.377  cls=0.000  ter=0.000 | total_norm=0.288 median=0.008 p90=0.098 max=0.192 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.192(r=0.029), pred.2.weight:0.157(r=0.276), short2long.weight:0.098(r=0.011), conv.weight:0.079(r=0.032), short_lstm.weight_ih_l0:0.054(r=0.011), short_lstm.weight_ih_l0_reverse:0.037(r=0.008)
+[TUNE] total_grad_norm=0.287656  head_frac=1.312
+[E78 B000] Loss→ MSE=0.0306  lr=6.6224e-07  slip_frac=0.000
+[TUNE] opt_lr=6.6224e-07  batch_loss=0.030648  tr_rmse=0.1751  tr_r2=0.299  vl_rmse=0.1633  vl_r2=0.496  vl_loss=0.026659  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E79 B000] GradNorm→ reg=0.410  cls=0.000  ter=0.000 | total_norm=0.319 median=0.009 p90=0.115 max=0.223 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.223(r=0.034), pred.2.weight:0.159(r=0.280), short2long.weight:0.115(r=0.012), conv.weight:0.082(r=0.034), short_lstm.weight_ih_l0:0.063(r=0.013), short_lstm.weight_ih_l0_reverse:0.038(r=0.008)
+[TUNE] total_grad_norm=0.319316  head_frac=1.285
+[E79 B000] Loss→ MSE=0.0302  lr=6.1412e-07  slip_frac=0.000
+[TUNE] opt_lr=6.1412e-07  batch_loss=0.030184  tr_rmse=0.1737  tr_r2=0.309  vl_rmse=0.1632  vl_r2=0.497  vl_loss=0.026621  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E80 B000] GradNorm→ reg=0.401  cls=0.000  ter=0.000 | total_norm=0.303 median=0.010 p90=0.105 max=0.212 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.212(r=0.032), pred.2.weight:0.156(r=0.275), short2long.weight:0.105(r=0.011), conv.weight:0.069(r=0.028), short_lstm.weight_ih_l0:0.059(r=0.012), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.302654  head_frac=1.324
+[E80 B000] Loss→ MSE=0.0311  lr=5.6791e-07  slip_frac=0.000
+[TUNE] opt_lr=5.6791e-07  batch_loss=0.031095  tr_rmse=0.1763  tr_r2=0.288  vl_rmse=0.1631  vl_r2=0.498  vl_loss=0.026598  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E81 B000] GradNorm→ reg=0.514  cls=0.000  ter=0.000 | total_norm=0.367 median=0.015 p90=0.115 max=0.233 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.233(r=0.035), pred.2.weight:0.215(r=0.379), short2long.weight:0.115(r=0.013), conv.weight:0.103(r=0.043), short_lstm.weight_ih_l0:0.066(r=0.014), pred.2.bias:0.051(r=0.739)
+[TUNE] total_grad_norm=0.367024  head_frac=1.402
+[E81 B000] Loss→ MSE=0.0305  lr=5.2365e-07  slip_frac=0.000
+[TUNE] opt_lr=5.2365e-07  batch_loss=0.030519  tr_rmse=0.1747  tr_r2=0.302  vl_rmse=0.1631  vl_r2=0.498  vl_loss=0.026594  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E82 B000] GradNorm→ reg=0.541  cls=0.000  ter=0.000 | total_norm=0.393 median=0.015 p90=0.130 max=0.264 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.264(r=0.040), pred.2.weight:0.218(r=0.383), short2long.weight:0.130(r=0.014), conv.weight:0.105(r=0.044), short_lstm.weight_ih_l0:0.064(r=0.014), pred.2.bias:0.044(r=0.630)
+[TUNE] total_grad_norm=0.392514  head_frac=1.377
+[E82 B000] Loss→ MSE=0.0300  lr=4.8140e-07  slip_frac=0.000
+[TUNE] opt_lr=4.8140e-07  batch_loss=0.029960  tr_rmse=0.1731  tr_r2=0.314  vl_rmse=0.1630  vl_r2=0.498  vl_loss=0.026553  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E83 B000] GradNorm→ reg=0.345  cls=0.000  ter=0.000 | total_norm=0.271 median=0.009 p90=0.102 max=0.189 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.189(r=0.029), pred.2.weight:0.129(r=0.227), short2long.weight:0.102(r=0.011), conv.weight:0.069(r=0.028), short_lstm.weight_ih_l0:0.058(r=0.012), short_lstm.weight_ih_l0_reverse:0.031(r=0.007)
+[TUNE] total_grad_norm=0.271018  head_frac=1.274
+[E83 B000] Loss→ MSE=0.0299  lr=4.4118e-07  slip_frac=0.000
+[TUNE] opt_lr=4.4118e-07  batch_loss=0.029855  tr_rmse=0.1728  tr_r2=0.317  vl_rmse=0.1630  vl_r2=0.498  vl_loss=0.026576  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E84 B000] GradNorm→ reg=0.413  cls=0.000  ter=0.000 | total_norm=0.312 median=0.011 p90=0.112 max=0.212 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.212(r=0.032), pred.2.weight:0.158(r=0.279), short2long.weight:0.112(r=0.012), conv.weight:0.085(r=0.035), short_lstm.weight_ih_l0:0.064(r=0.014), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.312303  head_frac=1.322
+[E84 B000] Loss→ MSE=0.0306  lr=4.0305e-07  slip_frac=0.000
+[TUNE] opt_lr=4.0305e-07  batch_loss=0.030555  tr_rmse=0.1748  tr_r2=0.301  vl_rmse=0.1630  vl_r2=0.498  vl_loss=0.026568  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E85 B000] GradNorm→ reg=0.367  cls=0.000  ter=0.000 | total_norm=0.278 median=0.010 p90=0.102 max=0.191 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.191(r=0.029), pred.2.weight:0.137(r=0.242), short2long.weight:0.102(r=0.011), conv.weight:0.076(r=0.031), short_lstm.weight_ih_l0:0.053(r=0.011), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.278035  head_frac=1.321
+[E85 B000] Loss→ MSE=0.0302  lr=3.6703e-07  slip_frac=0.000
+[TUNE] opt_lr=3.6703e-07  batch_loss=0.030182  tr_rmse=0.1737  tr_r2=0.309  vl_rmse=0.1630  vl_r2=0.498  vl_loss=0.026575  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E86 B000] GradNorm→ reg=0.415  cls=0.000  ter=0.000 | total_norm=0.315 median=0.011 p90=0.108 max=0.212 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.212(r=0.032), pred.2.weight:0.160(r=0.282), conv.weight:0.108(r=0.045), short2long.weight:0.099(r=0.011), short_lstm.weight_ih_l0:0.059(r=0.012), pred.2.bias:0.032(r=0.458)
+[TUNE] total_grad_norm=0.314586  head_frac=1.318
+[E86 B000] Loss→ MSE=0.0306  lr=3.3317e-07  slip_frac=0.000
+[TUNE] opt_lr=3.3317e-07  batch_loss=0.030638  tr_rmse=0.1750  tr_r2=0.299  vl_rmse=0.1629  vl_r2=0.498  vl_loss=0.026548  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E87 B000] GradNorm→ reg=0.440  cls=0.000  ter=0.000 | total_norm=0.345 median=0.013 p90=0.120 max=0.230 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.230(r=0.035), pred.2.weight:0.164(r=0.289), short2long.weight:0.120(r=0.013), conv.weight:0.118(r=0.049), short_lstm.weight_ih_l0:0.077(r=0.016), short_lstm.weight_ih_l0_reverse:0.043(r=0.009)
+[TUNE] total_grad_norm=0.344988  head_frac=1.276
+[E87 B000] Loss→ MSE=0.0310  lr=3.0150e-07  slip_frac=0.000
+[TUNE] opt_lr=3.0150e-07  batch_loss=0.030995  tr_rmse=0.1761  tr_r2=0.291  vl_rmse=0.1629  vl_r2=0.498  vl_loss=0.026549  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E88 B000] GradNorm→ reg=0.361  cls=0.000  ter=0.000 | total_norm=0.288 median=0.009 p90=0.108 max=0.194 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.194(r=0.029), pred.2.weight:0.140(r=0.246), short2long.weight:0.108(r=0.012), conv.weight:0.087(r=0.036), short_lstm.weight_ih_l0:0.059(r=0.012), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.287867  head_frac=1.253
+[E88 B000] Loss→ MSE=0.0307  lr=2.7205e-07  slip_frac=0.000
+[TUNE] opt_lr=2.7205e-07  batch_loss=0.030680  tr_rmse=0.1752  tr_r2=0.298  vl_rmse=0.1630  vl_r2=0.498  vl_loss=0.026573  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E89 B000] GradNorm→ reg=0.388  cls=0.000  ter=0.000 | total_norm=0.293 median=0.011 p90=0.106 max=0.193 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.193(r=0.029), pred.2.weight:0.151(r=0.265), short2long.weight:0.106(r=0.012), conv.weight:0.099(r=0.041), short_lstm.weight_ih_l0:0.043(r=0.009), pred.2.bias:0.034(r=0.487)
+[TUNE] total_grad_norm=0.293361  head_frac=1.324
+[E89 B000] Loss→ MSE=0.0308  lr=2.4484e-07  slip_frac=0.000
+[TUNE] opt_lr=2.4484e-07  batch_loss=0.030834  tr_rmse=0.1756  tr_r2=0.294  vl_rmse=0.1630  vl_r2=0.498  vl_loss=0.026565  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E90 B000] GradNorm→ reg=0.294  cls=0.000  ter=0.000 | total_norm=0.242 median=0.007 p90=0.095 max=0.182 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.182(r=0.028), pred.2.weight:0.105(r=0.184), short2long.weight:0.095(r=0.010), conv.weight:0.047(r=0.020), short_lstm.weight_ih_l0:0.041(r=0.009), short_lstm.weight_ih_l0_reverse:0.030(r=0.006)
+[TUNE] total_grad_norm=0.242107  head_frac=1.214
+[E90 B000] Loss→ MSE=0.0305  lr=2.1991e-07  slip_frac=0.000
+[TUNE] opt_lr=2.1991e-07  batch_loss=0.030476  tr_rmse=0.1746  tr_r2=0.303  vl_rmse=0.1629  vl_r2=0.499  vl_loss=0.026544  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E91 B000] GradNorm→ reg=0.291  cls=0.000  ter=0.000 | total_norm=0.239 median=0.007 p90=0.089 max=0.168 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.168(r=0.026), pred.2.weight:0.108(r=0.190), short2long.weight:0.089(r=0.010), conv.weight:0.081(r=0.033), short_lstm.weight_ih_l0:0.040(r=0.008), short_lstm.weight_ih_l0_reverse:0.029(r=0.006)
+[TUNE] total_grad_norm=0.239471  head_frac=1.217
+[E91 B000] Loss→ MSE=0.0300  lr=1.9728e-07  slip_frac=0.000
+[TUNE] opt_lr=1.9728e-07  batch_loss=0.030049  tr_rmse=0.1733  tr_r2=0.312  vl_rmse=0.1629  vl_r2=0.499  vl_loss=0.026528  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E92 B000] GradNorm→ reg=0.457  cls=0.000  ter=0.000 | total_norm=0.360 median=0.012 p90=0.126 max=0.235 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.235(r=0.036), pred.2.weight:0.178(r=0.313), conv.weight:0.126(r=0.052), short2long.weight:0.124(r=0.013), short_lstm.weight_ih_l0:0.078(r=0.016), short_lstm.weight_ih_l0_reverse:0.044(r=0.009)
+[TUNE] total_grad_norm=0.359501  head_frac=1.270
+[E92 B000] Loss→ MSE=0.0307  lr=1.7697e-07  slip_frac=0.000
+[TUNE] opt_lr=1.7697e-07  batch_loss=0.030691  tr_rmse=0.1752  tr_r2=0.298  vl_rmse=0.1629  vl_r2=0.499  vl_loss=0.026523  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E93 B000] GradNorm→ reg=0.285  cls=0.000  ter=0.000 | total_norm=0.245 median=0.006 p90=0.094 max=0.176 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.176(r=0.027), pred.2.weight:0.097(r=0.171), short2long.weight:0.094(r=0.010), conv.weight:0.081(r=0.033), short_lstm.weight_ih_l0:0.053(r=0.011), short_lstm.weight_ih_l0_reverse:0.031(r=0.007)
+[TUNE] total_grad_norm=0.245262  head_frac=1.162
+[E93 B000] Loss→ MSE=0.0308  lr=1.5900e-07  slip_frac=0.000
+[TUNE] opt_lr=1.5900e-07  batch_loss=0.030763  tr_rmse=0.1754  tr_r2=0.296  vl_rmse=0.1628  vl_r2=0.499  vl_loss=0.026513  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E94 B000] GradNorm→ reg=0.311  cls=0.000  ter=0.000 | total_norm=0.262 median=0.007 p90=0.100 max=0.182 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.182(r=0.028), pred.2.weight:0.122(r=0.215), short2long.weight:0.100(r=0.011), conv.weight:0.074(r=0.031), short_lstm.weight_ih_l0:0.055(r=0.012), short_lstm.weight_ih_l0_reverse:0.033(r=0.007)
+[TUNE] total_grad_norm=0.261756  head_frac=1.190
+[E94 B000] Loss→ MSE=0.0297  lr=1.4340e-07  slip_frac=0.000
+[TUNE] opt_lr=1.4340e-07  batch_loss=0.029745  tr_rmse=0.1725  tr_r2=0.319  vl_rmse=0.1628  vl_r2=0.499  vl_loss=0.026513  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E95 B000] GradNorm→ reg=0.382  cls=0.000  ter=0.000 | total_norm=0.289 median=0.010 p90=0.104 max=0.192 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.192(r=0.029), pred.2.weight:0.148(r=0.261), short2long.weight:0.104(r=0.011), conv.weight:0.086(r=0.036), short_lstm.weight_ih_l0:0.059(r=0.012), short_lstm.weight_ih_l0_reverse:0.032(r=0.007)
+[TUNE] total_grad_norm=0.289353  head_frac=1.319
+[E95 B000] Loss→ MSE=0.0303  lr=1.3016e-07  slip_frac=0.000
+[TUNE] opt_lr=1.3016e-07  batch_loss=0.030305  tr_rmse=0.1741  tr_r2=0.307  vl_rmse=0.1628  vl_r2=0.499  vl_loss=0.026514  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E96 B000] GradNorm→ reg=0.308  cls=0.000  ter=0.000 | total_norm=0.246 median=0.007 p90=0.092 max=0.171 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.171(r=0.026), pred.2.weight:0.115(r=0.203), short2long.weight:0.092(r=0.010), conv.weight:0.071(r=0.029), short_lstm.weight_ih_l0:0.052(r=0.011), short_lstm.weight_ih_l0_reverse:0.028(r=0.006)
+[TUNE] total_grad_norm=0.246024  head_frac=1.252
+[E96 B000] Loss→ MSE=0.0307  lr=1.1932e-07  slip_frac=0.000
+[TUNE] opt_lr=1.1932e-07  batch_loss=0.030679  tr_rmse=0.1752  tr_r2=0.298  vl_rmse=0.1628  vl_r2=0.499  vl_loss=0.026502  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E97 B000] GradNorm→ reg=0.352  cls=0.000  ter=0.000 | total_norm=0.269 median=0.008 p90=0.094 max=0.196 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.196(r=0.030), pred.2.weight:0.135(r=0.237), short2long.weight:0.094(r=0.010), conv.weight:0.055(r=0.023), short_lstm.weight_ih_l0:0.048(r=0.010), short_lstm.weight_ih_l0_reverse:0.027(r=0.006)
+[TUNE] total_grad_norm=0.269155  head_frac=1.306
+[E97 B000] Loss→ MSE=0.0305  lr=1.1087e-07  slip_frac=0.000
+[TUNE] opt_lr=1.1087e-07  batch_loss=0.030549  tr_rmse=0.1748  tr_r2=0.301  vl_rmse=0.1628  vl_r2=0.499  vl_loss=0.026498  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E98 B000] GradNorm→ reg=0.579  cls=0.000  ter=0.000 | total_norm=0.405 median=0.017 p90=0.116 max=0.264 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.264(r=0.040), pred.2.weight:0.245(r=0.432), short2long.weight:0.116(r=0.013), conv.weight:0.092(r=0.038), short_lstm.weight_ih_l0:0.075(r=0.016), pred.2.bias:0.053(r=0.764)
+[TUNE] total_grad_norm=0.404717  head_frac=1.430
+[E98 B000] Loss→ MSE=0.0309  lr=1.0483e-07  slip_frac=0.000
+[TUNE] opt_lr=1.0483e-07  batch_loss=0.030920  tr_rmse=0.1758  tr_r2=0.292  vl_rmse=0.1627  vl_r2=0.500  vl_loss=0.026482  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E99 B000] GradNorm→ reg=0.393  cls=0.000  ter=0.000 | total_norm=0.311 median=0.011 p90=0.112 max=0.209 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.209(r=0.032), pred.2.weight:0.148(r=0.261), short2long.weight:0.112(r=0.012), conv.weight:0.103(r=0.043), short_lstm.weight_ih_l0:0.066(r=0.014), short_lstm.weight_ih_l0_reverse:0.036(r=0.008)
+[TUNE] total_grad_norm=0.310771  head_frac=1.264
+[E99 B000] Loss→ MSE=0.0301  lr=1.0121e-07  slip_frac=0.000
+[TUNE] opt_lr=1.0121e-07  batch_loss=0.030077  tr_rmse=0.1734  tr_r2=0.312  vl_rmse=0.1627  vl_r2=0.500  vl_loss=0.026486  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000
+
+[E100 B000] GradNorm→ reg=0.321  cls=0.000  ter=0.000 | total_norm=0.261 median=0.007 p90=0.099 max=0.186 min=0.000 zero_frac=0.000 param_norm=27.522
+Top6_grads: pred.0.weight:0.186(r=0.028), pred.2.weight:0.119(r=0.209), short2long.weight:0.099(r=0.011), conv.weight:0.075(r=0.031), short_lstm.weight_ih_l0:0.046(r=0.010), short_lstm.weight_ih_l0_reverse:0.031(r=0.007)
+[TUNE] total_grad_norm=0.260718  head_frac=1.230
+[E100 B000] Loss→ MSE=0.0306  lr=4.5000e-06  slip_frac=0.000
+[TUNE] opt_lr=4.5000e-06  batch_loss=0.030597  tr_rmse=0.1749  tr_r2=0.300  vl_rmse=0.1627  vl_r2=0.500  vl_loss=0.026487  tr_base_rmse=0.2091  tr_base_r2=0.000  vl_base_rmse=0.2301  vl_base_r2=0.000  slip_frac=0.000  HUB=0.0000

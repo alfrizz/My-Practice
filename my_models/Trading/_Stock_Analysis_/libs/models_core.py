@@ -903,6 +903,10 @@ def _emit_run_header_once(log_file: Path):
         for cand in hp_candidates:
             merged_hp.update(cand)
 
+        _append_log("\nPARAMETER NAMES:", log_file)
+        for name, _ in model.named_parameters():
+            _append_log(f"  {name}", log_file)
+
         hp_keys = ["INITIAL_LR", "SHORT_UNITS", "LONG_UNITS", "PRED_HIDDEN", "DROPOUT_SHORT", "DROPOUT_LONG", "CLIPNORM", "WEIGHT_DECAY", 
                    "TRAIN_BATCH",  "DIFF1_WEIGHT", "DIFF2_WEIGHT", "SMOOTH_ALPHA", "SMOOTH_BETA", "SMOOTH_DELTA", "CLS_LOSS_WEIGHT"]
         hp_lines = []
@@ -910,12 +914,9 @@ def _emit_run_header_once(log_file: Path):
             if k in merged_hp:
                 hp_lines.append(f"{k} = {merged_hp[k]}")
 
-        if hp_lines:
-            _append_log("\nHYPERPARAMS:", log_file)
-            for line in hp_lines:
-                _append_log("  " + line, log_file)
-        else:
-            _append_log("\nHYPERPARAMS: (none found)", log_file)
+        _append_log("\nHYPERPARAMS:", log_file)
+        for line in hp_lines:
+            _append_log("  " + line, log_file)
 
         _RUN_HEADER_EMITTED = True
 
@@ -938,215 +939,99 @@ def _emit_shapes_once(lr_vals: torch.Tensor, y_r: torch.Tensor, hub: torch.Tenso
 def log_loss_components(
     epoch: int,
     batch_idx: int,
-    lr_vals: torch.Tensor,
-    y_r:     torch.Tensor,
-    b_logits:torch.Tensor,
-    hub:     torch.Tensor,
-    prev_lr: torch.Tensor|None,
-    prev_prev_lr: torch.Tensor|None,
+    lr_vals:    torch.Tensor,
+    y_r:        torch.Tensor,
+    b_logits:   torch.Tensor,
+    hub:        torch.Tensor,
+    prev_lr:    torch.Tensor | None,
+    prev_prev_lr: torch.Tensor | None,
     mse_loss,
     bce_loss,
     cls_loss_weight: float,
     smooth_beta:     float,
     diff1_weight:    float,
     diff2_weight:    float,
-    model:     torch.nn.Module,
-    log_file:        Path,
-    optimizer: torch.optim.Optimizer | None = None,
-    batch_loss: float | torch.Tensor | None = None,
+    model:       torch.nn.Module,
+    log_file:    Path,
+    optimizer:   torch.optim.Optimizer | None = None,
+    batch_loss:  float | torch.Tensor | None = None,
     epoch_train_metrics: dict | None = None,
-    epoch_val_metrics: dict | None = None
+    epoch_val_metrics:   dict | None = None
 ):
     """
-    Per-batch diagnostic logger (compact, robust).
+    Compact diagnostics logger.
 
-    Responsibilities
-    - Emit a single run header and shapes once per run via _emit_run_header_once and _emit_shapes_once.
-    - Print parameter names once (epoch==1 and batch_idx==0).
-    - Log a detailed Loss→ line containing MSE, BCE (diagnostic), aggregated Huber (HUB),
-      D1/D2 penalties, lr distribution, hub(mean,max) and slip_frac.
-    - Build a single compact [TUNE] line that contains:
-      opt_lr, batch_loss, tr_rmse, tr_r2, vl_rmse, vl_r2, slip_frac, HUB, total_grad_norm, head_frac.
-    - Safe with device tensors and missing values; never raises due to logging.
-    - Backward-compatible: accept same arguments as previous version and optional epoch metrics dicts.
+    Logs two lines per batch:
+      [E.. B..] Loss→ MSE, BCE, HUB, D1, D2, lr stats, hub stats, slip_frac
+      [TUNE]    opt_lr, batch_loss, tr_rmse, tr_r2, vl_rmse, vl_r2, slip_frac, HUB
     """
-    # Emit run header once per run (helpers defined elsewhere)
+
     _emit_run_header_once(log_file)
 
+    # --- 1) Loss→ line ---
+    # prefer batch_loss (mean–window MSE), fallback to mse(lr,y_r)
+    l_mse   = float(batch_loss) if batch_loss is not None else float(mse_loss(lr_vals, y_r).item())
+    # BCE diagnostic
+    l_bce   = float(cls_loss_weight * bce_loss(b_logits, torch.zeros_like(b_logits)).item()) \
+              if b_logits is not None else 0.0
+    # Huber diagnostic
+    hub_mean, hub_max = hub.mean().item(), hub.max().item()
+    l_hub   = smooth_beta * hub_mean
+    # slip fraction
+    slip_frac = (hub > getattr(hub, "_log_slip_thresh", 1e-6)).float().mean().item()
+    # D1 / D2 penalties
+    l_d1 = float(diff1_weight * (prev_lr - lr_vals).clamp(min=0).pow(2).mean().item()) \
+           if prev_lr is not None else 0.0
+    l_d2 = float(diff2_weight * (lr_vals - 2*prev_lr + prev_prev_lr).pow(2).mean().item()) \
+           if prev_prev_lr is not None else 0.0
 
-    # --- Safe helpers for conversions and small reductions ---
-    def to_float_safe(x, default: float = 0.0):
-        try:
-            if isinstance(x, torch.Tensor):
-                return float(x.cpu().detach().item())
-            return float(x)
-        except Exception:
-            return default
+    # build Loss→ parts, dropping zero entries
+    parts = [f"MSE={l_mse:.4f}"]
+    if l_bce:   parts.append(f"BCE={l_bce:.4f}")
+    if l_hub:   parts.append(f"HUB={l_hub:.4f}")
+    if l_d1:    parts.append(f"D1={l_d1:.4f}")
+    if l_d2:    parts.append(f"D2={l_d2:.4f}")
 
-    def tensor_stat_safe(t: torch.Tensor, fn, default: float = 0.0):
-        try:
-            return to_float_safe(fn(t))
-        except Exception:
-            return default
+    # single-value LR in scientific notation
+    lr_mean = lr_vals.mean().item()
+    lr_std  = lr_vals.std().item()
+    parts.append(f"lr={lr_mean:.4e}")
 
-    # --- Compute diagnostics (robust) ---
-    try:
-        l_mse = to_float_safe(mse_loss(lr_vals, y_r))
-    except Exception:
-        l_mse = 0.0
+    # slip fraction
+    parts.append(f"slip_frac={slip_frac:.3f}")
 
-    try:
-        zeros = torch.zeros_like(b_logits)
-        l_bce = to_float_safe(cls_loss_weight * bce_loss(b_logits, zeros))
-    except Exception:
-        l_bce = 0.0
+    _append_log(f"[E{epoch:02d} B{batch_idx:03d}] Loss→ " + "  ".join(parts),
+                log_file)
 
-    hub_mean = tensor_stat_safe(hub, torch.mean)
-    hub_max  = tensor_stat_safe(hub, torch.max)
-    l_hub = smooth_beta * hub_mean
+    # --- 2) [TUNE] line ---
+    tune = [
+        f"opt_lr={optimizer.param_groups[0]['lr']:.4e}",
+        f"batch_loss={l_mse:.6f}",
+        f"tr_rmse={epoch_train_metrics.get('rmse',0):.4f}",
+        f"tr_r2={epoch_train_metrics.get('r2',  0):.3f}",
+        f"vl_rmse={epoch_val_metrics.get('rmse',0):.4f}",
+        f"vl_r2={epoch_val_metrics.get('r2',  0):.3f}",
+        f"vl_loss={epoch_val_metrics.get('val_loss', 0):.6f}"
+    ]
 
-    lr_mean = tensor_stat_safe(lr_vals, torch.mean)
-    lr_std  = tensor_stat_safe(lr_vals, torch.std)
-    lr_min  = tensor_stat_safe(lr_vals, torch.min)
-    lr_max  = tensor_stat_safe(lr_vals, torch.max)
+    # optional baselines if provided
+    if "base_rmse" in epoch_train_metrics:
+        tune += [
+            f"tr_base_rmse={epoch_train_metrics['base_rmse']:.4f}",
+            f"tr_base_r2={epoch_train_metrics['base_r2']:.3f}"
+        ]
+    if "base_rmse" in epoch_val_metrics:
+        tune += [
+            f"vl_base_rmse={epoch_val_metrics['base_rmse']:.4f}",
+            f"vl_base_r2={epoch_val_metrics['base_r2']:.3f}"
+        ]
 
-    slip_thresh = getattr(hub, "_log_slip_thresh", 1e-6)
-    try:
-        slip_frac = float((hub > slip_thresh).float().mean().cpu().detach().item())
-    except Exception:
-        slip_frac = 0.0
+    tune += [
+        f"slip_frac={slip_frac:.3f}",
+        f"HUB={l_hub:.4f}",
+    ]
 
-    l_d1 = 0.0
-    if prev_lr is not None:
-        try:
-            neg = torch.relu(prev_lr - lr_vals)
-            l_d1 = to_float_safe(diff1_weight * neg.pow(2).mean())
-        except Exception:
-            l_d1 = 0.0
-
-    l_d2 = 0.0
-    if prev_prev_lr is not None:
-        try:
-            curv = lr_vals - 2*prev_lr + prev_prev_lr
-            l_d2 = to_float_safe(diff2_weight * curv.pow(2).mean())
-        except Exception:
-            l_d2 = 0.0
-
-    opt_lr = None
-    if optimizer is not None and len(optimizer.param_groups) > 0:
-        try:
-            opt_lr = float(optimizer.param_groups[0].get("lr", 0.0))
-        except Exception:
-            opt_lr = None
-
-    batch_loss_val = None
-    if batch_loss is not None:
-        try:
-            batch_loss_val = float(batch_loss.item()) if torch.is_tensor(batch_loss) else float(batch_loss)
-        except Exception:
-            batch_loss_val = None
-
-    # --- Compose and write the detailed loss line ---
-    line = (
-        f"[E{epoch:02d} B{batch_idx:03d}] Loss→ "
-        f"MSE={l_mse:.4f}  BCE={l_bce:.4f}  HUB={l_hub:.4f}  "
-        f"D1={l_d1:.4f}  D2={l_d2:.4f} | "
-        f"lr(mean,sd,min,max)={lr_mean:.4f},{lr_std:.4f},{lr_min:.4f},{lr_max:.4f} | "
-        f"hub(mean,max)={hub_mean:.4f},{hub_max:.4f} | slip_frac={slip_frac:.3f}"
-    )
-    _append_log(line, log_file)
-
-
-    # Guarded gradient summary: only compute grad norms/head_frac if any grad is present
-    has_any_grad = False
-    try:
-        for _, p in model.named_parameters():
-            if p.grad is not None:
-                has_any_grad = True
-                break
-    except Exception:
-        has_any_grad = False
-
-    total_grad_norm = 0.0
-    head_frac = 0.0
-
-    if has_any_grad:
-        per_head = {"reg": 0.0, "cls": 0.0, "ter": 0.0}
-        grads_vals = []
-        param_norms = []
-
-        for name, p in model.named_parameters():
-            try:
-                pnorm = float(p.detach().norm().cpu().item())
-            except Exception:
-                pnorm = 0.0
-            param_norms.append(pnorm)
-
-            if p.grad is None:
-                grads_vals.append((name, 0.0))
-                continue
-
-            try:
-                g = p.grad
-                gnorm = float(g.norm().cpu().item())
-                if not torch.isfinite(g).all():
-                    # keep going; we still record gnorm (guarded)
-                    pass
-            except Exception:
-                gnorm = 0.0
-            grads_vals.append((name, gnorm))
-
-            if name.startswith("pred"):
-                per_head["reg"] += gnorm
-            elif name.startswith("cls_head"):
-                per_head["cls"] += gnorm
-            elif name.startswith("cls_ter"):
-                per_head["ter"] += gnorm
-
-        grad_only_vals = [v for _, v in grads_vals]
-        total_grad_sq = sum(v * v for v in grad_only_vals)
-        total_grad_norm = float(math.sqrt(total_grad_sq)) if total_grad_sq > 0 else 0.0
-        try:
-            head_frac = float(per_head["reg"]) / total_grad_norm if total_grad_norm > 1e-12 else 0.0
-        except Exception:
-            head_frac = 0.0
-
-
-    # --- Build unified compact [TUNE] line with loss, grad and epoch metrics ---
-    tune_parts = []
-    if opt_lr is not None:
-        tune_parts.append(f"opt_lr={opt_lr:.4e}")
-    if batch_loss_val is not None:
-        tune_parts.append(f"batch_loss={batch_loss_val:.6f}")
-
-    if epoch_train_metrics is not None:
-        tr_rmse = epoch_train_metrics.get("rmse")
-        tr_r2   = epoch_train_metrics.get("r2")
-        if tr_rmse is not None:
-            tune_parts.append(f"tr_rmse={to_float_safe(tr_rmse):.4f}")
-        if tr_r2 is not None:
-            tune_parts.append(f"tr_r2={to_float_safe(tr_r2):.3f}")
-
-    if epoch_val_metrics is not None:
-        vl_rmse = epoch_val_metrics.get("rmse")
-        vl_r2   = epoch_val_metrics.get("r2")
-        if vl_rmse is not None:
-            tune_parts.append(f"vl_rmse={to_float_safe(vl_rmse):.4f}")
-        if vl_r2 is not None:
-            tune_parts.append(f"vl_r2={to_float_safe(vl_r2):.3f}")
-
-    # always include slip_frac and HUB for quick scans
-    tune_parts.append(f"slip_frac={float(slip_frac):.3f}")
-    tune_parts.append(f"HUB={float(l_hub):.4f}")
-
-    # include gradient summary
-    if 'has_any_grad' in locals() and has_any_grad:
-        tune_parts.append(f"total_grad_norm={total_grad_norm:.6f}")
-        tune_parts.append(f"head_frac={head_frac:.3f}")
-
-    # emit unified [TUNE] line
-    if tune_parts:
-        _append_log("[TUNE] " + "  ".join(tune_parts), log_file)
+    _append_log("[TUNE] " + "  ".join(tune), log_file)
 
 
 ####################
@@ -1170,12 +1055,6 @@ def log_gradient_norms(
     """
     _emit_run_header_once(log_file)
     # _emit_shapes_once(lr_vals, y_r, hub, log_file)
-
-    # Print parameter names once (first epoch, first batch)
-    if epoch == 1 and batch_idx == 0:
-        _append_log("\nPARAMETER NAMES:", log_file)
-        for name, _ in model.named_parameters():
-            _append_log(f"  {name}", log_file)
 
     per_head = {"reg": 0.0, "cls": 0.0, "ter": 0.0}
     grads_list = []

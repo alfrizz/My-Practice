@@ -168,113 +168,247 @@ class ModelClass(nn.Module):
 
 def get_metrics(device: torch.device, thr: float = 0.5):
     """
-    Return a dict of torchmetrics Metric objects on `device` for:
-      - regression:    rmse, mae, r2
-      - binary cls:    acc, prec, rec, f1, auc
-      - ternary cls:   t_acc, t_prec, t_rec, t_f1, t_auc
+    Return a dict of torchmetrics Metric objects on `device` for regression.
+
+    Metrics:
+      - rmse: Root Mean Squared Error (MeanSquaredError(squared=False))
+      - mae : Mean Absolute Error
+      - r2  : R2 score
+
+    Note:
+      - These metric objects remain available for callers that want torchmetrics
+        stateful objects, but the training/eval loops compute deterministic
+        epoch-level numeric metrics from flattened arrays to avoid torchmetrics'
+        compute fragility in small-sample cases.
     """
-    # regression metrics
-    regs = {
-        "rmse": torchmetrics.MeanSquaredError(squared=False),
-        "mae":  torchmetrics.MeanAbsoluteError(),
-        "r2":   torchmetrics.R2Score(),
-    }
-    # binary classification metrics
-    bins = {
-        "acc":  torchmetrics.classification.BinaryAccuracy(threshold=thr),
-        "prec": torchmetrics.classification.BinaryPrecision(threshold=thr),
-        "rec":  torchmetrics.classification.BinaryRecall(threshold=thr),
-        "f1":   torchmetrics.classification.BinaryF1Score(threshold=thr),
-        "auc":  torchmetrics.classification.BinaryAUROC(),
-    }
-    # multiclass (ternary) classification metrics
-    terns = {
-        "t_acc":  torchmetrics.classification.MulticlassAccuracy(num_classes=3),
-        "t_prec": torchmetrics.classification.MulticlassPrecision(num_classes=3, average="macro"),
-        "t_rec":  torchmetrics.classification.MulticlassRecall(num_classes=3, average="macro"),
-        "t_f1":   torchmetrics.classification.MulticlassF1Score(num_classes=3, average="macro"),
-        "t_auc":  torchmetrics.classification.MulticlassAUROC(num_classes=3, average="macro"),
+    return {
+        "rmse": torchmetrics.MeanSquaredError(squared=False).to(device),
+        "mae": torchmetrics.MeanAbsoluteError().to(device),
+        "r2": torchmetrics.R2Score().to(device),
     }
 
-    # Move all metrics to the target device
-    all_metrics = {**regs, **bins, **terns}
-    for m in all_metrics.values():
-        m.to(device)
-    return all_metrics
 
-
-#######################
-
+# ####################### 
 
 def update_metrics(
     metrics: dict[str, torchmetrics.Metric],
-    pr_seq: torch.Tensor, t_r: torch.Tensor,
-    pb_seq: torch.Tensor, t_b: torch.Tensor,
-    pt_seq: torch.Tensor, t_t: torch.Tensor
+    pr_seq: torch.Tensor,
+    t_r: torch.Tensor,
 ):
     """
-    Update regression, binary, and ternary metrics in one call.
+    Minimal updater for regression metrics.
 
-    - pr_seq, t_r: float predictions & targets for regression
-    - pb_seq, t_b: float probabilities & targets for binary cls
-    - pt_seq, t_t: [N,3] probs & int targets (0/1/2) for ternary cls
+    Expectations:
+      - pr_seq and t_r are 1-D torch Tensors on the same device and dtype.
+      - Only regression metrics present in `metrics` are updated.
+      - Function purpose is focused and deterministic; it does not attempt
+        classification updates or defensive try/except checks.
     """
-    # 1) regression
-    for name in ("rmse", "mae", "r2"):
-        metrics[name].update(pr_seq, t_r)
+    if pr_seq is None or t_r is None:
+        raise ValueError("pr_seq and t_r (regression preds/targets) are required")
 
-    # 2) binary classification
-    rounded = pb_seq.round()
-    for name in ("acc", "prec", "rec", "f1"):
-        metrics[name].update(rounded, t_b)
-    metrics["auc"].update(pb_seq, t_b)
+    if not isinstance(metrics, dict):
+        raise ValueError("metrics must be a dict of torchmetrics objects")
 
-    # 3) multiclass (ternary) classification
-    preds_cls = pt_seq.argmax(dim=1)
-    for name in ("t_acc", "t_prec", "t_rec", "t_f1"):
-        metrics[name].update(preds_cls, t_t)
-    metrics["t_auc"].update(pt_seq, t_t)
+    # Update only regression metrics if present
+    if "rmse" in metrics:
+        metrics["rmse"].update(pr_seq, t_r)
+    if "mae" in metrics:
+        metrics["mae"].update(pr_seq, t_r)
+    if "r2" in metrics:
+        metrics["r2"].update(pr_seq, t_r)
 
 
 ####################### 
 
 
+# def eval_on_loader(
+#     loader,
+#     model: torch.nn.Module,
+#     device: torch.device,
+#     metrics: dict | None = None,
+#     collect_preds: bool = False,
+#     disable_tqdm: bool = False,
+#     clamp_preds: bool = True,
+#     debug_sample: bool = False
+# ):
+#     """
+#     Evaluate model on loader and compute regression metrics deterministically.
+
+#     Behavior:
+#       - Treats the regression head as linear (no sigmoid) to match training.
+#       - Accepts model.forward returning either:
+#           * raw_reg (Tensor) or
+#           * (raw_reg, raw_cls, raw_ter) tuple/list.
+#       - Collects regression predictions and targets across windows in chronological order.
+#       - By default clamps predictions into [0,1] before metric computation (clamp_preds=True).
+#         Disable if your targets are unbounded and you prefer raw outputs.
+#       - Computes numeric RMSE, MAE, R2 at epoch end using numpy (no per-batch torchmetrics.compute).
+#       - If `metrics` is provided (torchmetrics dict), updates regression metric objects once at epoch end.
+#       - If collect_preds=True returns (results_dict, preds_array) else (results_dict, None).
+
+#     Useful toggles:
+#       - clamp_preds: clamp eval predictions before metric computation (default True).
+#       - debug_sample: print first window's pred/targ pairs for quick alignment checks.
+#     """
+#     import numpy as np
+
+#     preds_list = []
+#     targs_list = []
+#     expected_total_preds = 0
+#     full_end_times = getattr(loader.dataset, "end_times", None)
+
+#     model.eval()
+#     model.h_short = model.h_long = None
+#     prev_day = None
+
+#     with torch.no_grad():
+#         loop = tqdm(loader, desc="eval", unit="batch", disable=disable_tqdm)
+#         for batch in loop:
+#             # Unpack DayWindowDataset output
+#             xb, y_reg, y_bin, y_ret, y_ter, rc, wd, ts_list, lengths = batch
+
+#             xb    = xb.to(device, non_blocking=True)
+#             y_reg = y_reg.to(device, non_blocking=True)
+#             wd    = wd.to(device, non_blocking=True)
+
+#             B = xb.size(0)
+#             for i in range(B):
+#                 W_day  = int(lengths[i])
+#                 if W_day == 0:
+#                     continue
+
+#                 day_id = int(wd[i].item())
+
+#                 # stateful resets
+#                 model.reset_short()
+#                 if prev_day is not None and day_id < prev_day:
+#                     model.reset_long()
+#                 prev_day = day_id
+
+#                 x_seq = xb[i, :W_day]
+#                 out = model(x_seq)
+#                 raw_reg = out[0] if isinstance(out, (tuple, list)) else out
+
+#                 if raw_reg is None:
+#                     raise RuntimeError("Model returned None for regression output")
+
+#                 # Index final timestep logits exactly as training: use dim>=3 branch
+#                 if raw_reg.dim() >= 3:
+#                     pr_tensor = raw_reg[..., -1, 0]
+#                 else:
+#                     pr_tensor = raw_reg[..., 0]
+
+#                 # Convert to explicit 1-D numpy arrays (detached)
+#                 pr_seq = pr_tensor.detach().cpu().numpy().reshape(-1)
+#                 t_r = y_reg[i, :W_day].view(-1).cpu().numpy().reshape(-1)
+
+#                 # Optional debug print for first window processed
+#                 if debug_sample and len(preds_list) == 0:
+#                     print("EVAL DEBUG sample pred[:10], targ[:10]:", pr_seq[:10], t_r[:10])
+
+#                 preds_list.append(pr_seq)
+#                 targs_list.append(t_r)
+#                 expected_total_preds += pr_seq.shape[0]
+
+#     # Flatten collected arrays
+#     if preds_list:
+#         preds_flat = np.concatenate([np.asarray(p).reshape(-1) for p in preds_list])
+#         targs_flat = np.concatenate([np.asarray(t).reshape(-1) for t in targs_list])
+#     else:
+#         preds_flat = np.array([], dtype=float)
+#         targs_flat = np.array([], dtype=float)
+
+#     # Optional clamp for bounded targets
+#     if clamp_preds and preds_flat.size > 0:
+#         preds_flat = np.clip(preds_flat, 0.0, 1.0)
+
+#     # Sanity check if collection requested
+#     if collect_preds:
+#         if full_end_times is not None:
+#             total_from_dataset = len(full_end_times)
+#             if preds_flat.size != total_from_dataset:
+#                 raise AssertionError(
+#                     f"Collected preds ({preds_flat.size}) != dataset end_times length ({total_from_dataset})."
+#                 )
+#         else:
+#             if preds_flat.size != expected_total_preds:
+#                 raise AssertionError(
+#                     f"Final collected preds ({preds_flat.size}) != expected_total_preds ({expected_total_preds})."
+#                 )
+
+#     # Compute numeric metrics deterministically
+#     results = {}
+#     if preds_flat.size == 0:
+#         results["rmse"] = float("nan")
+#         results["mae"] = float("nan")
+#         results["r2"]  = float("nan")
+#     else:
+#         diff = preds_flat - targs_flat
+#         mse = float((diff ** 2).mean())
+#         mae = float(np.abs(diff).mean())
+#         rmse = float(np.sqrt(mse))
+#         if preds_flat.size < 2:
+#             r2 = float("nan")
+#         else:
+#             tss = float(((targs_flat - targs_flat.mean()) ** 2).sum())
+#             rss = float((diff ** 2).sum())
+#             r2 = float("nan") if tss == 0.0 else 1.0 - (rss / tss)
+#         results["rmse"] = rmse
+#         results["mae"]  = mae
+#         results["r2"]   = r2
+
+#     # Sync torchmetrics (if provided) with epoch-level tensors once
+#     if metrics is not None and preds_flat.size > 0:
+#         preds_torch = torch.from_numpy(preds_flat).to(device)
+#         targs_torch = torch.from_numpy(targs_flat).to(device)
+#         if "rmse" in metrics:
+#             metrics["rmse"].update(preds_torch, targs_torch)
+#         if "mae" in metrics:
+#             metrics["mae"].update(preds_torch, targs_torch)
+#         if "r2" in metrics:
+#             metrics["r2"].update(preds_torch, targs_torch)
+
+#     preds_arr = preds_flat if collect_preds else None
+#     return results, preds_arr
+
 def eval_on_loader(
     loader,
     model: torch.nn.Module,
     device: torch.device,
-    metrics: dict,
+    metrics: dict | None = None,
     collect_preds: bool = False,
-    disable_tqdm: bool = False
+    disable_tqdm: bool = False,
+    clamp_preds: bool = True,
+    debug_sample: bool = False,
+    return_targs: bool = False,  # new explicit opt-in flag; default False keeps old signature
 ):
     """
-    Evaluate model on loader and update provided metrics.
+    Evaluate model on `loader` and compute regression metrics deterministically.
 
-    Behavior:
-      - Resets provided metric objects, runs model in eval() mode, and keeps
-        model stateful semantics (reset_short / reset_long) used by the dataset.
-      - Accepts model.forward that returns either:
-          * raw_reg (Tensor) or
-          * (raw_reg, raw_cls, raw_ter) tuple/list.
-      - Converts logits to probabilities for metrics:
-          * regression: sigmoid(raw_reg[..., -1, 0])
-          * binary:    sigmoid(raw_cls[..., -1, 0]) if present, otherwise zeros
-          * ternary:   softmax(raw_ter[..., -1, :]) if present, otherwise zeros
-      - Optionally collects flat reg predictions in chronological order and
-        returns them alongside final metrics.
-    Returns:
-      (results_dict, preds_array or None)
+    Backwards-compatible return values:
+      - If collect_preds is False: returns (results_dict, None)
+      - If collect_preds is True and return_targs is False: returns (results_dict, preds_array)
+      - If collect_preds is True and return_targs is True: returns (results_dict, preds_array, targs_array)
+
+    Behavior and details:
+      - Assumes the model's regression head is linear (no final sigmoid) to match training.
+      - Accepts model(x) returning either raw_reg Tensor or (raw_reg, raw_cls, raw_ter).
+      - Indexing parity with training: when raw_reg.dim() >= 3 we use raw_reg[..., -1, 0].
+      - Collects per-window predictions and targets in chronological order, flattens
+        them at epoch end and computes RMSE, MAE, R2 with numpy (no per-batch torchmetrics.compute).
+      - By default clamps predictions into [0,1] before metric computation (clamp_preds=True).
+      - If `metrics` (torchmetrics dict) is provided, does a single epoch-level .update()
+        for regression metrics using the flattened tensors (keeps compatibility).
+      - debug_sample prints the first processed window (pred[:10], targ[:10]) for quick sanity checks.
     """
-    # 1) Reset metrics
-    for m in metrics.values():
-        m.reset()
+    import numpy as np
 
-    preds = [] if collect_preds else None
-    expected_total_preds = 0  # strict counter for collected predictions
-
+    preds_list = []
+    targs_list = []
+    expected_total_preds = 0
     full_end_times = getattr(loader.dataset, "end_times", None)
 
-    # 2) Model to eval
     model.eval()
     model.h_short = model.h_long = None
     prev_day = None
@@ -282,102 +416,116 @@ def eval_on_loader(
     with torch.no_grad():
         loop = tqdm(loader, desc="eval", unit="batch", disable=disable_tqdm)
         for batch in loop:
-            # Unpack exactly what DayWindowDataset returns
+            # DayWindowDataset unpacking (keeps original shape contract)
             xb, y_reg, y_bin, y_ret, y_ter, rc, wd, ts_list, lengths = batch
 
-            # Move to device
             xb    = xb.to(device, non_blocking=True)
             y_reg = y_reg.to(device, non_blocking=True)
-            y_bin = y_bin.to(device, non_blocking=True)
-            y_ter = y_ter.to(device, non_blocking=True)
             wd    = wd.to(device, non_blocking=True)
 
             B = xb.size(0)
             for i in range(B):
-                W_day  = int(lengths[i])
+                W_day = int(lengths[i])
+                if W_day == 0:
+                    continue
+
                 day_id = int(wd[i].item())
 
-                # reset short‐term per day, long‐term on wrap
+                # stateful resets consistent with training
                 model.reset_short()
                 if prev_day is not None and day_id < prev_day:
                     model.reset_long()
                 prev_day = day_id
 
-                # forward; accept either single-tensor or tuple output
                 x_seq = xb[i, :W_day]
                 out = model(x_seq)
+                raw_reg = out[0] if isinstance(out, (tuple, list)) else out
 
-                if isinstance(out, (tuple, list)):
-                    raw_reg = out[0]
-                    raw_cls = out[1] if len(out) > 1 else None
-                    raw_ter = out[2] if len(out) > 2 else None
-                else:
-                    raw_reg = out
-                    raw_cls = None
-                    raw_ter = None
-
-                # robustly index final time step logits
                 if raw_reg is None:
                     raise RuntimeError("Model returned None for regression output")
-                pr_seq = torch.sigmoid(raw_reg[..., -1, 0]) if raw_reg.dim() >= 2 else torch.sigmoid(raw_reg[..., 0])
 
-                if raw_cls is not None:
-                    pb_seq = torch.sigmoid(raw_cls[..., -1, 0]) if raw_cls.dim() >= 2 else torch.sigmoid(raw_cls[..., 0])
+                # Index final timestep logits exactly as training uses
+                if raw_reg.dim() >= 3:
+                    pr_tensor = raw_reg[..., -1, 0]
                 else:
-                    pb_seq = torch.zeros_like(pr_seq)
+                    pr_tensor = raw_reg[..., 0]
 
-                if raw_ter is not None:
-                    t_logits = raw_ter[..., -1, :] if raw_ter.dim() >= 2 else raw_ter
-                    pt_seq = torch.softmax(t_logits, dim=-1)
-                else:
-                    pt_seq = torch.zeros(pr_seq.size(0), 3, device=pr_seq.device)
+                # convert to explicit 1-D numpy arrays
+                pr_seq = pr_tensor.detach().cpu().numpy().reshape(-1)
+                t_r = y_reg[i, :W_day].view(-1).cpu().numpy().reshape(-1)
 
-                # targets
-                t_r = y_reg[i, :W_day].view(-1)
-                t_b = y_bin[i, :W_day].view(-1)
-                t_t = y_ter[i, :W_day].view(-1)
+                if debug_sample and len(preds_list) == 0:
+                    print("EVAL DEBUG sample pred[:10], targ[:10]:", pr_seq[:10], t_r[:10])
 
-                # update metrics
-                update_metrics(
-                    metrics,
-                    pr_seq, t_r,
-                    pb_seq, t_b,
-                    pt_seq, t_t
-                )
+                preds_list.append(pr_seq)
+                targs_list.append(t_r)
+                expected_total_preds += pr_seq.shape[0]
 
-                # collect preds (if requested) and enforce strict length matching
-                if collect_preds:
-                    # append predictions for this window
-                    preds.extend(pr_seq.cpu().tolist())
-                    expected_total_preds += W_day
-                    # sanity check: ensure we haven't lost/duplicated entries so far
-                    if len(preds) != expected_total_preds:
-                        raise RuntimeError(
-                            f"Prediction-collection mismatch: collected {len(preds)} items, "
-                            f"expected {expected_total_preds} after processing batch index with W_day={W_day}"
-                        )
+    # Flatten collected arrays deterministically
+    if preds_list:
+        preds_flat = np.concatenate([np.asarray(p).reshape(-1) for p in preds_list])
+        targs_flat = np.concatenate([np.asarray(t).reshape(-1) for t in targs_list])
+    else:
+        preds_flat = np.array([], dtype=float)
+        targs_flat = np.array([], dtype=float)
 
-    # finalize metrics
-    results = {name: m.compute().item() for name, m in metrics.items()}
+    # Optional clamp for bounded targets
+    if clamp_preds and preds_flat.size > 0:
+        preds_flat = np.clip(preds_flat, 0.0, 1.0)
 
-    # final assertion for collect_preds: total matches sum(lengths)
+    # Sanity check when collect_preds requested
     if collect_preds:
-        # derive dataset-wide expected total if possible
         if full_end_times is not None:
             total_from_dataset = len(full_end_times)
-            if len(preds) != total_from_dataset:
+            if preds_flat.size != total_from_dataset:
                 raise AssertionError(
-                    f"Collected preds ({len(preds)}) != dataset end_times length ({total_from_dataset})."
+                    f"Collected preds ({preds_flat.size}) != dataset end_times length ({total_from_dataset})."
                 )
-        # otherwise rely on the running counter
-        # (expected_total_preds holds the total number of collected windows)
-        if len(preds) != expected_total_preds:
-            raise AssertionError(
-                f"Final collected preds ({len(preds)}) != expected_total_preds ({expected_total_preds})."
-            )
-        preds_arr = np.array(preds)
-        return results, preds_arr
+        else:
+            if preds_flat.size != expected_total_preds:
+                raise AssertionError(
+                    f"Final collected preds ({preds_flat.size}) != expected_total_preds ({expected_total_preds})."
+                )
 
+    # Deterministic numeric metrics (numpy)
+    results = {}
+    if preds_flat.size == 0:
+        results["rmse"] = float("nan")
+        results["mae"] = float("nan")
+        results["r2"] = float("nan")
+    else:
+        diff = preds_flat - targs_flat
+        mse = float((diff ** 2).mean())
+        mae = float(np.abs(diff).mean())
+        rmse = float(np.sqrt(mse))
+        if preds_flat.size < 2:
+            r2 = float("nan")
+        else:
+            tss = float(((targs_flat - targs_flat.mean()) ** 2).sum())
+            rss = float((diff ** 2).sum())
+            r2 = float("nan") if tss == 0.0 else 1.0 - (rss / tss)
+        results["rmse"] = rmse
+        results["mae"] = mae
+        results["r2"] = r2
+
+    # Optionally sync torchmetrics objects once with flattened tensors
+    if metrics is not None and preds_flat.size > 0:
+        preds_torch = torch.from_numpy(preds_flat).to(device)
+        targs_torch = torch.from_numpy(targs_flat).to(device)
+        if "rmse" in metrics:
+            metrics["rmse"].update(preds_torch, targs_torch)
+        if "mae" in metrics:
+            metrics["mae"].update(preds_torch, targs_torch)
+        if "r2" in metrics:
+            metrics["r2"].update(preds_torch, targs_torch)
+
+    # Backwards-compatible returns:
+    # - old callers expect (results, preds_arr) so preserve that when collect_preds=True
+    # - if caller also passed return_targs=True, return (results, preds_arr, targs_arr)
+    if collect_preds:
+        if return_targs:
+            return results, preds_flat, targs_flat
+        return results, preds_flat
     return results, None
 
 
@@ -385,299 +533,439 @@ def eval_on_loader(
 ###################### 
 
 
+# def model_training_loop(
+#     model: torch.nn.Module,
+#     optimizer: torch.optim.Optimizer,
+#     cosine_sched: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts,
+#     plateau_sched: torch.optim.lr_scheduler.ReduceLROnPlateau,
+#     scaler: torch.cuda.amp.GradScaler,
+#     train_loader,
+#     val_loader,
+#     *,
+#     max_epochs: int,
+#     early_stop_patience: int,
+#     clipnorm: float,
+#     device: torch.device,
+#     mode: str = "train",
+# ):
+#     """
+#     Minimal stateful LSTM loop with full logging.
+
+#     - Mixed‐precision, grad clipping, Cosine per epoch + Plateau on val RMSE.
+#     - Per‐window final‐step scalar target: pred = model(x_seq)[…,-1], targ = y_r[i,-1].
+#     - Computes train/val RMSE each epoch.
+#     - Calls models_core.log_gradient_norms and log_loss_components for your diagnostics.
+#     - Keeps maybe_save_chkpt / save_final_chkpt & live_plot updates.
+#     """
+#     model.to(device)
+#     mse = torch.nn.MSELoss()
+
+#     if mode != "train":
+#         return eval_on_loader(val_loader, model, device,
+#                               get_metrics(device), collect_preds=True)
+
+#     best_val, best_state = float("inf"), None
+#     patience = 0
+#     live_plot = plots.LiveRMSEPlot()
+
+#     all_tr_targs = []
+#     for xb, y_r, *_, lengths in train_loader:
+#         for i, L in enumerate(lengths):
+#             if L > 0:
+#                 all_tr_targs.append(
+#                     float(y_r[i, :L].view(-1)[-1].item())
+#                 )
+#     base_tr_rmse = float(np.std(all_tr_targs))
+#     base_tr_r2   = 0.0
+
+#     all_vl_targs = []
+#     for xb, y_r, *_, lengths in val_loader:
+#         for i, L in enumerate(lengths):
+#             if L > 0:
+#                 all_vl_targs.append(
+#                     float(y_r[i, :L].view(-1)[-1].item())
+#                 )
+#     base_vl_rmse = float(np.std(all_vl_targs))
+#     base_vl_r2   = 0.0
+
+#     for epoch in range(1, max_epochs + 1):        
+#         # — TRAIN —
+#         model.train()
+#         train_preds, train_targs = [], []
+#         for xb, y_r, *_, lengths in tqdm(train_loader,
+#                                          desc=f"Epoch {epoch} ▶ Train",
+#                                          leave=False):
+#             xb, y_r = xb.to(device), y_r.to(device)
+#             optimizer.zero_grad(set_to_none=True)
+    
+#             batch_loss = torch.tensor(0.0, device=device)
+#             num_windows = 0
+    
+#             for i, L in enumerate(lengths):
+#                 if L == 0:
+#                     continue
+#                 seq = xb[i, :L]
+#                 out = model(seq)
+#                 pred = (out[..., -1, 0] if out.dim() >= 3 else out.view(-1))[-1]
+#                 targ = y_r[i, :L].view(-1)[-1]
+    
+#                 l = mse(pred, targ)
+#                 batch_loss += l
+#                 num_windows += 1
+    
+#                 train_preds.append(pred.item())
+#                 train_targs.append(targ.item())
+    
+#             batch_loss = batch_loss / num_windows
+#             scaler.scale(batch_loss).backward()
+#             scaler.unscale_(optimizer)
+#             torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+#             scaler.step(optimizer)
+#             scaler.update()
+    
+#         # 1) TRAIN metrics & epoch‐level MSE
+#         train_rmse = float(batch_loss.sqrt().item())
+#         tp = np.array(train_preds)
+#         tt = np.array(train_targs)
+#         train_r2 = (
+#             1.0
+#             - ((tp - tt)**2).sum()
+#               / ((tt - tt.mean())**2).sum()
+#         ) if tt.size > 1 and not np.isclose(tt.var(), 0.0) else float("nan")
+#         epoch_mse = train_rmse ** 2
+    
+#         cosine_sched.step(epoch)
+    
+#         # — VALIDATION —
+#         model.eval()
+#         val_preds, val_targs = [], []
+#         with torch.no_grad():
+#             for xb, y_r, *_, lengths in tqdm(val_loader,
+#                                              desc=f"Epoch {epoch} ▶ Valid",
+#                                              leave=False):
+#                 xb, y_r = xb.to(device), y_r.to(device)
+#                 for i, L in enumerate(lengths):
+#                     if L == 0:
+#                         continue
+#                     seq = xb[i, :L]
+#                     out = model(seq)
+#                     pred = (out[..., -1, 0] if out.dim() >= 3 else out.view(-1))[-1]
+#                     targ = y_r[i, :L].view(-1)[-1]
+#                     val_preds.append(pred.item())
+#                     val_targs.append(targ.item())
+    
+#         # 2) VAL metrics & val_loss
+#         vp = np.array(val_preds)
+#         vt = np.array(val_targs)
+#         val_rmse       = float(np.sqrt(((vp - vt) ** 2).mean()))
+#         val_batch_loss = val_rmse ** 2
+#         vl_r2 = (
+#             1.0
+#             - ((vp - vt)**2).sum()
+#               / ((vt - vt.mean())**2).sum()
+#         ) if vt.size > 1 and not np.isclose(vt.var(), 0.0) else float("nan")
+    
+#         plateau_sched.step(val_rmse)
+    
+#         # — LOGGING —
+#         models_core.model = model
+#         models_core.log_gradient_norms(epoch, 0, model, params.log_file)
+    
+#         rep_targ  = torch.tensor([vt[-1], vt[-1]], device=device)
+#         rep_hub   = torch.zeros_like(rep_targ)
+#         lr_val    = optimizer.param_groups[0]["lr"]
+#         lr_tensor = torch.tensor([lr_val, lr_val], device=device)
+    
+#         models_core.log_loss_components(
+#             epoch=epoch,
+#             batch_idx=0,
+#             lr_vals=lr_tensor,
+#             y_r=rep_targ,
+#             b_logits=None,
+#             hub=rep_hub,
+#             prev_lr=None,
+#             prev_prev_lr=None,
+#             mse_loss=mse,
+#             bce_loss=None,
+#             cls_loss_weight=0.0,
+#             smooth_beta=0.0,
+#             diff1_weight=0.0,
+#             diff2_weight=0.0,
+#             model=model,
+#             log_file=params.log_file,
+#             optimizer=optimizer,
+#             batch_loss=epoch_mse,
+#             epoch_train_metrics={
+#                 "rmse":      train_rmse,
+#                 "r2":        train_r2,
+#                 "base_rmse": base_tr_rmse,
+#                 "base_r2":   base_tr_r2,
+#             },
+#             epoch_val_metrics={
+#                 "rmse":      val_rmse,
+#                 "r2":        vl_r2,
+#                 "base_rmse": base_vl_rmse,
+#                 "base_r2":   base_vl_r2,
+#                 "val_loss":  val_batch_loss,
+#             },
+#         )
+
+
+#         # live‐plot + checkpoint + early stop
+#         live_plot.update(train_rmse, val_rmse)
+#         models_dir = Path(params.models_folder)
+#         best_val, improved, _, _, tmp = models_core.maybe_save_chkpt(
+#             models_dir, model, val_rmse, best_val,
+#             {"rmse": train_rmse}, {"rmse": val_rmse}, live_plot, params
+#         )
+#         if improved:
+#             best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+#             patience = 0
+#         else:
+#             patience += 1
+#             if patience >= early_stop_patience:
+#                 print(f"Early stopping at epoch {epoch}")
+#                 break
+
+#         print(f"Epoch {epoch:02d}  TRAIN RMSE={train_rmse:.4f}  VALID RMSE={val_rmse:.4f}")
+
+#     # restore best and save final
+#     if best_state is not None:
+#         model.load_state_dict(best_state)
+#         models_core.save_final_chkpt(
+#             models_dir, best_state, best_val, params, {}, {}, live_plot, suffix="_fin"
+#         )
+
+#     return best_val
+
 def model_training_loop(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     cosine_sched: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts,
     plateau_sched: torch.optim.lr_scheduler.ReduceLROnPlateau,
-    scaler: GradScaler,
+    scaler: torch.cuda.amp.GradScaler,
     train_loader,
     val_loader,
     *,
     max_epochs: int,
     early_stop_patience: int,
     clipnorm: float,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device,
     mode: str = "train",
-    cls_loss_weight: float = 0.05,    # kept for backward compatibility (unused)
-    smooth_alpha: float = 0.005,      # diagnostics only
-    smooth_beta: float = 20.0,        # diagnostics only
-    smooth_delta: float = 0.01,       # diagnostics only
-    diff1_weight: float = 1.0,        # diagnostics only
-    diff2_weight: float = 0.2         # diagnostics only
-) -> float:
+):
     """
-    Train or evaluate the simplified CNN→BiLSTM→BiLSTM regression model.
+    Minimal stateful LSTM loop with full logging.
 
-    Behavior:
-      - 'train' mode:
-          * Loss = pure MSE on model's regression output.
-          * Diagnostics (slip smoothing, diff penalties) are computed per-window
-            for logging only and are NOT added to the backpropagated loss.
-          * Classification heads (if present) are treated as optional: their
-            outputs are consumed for metrics only when available.
-          * Stateful LSTM resets (reset_short / reset_long) remain unchanged.
-          * Mixed-precision, gradient clipping, CosineAnnealingWarmRestarts,
-            ReduceLROnPlateau, early stopping, checkpointing, and plotting
-            remain unchanged.
-      - non-'train' mode: delegates to eval_on_loader() and returns its result.
-
-    Returns:
-      best_val_rmse (float): lowest validation RMSE observed during training.
+    - Mixed-precision training, per-batch grad clipping.
+    - CosineAnnealingWarmRestarts per epoch + ReduceLROnPlateau on val RMSE.
+    - Static baselines (std of true targets, trivial R²=0) computed once.
+    - Per-window final-step scalar target: 
+        pred = model(x_seq)[…,-1,0], targ = y_r[i,-1].
+    - Computes epoch-level TRAIN and VAL RMSE, MSE, R².
+    - Logs gradient norms and loss components once per epoch.
+    - Live RMSE plot, checkpointing, early stopping.
     """
+
+    import math
+    import numpy as np
+
     model.to(device)
-    mse_loss = nn.MSELoss()
-    bce_loss = nn.BCEWithLogitsLoss()  # diagnostics/metrics only
+    mse_loss_fn = torch.nn.MSELoss()
 
+    # If not training, run pure evaluation
     if mode != "train":
-        return eval_on_loader(
-            val_loader, model, device,
-            get_metrics(device),
-            collect_preds=True
-        )
+        return eval_on_loader(val_loader, model, device,
+                              get_metrics(device), collect_preds=True)
 
-    torch.backends.cudnn.benchmark = True
-    train_metrics = get_metrics(device)
-    val_metrics = get_metrics(device)
-
-    best_val_rmse, best_state = float("inf"), None
-    best_tr_metrics, best_vl_metrics = {}, {}
-    patience_ctr = 0
+    # Prepare checkpointing and live-plot
+    best_val = float("inf")
+    patience = 0
     live_plot = plots.LiveRMSEPlot()
 
-    # --- training loop with single epoch-end log ---
+    # — STATIC BASELINES (compute once, before epochs) —
+    all_tr_targs = []
+    for xb, y_r, *_, lengths in train_loader:
+        for i, L in enumerate(lengths):
+            if L > 0:
+                all_tr_targs.append(
+                    float(y_r[i, :L].view(-1)[-1].item())
+                )
+    base_tr_rmse = float(np.std(all_tr_targs))
+    base_tr_r2   = 0.0
+
+    all_vl_targs = []
+    for xb, y_r, *_, lengths in val_loader:
+        for i, L in enumerate(lengths):
+            if L > 0:
+                all_vl_targs.append(
+                    float(y_r[i, :L].view(-1)[-1].item())
+                )
+    base_vl_rmse = float(np.std(all_vl_targs))
+    base_vl_r2   = 0.0
+
+    # — EPOCH LOOP —
     for epoch in range(1, max_epochs + 1):
-        gc.collect()
+
+        # — TRAINING PASS —  
         model.train()
-        model.h_short = model.h_long = None
-    
-        # reset train metrics
-        for m in train_metrics.values():
-            m.reset()
-    
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch}", unit="batch")
-        for batch_idx, batch in enumerate(pbar):
-            xb_days, y_r_days, y_b_days, _, y_t_days, \
-                rc_days, wd_days, ts_list, lengths = batch
-    
-            xb = xb_days.to(device, non_blocking=True)
-            targ_r = y_r_days.to(device, non_blocking=True)
-            targ_b = y_b_days.to(device, non_blocking=True)
-            targ_t = y_t_days.to(device, non_blocking=True).view(-1)
-            wd = wd_days.to(device, non_blocking=True)
-    
+        train_preds, train_targs = [], []
+        train_se, train_count = 0.0, 0
+
+        for xb, y_r, *_, lengths in tqdm(
+                train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
+            xb, y_r = xb.to(device), y_r.to(device)
             optimizer.zero_grad(set_to_none=True)
-    
-            # buffers for metrics
-            preds_r, targs_r = [], []
-            preds_b, targs_b = [], []
-            preds_t, targs_t = [], []
-    
-            prev_day, ewma = None, None
-            prev_lr, prev_prev_lr = None, None
-    
-            # accumulator for the batch loss (aggregate over windows)
+
+            # accumulate per-batch loss for backprop
             batch_loss = torch.tensor(0.0, device=device)
-            n_windows = xb.size(0)
-    
-            # per-window forward + diagnostics
-            for di in range(n_windows):
-                W = lengths[di]
-                day_id = int(wd[di].item())
-                x_seq = xb[di, :W]
-                y_r = targ_r[di, :W].view(-1)
-                y_b = targ_b[di, :W].view(-1)
-                y_t = targ_t[di * W: di * W + W]
-    
-                model.reset_short()
-                if prev_day is not None and day_id < prev_day:
-                    model.reset_long()
-                prev_day = day_id
-    
-                # Forward: robustly accept either single-tensor or 3-tuple outputs
-                out = model(x_seq)
-                if isinstance(out, (tuple, list)):
-                    raw_reg = out[0]
-                    raw_cls = out[1] if len(out) > 1 else None
-                    raw_ter = out[2] if len(out) > 2 else None
-                else:
-                    raw_reg = out
-                    raw_cls = None
-                    raw_ter = None
-    
-                # Index final timestep logits robustly
-                lr_logits = raw_reg[..., -1, 0] if raw_reg.dim() >= 3 else raw_reg[..., 0]
-    
-                # classification logits (if present)
-                b_logits = None
-                t_logits = None
-                if raw_cls is not None:
-                    b_logits = raw_cls[..., -1, 0] if raw_cls.dim() >= 3 else raw_cls[..., 0]
-                if raw_ter is not None:
-                    t_logits = raw_ter[..., -1, :] if raw_ter.dim() >= 3 else raw_ter
-    
-                # probabilities used for metric collection
-                lr = torch.sigmoid(lr_logits)
-                pb = torch.sigmoid(b_logits) if b_logits is not None else torch.zeros_like(lr)
-                pt = torch.softmax(t_logits, dim=-1) if t_logits is not None else torch.zeros(lr.size(0), 3, device=lr.device)
-    
-                preds_r.append(lr.detach()); targs_r.append(y_r)
-                preds_b.append(pb.detach()); targs_b.append(y_b)
-                preds_t.append(pt.detach()); targs_t.append(y_t)
-    
-                # diagnostics (computed but NOT added to loss directly)
-                with autocast(device_type=device.type):
-                    win_loss = mse_loss(lr, y_r)  # per-window MSE
-    
-                    ewma_new = lr.detach() if ewma is None else smooth_alpha * lr.detach() + (1 - smooth_alpha) * ewma
-                    slip = torch.relu(ewma_new - lr)
-                    if prev_lr is not None:
-                        slip = torch.where(lr > prev_lr, torch.zeros_like(slip), slip)
-                    hub = torch.where(
-                        slip <= smooth_delta,
-                        0.5 * slip ** 2,
-                        smooth_delta * (slip - 0.5 * smooth_delta)
-                    )
-    
-                    if prev_lr is not None:
-                        neg_diff = torch.relu(prev_lr - lr)
-                    else:
-                        neg_diff = torch.zeros_like(lr)
-    
-                    if prev_prev_lr is not None:
-                        curv = lr - 2 * prev_lr + prev_prev_lr
-                    else:
-                        curv = torch.zeros_like(lr)
-    
-                prev_prev_lr, prev_lr, ewma = prev_lr, lr.detach(), ewma_new
-    
-                # accumulate window loss (simple average over windows)
-                batch_loss = batch_loss + win_loss
-    
-            # finalize batch loss
-            batch_loss = batch_loss / float(n_windows)
-    
-            # backprop aggregated batch loss
+            num_windows = 0
+
+            for i, L in enumerate(lengths):
+                if L == 0:
+                    continue
+                seq = xb[i, :L]
+                out = model(seq)
+                # extract the final scalar prediction
+                pred = (out[..., -1, 0]
+                        if out.dim() >= 3 else out.view(-1))[-1]
+                targ = y_r[i, :L].view(-1)[-1]
+
+                # MSE for this window
+                l = mse_loss_fn(pred, targ)
+                batch_loss += l
+                num_windows += 1
+
+                # accumulate epoch‐level squared error
+                err = (pred - targ).item()
+                train_se   += err * err
+                train_count += 1
+
+                # store for train R²
+                train_preds.append(pred.item())
+                train_targs.append(targ.item())
+
+            # normalize batch loss, backward, clip, step
+            batch_loss = batch_loss / num_windows
             scaler.scale(batch_loss).backward()
             scaler.unscale_(optimizer)
-    
-            nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer)
             scaler.update()
-    
-            # batch-level metric update (regression always present; cls/ter used if available)
-            with torch.no_grad():
-                update_metrics(
-                    train_metrics,
-                    torch.cat(preds_r), torch.cat(targs_r),
-                    torch.cat(preds_b), torch.cat(targs_b),
-                    torch.cat(preds_t), torch.cat(targs_t),
-                )
-    
-            # scheduler & progress bar
-            frac = epoch - 1 + (batch_idx + 1) / len(train_loader)
-            cosine_sched.step(frac)
-            pbar.set_postfix(lr=optimizer.param_groups[0]["lr"], refresh=False)
-    
-        # --- epoch-level metrics & validation ---
-        raw_tr = {n: m.compute() for n, m in train_metrics.items()}
-        tr = {n: (v.item() if isinstance(v, torch.Tensor) else v) for n, v in raw_tr.items()}
-    
-        for m in val_metrics.values():
-            m.reset()
-        raw_vl, _ = eval_on_loader(val_loader, model, device, val_metrics)
-        vl = {n: (v.item() if isinstance(v, torch.Tensor) else v) for n, v in raw_vl.items()}
-    
-        # compute a stable epoch-end gradient norm and emit one aligned GradNorm snapshot
-        import math
-        def _total_grad_norm(model_):
-            vals = [p.grad.detach().float().norm(2).item() for p in model_.parameters() if p.grad is not None]
-            return float(math.sqrt(sum(v * v for v in vals))) if vals else 0.0
-    
-        total_grad = _total_grad_norm(model)
-        # call the same gradient-logging helper so human-readable GradNorm→ print appears near TUNE
-        # this keeps format identical to per-batch GradNorm→ but now captured at epoch-end
+
+        # — TRAIN METRICS (epoch‐level) —  
+        epoch_mse   = train_se / train_count
+        train_rmse  = float(math.sqrt(epoch_mse))
+        tp_arr      = np.array(train_preds)
+        tt_arr      = np.array(train_targs)
+        train_r2 = (
+            1.0
+            - ((tp_arr - tt_arr)**2).sum()
+              / ((tt_arr - tt_arr.mean())**2).sum()
+        ) if tt_arr.size > 1 and not np.isclose(tt_arr.var(), 0.0) else float("nan")
+
+        # step cosine scheduler once per epoch
+        cosine_sched.step(epoch)
+
+        # — VALIDATION PASS —  
+        model.eval()
+        val_preds, val_targs = [], []
+        with torch.no_grad():
+            for xb, y_r, *_, lengths in tqdm(
+                    val_loader, desc=f"Epoch {epoch} ▶ Valid", leave=False):
+                xb, y_r = xb.to(device), y_r.to(device)
+                for i, L in enumerate(lengths):
+                    if L == 0:
+                        continue
+                    seq = xb[i, :L]
+                    out = model(seq)
+                    pred = (out[..., -1, 0]
+                            if out.dim() >= 3 else out.view(-1))[-1]
+                    targ = y_r[i, :L].view(-1)[-1]
+                    val_preds.append(pred.item())
+                    val_targs.append(targ.item())
+
+        # — VAL METRICS (epoch‐level) —
+        vp_arr = np.array(val_preds)
+        vt_arr = np.array(val_targs)
+        val_rmse       = float(np.sqrt(((vp_arr - vt_arr)**2).mean()))
+        val_batch_loss = val_rmse ** 2
+        vl_r2 = (
+            1.0
+            - ((vp_arr - vt_arr)**2).sum()
+              / ((vt_arr - vt_arr.mean())**2).sum()
+        ) if vt_arr.size > 1 and not np.isclose(vt_arr.var(), 0.0) else float("nan")
+
+        # step plateau scheduler on val_rmse
+        plateau_sched.step(val_rmse)
+
+        # — LOGGING —  
+        models_core.model = model
         models_core.log_gradient_norms(epoch, 0, model, params.log_file)
-    
-        # prefer last-computed tensors from the training loop, fall back to a tiny zero tensor
-        rep_lr   = lr    if 'lr' in locals() and isinstance(lr, torch.Tensor) else torch.zeros(1, device=device)
-        rep_y_r  = y_r   if 'y_r' in locals() and isinstance(y_r, torch.Tensor) else torch.zeros_like(rep_lr)
-        rep_hub  = hub   if 'hub' in locals() and isinstance(hub, torch.Tensor) else torch.zeros_like(rep_lr)
-    
-        # single epoch-end unified log with epoch metrics
+
+        # replicate a minimal y_r + hub for loss‐component logging
+        rep_targ  = torch.tensor([vt_arr[-1], vt_arr[-1]], device=device)
+        rep_hub   = torch.zeros_like(rep_targ)
+        lr_val    = optimizer.param_groups[0]["lr"]
+        lr_tensor = torch.tensor([lr_val, lr_val], device=device)
+
         models_core.log_loss_components(
             epoch=epoch,
             batch_idx=0,
-            lr_vals=rep_lr,
-            y_r=rep_y_r,
+            lr_vals=lr_tensor,
+            y_r=rep_targ,
             b_logits=None,
             hub=rep_hub,
             prev_lr=None,
             prev_prev_lr=None,
-            mse_loss=mse_loss,
-            bce_loss=bce_loss,
-            cls_loss_weight=cls_loss_weight,
-            smooth_beta=smooth_beta,
-            diff1_weight=diff1_weight,
-            diff2_weight=diff2_weight,
+            mse_loss=mse_loss_fn,
+            bce_loss=None,
+            cls_loss_weight=0.0,
+            smooth_beta=0.0,
+            diff1_weight=0.0,
+            diff2_weight=0.0,
             model=model,
             log_file=params.log_file,
             optimizer=optimizer,
-            batch_loss=None,
-            epoch_train_metrics=tr,
-            epoch_val_metrics=vl
+            batch_loss=epoch_mse,
+            epoch_train_metrics={
+                "rmse":      train_rmse,
+                "r2":        train_r2,
+                "base_rmse": base_tr_rmse,
+                "base_r2":   base_tr_r2,
+            },
+            epoch_val_metrics={
+                "rmse":      val_rmse,
+                "r2":        vl_r2,
+                "base_rmse": base_vl_rmse,
+                "base_r2":   base_vl_r2,
+                "val_loss":  val_batch_loss,
+            },
         )
-    
-        # checkpointing, plotting & early stopping (unchanged)
+
+
+        # live‐plot + checkpoint + early stop
+        live_plot.update(train_rmse, val_rmse)
         models_dir = Path(params.models_folder)
-        live_plot.update(tr["rmse"], vl["rmse"])
-        best_val_rmse, improved, tr_best, vl_best, tmp_state = \
-            models_core.maybe_save_chkpt(
-                models_dir, model, vl["rmse"],
-                best_val_rmse, tr, vl, live_plot, params
-            )
-        if tmp_state is not None:
-            best_state = tmp_state
-            best_tr_metrics = tr_best.copy()
-            best_vl_metrics = vl_best.copy()
-    
-        patience_ctr = 0 if improved else patience_ctr + 1
-        if patience_ctr >= early_stop_patience:
-            print(f"Early stopping at epoch {epoch}")
-            break
-    
-        # epoch summary print (unchanged)
-        print(f"Epoch {epoch:03d}")
-        print(
-            f'TRAIN→ RMSE={tr["rmse"]:.5f} MAE={tr["mae"]:.5f} R2={tr["r2"]:.5f} | '
-            f'Acc={tr["acc"]:.5f} Prec={tr["prec"]:.5f} Rec={tr["rec"]:.5f} '
-            f'F1={tr["f1"]:.5f} AUROC={tr["auc"]:.5f} | '
-            f'T_ACC={tr["t_acc"]:.5f} T_P={tr["t_prec"]:.5f} T_R={tr["t_rec"]:.5f} '
-            f'T_F1={tr["t_f1"]:.5f} T_AUC={tr["t_auc"]:.5f}'
+        best_val, improved, _, _, tmp = models_core.maybe_save_chkpt(
+            models_dir, model, val_rmse, best_val,
+            {"rmse": train_rmse}, {"rmse": val_rmse}, live_plot, params
         )
-        print(
-            f'VALID→ RMSE={vl["rmse"]:.5f} MAE={vl["mae"]:.5f} R2={vl["r2"]:.5f} | '
-            f'Acc={vl["acc"]:.5f} Prec={vl["prec"]:.5f} Rec={vl["rec"]:.5f} '
-            f'F1={vl["f1"]:.5f} AUROC={vl["auc"]:.5f} | '
-            f'T_ACC={vl["t_acc"]:.5f} T_P={vl["t_prec"]:.5f} T_R={vl["t_rec"]:.5f} '
-            f'T_F1={vl["t_f1"]:.5f} T_AUC={vl["t_auc"]:.5f}'
-        )
-    
-        if epoch > params.hparams["LR_EPOCHS_WARMUP"]:
-            plateau_sched.step(vl["rmse"])
+        if improved:
+            best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+            patience = 0
+        else:
+            patience += 1
+            if patience >= early_stop_patience:
+                print(f"Early stopping at epoch {epoch}")
+                break
 
-    
-    # final-best checkpoint (unchanged)
+        print(f"Epoch {epoch:02d}  TRAIN RMSE={train_rmse:.4f}  VALID RMSE={val_rmse:.4f}")
+
+    # restore best and save final
     if best_state is not None:
+        model.load_state_dict(best_state)
         models_core.save_final_chkpt(
-            Path(params.models_folder),
-            best_state,
-            best_val_rmse,
-            params,
-            best_tr_metrics,
-            best_vl_metrics,
-            live_plot,
-            suffix="_fin"
+            models_dir, best_state, best_val, params, {}, {}, live_plot, suffix="_fin"
         )
 
-    return best_val_rmse
+    return best_val
