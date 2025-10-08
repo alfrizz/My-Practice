@@ -25,7 +25,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.16273
+sel_val_rmse = 0.15130
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -128,8 +128,8 @@ def signal_parameters(ticker):
                          'eng_adx',
                          'hour',
                          'adx_14']
-        trailing_stop_pred = 0.03
-        pred_threshold = 0.3
+        trailing_stop_pred = 0.2
+        pred_threshold = 0.2
         return_threshold = 0.01
         
     return look_back, sess_start_pred, sess_start_shift, features_cols, smooth_sign_win, trailing_stop_pred, pred_threshold, return_threshold
@@ -151,7 +151,7 @@ hparams = {
     
     # ── Short-term encoder (short Bi-LSTM) ─────────────────────────────
     "SHORT_UNITS":           128,    # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
-    "DROPOUT_SHORT":         0.3,   # after short LSTM; ↑regularization, ↓retains sharp spikes
+    "DROPOUT_SHORT":         0.2,   # after short LSTM; ↑regularization, ↓retains sharp spikes
     
     # ── Projection (short -> final feature space) ──────────────────────
     "LONG_UNITS":            256,    # projection / pred input dim (formerly long LSTM size); ↑feature width, ↓bottleneck risk
@@ -160,7 +160,7 @@ hparams = {
     "PRED_HIDDEN":           128,      # optional head hidden dim 
     
     # ── Final normalization / dropout (applied to projection before head) ─
-    "DROPOUT_LONG":          0.3,   # after projection; ↑overfitting guard, ↓reactivity at head
+    "DROPOUT_LONG":          0.2,   # after projection; ↑overfitting guard, ↓reactivity at head
     
     # ── Regression head (last layer) ───────────────────────────────────
     # "PRED_HIDDEN":          None,   # optional hidden dim for extra head layer (unused)
@@ -170,18 +170,18 @@ hparams = {
     # "ATT_DROPOUT":          0.15,   # kept for compatibility (unused) -- commented
     
     # —— Active Loss & Smoothing Hyperparameters —— 
-    "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
-    "DIFF2_WEIGHT":          2.0,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
-    "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
-    "SMOOTH_BETA":           100.0,  # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
-    "SMOOTH_DELTA":          0.02,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
+    # "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
+    # "DIFF2_WEIGHT":          2.0,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
+    # "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
+    # "SMOOTH_BETA":           100.0,  # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
+    # "SMOOTH_DELTA":          0.02,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
     # "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight (kept but unused); ↑spike emphasis, ↓regression focus
     
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "LR_EPOCHS_WARMUP":      1,      # constant LR before scheduler; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            5e-6,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
-    "WEIGHT_DECAY":          3e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1.0,    # max grad norm; ↑training stability, ↓gradient expressivity
+    "INITIAL_LR":            2e-5,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
+    "WEIGHT_DECAY":          1e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              1.5,    # max grad norm; ↑training stability, ↓gradient expressivity
     "ETA_MIN":               1e-7,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
     "T_0":                   100,    # cosine cycle length (unchanged)
     "T_MULT":                1,      # cycle multiplier (unchanged)
@@ -195,8 +195,8 @@ hparams = {
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time
 
     # ── ReduceLROnPlateau Scheduler ───
-    "PLATEAU_FACTOR":        0.9,    # multiply LR by this factor on plateau
-    "PLATEAU_PATIENCE":      0,      # epochs with no val-improve before LR cut
-    "MIN_LR":                1e-6,   # lower bound on LR after reductions
-    "PLAT_EPOCHS_WARMUP":    999     # epochs to wait before triggering plateau logic
+    # "PLATEAU_FACTOR":        0.9,    # multiply LR by this factor on plateau
+    # "PLATEAU_PATIENCE":      0,      # epochs with no val-improve before LR cut
+    # "MIN_LR":                1e-6,   # lower bound on LR after reductions
+    # "PLAT_EPOCHS_WARMUP":    999     # epochs to wait before triggering plateau logic
 }

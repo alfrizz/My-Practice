@@ -19,6 +19,7 @@ from tqdm.auto import tqdm
 import ta
 
 import torch
+import torch.nn as nn
 import torch.backends.cudnn as cudnn
 
 from sklearn.compose import ColumnTransformer
@@ -702,77 +703,96 @@ def compare_raw_vs_scaled(
 #########################################################################################################
 
 
+
+
 def ig_feature_importance(
-    model, loader, feature_names, device,
-    n_samples=100, n_steps=50
-):
+    model: nn.Module,
+    loader,
+    feature_names,
+    device: torch.device,
+    n_samples: int = 100,
+    n_steps: int = 50
+) -> pd.DataFrame:
     """
-    Integrated-Gradients (Captum)
-    Post-training features impact: it provides the per-feature attributions summed over time.
-    It digs into the trained PyTorch model and attributes how much each input feature drove the final prediction in each window. 
-    We’ll sum attributions over the time axis and average across some test windows.
-    Runs Integrated Gradients on up to n_samples windows from loader.
-    Returns a DataFrame of mean |IG| per feature.
+    Compute per‐feature Integrated Gradients attributions.
+
+    - Disables cuDNN (RNN backward incompatibility in eval).
+    - Puts model in eval(), clears state.
+    - Defines a pure‐float32 forward that returns the final scalar signal.
+    - Runs IG with float32 inputs and baselines.
+    - Summarizes absolute attributions over time and averages across windows.
+    - Returns DataFrame sorted by descending importance.
     """
-    # 1) disable cuDNN so RNN backward works in eval mode
+    # 1) disable cuDNN for RNN backward
     cudnn_enabled = cudnn.enabled
     cudnn.enabled = False
 
     model.eval()
+    model.h_short = model.h_long = None
 
-    # 2) wrap model to return only the final regression output
-    def forward_reg(x):
-        out = model(x)
-        if isinstance(out, (tuple, list)):
-            pr = out[0]
-        else:
-            pr = out
-        return torch.sigmoid(pr[..., -1, 0])  
+    # 2) forward that emits the final scalar (sigmoid‐activated) in float32
+    def forward_reg(x: torch.Tensor) -> torch.Tensor:
+        # x: (B, W, F), float32
+        with torch.cuda.amp.autocast(enabled=False):
+            model.float()
+            model.reset_short()
+            out = model(x.float())
+            pr  = out[0] if isinstance(out, (tuple, list)) else out
+            # pr may be (B, W, 1), (B, W, D), or (B, W)
+            if pr.dim() == 3 and pr.size(-1) == 1:
+                pr = pr.squeeze(-1)
+            if pr.dim() == 3:
+                pr = pr[..., 0]
+            if pr.dim() == 2:
+                # final timestep = last window step
+                pr = pr[:, -1]
+            return torch.sigmoid(pr)
 
     ig = IntegratedGradients(forward_reg)
 
-    # 3) accumulator for feature‐wise attributions
     total_attr = np.zeros(len(feature_names), dtype=float)
     count = 0
 
-    # 4) loop over windows
+    # 3) iterate windows (with progress bar)
     for batch in tqdm(loader, desc="IG windows", total=n_samples):
         xb, y_sig, *_, lengths = batch
-        W = lengths[0]
-        x = xb[0, :W].unsqueeze(0).to(device)   # shape: (1, W, F)
+        W = int(lengths[0])
+        if W == 0:
+            continue
 
-        # 5) compute IG attributions
+        x = xb[0, :W].unsqueeze(0).to(device).float()   # (1, W, F)
+        baseline = torch.zeros_like(x)
+
+        # 4) compute IG in float32
         atts, delta = ig.attribute(
             inputs=x,
-            baselines=torch.zeros_like(x),
+            baselines=baseline,
             n_steps=n_steps,
             internal_batch_size=1,
             return_convergence_delta=True
         )
 
-        # 6) collapse attributions across all dims except the last (features)
-        attr_np  = atts.detach().abs().cpu().numpy()  
-        abs_sum  = attr_np.reshape(-1, attr_np.shape[-1]).sum(axis=0)
-
+        # 5) collapse abs attributions over time
+        attr_np = atts.detach().abs().cpu().numpy()      # (1, W, F)
+        abs_sum = attr_np.reshape(-1, attr_np.shape[-1]).sum(axis=0)  # (F,)
         total_attr += abs_sum
         count += 1
         if count >= n_samples:
             break
 
-        # 7) free GPU memory
-        del atts, delta, x
+        # 6) free GPU memory
+        del atts, delta, x, baseline
         torch.cuda.empty_cache()
 
-    # 8) restore cuDNN
+    # 7) restore cuDNN
     cudnn.enabled = cudnn_enabled
 
-    # 9) average and return as DataFrame
-    avg_attr = total_attr / count
+    # 8) average and package
+    avg_attr = total_attr / max(1, count)
     imp_df   = pd.DataFrame({
         "feature":    feature_names,
         "importance": avg_attr
-    }).sort_values("importance", ascending=False)
+    }).sort_values("importance", ascending=False).reset_index(drop=True)
 
     return imp_df
-
 

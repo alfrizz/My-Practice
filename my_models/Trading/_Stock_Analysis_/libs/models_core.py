@@ -27,9 +27,6 @@ import torch.nn as nn
 import torch.nn.functional as Funct
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset, DataLoader
-from torch.amp import GradScaler, autocast
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
-from torch.optim import AdamW
 
 from numba import njit
 from tqdm.auto import tqdm
@@ -628,48 +625,7 @@ def summarize_split(name, loader, times):
     print(f" dataloader    : batches={len(loader):3d}, batch_size={loader.batch_size}, workers={loader.num_workers}, pin_memory={loader.pin_memory}")
     print()
 
-
-#########################################################################################################
-
-
-def make_optimizer_and_scheduler(
-    model: nn.Module,
-    initial_lr: float,
-    weight_decay: float,
-    clipnorm: float
-):
-    """
-    1) AdamW optimizer with decoupled weight decay
-    2) ReduceLROnPlateau for val‐RMSE stagnation
-    3) CosineAnnealingWarmRestarts at batch‐level
-    4) GradScaler for mixed‐precision safety
-    """
-    optimizer = AdamW(
-        model.parameters(),
-        lr=initial_lr,
-        weight_decay=weight_decay
-    )
-
-    plateau_sched = ReduceLROnPlateau(
-        optimizer,
-        mode='min',
-        factor=params.hparams['PLATEAU_FACTOR'],
-        patience=params.hparams['PLATEAU_PATIENCE'],
-        min_lr=params.hparams['MIN_LR'],
-    )
-
-    cosine_sched = CosineAnnealingWarmRestarts(
-        optimizer,
-        T_0   = params.hparams['T_0'],
-        T_mult= params.hparams['T_MULT'],
-        eta_min=params.hparams['ETA_MIN']
-    )
-
-    scaler = GradScaler()
-
-    return optimizer, plateau_sched, cosine_sched, scaler, clipnorm
-
-
+    
 #########################################################################################################
 
 
@@ -856,13 +812,35 @@ def select_checkpoint(
 
 #########################################################################################################
 
-# module-level guards
-_RUN_HEADER_EMITTED = False
-_RUN_HEADER_LOCK = threading.Lock()
-_RUN_SHAPES = None        # will hold tuple(shape_lr, shape_y, shape_hub) after first call
-_RUN_SHAPES_EMITTED = False
+# ——— Single guard for run header ————————————————————————————————
+_RUN_STARTED = False
+_RUN_LOCK    = threading.Lock()
 
-def _append_log(text: str, log_file: Path):
+def init_log(log_file, hparams=None):
+    """
+    Emit the run header exactly once:
+      • timestamp
+      • parameter names
+      • (optional) hyperparameter dict
+    """
+    global _RUN_STARTED
+    with _RUN_LOCK:
+        if _RUN_STARTED:
+            return
+        sep = "-" * 150
+        _append_log("\n"+sep, log_file)
+        _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+
+        # dump hyperparams if given
+        if isinstance(hparams, dict) and hparams:
+            _append_log("\nHYPERPARAMS:", log_file)
+            for k, v in hparams.items():
+                _append_log(f"  {k} = {v}", log_file)
+
+        _RUN_STARTED = True
+
+def _append_log(text: str, log_file):
+    """Append a line to log_file, creating parent dirs if needed."""
     try:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         with open(log_file, "a", encoding="utf-8") as f:
@@ -873,267 +851,120 @@ def _append_log(text: str, log_file: Path):
     except Exception:
         pass
 
-#####################
+##################### 
 
-def _emit_run_header_once(log_file: Path):
-    global _RUN_HEADER_EMITTED
-    with _RUN_HEADER_LOCK:
-        if _RUN_HEADER_EMITTED:
-            return
-        sep = "-" * 80
-        # blank line, separator, timestamp, hyperparams, blank line
-        _append_log("\n" + sep + "\n", log_file)
-        _append_log(f"\nRUN START: {datetime.utcnow().isoformat()}Z", log_file)
 
-        # attempt to dump selected hyperparams from known locations
-        hp_candidates = []
-        hp_mod = globals().get("hparams")
-        if isinstance(hp_mod, dict):
-            hp_candidates.append(hp_mod)
-        params_obj = globals().get("params")
-        try:
-            if params_obj is not None and hasattr(params_obj, "hparams"):
-                hp_attr = getattr(params_obj, "hparams")
-                if isinstance(hp_attr, dict):
-                    hp_candidates.append(hp_attr)
-        except Exception:
-            pass
-
-        merged_hp = {}
-        for cand in hp_candidates:
-            merged_hp.update(cand)
-
-        _append_log("\nPARAMETER NAMES:", log_file)
-        for name, _ in model.named_parameters():
-            _append_log(f"  {name}", log_file)
-
-        hp_keys = ["INITIAL_LR", "SHORT_UNITS", "LONG_UNITS", "PRED_HIDDEN", "DROPOUT_SHORT", "DROPOUT_LONG", "CLIPNORM", "WEIGHT_DECAY", 
-                   "TRAIN_BATCH",  "DIFF1_WEIGHT", "DIFF2_WEIGHT", "SMOOTH_ALPHA", "SMOOTH_BETA", "SMOOTH_DELTA", "CLS_LOSS_WEIGHT"]
-        hp_lines = []
-        for k in hp_keys:
-            if k in merged_hp:
-                hp_lines.append(f"{k} = {merged_hp[k]}")
-
-        _append_log("\nHYPERPARAMS:", log_file)
-        for line in hp_lines:
-            _append_log("  " + line, log_file)
-
-        _RUN_HEADER_EMITTED = True
-
-#####################
-
-def _emit_shapes_once(lr_vals: torch.Tensor, y_r: torch.Tensor, hub: torch.Tensor, log_file: Path):
-    global _RUN_SHAPES_EMITTED, _RUN_SHAPES
-    if _RUN_SHAPES_EMITTED:
-        return
-    try:
-        shape_info = f"\nshapes: lr_vals={tuple(lr_vals.shape)} y_r={tuple(y_r.shape)} hub={tuple(hub.shape)}"
-    except Exception:
-        shape_info = "\nshapes: (err)"
-    _append_log(shape_info, log_file)
-    _RUN_SHAPES = (tuple(lr_vals.shape), tuple(y_r.shape), tuple(hub.shape))
-    _RUN_SHAPES_EMITTED = True
-
-###################
-
-def log_loss_components(
-    epoch: int,
-    batch_idx: int,
-    lr_vals:    torch.Tensor,
-    y_r:        torch.Tensor,
-    b_logits:   torch.Tensor,
-    hub:        torch.Tensor,
-    prev_lr:    torch.Tensor | None,
-    prev_prev_lr: torch.Tensor | None,
-    mse_loss,
-    bce_loss,
-    cls_loss_weight: float,
-    smooth_beta:     float,
-    diff1_weight:    float,
-    diff2_weight:    float,
-    model:       torch.nn.Module,
-    log_file:    Path,
-    optimizer:   torch.optim.Optimizer | None = None,
-    batch_loss:  float | torch.Tensor | None = None,
-    epoch_train_metrics: dict | None = None,
-    epoch_val_metrics:   dict | None = None
+def log_epoch_summary(
+    epoch:        int,
+    model:        torch.nn.Module,
+    optimizer:    torch.optim.Optimizer,
+    train_preds:  np.ndarray,
+    train_targs:  np.ndarray,
+    val_preds:    np.ndarray,
+    val_targs:    np.ndarray,
+    batch_mse:    float,
+    base_tr_rmse: float,
+    base_vl_rmse: float,
+    slip_thresh:  float,
+    log_file:     Path,
+    top_k:        int = 999,
+    hparams:      dict | None = None,
 ):
     """
-    Compact diagnostics logger.
-
-    Logs two lines per batch:
-      [E.. B..] Loss→ MSE, BCE, HUB, D1, D2, lr stats, hub stats, slip_frac
-      [TUNE]    opt_lr, batch_loss, tr_rmse, tr_r2, vl_rmse, vl_r2, slip_frac, HUB
+    Append a one‐line summary per epoch with:
+      1) A single header (timestamp + hyperparams) via init_log().
+      2) Gradient‐norm breakdown (block L₂ norms for reg/cls/ter and total;
+         median, p90, max, zero_frac; parameter‐norm).
+      3) Slip & hub diagnostics (model.last_hub statistics).
+      4) Train metrics: RMSE, R², MAE (from batch_mse, train_preds/targs).
+      5) Val metrics: RMSE, R², MAE, val_loss.
+      6) Current learning rate.
+      7) Top‐K gradient entries by magnitude.
     """
+    # 1) Header (only on first call)
+    init_log(log_file, hparams=hparams)
 
-    _emit_run_header_once(log_file)
-
-    # --- 1) Loss→ line ---
-    # prefer batch_loss (mean–window MSE), fallback to mse(lr,y_r)
-    l_mse   = float(batch_loss) if batch_loss is not None else float(mse_loss(lr_vals, y_r).item())
-    # BCE diagnostic
-    l_bce   = float(cls_loss_weight * bce_loss(b_logits, torch.zeros_like(b_logits)).item()) \
-              if b_logits is not None else 0.0
-    # Huber diagnostic
-    hub_mean, hub_max = hub.mean().item(), hub.max().item()
-    l_hub   = smooth_beta * hub_mean
-    # slip fraction
-    slip_frac = (hub > getattr(hub, "_log_slip_thresh", 1e-6)).float().mean().item()
-    # D1 / D2 penalties
-    l_d1 = float(diff1_weight * (prev_lr - lr_vals).clamp(min=0).pow(2).mean().item()) \
-           if prev_lr is not None else 0.0
-    l_d2 = float(diff2_weight * (lr_vals - 2*prev_lr + prev_prev_lr).pow(2).mean().item()) \
-           if prev_prev_lr is not None else 0.0
-
-    # build Loss→ parts, dropping zero entries
-    parts = [f"MSE={l_mse:.4f}"]
-    if l_bce:   parts.append(f"BCE={l_bce:.4f}")
-    if l_hub:   parts.append(f"HUB={l_hub:.4f}")
-    if l_d1:    parts.append(f"D1={l_d1:.4f}")
-    if l_d2:    parts.append(f"D2={l_d2:.4f}")
-
-    # single-value LR in scientific notation
-    lr_mean = lr_vals.mean().item()
-    lr_std  = lr_vals.std().item()
-    parts.append(f"lr={lr_mean:.4e}")
-
-    # slip fraction
-    parts.append(f"slip_frac={slip_frac:.3f}")
-
-    _append_log(f"[E{epoch:02d} B{batch_idx:03d}] Loss→ " + "  ".join(parts),
-                log_file)
-
-    # --- 2) [TUNE] line ---
-    tune = [
-        f"opt_lr={optimizer.param_groups[0]['lr']:.4e}",
-        f"batch_loss={l_mse:.6f}",
-        f"tr_rmse={epoch_train_metrics.get('rmse',0):.4f}",
-        f"tr_r2={epoch_train_metrics.get('r2',  0):.3f}",
-        f"vl_rmse={epoch_val_metrics.get('rmse',0):.4f}",
-        f"vl_r2={epoch_val_metrics.get('r2',  0):.3f}",
-        f"vl_loss={epoch_val_metrics.get('val_loss', 0):.6f}"
-    ]
-
-    # optional baselines if provided
-    if "base_rmse" in epoch_train_metrics:
-        tune += [
-            f"tr_base_rmse={epoch_train_metrics['base_rmse']:.4f}",
-            f"tr_base_r2={epoch_train_metrics['base_r2']:.3f}"
-        ]
-    if "base_rmse" in epoch_val_metrics:
-        tune += [
-            f"vl_base_rmse={epoch_val_metrics['base_rmse']:.4f}",
-            f"vl_base_r2={epoch_val_metrics['base_r2']:.3f}"
-        ]
-
-    tune += [
-        f"slip_frac={slip_frac:.3f}",
-        f"HUB={l_hub:.4f}",
-    ]
-
-    _append_log("[TUNE] " + "  ".join(tune), log_file)
-
-
-####################
-
-def log_gradient_norms(
-    epoch: int,
-    batch_idx: int,
-    model:     torch.nn.Module,
-    log_file:  Path,
-    top_k:     int = 6,
-    include_head_ratio: bool = True
-):
-    """
-    Gradient norms dump.
-
-    - Aggregates per-head grad norms (reg/cls/ter) by prefix.
-    - Computes total_grad_norm, median/p90, max/min, zero-grad fraction and param_norm.
-    - Logs top_k parameters with grad norm and grad/param ratio.
-    - Emits compact tuning line with total_grad_norm and head_frac.
-    - Emits run header once per run to reduce duplicate timestamps.
-    """
-    _emit_run_header_once(log_file)
-    # _emit_shapes_once(lr_vals, y_r, hub, log_file)
-
-    per_head = {"reg": 0.0, "cls": 0.0, "ter": 0.0}
-    grads_list = []
-    param_list = []
-    zero_grad_count = 0
-    total_params = 0
-    nonfinite_grad_count = 0
+    # 2) Collect per‐parameter gradient norms and parameter norms
+    grads: list[tuple[str, float]] = []
+    pnorms: list[float] = []
+    reg_sq = cls_sq = ter_sq = all_sq = 0.0
 
     for name, p in model.named_parameters():
-        total_params += 1
-        try:
-            pnorm = float(p.detach().norm().cpu().item())
-        except Exception:
-            pnorm = 0.0
-        param_list.append((name, pnorm))
+        # parameter norm
+        pnorm = float(p.detach().norm().cpu())
+        pnorms.append(pnorm)
 
-        if p.grad is None:
-            zero_grad_count += 1
-            grads_list.append((name, 0.0))
-            continue
-
-        try:
-            g = p.grad
-            gnorm = float(g.norm().cpu().item())
-            if not torch.isfinite(g).all():
-                nonfinite_grad_count += 1
-        except Exception:
-            gnorm = 0.0
-        grads_list.append((name, gnorm))
+        # gradient norm and squared‐sum for blocks
+        gnorm = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+        sq = gnorm * gnorm
+        all_sq += sq
 
         if name.startswith("pred"):
-            per_head["reg"] += gnorm
+            reg_sq += sq
         elif name.startswith("cls_head"):
-            per_head["cls"] += gnorm
+            cls_sq += sq
         elif name.startswith("cls_ter"):
-            per_head["ter"] += gnorm
+            ter_sq += sq
 
-    grad_vals = [v for _, v in grads_list]
-    total_grad_sq = sum(v * v for v in grad_vals)
-    total_grad_norm = float(math.sqrt(total_grad_sq)) if total_grad_sq > 0 else 0.0
-    max_grad = float(max(grad_vals)) if grad_vals else 0.0
-    min_grad = float(min(grad_vals)) if grad_vals else 0.0
+        grads.append((name, gnorm))
 
-    param_norm_vals = [v for _, v in param_list]
-    total_param_norm = float(math.sqrt(sum(v * v for v in param_norm_vals))) if param_norm_vals else 0.0
+    # Compute block and total L2 norms
+    reg_g     = math.sqrt(reg_sq)
+    cls_g     = math.sqrt(cls_sq)
+    ter_g     = math.sqrt(ter_sq)
+    total_gn  = math.sqrt(all_sq) if grads else 0.0
 
-    zero_frac = zero_grad_count / max(1, total_params)
+    # Median, 90th-percentile, max, zero-fraction of all grads
+    gvals     = [g for _, g in grads]
+    med_g     = float(sorted(gvals)[len(gvals)//2])     if gvals else 0.0
+    p90_g     = float(sorted(gvals)[int(0.9 * len(gvals))]) if gvals else 0.0
+    max_g     = max(gvals)                               if gvals else 0.0
+    zero_frac = sum(1 for v in gvals if v == 0.0) / max(1, len(gvals))
 
-    try:
-        sorted_vals = sorted(grad_vals)
-        median_grad = float(sorted_vals[len(sorted_vals)//2]) if sorted_vals else 0.0
-        p90_grad = float(sorted_vals[int(0.9 * len(sorted_vals))]) if sorted_vals else 0.0
-    except Exception:
-        median_grad = 0.0
-        p90_grad = 0.0
+    # Overall parameter‐norm (L₂)
+    param_norm = math.sqrt(sum(p * p for p in pnorms)) if pnorms else 0.0
 
-    topk = sorted(grads_list, key=lambda x: x[1], reverse=True)[:top_k]
-    topk_items = []
-    for n, g in topk:
-        pnorm = next((v for (nm, v) in param_list if nm == n), 0.0)
-        rel = g / pnorm if pnorm > 0 else (float("inf") if g > 0 else 0.0)
-        rel_s = f"{rel:.3f}" if rel != float("inf") else "inf"
-        topk_items.append(f"{n}:{g:.3f}(r={rel_s})")
-    topk_str = ", ".join(topk_items)
+    # 3) Slip & hub diagnostics
+    hub     = getattr(model, "last_hub", None)
+    hub_max = float(hub.max().cpu()) if hub is not None else 0.0
+    slip    = float((hub > slip_thresh).float().mean().cpu()) if hub is not None else 0.0
 
-    head_line = (
-        f"\n[E{epoch:02d} B{batch_idx:03d}] GradNorm→ "
-        f"reg={per_head['reg']:.3f}  cls={per_head['cls']:.3f}  ter={per_head['ter']:.3f} | "
-        f"total_norm={total_grad_norm:.3f} median={median_grad:.3f} p90={p90_grad:.3f} "
-        f"max={max_grad:.3f} min={min_grad:.3f} zero_frac={zero_frac:.3f} param_norm={total_param_norm:.3f}"
+    # 4) Train metrics
+    tr_rmse = math.sqrt(batch_mse)
+    tr_se   = ((train_preds - train_targs) ** 2).sum()
+    tr_sst  = ((train_targs - train_targs.mean()) ** 2).sum() or 1.0
+    tr_r2   = 1.0 - tr_se / tr_sst
+    tr_mae  = float(np.abs(train_preds - train_targs).mean())
+
+    # 5) Val metrics
+    vl_rmse  = float(np.sqrt(((val_preds - val_targs) ** 2).mean()))
+    vl_se    = ((val_preds - val_targs) ** 2).sum()
+    vl_sst   = ((val_targs - val_targs.mean()) ** 2).sum() or 1.0
+    vl_r2    = 1.0 - vl_se / vl_sst
+    vl_mae   = float(np.abs(val_preds - val_targs).mean())
+    val_loss = vl_rmse ** 2
+
+    # 6) Learning rate
+    lr = optimizer.param_groups[0]["lr"]
+
+    # 7) Top‐K gradients by magnitude
+    topk     = sorted(grads, key=lambda x: x[1], reverse=True)[:top_k]
+    topk_s   = ",".join(f"{n}:{g:.3f}" for n, g in topk)
+
+    # 8) Assemble and append log line
+    line = (
+        f"\nE{epoch:02d} | "
+        f"GN(reg={reg_g:.3f},cls={cls_g:.3f},ter={ter_g:.3f},"
+          f"tot={total_gn:.3f},med={med_g:.3f},p90={p90_g:.3f},"
+          f"max={max_g:.3f},zf={zero_frac:.2f},pN={param_norm:.3f}) | "
+        f"lr={lr:.2e} | "
+        f"mse={batch_mse:.4f} | "
+        f"tr: rmse={tr_rmse:.3f} r2={tr_r2:.3f} mae={tr_mae:.3f} | "
+        f"vl: rmse={vl_rmse:.3f} r2={vl_r2:.3f} mae={vl_mae:.3f} | "
+        f"bl: tr={base_tr_rmse:.3f} vl={base_vl_rmse:.3f} | "
+        f"vl_loss={val_loss:.4f} | "
+        f"slip={slip:.2f} hub={hub_max:.3f} | "
+        f"top_grads={topk_s}"
     )
-    _append_log(head_line, log_file)
-    _append_log(f"Top{top_k}_grads: {topk_str}", log_file)
+    _append_log(line, log_file)
 
-    if nonfinite_grad_count > 0:
-        _append_log(f"[WARN] Non-finite gradients for {nonfinite_grad_count} params", log_file)
-
-    if include_head_ratio:
-        head_frac = per_head["reg"] / total_grad_norm if total_grad_norm > 0 else 0.0
-        _append_log(f"[TUNE] total_grad_norm={total_grad_norm:.6f}  head_frac={head_frac:.3f}", log_file)
-    else:
-        _append_log(f"[TUNE] total_grad_norm={total_grad_norm:.6f}", log_file)
