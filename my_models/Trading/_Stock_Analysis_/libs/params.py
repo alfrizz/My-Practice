@@ -25,7 +25,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.15130
+sel_val_rmse = 0.25078
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -150,7 +150,7 @@ hparams = {
     # "SMOOTH_DILATION":      1,      # regression conv dilation (unused); ↑lag smoothing, ↓immediate response
     
     # ── Short-term encoder (short Bi-LSTM) ─────────────────────────────
-    "SHORT_UNITS":           128,    # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
+    "SHORT_UNITS":           192,    # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
     "DROPOUT_SHORT":         0.2,   # after short LSTM; ↑regularization, ↓retains sharp spikes
     
     # ── Projection (short -> final feature space) ──────────────────────
@@ -178,13 +178,13 @@ hparams = {
     # "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight (kept but unused); ↑spike emphasis, ↓regression focus
     
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
-    "LR_EPOCHS_WARMUP":      1,      # constant LR before scheduler; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            2e-5,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
-    "WEIGHT_DECAY":          1e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1.5,    # max grad norm; ↑training stability, ↓gradient expressivity
-    "ETA_MIN":               1e-7,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
-    "T_0":                   100,    # cosine cycle length (unchanged)
-    "T_MULT":                1,      # cycle multiplier (unchanged)
+    "LR_EPOCHS_WARMUP":      3,      # constant LR before scheduler; ↑stable start, ↓early adaptation
+    "INITIAL_LR":            1e-4,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
+    "WEIGHT_DECAY":          2e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              2,    # max grad norm; ↑training stability, ↓gradient expressivity
+    "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
+    "T_0":                   10,    # cosine cycle length (unchanged)
+    "T_MULT":                2,      # cycle multiplier (unchanged)
     
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
