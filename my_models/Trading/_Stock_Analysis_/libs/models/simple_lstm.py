@@ -167,43 +167,35 @@ class ModelClass(nn.Module):
 
 ######################################################################################################
 
-
 def compute_baselines(loader) -> tuple[float, float]:
     """
-    Compute two static one‐step‐per‐window baselines over all windows in `loader`:
-      1) mean_rmse       – RMSE if you always predict μ = average next‐price per window
-      2) persistence_rmse – RMSE if you always predict last‐seen (yₜ = yₜ₋₁) at window end
-
-    Returns:
-      mean_rmse, persistence_rmse
+    Compute two static, one‐step‐per‐window baselines over all windows in `loader`:
+      1) mean_rmse       – RMSE if you always predict μ = average y_sig per window
+      2) persistence_rmse – RMSE if you always predict last‐seen (yₜ = yₜ₋₁)
     """
-    # Collect exactly one “next‐price” and one “persistence‐error” per window
     nexts, last_deltas = [], []
-    for xb, y_r, *_ignore, wd, ts_list, lengths in loader:
+    
+    for x_pad, y_sig, _y_bin, _y_ret, _y_ter, _rc, wd, ts_list, lengths in loader:
         for i, L in enumerate(lengths):
             if L < 1:
                 continue
-            y = y_r[i, :L].view(-1).cpu().numpy()
-            # “next‐price” target at window end
-            nexts.append(y[-1])
-
-            # For persistence baseline, predict y[-1] as y[-2]
+            arr = y_sig[i, :L].view(-1).cpu().numpy()
+            nexts.append(arr[-1])
             if L > 1:
-                last_deltas.append(y[-1] - y[-2])
-
-    # Baseline #1: always predict global μ of the per-window next‐prices
+                last_deltas.append(arr[-1] - arr[-2])
+    
     nexts = np.array(nexts, dtype=float)
     mean_rmse = float(np.sqrt(((nexts - nexts.mean()) ** 2).mean()))
-
-    # Baseline #2: always predict no-change at end of each window
+    
     if last_deltas:
         last_deltas = np.array(last_deltas, dtype=float)
         persistence_rmse = float(np.sqrt((last_deltas ** 2).mean()))
     else:
         persistence_rmse = float("nan")
-
+    
+    # print(f"###### BASELINE CHECK on y_sig: nexts mean±std: "f"{nexts.mean():.5f} ± {nexts.std():.5f}") ################################
+    
     return mean_rmse, persistence_rmse
-
 
 ###############
 
@@ -252,7 +244,7 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
       3. Run model(x_windows) → raw_out.
       4. Unpack & head‐apply → raw_reg of shape (W, look_back, 1).
       5. Squeeze → (W, look_back).
-      6. Take preds = raw_reg[:, -1]; targs = y_reg[i, :W].
+      6. Take preds = raw_reg[:, -1]; targs = y_sig[i, :W].
       7. Accumulate all preds & targs.
 
     Returns:
@@ -266,17 +258,22 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
     all_preds, all_targs = [], []
     with torch.no_grad():
-        for xb, y_reg, *_ignored, wd, ts_list, lengths in tqdm(loader, desc="eval", leave=False):
-            xb, y_reg, wd = xb.to(device), y_reg.to(device), wd.to(device)
-            B = xb.size(0)
+        for x_pad, y_sig, y_bin, y_ret, y_ter, rc, wd, ts_list, lengths in tqdm(loader, desc="eval", leave=False):
 
+            # print(f"###### EVAL LOOP y_sig "f"mean±std: {y_sig.mean():.5f} ± {y_sig.std():.5f}") ############################
+
+            x_pad = x_pad.to(device)
+            y_sig = y_sig.to(device)
+            wd    = wd.to(device)
+
+            B = x_pad.size(0)
             for i in range(B):
                 prev_day = _reset_states(model, wd[i], prev_day)
                 W = int(lengths[i])
                 if W == 0:
                     continue
 
-                seqs    = xb[i, :W]                              # (W, look_back, F)
+                seqs    = x_pad[i, :W]                              # (W, look_back, F)
                 raw_out = model(seqs)
                 raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
@@ -288,7 +285,7 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
                 raw_reg   = raw_reg.squeeze(-1)                  # → (W, look_back)
                 preds_win = raw_reg[:, -1]                       # (W,)
-                targs_win = y_reg[i, :W].view(-1)                # (W,)
+                targs_win = y_sig[i, :W].view(-1)                # (W,)
 
                 all_preds.extend(preds_win.cpu().tolist())
                 all_targs.extend(targs_win.cpu().tolist())
@@ -315,27 +312,28 @@ def model_training_loop(
        clipnorm:           float
 ) -> float:
     """
-    Stateful training + per‐epoch validation + baseline logging.
+    Stateful training + per‐epoch validation + baseline logging,
+    with linear warmup followed by cosine restarts, and console printing
+    of TRAIN/VALID RMSE, R², and current LR each epoch.
 
     1. Precompute four static baselines via compute_baselines().
     2. For each epoch:
-       • Train on each window → collect train_preds/train_targs.
-       • Compute train_metrics = _compute_metrics(train_preds, train_targs).
-       • Step LR.
-       • val_metrics = eval_on_loader(val_loader, model).
-       • Call log_epoch_summary(epoch, model, optimizer,
-                                train_metrics, val_metrics,
-                                base_tr_mean, base_tr_pers,
-                                base_vl_mean, base_vl_pers,
-                                slip_thresh, log_file, top_k, hparams).
-       • Checkpoint & early stop.
+       • Linear warmup of LR over the first LR_EPOCHS_WARMUP epochs.
+       • After warmup, step the CosineAnnealingWarmRestarts scheduler.
+       • TRAIN loop: iterate days, reset day‐state, batch all windows,
+         accumulate per‐window MSELoss and collect preds/targs.
+       • Compute train_metrics via _compute_metrics.
+       • Compute val_metrics via eval_on_loader.
+       • Call log_epoch_summary with all metrics and baselines.
+       • Print a one‐line summary: TRAIN RMSE/R², VALID RMSE/R², LR.
+       • Checkpoint, update early‐stop, and optionally break.
     Returns:
       best_val_rmse: float
     """
     device = next(model.parameters()).device
     model.to(device)
 
-    # Precompute mean & persistence baselines
+    # 1) Precompute static baselines
     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
 
@@ -343,56 +341,67 @@ def model_training_loop(
     live_plot = plots.LiveRMSEPlot()
     best_val, best_state, patience = float("inf"), None, 0
 
+    warmup_epochs = params.hparams["LR_EPOCHS_WARMUP"]
+    init_lr       = params.hparams["INITIAL_LR"]
+
     for epoch in range(1, max_epochs + 1):
-        models_core.linear_warmup(
-            optimizer,
-            epoch,
-            params.hparams["LR_EPOCHS_WARMUP"],
-            params.hparams["INITIAL_LR"],
-        )
+        # --- Linear warmup for first `warmup_epochs` epochs ---
+        if epoch <= warmup_epochs:
+            lr = init_lr * (epoch / warmup_epochs)
+            for pg in optimizer.param_groups:
+                pg["lr"] = lr
+        else:
+            # After warmup, step cosine scheduler (shifted by warmup_epochs)
+            cosine_sched.step(epoch - warmup_epochs)
+
+        # --- TRAIN PHASE ---
         model.train()
         model.h_short = model.h_long = None
         train_preds, train_targs = [], []
         prev_day = None
 
-        # — TRAIN LOOP —
-        for xb, y_reg, *_ignore, wd, ts_list, lengths in tqdm(
+        for x_pad, y_sig, y_bin, y_ret, y_ter, rc, wd, ts_list, lengths in tqdm(     
             train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False
         ):
-            xb, y_reg, wd = xb.to(device), y_reg.to(device), wd.to(device)
+            x_pad, y_sig, wd = x_pad.to(device), y_sig.to(device), wd.to(device)
             optimizer.zero_grad(set_to_none=True)
 
-            batch_loss, windows = 0.0, 0
-            B = xb.size(0)
+            # print(f"###### TRAIN LOOP y_sig " f"mean±std: {y_sig.mean():.5f} ± {y_sig.std():.5f}") ###################################
 
+            batch_loss, windows = 0.0, 0
+            B = x_pad.size(0)
+
+            # Iterate each day in the batch
             for i in range(B):
                 prev_day = _reset_states(model, wd[i], prev_day)
                 W = int(lengths[i])
                 if W == 0:
                     continue
 
-                x_win    = xb[i, :W]
-                raw_out  = model(x_win)
-                raw_reg  = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+                # Forward all windows of day i
+                x_win   = x_pad[i, :W]                        
+                raw_out = model(x_win)
+                raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
+                # Ensure regression head applied
                 if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
                     raw_reg = model.pred(raw_reg)
                 elif raw_reg.dim() == 2:
                     raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
 
-                seq_preds = raw_reg.squeeze(-1)      # → (W, look_back)
-                preds_win = seq_preds[:, -1]         # → (W,)
-                targs_win = y_reg[i, :W].view(-1)    # → (W,)
+                seq_preds = raw_reg.squeeze(-1)      # (W,)
+                preds_win = seq_preds[:, -1]         # final window-end preds
+                targs_win = y_sig[i, :W].view(-1)    # true window-end targets
 
+                # Accumulate loss & collect preds/targs
                 loss = mse_loss(preds_win, targs_win)
                 batch_loss += loss
-                windows    += 1
+                windows   += 1
 
-                p_np = preds_win.detach().cpu().numpy()
-                t_np = targs_win.detach().cpu().numpy()
-                train_preds .extend(p_np.tolist())
-                train_targs .extend(t_np.tolist())
+                train_preds.extend(preds_win.detach().cpu().tolist())
+                train_targs.extend(targs_win.detach().cpu().tolist())
 
+            # Backprop once per batch
             batch_loss = batch_loss / max(1, windows)
             scaler.scale(batch_loss).backward()
             scaler.unscale_(optimizer)
@@ -400,22 +409,30 @@ def model_training_loop(
             scaler.step(optimizer)
             scaler.update()
 
-        # Compute training metrics once
-        train_preds_arr = np.array(train_preds, dtype=float)
-        train_targs_arr = np.array(train_targs, dtype=float)
-        train_metrics   = _compute_metrics(train_preds_arr, train_targs_arr)
-
-        # Compute validation metrics once
+        # --- METRICS & VALIDATION ---
+        train_metrics = _compute_metrics(
+            np.array(train_preds, dtype=float),
+            np.array(train_targs, dtype=float),
+        )
         val_metrics, _ = eval_on_loader(val_loader, model)
 
-        # Then update scheduler for next epoch:
-        cosine_sched.step(epoch)
-
-        # Extract scalars for logging, plotting, checkpointing
-        tr_rmse = train_metrics["rmse"]
-        vl_rmse = val_metrics["rmse"]
+        # print("▶ sample preds mean ± std:", np.array(train_preds, dtype=float).mean(), np.array(train_preds, dtype=float).std()) ##################
+        # print("▶ sample targs mean ± std:", np.array(train_targs, dtype=float).mean(), np.array(train_targs, dtype=float).std()) ##################
         
-        # Log & checkpoint
+        # --- LOG & CHECKPOINT ---
+        tr_rmse, tr_mae, tr_r2 = (
+            train_metrics["rmse"],
+            train_metrics["mae"],
+            train_metrics["r2"],
+        )
+        vl_rmse, vl_mae, vl_r2 = (
+            val_metrics["rmse"],
+            val_metrics["mae"],
+            val_metrics["r2"],
+        )
+        lr = optimizer.param_groups[0]["lr"]
+
+        # Append to log file and update live plot
         models_core.log_epoch_summary(
             epoch,
             model,
@@ -433,6 +450,15 @@ def model_training_loop(
         )
         live_plot.update(tr_rmse, vl_rmse)
 
+        # Console summary: TRAIN/VALID RMSE, R², and LR
+        print(
+            f"Epoch {epoch:02d}  "
+            f"TRAIN → RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
+            f"VALID → RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
+            f"lr={lr:.2e}"
+        )
+
+        # Checkpointing & early stopping
         models_dir = Path(params.models_folder)
         best_val, improved, *_ = models_core.maybe_save_chkpt(
             models_dir, model, vl_rmse, best_val,
@@ -448,9 +474,7 @@ def model_training_loop(
                 print(f"Early stopping at epoch {epoch}")
                 break
 
-        print(f"Epoch {epoch:02d}  TRAIN RMSE={tr_rmse:.5f}  VALID RMSE={vl_rmse:.5f}")
-
-    # Restore best model & final checkpoint
+    # --- FINAL CHECKPOINT RESTORE ---
     if best_state is not None:
         model.load_state_dict(best_state)
         models_core.save_final_chkpt(
@@ -459,4 +483,3 @@ def model_training_loop(
         )
 
     return best_val
-

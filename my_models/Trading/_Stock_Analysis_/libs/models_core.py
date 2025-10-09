@@ -305,11 +305,11 @@ class DayWindowDataset(Dataset):
       2) Groups windows by calendar date (numpy datetime64[D]).
       3) Computes start/end indices and weekday for each day.
       4) On __getitem__, returns an 8-tuple:
-         - x_day     : Tensor (1, W, look_back, F)
-         - y_day     : Tensor (1, W)
-         - y_sig_cls : Tensor (1, W) binary labels from y_day > signal_thresh
-         - ret_day   : Tensor (1, W) true returns
-         - y_ret_ter : LongTensor (1, W) ternary labels from ret_day vs return_thresh
+         - x         : Tensor (1, W, look_back, F)
+         - y_sig     : Tensor (1, W)
+         - y_cls_bin : Tensor (1, W) binary labels from y_sig > signal_thresh
+         - y_ret     : Tensor (1, W) true returns
+         - y_ret_ter : LongTensor (1, W) ternary labels from ret vs return_thresh
          - rc        : Tensor (W,) raw_close slice for this day
          - wd        : int weekday index
          - end_ts    : numpy.datetime64[ns] of last window’s timestamp
@@ -356,17 +356,17 @@ class DayWindowDataset(Dataset):
         e = self.end[idx].item()
 
         # 4) Slice out windows and add batch‐dim
-        x_day = self.X[s:e].unsqueeze(0)          # (1, W, look_back, F)
-        y_day = self.y_signal[s:e].unsqueeze(0)   # (1, W)
+        x     = self.X[s:e].unsqueeze(0)          # (1, W, look_back, F)
+        y_sig = self.y_signal[s:e].unsqueeze(0)   # (1, W)
 
         # Binary label per window
-        y_sig_cls = (y_day > self.signal_thresh).float()
+        y_cls_bin = (y_sig > self.signal_thresh).float()
 
         # True returns + ternary label
-        ret_day   = self.y_return[s:e].unsqueeze(0)
-        y_ret_ter = torch.ones_like(ret_day, dtype=torch.long)
-        y_ret_ter[ret_day >  self.return_thresh] = 2
-        y_ret_ter[ret_day < -self.return_thresh] = 0
+        y_ret     = self.y_return[s:e].unsqueeze(0)
+        y_ret_ter = torch.ones_like(y_ret, dtype=torch.long)
+        y_ret_ter[y_ret >  self.return_thresh] = 2
+        y_ret_ter[y_ret < -self.return_thresh] = 0
 
         # Extract raw_close slice (length W, no leading dim)
         rc = self.raw_close[s:e]
@@ -376,7 +376,7 @@ class DayWindowDataset(Dataset):
         end_ts = self.end_times[e - 1]  # numpy.datetime64[ns]
 
         # Return the fixed 8-tuple
-        return x_day, y_day, y_sig_cls, ret_day, y_ret_ter, rc, wd, end_ts
+        return x, y_sig, y_cls_bin, y_ret, y_ret_ter, rc, wd, end_ts
 
 
 ######################
@@ -387,45 +387,43 @@ def pad_collate(batch):
     Pad variable-length per-day sequences into fixed tensors.
 
     Batch items (always 8-tuple):
-      (x_day, y_day, y_sig_cls, ret_day, y_ret_ter, rc, weekday, end_ts)
+      (x, y_sig, y_cls_bin, y_ret, y_ret_ter, rc, wd, end_ts)
 
     Returns 9 items:
-      x_pad    Tensor (B, max_W, look_back, F)
-      y_pad    Tensor (B, max_W)
-      ysig_pad Tensor (B, max_W)
-      ret_pad  Tensor (B, max_W)
-      yter_pad LongTensor (B, max_W)
-      rc_pad   Tensor (B, max_W)
-      wd       LongTensor (B,)
-      ts_list  list of end_ts per element
-      lengths  list of true window counts per day
+      x_pad      Tensor (B, max_W, look_back, F)
+      ysig_pad   Tensor (B, max_W)
+      ybin_pad   Tensor (B, max_W)
+      y_ret_pad  Tensor (B, max_W)
+      yter_pad   LongTensor (B, max_W)
+      rc_pad     Tensor (B, max_W)
+      wd         LongTensor (B,)
+      ts_list    list of end_ts per element
+      lengths    list of true window counts per day
     """
     # Unpack fixed 8-tuple structure
-    x_list, y_list, ysig_list, ret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
+    x_list, ysig_list, ybin_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
 
     # Remove leading batch dim from each day's tensors
-    xs   = [x.squeeze(0) for x in x_list]
-    ys   = [y.squeeze(0) for y in y_list]
-    ysig = [yc.squeeze(0) for yc in ysig_list]
-    rets = [r.squeeze(0) for r in ret_list]
-    yter = [t.squeeze(0) for t in yter_list]
+    xs      = [x.squeeze(0) for x in x_list]
+    ysig    = [y.squeeze(0) for y in ysig_list]
+    ybin    = [yc.squeeze(0) for yc in ybin_list]
+    yrets   = [r.squeeze(0) for r in yret_list]
+    yter    = [t.squeeze(0) for t in yter_list]
     lengths = [seq.size(0) for seq in xs]
 
-    # 1) Pad along the time axis for each field
+    # Pad along the time axis for each field
     x_pad    = pad_sequence(xs,   batch_first=True)
-    y_pad    = pad_sequence(ys,   batch_first=True)
-    ysig_pad = pad_sequence(ysig, batch_first=True)
-    ret_pad  = pad_sequence(rets, batch_first=True)
+    ysig_pad = pad_sequence(ysig,   batch_first=True)
+    ybin_pad = pad_sequence(ybin, batch_first=True)
+    yret_pad = pad_sequence(yrets, batch_first=True)
     yter_pad = pad_sequence(yter, batch_first=True)
+    rc_pad   = pad_sequence(rc_list, batch_first=True)
 
-    # 2) Pad raw_close similarly
-    rc_pad = pad_sequence(rc_list, batch_first=True)
-
-    # 3) Weekday tensor and ts_list remain as-is
+    # Weekday tensor and ts_list 
     wd_tensor = torch.tensor(wd_list, dtype=torch.long)
 
     # Return all padded tensors, timestamps, and sequence lengths
-    return x_pad, y_pad, ysig_pad, ret_pad, yter_pad, rc_pad, wd_tensor, list(ts_list), lengths
+    return x_pad, ysig_pad, ybin_pad, yret_pad, yter_pad, rc_pad, wd_tensor, list(ts_list), lengths
 
 
     
@@ -551,6 +549,10 @@ def model_core_pipeline(
         sess_start=sess_start
     )
 
+    # ─── SANITY CHECK: verify scales of raw signal vs. return ───
+    print(f"###### FULL y_sig  mean±std: {y_sig.mean():.5f} ± {y_sig.std():.5f}")   # ######
+    print(f"###### FULL y_ret  mean±std: {y_ret.mean():.5f} ± {y_ret.std():.5f}")   # ######
+
     # 2) split into train/val/test by calendar day
     (train_split, val_split, test_split,
      samples_per_day,
@@ -568,8 +570,6 @@ def model_core_pipeline(
     # 3) carve end_times in the same proportions
     n_tr  = day_id_tr .shape[0]
     n_val = day_id_val.shape[0]
-    # n_tr  = X_tr.shape[0]
-    # n_val = X_val.shape[0]
     i_tr, i_val = n_tr, n_tr + n_val
 
     end_times_tr  = end_times[:i_tr]

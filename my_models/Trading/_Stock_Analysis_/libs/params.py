@@ -20,7 +20,7 @@ label_col  = "signal"
 month_to_check = '2023-10'
 
 createCSVbase = False # set to True to regenerate the 'base' csv
-createCSVsign = False # set to True to regenerate the 'sign' csv
+createCSVsign = True # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
@@ -110,24 +110,26 @@ def signal_parameters(ticker):
         look_back = 60
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
-        smooth_sign_win = 15
+        smooth_sign_win = 3
         features_cols = ['sma_pct_14',
                          'atr_pct_14',
-                         'rsi_14',
                          'bb_w_20',
-                         'plus_di_14',
+                         'rsi_14',
+                         'ret',
                          'range_pct',
                          'eng_ma',
-                         'minus_di_14',
-                         'macd_diff_12_26_9',
-                         'ret',
-                         'eng_macd',
-                         'macd_line_12_26_9',
+                         'plus_di_14',
                          'obv_diff_14',
                          'eng_atr_div',
-                         'eng_adx',
+                         'minus_di_14',
                          'hour',
-                         'adx_14']
+                         'eng_macd',
+                         'macd_diff_12_26_9',
+                         'body',
+                         'macd_line_12_26_9',
+                         'eng_rsi',
+                         'adx_14',
+                         'eng_adx']
         trailing_stop_pred = 0.2
         pred_threshold = 0.2
         return_threshold = 0.01
@@ -144,23 +146,21 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 hparams = {
     # ── Input conv (first layer) ────────────────────────────────────────
-    "CONV_K":                3,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
-    "CONV_DILATION":         1,      # input conv dilation; ↑receptive field, ↓signal granularity
+    "CONV_K":                5,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
+    "CONV_DILATION":         2,      # input conv dilation; ↑receptive field, ↓signal granularity
     # "SMOOTH_K":             3,      # regression-head conv kernel (unused in forward); ↑smoothing window, ↓reactivity
     # "SMOOTH_DILATION":      1,      # regression conv dilation (unused); ↑lag smoothing, ↓immediate response
     
     # ── Short-term encoder (short Bi-LSTM) ─────────────────────────────
-    "SHORT_UNITS":           192,    # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
-    "DROPOUT_SHORT":         0.2,   # after short LSTM; ↑regularization, ↓retains sharp spikes
+    "SHORT_UNITS":           192,      # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
+    "LONG_UNITS":            256,      # projection / pred input dim (formerly long LSTM size); ↑feature width, ↓bottleneck risk
+    "DROPOUT_SHORT":         0.15,      # after short LSTM; ↑regularization, ↓retains sharp spikes
+    "DROPOUT_LONG":          0.15,      # after projection; ↑overfitting guard, ↓reactivity at head
     
     # ── Projection (short -> final feature space) ──────────────────────
-    "LONG_UNITS":            256,    # projection / pred input dim (formerly long LSTM size); ↑feature width, ↓bottleneck risk
-    # "PROJ_HIDDEN":          192,    # hidden dim for optional short2long MLP (Option B) -- commented until used
-    # "PROJ_USE_MLP":         False,  # toggle single-linear vs small-MLP (unused) -- commented until used
+    # "PROJ_HIDDEN":          192,     # hidden dim for optional short2long MLP (Option B) -- commented until used
+    # "PROJ_USE_MLP":         False,   # toggle single-linear vs small-MLP (unused) -- commented until used
     "PRED_HIDDEN":           128,      # optional head hidden dim 
-    
-    # ── Final normalization / dropout (applied to projection before head) ─
-    "DROPOUT_LONG":          0.2,   # after projection; ↑overfitting guard, ↓reactivity at head
     
     # ── Regression head (last layer) ───────────────────────────────────
     # "PRED_HIDDEN":          None,   # optional hidden dim for extra head layer (unused)
@@ -179,24 +179,19 @@ hparams = {
     
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "LR_EPOCHS_WARMUP":      3,      # constant LR before scheduler; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            1e-4,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
-    "WEIGHT_DECAY":          2e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              2,    # max grad norm; ↑training stability, ↓gradient expressivity
+    "INITIAL_LR":            5e-5,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
+    "WEIGHT_DECAY":          5e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              1.5,      # max grad norm; ↑training stability, ↓gradient expressivity
     "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
-    "T_0":                   10,    # cosine cycle length (unchanged)
+    "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time
+    "MAX_EPOCHS":            70,     # max epochs
+    "T_0":                   70,     # cosine cycle length (unchanged)
     "T_MULT":                2,      # cycle multiplier (unchanged)
     
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
+    "TRAIN_BATCH":           16,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch
     "NUM_WORKERS":           12,     # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
-    "MAX_EPOCHS":            100,    # max epochs
-    "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time
 
-    # ── ReduceLROnPlateau Scheduler ───
-    # "PLATEAU_FACTOR":        0.9,    # multiply LR by this factor on plateau
-    # "PLATEAU_PATIENCE":      0,      # epochs with no val-improve before LR cut
-    # "MIN_LR":                1e-6,   # lower bound on LR after reductions
-    # "PLAT_EPOCHS_WARMUP":    999     # epochs to wait before triggering plateau logic
 }
