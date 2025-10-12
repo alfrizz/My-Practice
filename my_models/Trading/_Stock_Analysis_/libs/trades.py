@@ -76,7 +76,7 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
 ##################
 
 
-def process_splits(folder, ticker, bidasktoclose_pct):
+def process_splits(folder, ticker, bidask_spread_pct):
     """
     Processes the intraday CSV file for the given ticker from the specified folder.
     
@@ -378,7 +378,7 @@ def compute_continuous_signal(
                        float]],
     tau_time: float,        # minutes “half‐life” for temporal decay of past scores
     tau_dur: float,         # minutes “half‐life” for duration‐based trade boost
-    smoothing_window: Optional[int] = None  # size of centered rolling window to smooth final signal
+    # smoothing_window: Optional[int] = None  # size of centered rolling window to smooth final signal
 ) -> pd.DataFrame:
     """
     Build raw and smoothed per‐minute signal from past trades.
@@ -389,11 +389,6 @@ def compute_continuous_signal(
        c) duration_boost  = 1 – exp(– trade_duration_min / tau_dur) # in [0,1)
        d) raw_score[t]    = gap[t] * decay_time[t] * duration_boost
        e) signal_raw[t]   = max(prev_signal_raw[t], raw_score[t])
-    2) Copy signal_raw → “signal” column, then optionally smooth “signal” with
-       a centered rolling mean of width smoothing_window.
-    Returns a copy of day_df with two new columns:
-      • signal_raw  – unsmoothed raw per‐minute scores
-      • signal      – optionally smoothed series used for downstream actions
     """
     df = day_df.copy()
     n  = len(df)
@@ -428,18 +423,39 @@ def compute_continuous_signal(
     # assign raw signal series
     df["signal_raw"] = signal_raw
 
-    # copy raw → final signal
-    df["signal"] = df["signal_raw"]
-
-    # 2) optional smoothing of the final signal
-    if smoothing_window:
-        df["signal"] = (
-            df["signal"]
-              .rolling(window=smoothing_window, center=True, min_periods=1)
-              .mean()
-        )
-
     return df
+
+
+#########################################################################################################
+
+
+def smooth_scale_saturate(
+    series:   pd.Series,
+    window:   int,
+    beta_sat: float
+) -> pd.Series:
+    """
+    1) Smoothing: centered rolling mean of width `window`.
+    2) Proportional scale into [0,1]: divide by the global max of the smoothed series.
+    3) Soft‐saturating exponential warp:
+         h(u) = (1 - exp(-β·u)) / (1 - exp(-β))
+       • h(0)=0, h(1)=1
+       • concave: lifts the bulk (h(u)>u for u∈(0,1)), gently compresses the top end.
+    Returns a new Series in [0,1], same index as `series`.
+    """
+    # 1) smooth
+    sm = series.rolling(window=window, center=True, min_periods=1).mean()
+
+    # 2) proportional scale → [0,1]
+    u = sm / sm.max()
+
+    # 3) soft‐saturate
+    expb = np.exp(-beta_sat)
+    # denominator = 1 - e^{-β}
+    denom = 1.0 - expb
+    warped = (1.0 - np.exp(-beta_sat * u)) / denom
+
+    return pd.Series(warped, index=series.index)
 
     
 #########################################################################################################
@@ -657,37 +673,38 @@ def simulate_trading(
 
 
 def run_trading_pipeline(
-    df: pd.DataFrame,               
-    col_signal: str,                # e.g. "signal"
-    col_action: str,                # e.g. "signal_action"
-    min_prof_thr: float,            
-    max_down_prop: float,           
-    gain_tightening_factor: float,  
-    merging_retracement_thr: float, 
-    merging_time_gap_thr: float,    
-    tau_time: float,                
-    tau_dur: float,                 
-    trailing_stop_pct: float,       
-    buy_threshold: float,           
-    smoothing_window: Optional[int] = None,  
-    col_close: str = "close"        
+    df: pd.DataFrame,
+    col_signal: str,
+    col_action: str,
+    min_prof_thr: float,
+    max_down_prop: float,
+    gain_tightening_factor: float,
+    merging_retracement_thr: float,
+    merging_time_gap_thr: float,
+    tau_time: float,
+    tau_dur: float,
+    trailing_stop_pct: float,
+    buy_threshold: float,
+    smoothing_window: int,
+    beta_sat: float,
+    col_close: str = "close"
 ) -> Optional[Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, Any]]]]:
     """
     End-to-end trading pipeline:
 
-    1) Detect and merge candidate trades per day in session hours.
-    2) Compute per‐day raw & smoothed continuous signals.
-    3) Build a global cutoff using the UNSMOOTHED 'signal_raw' series:
-       - zero_frac = fraction of all raw values == 0
-       - top_pct   = zero_frac * 100
-       - cutoff    = percentile(flat_raw, 100 - top_pct)
-       - scale     = 1 / cutoff
-    4) Scale and cap the SMOOTHED 'signal' series per day.
-    5) Generate discrete trade actions and simulate P&L over all days.
+    1) Detect & merge candidate trades per day.
+    2) Compute per-day raw continuous signals (unsmoothed).
+    3) Concatenate all days’ raw signals, then apply:
+       a) smoothing (centered rolling mean, window=smoothing_window)
+       b) proportional scale into [0,1] by dividing by the global max
+       c) soft‐saturating exponential warp with curvature beta_sat
+       → yields one global “warped” pd.Series over the full index.
+    4) Split that warped series back into each day’s df_sig[col_signal].
+    5) Generate discrete actions & simulate P&L.
+
     Returns mapping day → (sim_df, trades, perf_stats).
     """
-
-    # 1) detect & merge
+    # 1) Detect & merge
     print("Detecting & merging trades by day …")
     trades_by_day = identify_trades_by_day(
         df,
@@ -700,40 +717,39 @@ def run_trading_pipeline(
         params.sess_end,
     )
 
-    # 2) compute signals
+    # 2) Compute raw continuous signals
     print("Computing raw continuous signals …")
-    raw_signals = {}
-    all_raw     = []
+    raw_signals: Dict[dt.date, Tuple[pd.DataFrame, List]] = {}
     for day, (day_df, trades) in trades_by_day.items():
         df_sig = compute_continuous_signal(
             day_df,
             trades,
-            tau_time,
-            tau_dur,
-            smoothing_window,
+            tau_time=tau_time,
+            tau_dur=tau_dur
         )
         raw_signals[day] = (df_sig, trades)
-        # collect unsmoothed values for global cutoff
-        all_raw.append(df_sig["signal_raw"].to_numpy())
 
-    if not all_raw:
-        return None
+    # 3) Build one global Series of raw signals across all days
+    print(f"Smoothing, scaling & soft-saturating …")
+    # concatenate in chronological order
+    all_raw = pd.concat(
+        [df_sig["signal_raw"] for df_sig, _ in raw_signals.values()]
+    ).sort_index()
 
-    # 3) global cutoff & scale on raw distribution
-    flat      = np.concatenate(all_raw)
-    zero_frac = float((flat == 0.0).sum()) / len(flat)
-    top_pct   = zero_frac * 100.0
-    cutoff    = np.percentile(flat, 100.0 - top_pct)
-    scale     = 1.0 / cutoff if cutoff > 0 else 0.0
+    # apply the combined smoothing / scaling / saturating
+    warped = smooth_scale_saturate(
+        series=all_raw,
+        window=smoothing_window,
+        beta_sat=beta_sat
+    )
 
-    # 4) scale & cap the smoothed signal, then generate actions
-    print("Scale & cap the smoothed signal ( top & bottom percentiles set at", round(top_pct,3) ,") & generating trade actions …")
-    signaled = {}
+    # 4) assign back per day and generate actions
+    signaled: Dict[dt.date, Tuple[pd.DataFrame, List]] = {}
     for day, (df_sig, trades) in raw_signals.items():
-        # apply scaling to the SMOOTHED 'signal' column
-        df_sig[col_signal] = np.minimum(df_sig["signal"] * scale, 1.0)
+        # pick the warped values matching this day's timestamps
+        df_sig[col_signal] = warped.loc[df_sig.index]
 
-        # discrete actions
+        # generate trade actions on the warped [0,1] signal
         df_act = generate_trade_actions(
             df_sig,
             col_signal,
@@ -754,3 +770,4 @@ def run_trading_pipeline(
     )
 
     return sim_results
+

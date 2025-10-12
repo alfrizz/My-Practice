@@ -167,6 +167,31 @@ class ModelClass(nn.Module):
 
 ######################################################################################################
 
+class SmoothMSELoss(nn.Module):
+    """
+    Combines pointwise MSE with a penalty on 1-step differences
+    to force model predictions to match both level and slope of the target.
+    """
+    def __init__(self, alpha: float = 10.0):
+        super().__init__()
+        self.level_loss = nn.MSELoss()
+        self.alpha      = alpha
+
+    def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
+        # preds/targs shape: (B,), or (B, W) if batched windows
+        L1 = self.level_loss(preds, targs)
+
+        # Compute one-step differences along time dimension
+        if preds.dim() == 1:
+            dp, dt = preds[1:] - preds[:-1], targs[1:] - targs[:-1]
+        else:
+            dp, dt = preds[:,1:] - preds[:,:-1], targs[:,1:] - targs[:,:-1]
+
+        L2 = self.level_loss(dp, dt)
+        return L1 + self.alpha * L2
+        
+######################################################################################################
+
 def compute_baselines(loader) -> tuple[float, float]:
     """
     Compute two static, one‐step‐per‐window baselines over all windows in `loader`:
@@ -292,8 +317,13 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
     preds = np.array(all_preds, dtype=float)
     targs = np.array(all_targs, dtype=float)
+    
     # if clamp_preds and preds.size:
     #     preds = np.clip(preds, 0.0, 1.0)
+
+    # attach Torch tensors to model for logger
+    model.last_val_preds  = torch.from_numpy(preds).float()
+    model.last_val_targs  = torch.from_numpy(targs).float()
 
     return _compute_metrics(preds, targs), preds
 
@@ -304,12 +334,13 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 def model_training_loop(
     model:           nn.Module,
     optimizer:       torch.optim.Optimizer,
-    cosine_sched:    torch.optim.lr_scheduler.CosineAnnealingWarmRestarts,
+    scheduler:       torch.optim.lr_scheduler.OneCycleLR,
     scaler:          GradScaler,
     train_loader, val_loader,
     *, max_epochs:         int,
        early_stop_patience: int,
-       clipnorm:           float
+       clipnorm:           float,
+       alpha_smooth:       int,
 ) -> float:
     """
     Stateful training + per‐epoch validation + baseline logging,
@@ -341,22 +372,11 @@ def model_training_loop(
     live_plot = plots.LiveRMSEPlot()
     best_val, best_state, patience = float("inf"), None, 0
 
-    warmup_epochs = params.hparams["LR_EPOCHS_WARMUP"]
-    init_lr       = params.hparams["INITIAL_LR"]
-
     for epoch in range(1, max_epochs + 1):
-        # --- Linear warmup for first `warmup_epochs` epochs ---
-        if epoch <= warmup_epochs:
-            lr = init_lr * (epoch / warmup_epochs)
-            for pg in optimizer.param_groups:
-                pg["lr"] = lr
-        else:
-            # After warmup, step cosine scheduler (shifted by warmup_epochs)
-            cosine_sched.step(epoch - warmup_epochs)
 
         # --- TRAIN PHASE ---
         model.train()
-        model.h_short = model.h_long = None
+        # model.h_short = model.h_long = None
         train_preds, train_targs = [], []
         prev_day = None
 
@@ -365,8 +385,6 @@ def model_training_loop(
         ):
             x_pad, y_sig, wd = x_pad.to(device), y_sig.to(device), wd.to(device)
             optimizer.zero_grad(set_to_none=True)
-
-            # print(f"###### TRAIN LOOP y_sig " f"mean±std: {y_sig.mean():.5f} ± {y_sig.std():.5f}") ###################################
 
             batch_loss, windows = 0.0, 0
             B = x_pad.size(0)
@@ -394,7 +412,8 @@ def model_training_loop(
                 targs_win = y_sig[i, :W].view(-1)    # true window-end targets
 
                 # Accumulate loss & collect preds/targs
-                loss = mse_loss(preds_win, targs_win)
+                smooth_loss = SmoothMSELoss(alpha_smooth)  
+                loss = smooth_loss(preds_win, targs_win)
                 batch_loss += loss
                 windows   += 1
 
@@ -408,6 +427,7 @@ def model_training_loop(
             nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
             scaler.step(optimizer)
             scaler.update()
+            scheduler.step()
 
         # --- METRICS & VALIDATION ---
         train_metrics = _compute_metrics(
@@ -416,9 +436,6 @@ def model_training_loop(
         )
         val_metrics, _ = eval_on_loader(val_loader, model)
 
-        # print("▶ sample preds mean ± std:", np.array(train_preds, dtype=float).mean(), np.array(train_preds, dtype=float).std()) ##################
-        # print("▶ sample targs mean ± std:", np.array(train_targs, dtype=float).mean(), np.array(train_targs, dtype=float).std()) ##################
-        
         # --- LOG & CHECKPOINT ---
         tr_rmse, tr_mae, tr_r2 = (
             train_metrics["rmse"],

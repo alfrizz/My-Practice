@@ -1,145 +1,275 @@
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
-RUN START: 2025-10-09T16:44:49.229115Z
+RUN START: 2025-10-12T16:28:01.412170Z
 
 HYPERPARAMS:
   CONV_K = 5
   CONV_DILATION = 2
+  ALPHA_SMOOTH = 10
   SHORT_UNITS = 192
   LONG_UNITS = 256
-  DROPOUT_SHORT = 0.01
-  DROPOUT_LONG = 0.01
+  DROPOUT_SHORT = 0.2
+  DROPOUT_LONG = 0.2
   PRED_HIDDEN = 128
-  LR_EPOCHS_WARMUP = 1
-  INITIAL_LR = 0.0005
-  WEIGHT_DECAY = 1e-07
-  CLIPNORM = 20
-  ETA_MIN = 1e-06
-  T_0 = 10
-  T_MULT = 2
-  TRAIN_BATCH = 64
-  VAL_BATCH = 1
-  NUM_WORKERS = 12
-  TRAIN_PREFETCH_FACTOR = 4
-  MAX_EPOCHS = 70
-  EARLY_STOP_PATIENCE = 7
-
-BASELINES:
-  TRAIN mean RMSE      = 0.05744
-  TRAIN persistence RMSE = 0.08142
-  VAL   mean RMSE      = 0.04264
-  VAL   persistence RMSE = 0.10806
-
-E01 | GN(reg=0.032,cls=0.000,ter=0.000,tot=0.048) | lr=5.00e-04 | tr(rmse=0.308,r2=-0.039,mae=0.238) | vl(rmse=0.284,r2=0.103,mae=0.232) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.028,pred.0.weight:0.028,short2long.weight:0.017,pred.2.weight:0.016,short_lstm.weight_ih_l0:0.011,short_lstm.weight_ih_l0_reverse:0.007,short_lstm.weight_hh_l0:0.002,short_lstm.bias_ih_l0:0.002,short_lstm.bias_hh_l0:0.002,bn.weight:0.001,pred.0.bias:0.001,short2long.bias:0.001,short_lstm.bias_ih_l0_reverse:0.001,short_lstm.bias_hh_l0_reverse:0.001,ln_long.weight:0.001,bn.bias:0.001,ln_long.bias:0.001,ln_short.weight:0.001,ln_short.bias:0.001,pred.2.bias:0.000,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E02 | GN(reg=0.208,cls=0.000,ter=0.000,tot=0.251) | lr=4.88e-04 | tr(rmse=0.285,r2=0.110,mae=0.224) | vl(rmse=0.283,r2=0.107,mae=0.228) | slip=0.00,hub=0.000 | top_grads=pred.2.weight:0.151,pred.0.weight:0.137,conv.weight:0.111,short2long.weight:0.066,short_lstm.weight_ih_l0:0.044,pred.2.bias:0.040,short_lstm.weight_ih_l0_reverse:0.025,short_lstm.bias_ih_l0:0.010,short_lstm.bias_hh_l0:0.010,short_lstm.weight_hh_l0:0.009,pred.0.bias:0.009,bn.weight:0.007,short2long.bias:0.005,short_lstm.bias_ih_l0_reverse:0.005,short_lstm.bias_hh_l0_reverse:0.005,bn.bias:0.004,ln_long.bias:0.004,ln_long.weight:0.003,ln_short.bias:0.003,ln_short.weight:0.002,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E03 | GN(reg=0.060,cls=0.000,ter=0.000,tot=0.083) | lr=4.52e-04 | tr(rmse=0.281,r2=0.135,mae=0.220) | vl(rmse=0.283,r2=0.109,mae=0.219) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.048,pred.0.weight:0.043,pred.2.weight:0.041,short2long.weight:0.022,short_lstm.weight_ih_l0:0.017,short_lstm.weight_ih_l0_reverse:0.010,pred.2.bias:0.009,short_lstm.weight_hh_l0:0.004,short_lstm.bias_ih_l0:0.003,short_lstm.bias_hh_l0:0.003,pred.0.bias:0.003,bn.weight:0.003,short_lstm.bias_ih_l0_reverse:0.002,short_lstm.bias_hh_l0_reverse:0.002,bn.bias:0.002,short2long.bias:0.002,ln_long.weight:0.001,ln_long.bias:0.001,ln_short.bias:0.001,ln_short.weight:0.001,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E04 | GN(reg=0.149,cls=0.000,ter=0.000,tot=0.191) | lr=3.97e-04 | tr(rmse=0.280,r2=0.142,mae=0.218) | vl(rmse=0.284,r2=0.103,mae=0.218) | slip=0.00,hub=0.000 | top_grads=pred.2.weight:0.109,conv.weight:0.101,pred.0.weight:0.097,short2long.weight:0.045,short_lstm.weight_ih_l0:0.038,pred.2.bias:0.028,short_lstm.weight_ih_l0_reverse:0.021,short_lstm.bias_ih_l0:0.008,short_lstm.bias_hh_l0:0.008,short_lstm.weight_hh_l0:0.008,pred.0.bias:0.006,bn.weight:0.006,bn.bias:0.004,short_lstm.bias_ih_l0_reverse:0.004,short_lstm.bias_hh_l0_reverse:0.004,short2long.bias:0.004,ln_long.bias:0.003,ln_long.weight:0.003,ln_short.bias:0.002,ln_short.weight:0.002,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E05 | GN(reg=0.146,cls=0.000,ter=0.000,tot=0.195) | lr=3.28e-04 | tr(rmse=0.279,r2=0.151,mae=0.217) | vl(rmse=0.285,r2=0.098,mae=0.219) | slip=0.00,hub=0.000 | top_grads=pred.2.weight:0.108,conv.weight:0.108,pred.0.weight:0.094,short2long.weight:0.045,short_lstm.weight_ih_l0:0.043,pred.2.bias:0.028,short_lstm.weight_ih_l0_reverse:0.022,short_lstm.weight_hh_l0:0.010,short_lstm.bias_ih_l0:0.010,short_lstm.bias_hh_l0:0.010,bn.weight:0.007,pred.0.bias:0.006,bn.bias:0.005,short_lstm.bias_ih_l0_reverse:0.004,short_lstm.bias_hh_l0_reverse:0.004,short2long.bias:0.003,ln_long.bias:0.003,ln_long.weight:0.003,ln_short.bias:0.002,ln_short.weight:0.002,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E06 | GN(reg=0.061,cls=0.000,ter=0.000,tot=0.090) | lr=2.51e-04 | tr(rmse=0.277,r2=0.159,mae=0.216) | vl(rmse=0.286,r2=0.091,mae=0.221) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.055,pred.2.weight:0.044,pred.0.weight:0.041,short_lstm.weight_ih_l0:0.024,short2long.weight:0.022,short_lstm.weight_ih_l0_reverse:0.012,pred.2.bias:0.010,short_lstm.weight_hh_l0:0.006,short_lstm.bias_ih_l0:0.004,short_lstm.bias_hh_l0:0.004,bn.weight:0.003,pred.0.bias:0.003,bn.bias:0.002,short_lstm.bias_ih_l0_reverse:0.002,short_lstm.bias_hh_l0_reverse:0.002,short2long.bias:0.002,ln_long.weight:0.001,ln_long.bias:0.001,ln_short.bias:0.001,ln_short.weight:0.001,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E07 | GN(reg=0.035,cls=0.000,ter=0.000,tot=0.064) | lr=1.73e-04 | tr(rmse=0.276,r2=0.166,mae=0.215) | vl(rmse=0.288,r2=0.079,mae=0.224) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.046,pred.0.weight:0.027,pred.2.weight:0.022,short_lstm.weight_ih_l0:0.019,short2long.weight:0.017,short_lstm.weight_ih_l0_reverse:0.009,short_lstm.weight_hh_l0:0.005,pred.2.bias:0.004,short_lstm.bias_ih_l0:0.003,short_lstm.bias_hh_l0:0.003,bn.weight:0.003,bn.bias:0.002,pred.0.bias:0.001,short_lstm.bias_ih_l0_reverse:0.001,short_lstm.bias_hh_l0_reverse:0.001,short2long.bias:0.001,ln_short.weight:0.001,ln_long.weight:0.001,ln_long.bias:0.001,ln_short.bias:0.001,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E08 | GN(reg=0.057,cls=0.000,ter=0.000,tot=0.102) | lr=1.04e-04 | tr(rmse=0.276,r2=0.170,mae=0.214) | vl(rmse=0.290,r2=0.066,mae=0.224) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.073,pred.0.weight:0.042,pred.2.weight:0.037,short_lstm.weight_ih_l0:0.032,short2long.weight:0.025,short_lstm.weight_ih_l0_reverse:0.013,short_lstm.weight_hh_l0:0.009,pred.2.bias:0.008,short_lstm.bias_ih_l0:0.005,short_lstm.bias_hh_l0:0.005,bn.weight:0.004,bn.bias:0.003,pred.0.bias:0.002,short_lstm.bias_ih_l0_reverse:0.002,short_lstm.bias_hh_l0_reverse:0.002,short2long.bias:0.002,ln_short.weight:0.001,ln_long.weight:0.001,ln_short.bias:0.001,ln_long.bias:0.001,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E09 | GN(reg=0.136,cls=0.000,ter=0.000,tot=0.210) | lr=4.87e-05 | tr(rmse=0.275,r2=0.173,mae=0.214) | vl(rmse=0.291,r2=0.056,mae=0.222) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.135,pred.2.weight:0.100,pred.0.weight:0.088,short_lstm.weight_ih_l0:0.061,short2long.weight:0.045,pred.2.bias:0.026,short_lstm.weight_ih_l0_reverse:0.024,short_lstm.weight_hh_l0:0.015,short_lstm.bias_ih_l0:0.013,short_lstm.bias_hh_l0:0.013,bn.weight:0.009,bn.bias:0.006,pred.0.bias:0.006,short_lstm.bias_ih_l0_reverse:0.004,short_lstm.bias_hh_l0_reverse:0.004,short2long.bias:0.004,ln_short.bias:0.003,ln_long.bias:0.003,ln_long.weight:0.002,ln_short.weight:0.002,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E10 | GN(reg=0.070,cls=0.000,ter=0.000,tot=0.106) | lr=1.32e-05 | tr(rmse=0.275,r2=0.176,mae=0.213) | vl(rmse=0.291,r2=0.060,mae=0.224) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.069,pred.2.weight:0.051,pred.0.weight:0.046,short_lstm.weight_ih_l0:0.027,short2long.weight:0.023,pred.2.bias:0.013,short_lstm.weight_ih_l0_reverse:0.012,short_lstm.weight_hh_l0:0.006,short_lstm.bias_ih_l0:0.006,short_lstm.bias_hh_l0:0.006,bn.weight:0.004,pred.0.bias:0.003,bn.bias:0.003,short_lstm.bias_ih_l0_reverse:0.002,short_lstm.bias_hh_l0_reverse:0.002,short2long.bias:0.002,ln_long.bias:0.001,ln_short.bias:0.001,ln_long.weight:0.001,ln_short.weight:0.001,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-------------------------------------------------------------------------------------------------------------------------------------------------------
-RUN START: 2025-10-09T17:16:07.811432Z
-
-HYPERPARAMS:
-  CONV_K = 5
-  CONV_DILATION = 2
-  SHORT_UNITS = 192
-  LONG_UNITS = 256
-  DROPOUT_SHORT = 0.01
-  DROPOUT_LONG = 0.01
-  PRED_HIDDEN = 128
-  LR_EPOCHS_WARMUP = 5
-  INITIAL_LR = 0.0005
-  WEIGHT_DECAY = 1e-07
-  CLIPNORM = 20
-  ETA_MIN = 1e-06
-  EARLY_STOP_PATIENCE = 7
-  MAX_EPOCHS = 70
-  T_0 = 70
-  T_MULT = 2
+  MAX_EPOCHS = 50
+  EARLY_STOP_PATIENCE = 5
+  WEIGHT_DECAY = 0.0002
+  CLIPNORM = 1
+  ONECYCLE_MAX_LR = 0.0002
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 1000
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
   TRAIN_BATCH = 16
   VAL_BATCH = 1
   NUM_WORKERS = 12
   TRAIN_PREFETCH_FACTOR = 4
 
 BASELINES:
-  TRAIN mean RMSE      = 0.05776
-  TRAIN persistence RMSE = 0.08162
-  VAL   mean RMSE      = 0.04162
-  VAL   persistence RMSE = 0.10590
+  TRAIN mean RMSE      = 0.04186
+  TRAIN persistence RMSE = 0.00941
+  VAL   mean RMSE      = 0.06478
+  VAL   persistence RMSE = 0.01200
 
-E01 | GN(reg=0.277,cls=0.000,ter=0.000,tot=0.372) | lr=1.00e-04 | tr(rmse=0.289,r2=0.088,mae=0.226) | vl(rmse=0.285,r2=0.087,mae=0.236) | slip=0.00,hub=0.000 | top_grads=pred.0.weight:0.223,pred.2.weight:0.158,short2long.weight:0.154,conv.weight:0.147,short_lstm.weight_ih_l0:0.101,short_lstm.weight_ih_l0_reverse:0.066,pred.2.bias:0.040,short_lstm.bias_ih_l0:0.019,short_lstm.bias_hh_l0:0.019,short_lstm.weight_hh_l0:0.018,pred.0.bias:0.014,bn.weight:0.014,short2long.bias:0.011,short_lstm.bias_ih_l0_reverse:0.011,short_lstm.bias_hh_l0_reverse:0.011,bn.bias:0.007,ln_long.bias:0.007,ln_short.bias:0.007,ln_long.weight:0.006,ln_short.weight:0.006,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E01 | GN(reg=0.214,cls=0.000,ter=0.000,tot=0.219) | UPD(med=1.16e-07,max=2.06e-05) | lr=3.7e-05 | TR(rmse=0.134,r2=-0.380,mae=0.094) | VL(rmse=0.106,r2=0.031,mae=0.070) | slopeRMSE=0.011 | slip=0.00,hub=0.000 | topK=pred.2.weight:0.181/1.3e-05 pred.0.weight:0.111/6.3e-07 short2long.weight:0.038/1.5e-07 pred.2.bias:0.030/2.1e-05 conv.weight:0.017/2.4e-07 short_lstm.weight_ih_l0:0.016/1.2e-07 short_lstm.weight_ih_l0_reverse:0.010/7.4e-08 pred.0.bias:0.006/5.5e-07 short_lstm.weight_hh_l0:0.004/1.2e-08 short_lstm.bias_ih_l0:0.003/9.8e-08 short_lstm.bias_hh_l0:0.003/9.4e-08 short2long.bias:0.003/1.6e-07 ln_long.weight:0.002/5.1e-09 ln_long.bias:0.002/2.3e-06 short_lstm.bias_ih_l0_reverse:0.002/5.3e-08 short_lstm.bias_hh_l0_reverse:0.002/5.0e-08 ln_short.bias:0.001/1.7e-06 ln_short.weight:0.001/3.4e-09 bn.weight:0.001/6.9e-09 bn.bias:0.001/2.6e-06 conv.bias:0.000/1.1e-13 short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
 
-E02 | GN(reg=0.340,cls=0.000,ter=0.000,tot=0.493) | lr=2.00e-04 | tr(rmse=0.283,r2=0.130,mae=0.220) | vl(rmse=0.285,r2=0.086,mae=0.231) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.270,pred.0.weight:0.266,pred.2.weight:0.204,short2long.weight:0.158,short_lstm.weight_ih_l0:0.144,short_lstm.weight_ih_l0_reverse:0.070,pred.2.bias:0.056,short_lstm.weight_hh_l0:0.028,short_lstm.bias_ih_l0:0.027,short_lstm.bias_hh_l0:0.027,bn.weight:0.023,pred.0.bias:0.018,bn.bias:0.014,short2long.bias:0.012,short_lstm.bias_ih_l0_reverse:0.012,short_lstm.bias_hh_l0_reverse:0.012,ln_long.bias:0.008,ln_short.bias:0.008,ln_long.weight:0.006,ln_short.weight:0.006,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E02 | GN(reg=0.226,cls=0.000,ter=0.000,tot=0.226) | UPD(med=5.24e-08,max=5.25e-05) | lr=8.2e-05 | TR(rmse=0.113,r2=0.025,mae=0.078) | VL(rmse=0.106,r2=0.035,mae=0.074) | slopeRMSE=0.010 | slip=0.00,hub=0.000 | topK=pred.2.weight:0.200/3.2e-05 pred.0.weight:0.098/1.2e-06 pred.2.bias:0.035/5.2e-05 short2long.weight:0.011/9.9e-08 pred.0.bias:0.007/1.4e-06 conv.weight:0.005/1.5e-07 short_lstm.weight_ih_l0:0.003/5.2e-08 short_lstm.weight_ih_l0_reverse:0.003/4.3e-08 short2long.bias:0.001/1.1e-07 ln_long.bias:0.001/1.5e-06 short_lstm.weight_hh_l0:0.001/5.2e-09 short_lstm.bias_ih_l0:0.001/4.2e-08 short_lstm.bias_hh_l0:0.001/4.0e-08 short_lstm.bias_ih_l0_reverse:0.000/2.9e-08 short_lstm.bias_hh_l0_reverse:0.000/2.8e-08 ln_long.weight:0.000/1.9e-09 ln_short.bias:0.000/7.4e-07 bn.weight:0.000/6.1e-09 ln_short.weight:0.000/1.5e-09 bn.bias:0.000/1.3e-06 conv.bias:0.000/8.4e-14 short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
 
-E03 | GN(reg=0.844,cls=0.000,ter=0.000,tot=1.198) | lr=3.00e-04 | tr(rmse=0.278,r2=0.156,mae=0.216) | vl(rmse=0.282,r2=0.101,mae=0.223) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.710,pred.0.weight:0.645,pred.2.weight:0.522,short_lstm.weight_ih_l0:0.304,short2long.weight:0.297,pred.2.bias:0.146,short_lstm.weight_ih_l0_reverse:0.143,short_lstm.bias_ih_l0:0.063,short_lstm.bias_hh_l0:0.063,short_lstm.weight_hh_l0:0.058,bn.weight:0.055,pred.0.bias:0.044,bn.bias:0.036,short_lstm.bias_ih_l0_reverse:0.026,short_lstm.bias_hh_l0_reverse:0.026,short2long.bias:0.023,ln_long.bias:0.017,ln_short.bias:0.016,ln_long.weight:0.012,ln_short.weight:0.010,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E03 | GN(reg=0.036,cls=0.000,ter=0.000,tot=0.037) | UPD(med=1.89e-08,max=8.92e-06) | lr=1.4e-04 | TR(rmse=0.112,r2=0.036,mae=0.077) | VL(rmse=0.108,r2=-0.001,mae=0.083) | slopeRMSE=0.010 | slip=0.00,hub=0.000 | topK=pred.2.weight:0.033/8.9e-06 pred.0.weight:0.015/3.1e-07 conv.weight:0.001/7.8e-08 short2long.weight:0.001/2.0e-08 short_lstm.weight_ih_l0:0.001/1.9e-08 short_lstm.weight_ih_l0_reverse:0.000/1.1e-08 pred.2.bias:0.000/7.3e-07 pred.0.bias:0.000/5.9e-08 short_lstm.weight_hh_l0:0.000/1.9e-09 short_lstm.bias_ih_l0:0.000/1.1e-08 short_lstm.bias_hh_l0:0.000/1.1e-08 short2long.bias:0.000/1.9e-08 ln_long.weight:0.000/6.6e-10 ln_long.bias:0.000/2.2e-07 bn.weight:0.000/2.1e-09 short_lstm.bias_ih_l0_reverse:0.000/7.1e-09 short_lstm.bias_hh_l0_reverse:0.000/6.7e-09 ln_short.weight:0.000/5.1e-10 ln_short.bias:0.000/1.6e-07 bn.bias:0.000/3.1e-07 conv.bias:0.000/7.2e-14 short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
 
-E04 | GN(reg=0.748,cls=0.000,ter=0.000,tot=1.072) | lr=4.00e-04 | tr(rmse=0.275,r2=0.177,mae=0.213) | vl(rmse=0.284,r2=0.093,mae=0.224) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.674,pred.0.weight:0.551,pred.2.weight:0.484,short_lstm.weight_ih_l0:0.252,short2long.weight:0.209,pred.2.bias:0.141,short_lstm.weight_ih_l0_reverse:0.121,short_lstm.bias_ih_l0:0.052,short_lstm.bias_hh_l0:0.052,bn.weight:0.049,short_lstm.weight_hh_l0:0.048,pred.0.bias:0.039,bn.bias:0.034,short_lstm.bias_ih_l0_reverse:0.022,short_lstm.bias_hh_l0_reverse:0.022,short2long.bias:0.017,ln_long.bias:0.013,ln_short.bias:0.012,ln_long.weight:0.009,ln_short.weight:0.008,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E04 | GN(reg=0.415,cls=0.000,ter=0.000,tot=0.415) | UPD(med=1.43e-07,max=1.50e-04) | lr=1.8e-04 | TR(rmse=0.110,r2=0.061,mae=0.076) | VL(rmse=0.112,r2=-0.068,mae=0.091) | slopeRMSE=0.010 | slip=0.00,hub=0.000 | topK=pred.2.weight:0.381/1.4e-04 pred.0.weight:0.157/4.4e-06 pred.2.bias:0.047/1.5e-04 conv.weight:0.011/8.0e-07 pred.0.bias:0.009/4.0e-06 short2long.weight:0.006/1.2e-07 short_lstm.weight_ih_l0:0.005/1.8e-07 short_lstm.weight_ih_l0_reverse:0.002/6.7e-08 short_lstm.weight_hh_l0:0.001/1.8e-08 short_lstm.bias_ih_l0:0.001/1.5e-07 short_lstm.bias_hh_l0:0.001/1.4e-07 bn.weight:0.001/2.4e-08 ln_long.bias:0.000/1.8e-06 short2long.bias:0.000/1.3e-07 bn.bias:0.000/5.0e-06 ln_long.weight:0.000/3.9e-09 ln_short.bias:0.000/1.3e-06 short_lstm.bias_ih_l0_reverse:0.000/4.5e-08 short_lstm.bias_hh_l0_reverse:0.000/4.3e-08 ln_short.weight:0.000/2.3e-09 conv.bias:0.000/3.3e-13 short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
 
-E05 | GN(reg=0.635,cls=0.000,ter=0.000,tot=0.877) | lr=5.00e-04 | tr(rmse=0.272,r2=0.191,mae=0.211) | vl(rmse=0.286,r2=0.081,mae=0.225) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.542,pred.0.weight:0.441,pred.2.weight:0.438,short_lstm.weight_ih_l0:0.188,short2long.weight:0.142,pred.2.bias:0.125,short_lstm.weight_ih_l0_reverse:0.098,bn.weight:0.038,short_lstm.bias_ih_l0:0.038,short_lstm.bias_hh_l0:0.038,short_lstm.weight_hh_l0:0.037,pred.0.bias:0.032,bn.bias:0.027,short_lstm.bias_ih_l0_reverse:0.017,short_lstm.bias_hh_l0_reverse:0.017,short2long.bias:0.012,ln_long.bias:0.010,ln_short.bias:0.009,ln_long.weight:0.007,ln_short.weight:0.006,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E05 | GN(reg=0.393,cls=0.000,ter=0.000,tot=0.393) | UPD(med=2.02e-07,max=1.49e-04) | lr=2.0e-04 | TR(rmse=0.109,r2=0.086,mae=0.075) | VL(rmse=0.107,r2=0.012,mae=0.085) | slopeRMSE=0.010 | slip=0.00,hub=0.000 | topK=pred.2.weight:0.362/1.4e-04 pred.0.weight:0.145/4.5e-06 pred.2.bias:0.045/1.5e-04 conv.weight:0.014/1.1e-06 pred.0.bias:0.009/4.1e-06 short_lstm.weight_ih_l0:0.006/2.5e-07 short2long.weight:0.006/1.2e-07 short_lstm.weight_ih_l0_reverse:0.002/7.7e-08 short_lstm.weight_hh_l0:0.001/2.4e-08 short_lstm.bias_ih_l0:0.001/2.1e-07 short_lstm.bias_hh_l0:0.001/2.0e-07 bn.weight:0.001/3.6e-08 bn.bias:0.001/6.6e-06 ln_long.bias:0.000/1.6e-06 short2long.bias:0.000/1.3e-07 ln_short.bias:0.000/1.3e-06 ln_long.weight:0.000/3.6e-09 short_lstm.bias_ih_l0_reverse:0.000/5.2e-08 short_lstm.bias_hh_l0_reverse:0.000/4.9e-08 ln_short.weight:0.000/1.9e-09 conv.bias:0.000/3.7e-13 short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
 
-E06 | GN(reg=0.481,cls=0.000,ter=0.000,tot=0.662) | lr=5.00e-04 | tr(rmse=0.270,r2=0.206,mae=0.208) | vl(rmse=0.288,r2=0.063,mae=0.228) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.413,pred.0.weight:0.334,pred.2.weight:0.332,short_lstm.weight_ih_l0:0.136,pred.2.bias:0.097,short2long.weight:0.091,short_lstm.weight_ih_l0_reverse:0.070,bn.weight:0.028,short_lstm.bias_ih_l0:0.028,short_lstm.bias_hh_l0:0.028,short_lstm.weight_hh_l0:0.026,pred.0.bias:0.024,bn.bias:0.020,short_lstm.bias_ih_l0_reverse:0.012,short_lstm.bias_hh_l0_reverse:0.012,short2long.bias:0.007,ln_long.bias:0.007,ln_short.bias:0.006,ln_long.weight:0.005,ln_short.weight:0.004,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E06 | GN(reg=0.305,cls=0.000,ter=0.000,tot=0.306) | UPD(med=1.74e-07,max=1.10e-04) | lr=2.0e-04 | TR(rmse=0.107,r2=0.113,mae=0.074) | VL(rmse=0.105,r2=0.056,mae=0.081) | slopeRMSE=0.010 | slip=0.00,hub=0.000 | topK=pred.2.weight:0.283/1.1e-04 pred.0.weight:0.110/3.4e-06 pred.2.bias:0.034/1.1e-04 conv.weight:0.014/1.0e-06 pred.0.bias:0.006/3.0e-06 short_lstm.weight_ih_l0:0.006/2.2e-07 short2long.weight:0.004/8.9e-08 short_lstm.weight_ih_l0_reverse:0.002/7.0e-08 short_lstm.weight_hh_l0:0.001/2.0e-08 short_lstm.bias_ih_l0:0.001/1.8e-07 short_lstm.bias_hh_l0:0.001/1.7e-07 bn.weight:0.001/3.5e-08 bn.bias:0.000/5.7e-06 ln_long.bias:0.000/1.0e-06 short2long.bias:0.000/9.2e-08 ln_short.bias:0.000/1.0e-06 short_lstm.bias_ih_l0_reverse:0.000/4.5e-08 short_lstm.bias_hh_l0_reverse:0.000/4.3e-08 ln_long.weight:0.000/2.3e-09 ln_short.weight:0.000/1.4e-09 conv.bias:0.000/4.1e-13 short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
 
-E07 | GN(reg=0.414,cls=0.000,ter=0.000,tot=0.588) | lr=4.99e-04 | tr(rmse=0.269,r2=0.214,mae=0.207) | vl(rmse=0.291,r2=0.045,mae=0.229) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.384,pred.0.weight:0.291,pred.2.weight:0.282,short_lstm.weight_ih_l0:0.120,pred.2.bias:0.084,short2long.weight:0.073,short_lstm.weight_ih_l0_reverse:0.064,short_lstm.bias_ih_l0:0.026,short_lstm.bias_hh_l0:0.026,bn.weight:0.026,short_lstm.weight_hh_l0:0.022,pred.0.bias:0.021,bn.bias:0.019,short_lstm.bias_ih_l0_reverse:0.011,short_lstm.bias_hh_l0_reverse:0.011,ln_long.bias:0.006,short2long.bias:0.006,ln_short.bias:0.005,ln_long.weight:0.004,ln_short.weight:0.003,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E08 | GN(reg=0.301,cls=0.000,ter=0.000,tot=0.436) | lr=4.98e-04 | tr(rmse=0.268,r2=0.220,mae=0.206) | vl(rmse=0.296,r2=0.017,mae=0.231) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.291,pred.2.weight:0.209,pred.0.weight:0.206,short_lstm.weight_ih_l0:0.091,pred.2.bias:0.063,short2long.weight:0.050,short_lstm.weight_ih_l0_reverse:0.049,short_lstm.bias_ih_l0:0.020,short_lstm.bias_hh_l0:0.020,bn.weight:0.019,short_lstm.weight_hh_l0:0.018,pred.0.bias:0.015,bn.bias:0.014,short_lstm.bias_ih_l0_reverse:0.009,short_lstm.bias_hh_l0_reverse:0.009,ln_long.bias:0.004,short2long.bias:0.004,ln_short.bias:0.004,ln_long.weight:0.003,ln_short.weight:0.003,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E09 | GN(reg=0.223,cls=0.000,ter=0.000,tot=0.322) | lr=4.96e-04 | tr(rmse=0.266,r2=0.227,mae=0.205) | vl(rmse=0.299,r2=-0.009,mae=0.234) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.211,pred.2.weight:0.162,pred.0.weight:0.145,short_lstm.weight_ih_l0:0.074,pred.2.bias:0.047,short_lstm.weight_ih_l0_reverse:0.038,short2long.weight:0.037,short_lstm.weight_hh_l0:0.016,short_lstm.bias_ih_l0:0.015,short_lstm.bias_hh_l0:0.015,bn.weight:0.014,pred.0.bias:0.011,bn.bias:0.009,short_lstm.bias_ih_l0_reverse:0.006,short_lstm.bias_hh_l0_reverse:0.006,ln_long.bias:0.003,short2long.bias:0.003,ln_short.bias:0.003,ln_short.weight:0.002,ln_long.weight:0.002,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
-
-E10 | GN(reg=0.183,cls=0.000,ter=0.000,tot=0.273) | lr=4.94e-04 | tr(rmse=0.265,r2=0.232,mae=0.204) | vl(rmse=0.303,r2=-0.033,mae=0.237) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.178,pred.2.weight:0.142,pred.0.weight:0.109,short_lstm.weight_ih_l0:0.076,pred.2.bias:0.036,short_lstm.weight_ih_l0_reverse:0.035,short2long.weight:0.032,short_lstm.weight_hh_l0:0.017,short_lstm.bias_ih_l0:0.015,short_lstm.bias_hh_l0:0.015,bn.weight:0.014,pred.0.bias:0.008,bn.bias:0.008,short_lstm.bias_ih_l0_reverse:0.006,short_lstm.bias_hh_l0_reverse:0.006,ln_short.bias:0.003,ln_long.bias:0.003,short2long.bias:0.003,ln_short.weight:0.002,ln_long.weight:0.002,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E07 | GN(reg=0.202,cls=0.000,ter=0.000,tot=0.202) | UPD(med=1.32e-07,max=7.32e-05) | lr=2.0e-04 | TR(rmse=0.106,r2=0.133,mae=0.073) | VL(rmse=0.103,r2=0.093,mae=0.078) | slopeRMSE=0.011 | slip=0.00,hub=0.000 | topK=pred.2.weight:0.187/7.3e-05 pred.0.weight:0.071/2.2e-06 pred.2.bias:0.021/6.6e-05 conv.weight:0.011/8.6e-07 short_lstm.weight_ih_l0:0.004/1.6e-07 pred.0.bias:0.004/1.9e-06 short2long.weight:0.003/5.8e-08 short_lstm.weight_ih_l0_reverse:0.001/5.5e-08 short_lstm.weight_hh_l0:0.001/1.5e-08 short_lstm.bias_ih_l0:0.001/1.4e-07 short_lstm.bias_hh_l0:0.001/1.3e-07 bn.weight:0.001/2.8e-08 bn.bias:0.000/4.3e-06 ln_long.bias:0.000/5.8e-07 short2long.bias:0.000/5.9e-08 short_lstm.bias_ih_l0_reverse:0.000/3.4e-08 short_lstm.bias_hh_l0_reverse:0.000/3.2e-08 ln_short.bias:0.000/6.9e-07 ln_long.weight:0.000/1.3e-09 ln_short.weight:0.000/9.7e-10 conv.bias:0.000/4.9e-13 short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
-RUN START: 2025-10-09T17:21:39.838960Z
+RUN START: 2025-10-12T16:33:32.809177Z
 
 HYPERPARAMS:
   CONV_K = 5
   CONV_DILATION = 2
+  ALPHA_SMOOTH = 10
   SHORT_UNITS = 192
   LONG_UNITS = 256
-  DROPOUT_SHORT = 0.1
-  DROPOUT_LONG = 0.1
+  DROPOUT_SHORT = 0.2
+  DROPOUT_LONG = 0.2
   PRED_HIDDEN = 128
-  LR_EPOCHS_WARMUP = 3
-  INITIAL_LR = 0.0001
-  WEIGHT_DECAY = 1e-05
-  CLIPNORM = 2
-  ETA_MIN = 1e-06
-  EARLY_STOP_PATIENCE = 7
-  MAX_EPOCHS = 70
-  T_0 = 70
-  T_MULT = 2
+  MAX_EPOCHS = 50
+  EARLY_STOP_PATIENCE = 5
+  WEIGHT_DECAY = 0.0002
+  CLIPNORM = 1
+  ONECYCLE_MAX_LR = 0.0002
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 1000
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
   TRAIN_BATCH = 16
   VAL_BATCH = 1
   NUM_WORKERS = 12
   TRAIN_PREFETCH_FACTOR = 4
 
 BASELINES:
-  TRAIN mean RMSE      = 0.05776
-  TRAIN persistence RMSE = 0.08162
-  VAL   mean RMSE      = 0.04162
-  VAL   persistence RMSE = 0.10590
+  TRAIN mean RMSE      = 0.04186
+  TRAIN persistence RMSE = 0.00941
+  VAL   mean RMSE      = 0.06478
+  VAL   persistence RMSE = 0.01200
 
-E01 | GN(reg=0.592,cls=0.000,ter=0.000,tot=0.708) | lr=3.33e-05 | tr(rmse=0.299,r2=0.028,mae=0.233) | vl(rmse=0.281,r2=0.109,mae=0.217) | slip=0.00,hub=0.000 | top_grads=pred.0.weight:0.432,pred.2.weight:0.393,short2long.weight:0.261,conv.weight:0.228,short_lstm.weight_ih_l0:0.129,pred.2.bias:0.095,short_lstm.weight_ih_l0_reverse:0.083,short_lstm.bias_ih_l0:0.041,short_lstm.bias_hh_l0:0.041,pred.0.bias:0.030,short_lstm.weight_hh_l0:0.029,short_lstm.bias_ih_l0_reverse:0.023,short_lstm.bias_hh_l0_reverse:0.023,short2long.bias:0.020,bn.weight:0.016,ln_long.bias:0.013,bn.bias:0.013,ln_short.bias:0.011,ln_long.weight:0.011,ln_short.weight:0.007,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E01 | GN[0.270,0.000,0.000,0.281] | UPD[2.1e-07,6.5e-05] | lr=3.7e-05 | TR[0.148,-0.68] | VL[0.109,-0.03] | SR=0.011 | slip=0.00/hub=0.000 | topK=weight:0.210/1.4e-05, weight:0.161/9.2e-07, weight:0.062/2.5e-07, bias:0.051/6.5e-05, weight:0.030/4.3e-07, weight_ih_l0:0.026/1.9e-07, weight_ih_l0_reverse:0.019/1.3e-07, bias:0.010/1.0e-06, weight_hh_l0:0.007/2.1e-08, bias_ih_l0:0.006/2.1e-07, bias_hh_l0:0.006/2.1e-07, bias:0.005/2.6e-07, bias_ih_l0_reverse:0.004/1.3e-07, bias_hh_l0_reverse:0.004/1.3e-07, bias:0.003/3.4e-06, weight:0.003/7.4e-09, bias:0.002/2.6e-06, weight:0.002/1.7e-08, weight:0.002/5.1e-09, bias:0.001/4.9e-06, bias:0.000/3.5e-13, weight_hh_l0_reverse:0.000/0.0e+00
 
-E02 | GN(reg=0.493,cls=0.000,ter=0.000,tot=0.590) | lr=6.67e-05 | tr(rmse=0.289,r2=0.089,mae=0.226) | vl(rmse=0.281,r2=0.113,mae=0.219) | slip=0.00,hub=0.000 | top_grads=pred.0.weight:0.349,pred.2.weight:0.336,conv.weight:0.242,short2long.weight:0.177,short_lstm.weight_ih_l0:0.098,pred.2.bias:0.086,short_lstm.weight_ih_l0_reverse:0.052,short_lstm.bias_ih_l0:0.032,short_lstm.bias_hh_l0:0.032,pred.0.bias:0.024,short_lstm.weight_hh_l0:0.023,bn.weight:0.016,short_lstm.bias_ih_l0_reverse:0.015,short_lstm.bias_hh_l0_reverse:0.015,short2long.bias:0.014,bn.bias:0.013,ln_long.bias:0.010,ln_short.bias:0.007,ln_long.weight:0.007,ln_short.weight:0.004,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E02 | GN[0.215,0.000,0.000,0.216] | UPD[8.7e-08,1.3e-04] | lr=8.2e-05 | TR[0.114,0.00] | VL[0.106,0.03] | SR=0.010 | slip=0.00/hub=0.000 | topK=weight:0.171/2.5e-05, weight:0.123/1.6e-06, bias:0.043/1.3e-04, weight:0.017/1.5e-07, bias:0.010/2.0e-06, weight:0.007/2.1e-07, weight_ih_l0:0.005/7.9e-08, weight_ih_l0_reverse:0.004/6.9e-08, bias:0.001/1.7e-07, weight_hh_l0:0.001/9.3e-09, bias_ih_l0:0.001/8.7e-08, bias_hh_l0:0.001/8.5e-08, bias:0.001/2.0e-06, bias_ih_l0_reverse:0.001/6.6e-08, bias_hh_l0_reverse:0.001/6.6e-08, bias:0.001/9.7e-07, weight:0.000/9.0e-09, weight:0.000/2.4e-09, weight:0.000/2.2e-09, bias:0.000/1.9e-06, bias:0.000/1.7e-13, weight_hh_l0_reverse:0.000/0.0e+00
 
-E03 | GN(reg=0.572,cls=0.000,ter=0.000,tot=0.719) | lr=1.00e-04 | tr(rmse=0.285,r2=0.114,mae=0.222) | vl(rmse=0.282,r2=0.105,mae=0.218) | slip=0.00,hub=0.000 | top_grads=pred.0.weight:0.398,pred.2.weight:0.396,conv.weight:0.371,short2long.weight:0.171,short_lstm.weight_ih_l0:0.121,pred.2.bias:0.105,short_lstm.weight_ih_l0_reverse:0.055,short_lstm.bias_ih_l0:0.040,short_lstm.bias_hh_l0:0.040,short_lstm.weight_hh_l0:0.028,pred.0.bias:0.028,bn.weight:0.024,bn.bias:0.019,short_lstm.bias_ih_l0_reverse:0.016,short_lstm.bias_hh_l0_reverse:0.016,short2long.bias:0.014,ln_long.bias:0.010,ln_short.bias:0.008,ln_long.weight:0.006,ln_short.weight:0.004,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E03 | GN[0.057,0.000,0.000,0.057] | UPD[3.4e-08,9.4e-05] | lr=1.4e-04 | TR[0.113,0.02] | VL[0.108,0.01] | SR=0.010 | slip=0.00/hub=0.000 | topK=weight:0.043/1.1e-05, weight:0.032/6.9e-07, bias:0.017/9.4e-05, bias:0.004/1.3e-06, weight:0.003/3.9e-08, weight:0.002/9.3e-08, weight_ih_l0:0.001/2.8e-08, weight_ih_l0_reverse:0.001/1.8e-08, weight_hh_l0:0.000/3.6e-09, bias_ih_l0:0.000/3.4e-08, bias_hh_l0:0.000/3.3e-08, bias:0.000/4.5e-08, bias:0.000/5.0e-07, bias_ih_l0_reverse:0.000/1.9e-08, bias_hh_l0_reverse:0.000/1.9e-08, weight:0.000/9.1e-10, bias:0.000/2.8e-07, weight:0.000/2.9e-09, bias:0.000/6.3e-07, weight:0.000/7.4e-10, bias:0.000/3.0e-13, weight_hh_l0_reverse:0.000/0.0e+00
 
-E04 | GN(reg=0.601,cls=0.000,ter=0.000,tot=0.792) | lr=1.00e-04 | tr(rmse=0.282,r2=0.134,mae=0.219) | vl(rmse=0.284,r2=0.092,mae=0.218) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.458,pred.2.weight:0.419,pred.0.weight:0.415,short2long.weight:0.159,short_lstm.weight_ih_l0:0.144,pred.2.bias:0.110,short_lstm.weight_ih_l0_reverse:0.056,short_lstm.bias_ih_l0:0.047,short_lstm.bias_hh_l0:0.047,short_lstm.weight_hh_l0:0.032,bn.weight:0.029,pred.0.bias:0.029,bn.bias:0.023,short_lstm.bias_ih_l0_reverse:0.016,short_lstm.bias_hh_l0_reverse:0.016,short2long.bias:0.013,ln_long.bias:0.010,ln_short.bias:0.008,ln_long.weight:0.006,ln_short.weight:0.004,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E04 | GN[0.303,0.000,0.000,0.303] | UPD[1.2e-07,3.3e-04] | lr=1.8e-04 | TR[0.111,0.04] | VL[0.113,-0.09] | SR=0.010 | slip=0.00/hub=0.000 | topK=weight:0.259/8.6e-05, weight:0.152/4.3e-06, bias:0.036/3.3e-04, bias:0.008/3.6e-06, weight:0.006/1.2e-07, weight:0.006/3.9e-07, weight_ih_l0:0.004/1.3e-07, weight_ih_l0_reverse:0.002/5.8e-08, weight_hh_l0:0.001/1.4e-08, bias_ih_l0:0.001/1.2e-07, bias_hh_l0:0.001/1.1e-07, weight:0.001/2.5e-08, bias:0.001/1.7e-06, weight:0.000/5.4e-09, bias:0.000/1.1e-07, bias_ih_l0_reverse:0.000/4.5e-08, bias_hh_l0_reverse:0.000/4.5e-08, bias:0.000/2.7e-06, bias:0.000/9.2e-07, weight:0.000/1.8e-09, bias:0.000/8.1e-13, weight_hh_l0_reverse:0.000/0.0e+00
 
-E05 | GN(reg=0.607,cls=0.000,ter=0.000,tot=0.855) | lr=9.98e-05 | tr(rmse=0.279,r2=0.151,mae=0.217) | vl(rmse=0.285,r2=0.087,mae=0.219) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.546,pred.2.weight:0.427,pred.0.weight:0.415,short_lstm.weight_ih_l0:0.172,short2long.weight:0.146,pred.2.bias:0.112,short_lstm.weight_ih_l0_reverse:0.059,short_lstm.bias_ih_l0:0.055,short_lstm.bias_hh_l0:0.055,short_lstm.weight_hh_l0:0.037,bn.weight:0.033,pred.0.bias:0.029,bn.bias:0.026,short_lstm.bias_ih_l0_reverse:0.016,short_lstm.bias_hh_l0_reverse:0.016,short2long.bias:0.012,ln_long.bias:0.010,ln_short.bias:0.008,ln_long.weight:0.005,ln_short.weight:0.004,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E05 | GN[0.404,0.000,0.000,0.404] | UPD[2.4e-07,6.8e-04] | lr=2.0e-04 | TR[0.111,0.06] | VL[0.111,-0.06] | SR=0.010 | slip=0.00/hub=0.000 | topK=weight:0.347/1.3e-04, weight:0.199/6.1e-06, bias:0.052/6.8e-04, weight:0.012/9.0e-07, bias:0.011/5.5e-06, weight:0.008/1.8e-07, weight_ih_l0:0.006/2.4e-07, weight_ih_l0_reverse:0.002/9.0e-08, weight_hh_l0:0.002/2.8e-08, bias_ih_l0:0.001/2.5e-07, bias_hh_l0:0.001/2.5e-07, weight:0.001/4.8e-08, bias:0.001/2.4e-06, bias:0.001/5.9e-06, weight:0.001/7.5e-09, bias:0.001/1.8e-07, bias_ih_l0_reverse:0.000/7.4e-08, bias_hh_l0_reverse:0.000/7.4e-08, bias:0.000/1.5e-06, weight:0.000/2.8e-09, bias:0.000/8.6e-13, weight_hh_l0_reverse:0.000/0.0e+00
 
-E06 | GN(reg=0.556,cls=0.000,ter=0.000,tot=0.824) | lr=9.96e-05 | tr(rmse=0.277,r2=0.165,mae=0.215) | vl(rmse=0.285,r2=0.087,mae=0.221) | slip=0.00,hub=0.000 | top_grads=conv.weight:0.555,pred.2.weight:0.397,pred.0.weight:0.375,short_lstm.weight_ih_l0:0.180,short2long.weight:0.123,pred.2.bias:0.104,short_lstm.weight_ih_l0_reverse:0.057,short_lstm.bias_ih_l0:0.057,short_lstm.bias_hh_l0:0.057,short_lstm.weight_hh_l0:0.038,bn.weight:0.033,pred.0.bias:0.026,bn.bias:0.026,short_lstm.bias_ih_l0_reverse:0.014,short_lstm.bias_hh_l0_reverse:0.014,short2long.bias:0.010,ln_long.bias:0.008,ln_short.bias:0.007,ln_long.weight:0.004,ln_short.weight:0.003,conv.bias:0.000,short_lstm.weight_hh_l0_reverse:0.000
+E06 | GN[0.348,0.000,0.000,0.349] | UPD[2.5e-07,8.3e-04] | lr=2.0e-04 | TR[0.109,0.09] | VL[0.108,-0.00] | SR=0.011 | slip=0.00/hub=0.000 | topK=weight:0.302/1.1e-04, weight:0.168/5.2e-06, bias:0.044/8.3e-04, weight:0.015/1.2e-06, bias:0.009/4.4e-06, weight:0.007/1.5e-07, weight_ih_l0:0.006/2.5e-07, weight_ih_l0_reverse:0.002/8.0e-08, weight_hh_l0:0.002/2.9e-08, bias_ih_l0:0.002/2.8e-07, bias_hh_l0:0.002/2.7e-07, weight:0.001/5.2e-08, bias:0.001/6.7e-06, bias:0.001/1.8e-06, bias:0.001/1.5e-07, weight:0.000/5.7e-09, bias_ih_l0_reverse:0.000/6.7e-08, bias_hh_l0_reverse:0.000/6.8e-08, bias:0.000/1.4e-06, weight:0.000/2.5e-09, bias:0.000/2.0e-12, weight_hh_l0_reverse:0.000/0.0e+00
+
+E07 | GN[0.281,0.000,0.000,0.282] | UPD[2.1e-07,1.1e-03] | lr=2.0e-04 | TR[0.107,0.11] | VL[0.105,0.05] | SR=0.011 | slip=0.00/hub=0.000 | topK=weight:0.246/8.9e-05, weight:0.133/4.1e-06, bias:0.034/1.1e-03, weight:0.018/1.4e-06, bias:0.007/3.4e-06, weight_ih_l0:0.006/2.1e-07, weight:0.005/1.1e-07, weight_ih_l0_reverse:0.002/6.2e-08, bias_ih_l0:0.001/2.5e-07, bias_hh_l0:0.001/2.4e-07, weight_hh_l0:0.001/2.5e-08, weight:0.001/4.9e-08, bias:0.001/6.3e-06, bias:0.000/1.2e-06, bias:0.000/1.1e-07, weight:0.000/4.0e-09, bias_ih_l0_reverse:0.000/5.2e-08, bias_hh_l0_reverse:0.000/5.3e-08, bias:0.000/1.1e-06, weight:0.000/2.1e-09, bias:0.000/7.9e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E08 | GN[0.207,0.000,0.000,0.208] | UPD[1.7e-07,2.1e-03] | lr=2.0e-04 | TR[0.106,0.13] | VL[0.103,0.09] | SR=0.011 | slip=0.00/hub=0.000 | topK=weight:0.181/6.6e-05, weight:0.097/2.9e-06, bias:0.024/2.1e-03, weight:0.017/1.3e-06, bias:0.005/2.3e-06, weight_ih_l0:0.004/1.7e-07, weight:0.004/7.7e-08, weight_ih_l0_reverse:0.001/4.7e-08, bias_ih_l0:0.001/1.9e-07, bias_hh_l0:0.001/1.9e-07, weight_hh_l0:0.001/1.9e-08, weight:0.001/4.1e-08, bias:0.001/4.9e-06, bias:0.000/7.5e-07, bias:0.000/7.6e-08, bias:0.000/7.4e-07, bias_ih_l0_reverse:0.000/3.8e-08, bias_hh_l0_reverse:0.000/3.8e-08, weight:0.000/2.6e-09, weight:0.000/1.5e-09, bias:0.000/8.0e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E09 | GN[0.143,0.000,0.000,0.144] | UPD[1.2e-07,2.4e-03] | lr=2.0e-04 | TR[0.105,0.14] | VL[0.102,0.11] | SR=0.011 | slip=0.00/hub=0.000 | topK=weight:0.126/4.5e-05, weight:0.065/2.0e-06, bias:0.015/2.4e-03, weight:0.013/1.0e-06, weight_ih_l0:0.003/1.2e-07, bias:0.003/1.4e-06, weight:0.003/5.3e-08, weight_ih_l0_reverse:0.001/3.5e-08, bias_ih_l0:0.001/1.4e-07, bias_hh_l0:0.001/1.4e-07, weight_hh_l0:0.001/1.3e-08, weight:0.001/3.3e-08, bias:0.000/3.5e-06, bias:0.000/4.4e-07, bias:0.000/5.0e-08, bias_ih_l0_reverse:0.000/2.7e-08, bias_hh_l0_reverse:0.000/2.7e-08, bias:0.000/4.9e-07, weight:0.000/1.5e-09, weight:0.000/1.1e-09, bias:0.000/1.7e-12, weight_hh_l0_reverse:0.000/0.0e+00
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2025-10-12T16:40:44.705576Z
+
+HYPERPARAMS:
+  CONV_K = 5
+  CONV_DILATION = 2
+  ALPHA_SMOOTH = 10
+  SHORT_UNITS = 192
+  LONG_UNITS = 256
+  DROPOUT_SHORT = 0.2
+  DROPOUT_LONG = 0.2
+  PRED_HIDDEN = 128
+  MAX_EPOCHS = 50
+  EARLY_STOP_PATIENCE = 5
+  WEIGHT_DECAY = 0.0002
+  CLIPNORM = 1
+  ONECYCLE_MAX_LR = 0.0002
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 1000
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 16
+  VAL_BATCH = 1
+  NUM_WORKERS = 12
+  TRAIN_PREFETCH_FACTOR = 4
+
+BASELINES:
+  TRAIN mean RMSE      = 0.04186
+  TRAIN persistence RMSE = 0.00941
+  VAL   mean RMSE      = 0.06478
+  VAL   persistence RMSE = 0.01200
+
+E01 | GN[0.257,0.000,0.000,0.264] | UPD[1.4e-07,7.8e-04] | lr=3.7e-05 | TR[0.135,-0.41,0.094] | VL[0.111,-0.06,0.070] | SR=0.010 | slip=0.00/hub=0.000 | topK=2.weight:0.219/1.4e-05, 0.weight:0.118/6.7e-07, 2.bias:0.064/7.8e-04, short2long.weight:0.052/2.1e-07, short_lstm.weight_ih_l0:0.020/1.4e-07, conv.weight:0.019/2.8e-07, short_lstm.weight_ih_l0_reverse:0.016/1.2e-07, 0.bias:0.008/6.5e-07, short_lstm.weight_hh_l0:0.004/1.3e-08, short_lstm.bias_ih_l0:0.004/1.3e-07, short_lstm.bias_hh_l0:0.004/1.3e-07, short2long.bias:0.004/2.1e-07, ln_long.bias:0.003/3.3e-06, short_lstm.bias_ih_l0_reverse:0.003/8.5e-08, short_lstm.bias_hh_l0_reverse:0.003/8.5e-08, ln_long.weight:0.002/5.8e-09, ln_short.bias:0.002/2.2e-06, ln_short.weight:0.001/3.9e-09, bn.weight:0.001/7.6e-09, bn.bias:0.001/3.2e-06, conv.bias:0.000/1.2e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E02 | GN[0.108,0.000,0.000,0.109] | UPD[5.5e-08,6.5e-04] | lr=8.2e-05 | TR[0.113,0.01,0.078] | VL[0.107,0.01,0.073] | SR=0.010 | slip=0.00/hub=0.000 | topK=2.weight:0.094/1.4e-05, 0.weight:0.042/5.4e-07, 2.bias:0.033/6.5e-04, short2long.weight:0.011/9.7e-08, conv.weight:0.004/1.2e-07, short_lstm.weight_ih_l0:0.003/5.5e-08, 0.bias:0.003/6.3e-07, short_lstm.weight_ih_l0_reverse:0.003/5.1e-08, short2long.bias:0.001/1.0e-07, short_lstm.weight_hh_l0:0.001/5.3e-09, ln_long.bias:0.001/1.3e-06, short_lstm.bias_ih_l0:0.001/4.9e-08, short_lstm.bias_hh_l0:0.001/5.0e-08, short_lstm.bias_ih_l0_reverse:0.001/3.7e-08, short_lstm.bias_hh_l0_reverse:0.001/3.7e-08, ln_long.weight:0.000/2.1e-09, ln_short.bias:0.000/7.5e-07, bn.weight:0.000/6.0e-09, ln_short.weight:0.000/1.5e-09, bn.bias:0.000/1.1e-06, conv.bias:0.000/1.2e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E03 | GN[0.148,0.000,0.000,0.148] | UPD[6.7e-08,8.4e-04] | lr=1.4e-04 | TR[0.112,0.04,0.077] | VL[0.107,0.02,0.074] | SR=0.010 | slip=0.00/hub=0.000 | topK=2.weight:0.133/3.3e-05, 0.weight:0.052/1.1e-06, 2.bias:0.041/8.4e-04, short2long.weight:0.006/9.0e-08, 0.bias:0.004/1.3e-06, conv.weight:0.004/2.0e-07, short_lstm.weight_ih_l0:0.003/6.7e-08, short_lstm.weight_ih_l0_reverse:0.002/4.1e-08, short_lstm.weight_hh_l0:0.001/6.4e-09, short_lstm.bias_ih_l0:0.001/6.3e-08, short_lstm.bias_hh_l0:0.001/6.3e-08, short2long.bias:0.000/9.6e-08, ln_long.bias:0.000/1.3e-06, bn.weight:0.000/1.0e-08, ln_long.weight:0.000/2.1e-09, short_lstm.bias_ih_l0_reverse:0.000/2.9e-08, short_lstm.bias_hh_l0_reverse:0.000/2.9e-08, ln_short.bias:0.000/6.4e-07, bn.bias:0.000/1.9e-06, ln_short.weight:0.000/1.2e-09, conv.bias:0.000/1.7e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E04 | GN[0.103,0.000,0.000,0.103] | UPD[7.5e-08,5.0e-04] | lr=1.8e-04 | TR[0.111,0.05,0.076] | VL[0.105,0.05,0.075] | SR=0.010 | slip=0.00/hub=0.000 | topK=2.weight:0.092/3.0e-05, 0.weight:0.034/9.7e-07, 2.bias:0.030/5.0e-04, conv.weight:0.004/2.5e-07, short2long.weight:0.003/6.8e-08, 0.bias:0.003/1.2e-06, short_lstm.weight_ih_l0:0.002/7.5e-08, short_lstm.weight_ih_l0_reverse:0.001/3.9e-08, short_lstm.bias_ih_l0:0.000/7.6e-08, short_lstm.bias_hh_l0:0.000/7.6e-08, short_lstm.weight_hh_l0:0.000/7.4e-09, bn.weight:0.000/1.3e-08, ln_long.bias:0.000/1.0e-06, short2long.bias:0.000/7.4e-08, bn.bias:0.000/2.4e-06, short_lstm.bias_ih_l0_reverse:0.000/2.8e-08, short_lstm.bias_hh_l0_reverse:0.000/2.8e-08, ln_long.weight:0.000/1.9e-09, ln_short.bias:0.000/5.9e-07, ln_short.weight:0.000/1.3e-09, conv.bias:0.000/7.7e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E05 | GN[0.094,0.000,0.000,0.094] | UPD[9.9e-08,3.5e-04] | lr=2.0e-04 | TR[0.109,0.09,0.075] | VL[0.103,0.10,0.073] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.085/3.1e-05, 0.weight:0.030/9.3e-07, 2.bias:0.028/3.5e-04, conv.weight:0.004/3.2e-07, short2long.weight:0.003/6.6e-08, short_lstm.weight_ih_l0:0.003/9.9e-08, 0.bias:0.002/1.1e-06, short_lstm.weight_ih_l0_reverse:0.001/3.9e-08, short_lstm.bias_ih_l0:0.001/1.1e-07, short_lstm.bias_hh_l0:0.001/1.1e-07, short_lstm.weight_hh_l0:0.001/9.7e-09, bn.weight:0.000/1.9e-08, ln_long.bias:0.000/9.2e-07, bn.bias:0.000/2.7e-06, short2long.bias:0.000/7.1e-08, short_lstm.bias_ih_l0_reverse:0.000/2.9e-08, short_lstm.bias_hh_l0_reverse:0.000/2.9e-08, ln_short.bias:0.000/6.2e-07, ln_long.weight:0.000/1.7e-09, ln_short.weight:0.000/1.1e-09, conv.bias:0.000/2.2e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E06 | GN[0.095,0.000,0.000,0.096] | UPD[1.0e-07,2.6e-04] | lr=2.0e-04 | TR[0.107,0.12,0.073] | VL[0.101,0.12,0.072] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.087/3.1e-05, 0.weight:0.029/8.8e-07, 2.bias:0.027/2.6e-04, conv.weight:0.005/3.6e-07, short2long.weight:0.003/6.0e-08, short_lstm.weight_ih_l0:0.003/1.0e-07, 0.bias:0.002/1.1e-06, short_lstm.weight_ih_l0_reverse:0.001/4.0e-08, short_lstm.bias_ih_l0:0.001/1.2e-07, short_lstm.bias_hh_l0:0.001/1.2e-07, short_lstm.weight_hh_l0:0.001/1.0e-08, bn.weight:0.000/2.2e-08, bn.bias:0.000/2.6e-06, ln_long.bias:0.000/8.1e-07, short2long.bias:0.000/6.4e-08, short_lstm.bias_ih_l0_reverse:0.000/3.1e-08, short_lstm.bias_hh_l0_reverse:0.000/3.1e-08, ln_short.bias:0.000/5.8e-07, ln_long.weight:0.000/1.5e-09, ln_short.weight:0.000/9.6e-10, conv.bias:0.000/5.8e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E07 | GN[0.100,0.000,0.000,0.100] | UPD[1.1e-07,2.1e-04] | lr=2.0e-04 | TR[0.106,0.14,0.072] | VL[0.100,0.14,0.071] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.092/3.3e-05, 0.weight:0.029/8.7e-07, 2.bias:0.026/2.1e-04, conv.weight:0.006/4.3e-07, short_lstm.weight_ih_l0:0.003/1.1e-07, short2long.weight:0.003/5.6e-08, 0.bias:0.002/1.0e-06, short_lstm.weight_ih_l0_reverse:0.001/4.1e-08, short_lstm.bias_ih_l0:0.001/1.4e-07, short_lstm.bias_hh_l0:0.001/1.4e-07, short_lstm.weight_hh_l0:0.001/1.2e-08, bn.weight:0.001/2.6e-08, bn.bias:0.000/2.6e-06, ln_long.bias:0.000/7.1e-07, short2long.bias:0.000/5.9e-08, short_lstm.bias_ih_l0_reverse:0.000/3.1e-08, short_lstm.bias_hh_l0_reverse:0.000/3.2e-08, ln_short.bias:0.000/5.4e-07, ln_long.weight:0.000/1.3e-09, ln_short.weight:0.000/8.5e-10, conv.bias:0.000/5.5e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E08 | GN[0.106,0.000,0.000,0.107] | UPD[1.4e-07,1.8e-04] | lr=2.0e-04 | TR[0.104,0.16,0.071] | VL[0.100,0.15,0.072] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.099/3.6e-05, 0.weight:0.029/8.7e-07, 2.bias:0.026/1.8e-04, conv.weight:0.007/5.2e-07, short_lstm.weight_ih_l0:0.004/1.4e-07, short2long.weight:0.002/5.2e-08, 0.bias:0.002/9.8e-07, short_lstm.weight_ih_l0_reverse:0.001/4.6e-08, short_lstm.bias_ih_l0:0.001/1.9e-07, short_lstm.bias_hh_l0:0.001/1.8e-07, short_lstm.weight_hh_l0:0.001/1.7e-08, bn.weight:0.001/3.4e-08, bn.bias:0.000/3.1e-06, ln_long.bias:0.000/6.4e-07, short_lstm.bias_ih_l0_reverse:0.000/3.6e-08, short_lstm.bias_hh_l0_reverse:0.000/3.6e-08, short2long.bias:0.000/5.6e-08, ln_short.bias:0.000/5.4e-07, ln_long.weight:0.000/1.2e-09, ln_short.weight:0.000/8.5e-10, conv.bias:0.000/9.9e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E09 | GN[0.110,0.000,0.000,0.111] | UPD[1.7e-07,1.6e-04] | lr=2.0e-04 | TR[0.103,0.18,0.071] | VL[0.100,0.14,0.073] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.103/3.7e-05, 0.weight:0.028/8.4e-07, 2.bias:0.026/1.6e-04, conv.weight:0.009/6.7e-07, short_lstm.weight_ih_l0:0.005/1.7e-07, short2long.weight:0.002/4.6e-08, 0.bias:0.002/9.4e-07, short_lstm.weight_hh_l0:0.001/2.5e-08, short_lstm.bias_ih_l0:0.001/2.5e-07, short_lstm.bias_hh_l0:0.001/2.5e-07, short_lstm.weight_ih_l0_reverse:0.001/4.4e-08, bn.weight:0.001/4.0e-08, bn.bias:0.001/3.6e-06, ln_long.bias:0.000/5.7e-07, short_lstm.bias_ih_l0_reverse:0.000/3.4e-08, short_lstm.bias_hh_l0_reverse:0.000/3.4e-08, short2long.bias:0.000/5.1e-08, ln_short.bias:0.000/5.1e-07, ln_long.weight:0.000/1.1e-09, ln_short.weight:0.000/9.4e-10, conv.bias:0.000/1.6e-12, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E10 | GN[0.117,0.000,0.000,0.117] | UPD[2.1e-07,1.4e-04] | lr=1.9e-04 | TR[0.103,0.19,0.070] | VL[0.100,0.13,0.073] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.110/3.9e-05, 0.weight:0.029/8.5e-07, 2.bias:0.027/1.4e-04, conv.weight:0.011/8.4e-07, short_lstm.weight_ih_l0:0.006/2.1e-07, short_lstm.weight_hh_l0:0.002/3.7e-08, short2long.weight:0.002/4.5e-08, 0.bias:0.002/9.4e-07, short_lstm.bias_ih_l0:0.002/3.3e-07, short_lstm.bias_hh_l0:0.002/3.2e-07, short_lstm.weight_ih_l0_reverse:0.001/4.5e-08, bn.weight:0.001/4.9e-08, bn.bias:0.001/4.1e-06, ln_long.bias:0.000/5.5e-07, short_lstm.bias_ih_l0_reverse:0.000/3.4e-08, short_lstm.bias_hh_l0_reverse:0.000/3.5e-08, short2long.bias:0.000/4.9e-08, ln_short.bias:0.000/4.8e-07, ln_long.weight:0.000/1.1e-09, ln_short.weight:0.000/9.3e-10, conv.bias:0.000/2.0e-12, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E11 | GN[0.128,0.000,0.000,0.130] | UPD[3.4e-07,1.3e-04] | lr=1.9e-04 | TR[0.102,0.20,0.070] | VL[0.101,0.12,0.074] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.122/4.3e-05, 0.weight:0.030/8.8e-07, 2.bias:0.028/1.3e-04, conv.weight:0.017/1.2e-06, short_lstm.weight_ih_l0:0.010/3.4e-07, short_lstm.weight_hh_l0:0.004/6.6e-08, short_lstm.bias_ih_l0:0.003/5.4e-07, short_lstm.bias_hh_l0:0.003/5.4e-07, short2long.weight:0.002/4.7e-08, 0.bias:0.002/9.6e-07, bn.weight:0.002/7.5e-08, bn.bias:0.002/6.0e-06, short_lstm.weight_ih_l0_reverse:0.001/5.5e-08, short_lstm.bias_ih_l0_reverse:0.000/4.0e-08, short_lstm.bias_hh_l0_reverse:0.000/4.0e-08, ln_long.bias:0.000/5.6e-07, short2long.bias:0.000/5.2e-08, ln_short.bias:0.000/5.4e-07, ln_long.weight:0.000/1.1e-09, ln_short.weight:0.000/9.8e-10, conv.bias:0.000/1.4e-12, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E12 | GN[0.151,0.000,0.000,0.154] | UPD[5.0e-07,1.4e-04] | lr=1.9e-04 | TR[0.102,0.21,0.070] | VL[0.101,0.12,0.074] | SR=0.011 | slip=0.00/hub=0.000 | topK=2.weight:0.144/4.9e-05, 0.weight:0.035/1.0e-06, 2.bias:0.032/1.4e-04, conv.weight:0.023/1.6e-06, short_lstm.weight_ih_l0:0.014/5.0e-07, short_lstm.weight_hh_l0:0.006/9.7e-08, short_lstm.bias_ih_l0:0.005/7.7e-07, short_lstm.bias_hh_l0:0.005/7.7e-07, short2long.weight:0.003/5.3e-08, 0.bias:0.003/1.1e-06, bn.weight:0.002/1.0e-07, bn.bias:0.002/7.8e-06, short_lstm.weight_ih_l0_reverse:0.002/6.3e-08, short_lstm.bias_ih_l0_reverse:0.000/4.4e-08, short_lstm.bias_hh_l0_reverse:0.000/4.5e-08, ln_long.bias:0.000/6.0e-07, short2long.bias:0.000/5.6e-08, ln_short.bias:0.000/5.8e-07, ln_long.weight:0.000/1.1e-09, ln_short.weight:0.000/1.0e-09, conv.bias:0.000/1.4e-12, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2025-10-12T16:49:41.233065Z
+
+HYPERPARAMS:
+  CONV_K = 5
+  CONV_DILATION = 2
+  ALPHA_SMOOTH = 10
+  SHORT_UNITS = 192
+  LONG_UNITS = 256
+  DROPOUT_SHORT = 0.2
+  DROPOUT_LONG = 0.2
+  PRED_HIDDEN = 128
+  MAX_EPOCHS = 50
+  EARLY_STOP_PATIENCE = 5
+  WEIGHT_DECAY = 0.0002
+  CLIPNORM = 1
+  ONECYCLE_MAX_LR = 0.0002
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 1000
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 16
+  VAL_BATCH = 1
+  NUM_WORKERS = 12
+  TRAIN_PREFETCH_FACTOR = 4
+
+BASELINES:
+  TRAIN mean RMSE      = 0.04186
+  TRAIN persistence RMSE = 0.00941
+  VAL   mean RMSE      = 0.06478
+  VAL   persistence RMSE = 0.01200
+
+E01 | GN[0.190,0.000,0.000,0.201] | GD[4.3e-03,5.0e-02,1.5e-01] | UR[1.9e-07,1.1e-05] | lr=3.7e-05 | TR[0.196,-1.95,0.123] | VL[0.105,0.05,0.074] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.147/9.4e-06, weight:0.118/6.7e-07, weight:0.050/2.0e-07, weight_ih_l0:0.027/1.9e-07, weight:0.027/3.8e-07, bias:0.024/1.1e-05, weight_ih_l0_reverse:0.015/1.1e-07, bias:0.007/5.8e-07, weight_hh_l0:0.005/1.8e-08, bias_ih_l0:0.004/1.4e-07, bias_hh_l0:0.004/1.4e-07, bias:0.004/2.0e-07, weight:0.003/7.5e-09, bias:0.003/2.7e-06, bias_ih_l0_reverse:0.002/6.6e-08, bias_hh_l0_reverse:0.002/6.6e-08, bias:0.002/2.2e-06, weight:0.002/1.6e-08, weight:0.002/4.7e-09, bias:0.001/3.9e-06, bias:0.000/2.2e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E02 | GN[0.104,0.000,0.000,0.105] | GD[5.7e-04,2.5e-02,8.1e-02] | UR[5.4e-08,2.5e-05] | lr=8.2e-05 | TR[0.113,0.02,0.077] | VL[0.106,0.03,0.077] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.081/1.2e-05, weight:0.060/7.6e-07, bias:0.025/2.5e-05, weight:0.008/7.2e-08, bias:0.007/1.3e-06, weight:0.004/1.2e-07, weight_ih_l0:0.003/5.4e-08, weight_ih_l0_reverse:0.002/3.9e-08, weight_hh_l0:0.001/4.9e-09, bias:0.001/8.0e-08, bias:0.001/9.8e-07, bias_ih_l0:0.001/3.6e-08, bias_hh_l0:0.001/3.7e-08, weight:0.000/1.9e-09, bias_ih_l0_reverse:0.000/2.3e-08, bias_hh_l0_reverse:0.000/2.2e-08, bias:0.000/5.5e-07, weight:0.000/5.0e-09, weight:0.000/1.5e-09, bias:0.000/9.6e-07, bias:0.000/1.2e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E03 | GN[0.253,0.000,0.000,0.253] | GD[5.3e-04,2.0e-02,2.1e-01] | UR[7.5e-08,5.2e-05] | lr=1.4e-04 | TR[0.111,0.04,0.076] | VL[0.111,-0.07,0.089] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.213/5.2e-05, weight:0.135/2.9e-06, bias:0.020/3.6e-05, weight:0.006/3.3e-07, bias:0.006/1.7e-06, weight:0.006/8.2e-08, weight_ih_l0:0.004/9.7e-08, weight_ih_l0_reverse:0.002/4.7e-08, weight_hh_l0:0.001/8.8e-09, bias_ih_l0:0.001/6.3e-08, bias_hh_l0:0.001/6.4e-08, weight:0.000/1.5e-08, bias:0.000/1.3e-06, weight:0.000/3.9e-09, bias:0.000/7.5e-08, bias:0.000/2.3e-06, bias:0.000/6.6e-07, bias_ih_l0_reverse:0.000/2.6e-08, bias_hh_l0_reverse:0.000/2.5e-08, weight:0.000/1.3e-09, bias:0.000/2.2e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E04 | GN[0.433,0.000,0.000,0.433] | GD[9.8e-04,4.4e-02,3.7e-01] | UR[1.7e-07,1.2e-04] | lr=1.8e-04 | TR[0.111,0.05,0.076] | VL[0.107,0.02,0.081] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.368/1.2e-04, weight:0.223/6.3e-06, bias:0.044/1.1e-04, bias:0.012/4.7e-06, weight:0.012/8.2e-07, weight:0.009/1.8e-07, weight_ih_l0:0.006/2.3e-07, weight_ih_l0_reverse:0.003/1.2e-07, weight_hh_l0:0.001/2.1e-08, bias_ih_l0:0.001/1.5e-07, bias_hh_l0:0.001/1.6e-07, weight:0.001/3.8e-08, bias:0.001/2.8e-06, weight:0.001/8.0e-09, bias:0.001/1.7e-07, bias:0.000/5.8e-06, bias_ih_l0_reverse:0.000/6.8e-08, bias_hh_l0_reverse:0.000/6.7e-08, bias:0.000/1.5e-06, weight:0.000/2.5e-09, bias:0.000/3.6e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E05 | GN[0.185,0.000,0.000,0.185] | GD[4.5e-04,1.4e-02,1.6e-01] | UR[7.7e-08,5.7e-05] | lr=2.0e-04 | TR[0.110,0.08,0.075] | VL[0.103,0.09,0.075] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.159/5.7e-05, weight:0.092/2.8e-06, bias:0.014/4.2e-05, weight:0.006/4.4e-07, bias:0.004/1.6e-06, weight:0.003/7.0e-08, weight_ih_l0:0.003/1.2e-07, weight_ih_l0_reverse:0.002/6.1e-08, weight_hh_l0:0.001/1.0e-08, weight:0.000/2.2e-08, bias_ih_l0:0.000/7.7e-08, bias_hh_l0:0.000/7.8e-08, bias:0.000/9.1e-07, weight:0.000/2.9e-09, bias:0.000/3.0e-06, bias:0.000/6.1e-08, bias_ih_l0_reverse:0.000/3.2e-08, bias_hh_l0_reverse:0.000/3.2e-08, bias:0.000/6.4e-07, weight:0.000/1.0e-09, bias:0.000/2.6e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E06 | GN[0.138,0.000,0.000,0.138] | GD[3.8e-04,9.2e-03,1.2e-01] | UR[6.6e-08,4.3e-05] | lr=2.0e-04 | TR[0.108,0.10,0.074] | VL[0.102,0.10,0.074] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.120/4.3e-05, weight:0.069/2.1e-06, bias:0.009/3.1e-05, weight:0.005/4.2e-07, weight_ih_l0:0.003/1.0e-07, weight:0.002/5.4e-08, bias:0.002/1.0e-06, weight_ih_l0_reverse:0.001/5.6e-08, weight:0.000/2.2e-08, weight_hh_l0:0.000/8.4e-09, bias_ih_l0:0.000/6.6e-08, bias_hh_l0:0.000/6.7e-08, bias:0.000/2.7e-06, bias:0.000/5.9e-07, bias_ih_l0_reverse:0.000/2.9e-08, bias_hh_l0_reverse:0.000/2.8e-08, bias:0.000/4.8e-08, weight:0.000/1.9e-09, bias:0.000/5.4e-07, weight:0.000/9.1e-10, bias:0.000/9.3e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E07 | GN[0.090,0.000,0.000,0.090] | GD[3.4e-04,4.6e-03,7.9e-02] | UR[5.9e-08,2.8e-05] | lr=2.0e-04 | TR[0.107,0.11,0.073] | VL[0.101,0.12,0.073] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.079/2.8e-05, weight:0.044/1.3e-06, weight:0.005/3.5e-07, bias:0.004/1.6e-05, weight_ih_l0:0.002/8.8e-08, weight:0.002/3.5e-08, weight_ih_l0_reverse:0.001/4.5e-08, bias:0.001/4.4e-07, weight:0.000/1.9e-08, weight_hh_l0:0.000/7.1e-09, bias_ih_l0:0.000/5.9e-08, bias_hh_l0:0.000/6.0e-08, bias:0.000/2.1e-06, bias_ih_l0_reverse:0.000/2.2e-08, bias_hh_l0_reverse:0.000/2.2e-08, bias:0.000/3.2e-07, bias:0.000/3.1e-08, bias:0.000/4.0e-07, weight:0.000/1.1e-09, weight:0.000/6.8e-10, bias:0.000/5.1e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E08 | GN[0.047,0.000,0.000,0.047] | GD[2.7e-04,3.6e-03,4.0e-02] | UR[4.6e-08,1.4e-05] | lr=2.0e-04 | TR[0.106,0.13,0.073] | VL[0.101,0.12,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.040/1.4e-05, weight:0.024/7.3e-07, weight:0.004/2.7e-07, weight_ih_l0:0.002/7.3e-08, weight:0.001/3.0e-08, weight_ih_l0_reverse:0.001/2.9e-08, weight_hh_l0:0.000/6.0e-09, weight:0.000/1.5e-08, bias_ih_l0:0.000/4.7e-08, bias_hh_l0:0.000/4.7e-08, bias:0.000/1.1e-06, bias:0.000/1.4e-06, bias:0.000/4.6e-08, bias:0.000/2.7e-08, bias:0.000/2.0e-07, bias_ih_l0_reverse:0.000/1.4e-08, bias_hh_l0_reverse:0.000/1.4e-08, bias:0.000/2.9e-07, weight:0.000/9.1e-10, weight:0.000/7.0e-10, bias:0.000/1.2e-12, weight_hh_l0_reverse:0.000/0.0e+00
+
+E09 | GN[0.013,0.000,0.000,0.013] | GD[2.2e-04,4.3e-03,9.2e-03] | UR[3.8e-08,1.9e-05] | lr=2.0e-04 | TR[0.105,0.15,0.072] | VL[0.101,0.13,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.009/2.8e-07, weight:0.008/2.8e-06, bias:0.004/1.9e-05, weight:0.003/2.1e-07, weight_ih_l0:0.002/5.8e-08, bias:0.001/4.0e-07, weight:0.001/1.9e-08, weight_ih_l0_reverse:0.001/2.2e-08, weight_hh_l0:0.000/4.6e-09, weight:0.000/1.1e-08, bias_ih_l0:0.000/3.8e-08, bias_hh_l0:0.000/3.8e-08, bias:0.000/8.9e-07, bias_ih_l0_reverse:0.000/1.0e-08, bias_hh_l0_reverse:0.000/1.0e-08, bias:0.000/1.7e-08, bias:0.000/1.1e-07, weight:0.000/6.6e-10, bias:0.000/1.9e-07, weight:0.000/5.7e-10, bias:0.000/1.0e-12, weight_hh_l0_reverse:0.000/0.0e+00
+
+E10 | GN[0.024,0.000,0.000,0.025] | GD[1.2e-04,6.1e-03,2.0e-02] | UR[2.0e-08,2.8e-05] | lr=1.9e-04 | TR[0.105,0.16,0.072] | VL[0.100,0.13,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.020/6.8e-06, weight:0.013/3.9e-07, bias:0.006/2.8e-05, weight:0.002/1.4e-07, bias:0.002/5.5e-07, weight_ih_l0:0.001/2.8e-08, weight:0.001/1.5e-08, weight_ih_l0_reverse:0.000/1.5e-08, weight_hh_l0:0.000/2.6e-09, bias_ih_l0:0.000/2.0e-08, bias_hh_l0:0.000/2.0e-08, weight:0.000/3.7e-09, bias:0.000/9.5e-08, bias_ih_l0_reverse:0.000/7.5e-09, bias_hh_l0_reverse:0.000/7.3e-09, bias:0.000/1.2e-08, bias:0.000/3.5e-07, weight:0.000/4.7e-10, weight:0.000/4.7e-10, bias:0.000/1.1e-07, bias:0.000/4.3e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E11 | GN[0.040,0.000,0.000,0.040] | GD[8.1e-05,7.5e-03,3.4e-02] | UR[1.5e-08,3.7e-05] | lr=1.9e-04 | TR[0.104,0.17,0.071] | VL[0.100,0.14,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.034/1.2e-05, weight:0.019/5.6e-07, bias:0.007/3.7e-05, weight:0.002/1.7e-07, bias:0.002/6.4e-07, weight:0.001/1.6e-08, weight_ih_l0:0.001/2.6e-08, weight_ih_l0_reverse:0.000/1.5e-08, weight_hh_l0:0.000/2.5e-09, weight:0.000/3.7e-09, bias_ih_l0:0.000/1.3e-08, bias_hh_l0:0.000/1.4e-08, bias:0.000/1.0e-07, bias_ih_l0_reverse:0.000/8.7e-09, bias_hh_l0_reverse:0.000/8.6e-09, bias:0.000/1.4e-08, weight:0.000/4.9e-10, bias:0.000/2.7e-07, bias:0.000/1.1e-07, weight:0.000/4.5e-10, bias:0.000/4.1e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E12 | GN[0.041,0.000,0.000,0.041] | GD[1.0e-04,7.8e-03,3.5e-02] | UR[1.6e-08,4.1e-05] | lr=1.9e-04 | TR[0.104,0.18,0.071] | VL[0.100,0.13,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.035/1.2e-05, weight:0.019/5.6e-07, bias:0.008/4.1e-05, weight:0.002/1.7e-07, bias:0.002/6.3e-07, weight:0.001/1.8e-08, weight_ih_l0:0.001/2.8e-08, weight_ih_l0_reverse:0.000/1.5e-08, weight_hh_l0:0.000/2.7e-09, weight:0.000/4.8e-09, bias_ih_l0:0.000/1.6e-08, bias_hh_l0:0.000/1.6e-08, bias:0.000/1.0e-07, bias:0.000/1.6e-08, bias_ih_l0_reverse:0.000/9.1e-09, bias_hh_l0_reverse:0.000/9.0e-09, bias:0.000/3.3e-07, weight:0.000/5.5e-10, bias:0.000/1.1e-07, weight:0.000/4.7e-10, bias:0.000/4.5e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+E13 | GN[0.064,0.000,0.000,0.064] | GD[1.9e-04,9.6e-03,5.6e-02] | UR[3.1e-08,5.4e-05] | lr=1.8e-04 | TR[0.103,0.18,0.071] | VL[0.100,0.14,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=weight:0.056/1.9e-05, weight:0.029/8.4e-07, bias:0.010/5.4e-05, weight:0.003/2.4e-07, bias:0.002/7.6e-07, weight_ih_l0:0.001/3.9e-08, weight:0.001/1.8e-08, weight_ih_l0_reverse:0.001/2.3e-08, weight_hh_l0:0.000/3.5e-09, bias_ih_l0:0.000/3.1e-08, bias_hh_l0:0.000/3.1e-08, weight:0.000/7.8e-09, bias:0.000/6.6e-07, bias_ih_l0_reverse:0.000/1.5e-08, bias_hh_l0_reverse:0.000/1.5e-08, bias:0.000/1.0e-07, bias:0.000/1.7e-08, bias:0.000/1.4e-07, weight:0.000/5.6e-10, weight:0.000/5.0e-10, bias:0.000/4.6e-13, weight_hh_l0_reverse:0.000/0.0e+00
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2025-10-12T16:59:27.044203Z
+
+HYPERPARAMS:
+  CONV_K = 5
+  CONV_DILATION = 2
+  ALPHA_SMOOTH = 10
+  SHORT_UNITS = 192
+  LONG_UNITS = 256
+  DROPOUT_SHORT = 0.2
+  DROPOUT_LONG = 0.2
+  PRED_HIDDEN = 128
+  MAX_EPOCHS = 50
+  EARLY_STOP_PATIENCE = 5
+  WEIGHT_DECAY = 0.0002
+  CLIPNORM = 1
+  ONECYCLE_MAX_LR = 0.0002
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 1000
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 16
+  VAL_BATCH = 1
+  NUM_WORKERS = 12
+  TRAIN_PREFETCH_FACTOR = 4
+
+BASELINES:
+  TRAIN mean RMSE       = 0.04186
+  TRAIN persistence RMSE = 0.00941
+  VAL   mean RMSE       = 0.06478
+  VAL   persistence RMSE = 0.01200
+
+# PER-EPOCH LOG FORMAT:
+#  E{ep:02d} | GN[reg,cls,ter,tot] | GD[med,p90,max] | UR[med,max] | lr={lr:.1e} | TR[rmse,r2,mae] | VL[rmse,r2,mae] | SR={slope_rmse:.3f} | SL={slip:.2f},HR={hub_max:.3f} | topK(g/u)=param:grad_norm/update_ratio,...
+
+E01 | GN[0.295,0.000,0.000,0.303] | GD[4.9e-03,6.2e-02,2.4e-01] | UR[1.8e-07,3.3e-05] | lr=3.7e-05 | TR[0.142,-0.55,0.096] | VL[0.110,-0.04,0.071] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.241/1.5e-05, 0.weight:0.158/9.1e-07, 2.bias:0.062/3.3e-05, short2long.weight:0.057/2.3e-07, short_lstm.weight_ih_l0:0.026/1.8e-07, short_lstm.weight_ih_l0_reverse:0.020/1.5e-07, conv.weight:0.020/2.9e-07, 0.bias:0.011/9.7e-07, short_lstm.weight_hh_l0:0.005/1.7e-08, short_lstm.bias_ih_l0:0.005/1.6e-07, short_lstm.bias_hh_l0:0.005/1.5e-07, short2long.bias:0.004/2.4e-07, short_lstm.bias_ih_l0_reverse:0.003/1.1e-07, short_lstm.bias_hh_l0_reverse:0.003/1.1e-07, ln_long.bias:0.003/3.5e-06, ln_long.weight:0.003/6.9e-09, ln_short.bias:0.002/2.9e-06, bn.weight:0.002/1.5e-08, ln_short.weight:0.002/4.9e-09, bn.bias:0.001/3.2e-06, conv.bias:0.000/1.6e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E02 | GN[0.217,0.000,0.000,0.218] | GD[1.2e-03,4.5e-02,1.8e-01] | UR[9.3e-08,5.4e-05] | lr=8.2e-05 | TR[0.113,0.01,0.077] | VL[0.107,0.02,0.073] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.184/2.6e-05, 0.weight:0.106/1.3e-06, 2.bias:0.045/5.4e-05, short2long.weight:0.016/1.4e-07, 0.bias:0.009/1.7e-06, conv.weight:0.007/2.3e-07, short_lstm.weight_ih_l0:0.006/9.3e-08, short_lstm.weight_ih_l0_reverse:0.004/6.2e-08, short2long.bias:0.001/1.5e-07, short_lstm.weight_hh_l0:0.001/8.5e-09, ln_long.bias:0.001/2.0e-06, short_lstm.bias_ih_l0:0.001/8.0e-08, short_lstm.bias_hh_l0:0.001/7.5e-08, short_lstm.bias_ih_l0_reverse:0.001/4.4e-08, short_lstm.bias_hh_l0_reverse:0.001/4.4e-08, ln_long.weight:0.001/2.8e-09, ln_short.bias:0.001/1.1e-06, bn.weight:0.000/7.4e-09, ln_short.weight:0.000/1.9e-09, bn.bias:0.000/2.1e-06, conv.bias:0.000/8.7e-14, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E03 | GN[0.105,0.000,0.000,0.105] | GD[3.9e-04,2.7e-02,8.9e-02] | UR[5.4e-08,5.8e-05] | lr=1.4e-04 | TR[0.112,0.03,0.076] | VL[0.106,0.03,0.078] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.089/2.1e-05, 0.weight:0.048/1.0e-06, 2.bias:0.027/5.8e-05, 0.bias:0.005/1.7e-06, short2long.weight:0.004/6.5e-08, conv.weight:0.003/1.6e-07, short_lstm.weight_ih_l0:0.002/5.4e-08, short_lstm.weight_ih_l0_reverse:0.001/3.3e-08, short_lstm.weight_hh_l0:0.000/5.0e-09, short_lstm.bias_ih_l0:0.000/4.8e-08, short_lstm.bias_hh_l0:0.000/4.5e-08, ln_long.bias:0.000/1.0e-06, short2long.bias:0.000/7.3e-08, ln_long.weight:0.000/1.8e-09, short_lstm.bias_ih_l0_reverse:0.000/2.3e-08, short_lstm.bias_hh_l0_reverse:0.000/2.3e-08, ln_short.bias:0.000/5.4e-07, bn.weight:0.000/4.5e-09, bn.bias:0.000/1.4e-06, ln_short.weight:0.000/1.1e-09, conv.bias:0.000/5.4e-14, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E04 | GN[0.181,0.000,0.000,0.181] | GD[5.8e-04,1.8e-02,1.6e-01] | UR[8.9e-08,5.6e-05] | lr=1.8e-04 | TR[0.110,0.06,0.075] | VL[0.109,-0.02,0.086] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.161/5.1e-05, 0.weight:0.079/2.2e-06, 2.bias:0.018/5.6e-05, conv.weight:0.006/4.0e-07, short2long.weight:0.004/8.2e-08, 0.bias:0.003/1.5e-06, short_lstm.weight_ih_l0:0.003/1.1e-07, short_lstm.weight_ih_l0_reverse:0.001/4.9e-08, short_lstm.weight_hh_l0:0.001/1.0e-08, short_lstm.bias_ih_l0:0.001/9.4e-08, short_lstm.bias_hh_l0:0.001/8.9e-08, ln_long.bias:0.000/1.3e-06, bn.weight:0.000/1.4e-08, ln_long.weight:0.000/3.7e-09, short2long.bias:0.000/7.5e-08, bn.bias:0.000/3.0e-06, short_lstm.bias_ih_l0_reverse:0.000/3.2e-08, short_lstm.bias_hh_l0_reverse:0.000/3.2e-08, ln_short.bias:0.000/7.4e-07, ln_short.weight:0.000/1.3e-09, conv.bias:0.000/1.3e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E05 | GN[0.265,0.000,0.000,0.266] | GD[1.0e-03,3.2e-02,2.4e-01] | UR[1.7e-07,1.2e-04] | lr=2.0e-04 | TR[0.109,0.08,0.074] | VL[0.107,0.01,0.085] | SR=0.010 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.237/8.3e-05, 0.weight:0.115/3.5e-06, 2.bias:0.032/1.2e-04, conv.weight:0.011/8.7e-07, 0.bias:0.006/2.8e-06, short2long.weight:0.006/1.2e-07, short_lstm.weight_ih_l0:0.005/2.0e-07, short_lstm.weight_ih_l0_reverse:0.002/9.2e-08, short_lstm.weight_hh_l0:0.001/1.8e-08, short_lstm.bias_ih_l0:0.001/1.8e-07, short_lstm.bias_hh_l0:0.001/1.7e-07, bn.weight:0.001/2.7e-08, ln_long.bias:0.001/2.0e-06, bn.bias:0.000/6.0e-06, ln_long.weight:0.000/5.6e-09, short2long.bias:0.000/1.2e-07, short_lstm.bias_ih_l0_reverse:0.000/6.2e-08, short_lstm.bias_hh_l0_reverse:0.000/6.2e-08, ln_short.bias:0.000/1.3e-06, ln_short.weight:0.000/2.0e-09, conv.bias:0.000/3.7e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E06 | GN[0.206,0.000,0.000,0.206] | GD[8.8e-04,2.3e-02,1.8e-01] | UR[1.5e-07,1.1e-04] | lr=2.0e-04 | TR[0.108,0.11,0.073] | VL[0.105,0.05,0.082] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.184/6.5e-05, 0.weight:0.088/2.7e-06, 2.bias:0.023/1.1e-04, conv.weight:0.011/8.7e-07, short_lstm.weight_ih_l0:0.005/1.8e-07, 0.bias:0.004/2.0e-06, short2long.weight:0.004/9.2e-08, short_lstm.weight_ih_l0_reverse:0.002/7.6e-08, short_lstm.weight_hh_l0:0.001/1.6e-08, short_lstm.bias_ih_l0:0.001/1.6e-07, short_lstm.bias_hh_l0:0.001/1.5e-07, bn.weight:0.001/2.7e-08, bn.bias:0.000/5.4e-06, ln_long.bias:0.000/1.4e-06, ln_long.weight:0.000/3.7e-09, short2long.bias:0.000/8.9e-08, short_lstm.bias_ih_l0_reverse:0.000/5.0e-08, short_lstm.bias_hh_l0_reverse:0.000/5.0e-08, ln_short.bias:0.000/9.9e-07, ln_short.weight:0.000/1.5e-09, conv.bias:0.000/4.0e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E07 | GN[0.141,0.000,0.000,0.141] | GD[7.3e-04,1.4e-02,1.3e-01] | UR[1.2e-07,7.5e-05] | lr=2.0e-04 | TR[0.107,0.13,0.073] | VL[0.103,0.09,0.079] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.127/4.4e-05, 0.weight:0.059/1.8e-06, 2.bias:0.014/7.5e-05, conv.weight:0.011/8.3e-07, short_lstm.weight_ih_l0:0.004/1.5e-07, short2long.weight:0.003/6.2e-08, 0.bias:0.003/1.2e-06, short_lstm.weight_ih_l0_reverse:0.002/6.0e-08, short_lstm.weight_hh_l0:0.001/1.3e-08, short_lstm.bias_ih_l0:0.001/1.3e-07, short_lstm.bias_hh_l0:0.001/1.2e-07, bn.weight:0.001/2.4e-08, bn.bias:0.000/4.7e-06, ln_long.bias:0.000/8.5e-07, short_lstm.bias_ih_l0_reverse:0.000/3.8e-08, short_lstm.bias_hh_l0_reverse:0.000/3.8e-08, short2long.bias:0.000/6.2e-08, ln_short.bias:0.000/7.4e-07, ln_long.weight:0.000/2.4e-09, ln_short.weight:0.000/1.4e-09, conv.bias:0.000/3.7e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E08 | GN[0.073,0.000,0.000,0.074] | GD[5.0e-04,8.1e-03,6.6e-02] | UR[8.4e-08,3.2e-05] | lr=2.0e-04 | TR[0.106,0.14,0.072] | VL[0.101,0.12,0.076] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.066/2.3e-05, 0.weight:0.032/9.6e-07, conv.weight:0.008/6.2e-07, 2.bias:0.005/3.2e-05, short_lstm.weight_ih_l0:0.003/1.0e-07, short2long.weight:0.002/3.4e-08, short_lstm.weight_ih_l0_reverse:0.001/3.9e-08, 0.bias:0.001/4.3e-07, short_lstm.bias_ih_l0:0.001/8.9e-08, short_lstm.bias_hh_l0:0.001/8.4e-08, short_lstm.weight_hh_l0:0.000/8.7e-09, bn.weight:0.000/1.8e-08, bn.bias:0.000/3.3e-06, ln_long.bias:0.000/4.2e-07, short_lstm.bias_ih_l0_reverse:0.000/2.4e-08, short_lstm.bias_hh_l0_reverse:0.000/2.4e-08, ln_short.bias:0.000/4.5e-07, short2long.bias:0.000/3.3e-08, ln_long.weight:0.000/1.2e-09, ln_short.weight:0.000/1.0e-09, conv.bias:0.000/5.2e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E09 | GN[0.012,0.000,0.000,0.012] | GD[2.0e-04,5.4e-03,8.1e-03] | UR[3.2e-08,3.8e-05] | lr=2.0e-04 | TR[0.105,0.16,0.072] | VL[0.101,0.13,0.073] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.008/2.8e-06, 0.weight:0.007/2.0e-07, 2.bias:0.005/3.8e-05, conv.weight:0.003/2.6e-07, short_lstm.weight_ih_l0:0.001/4.7e-08, 0.bias:0.001/4.0e-07, short2long.weight:0.001/1.7e-08, short_lstm.weight_ih_l0_reverse:0.000/1.4e-08, short_lstm.weight_hh_l0:0.000/3.9e-09, short_lstm.bias_ih_l0:0.000/3.5e-08, short_lstm.bias_hh_l0:0.000/3.2e-08, bn.weight:0.000/7.2e-09, bn.bias:0.000/1.0e-06, short2long.bias:0.000/1.5e-08, ln_long.weight:0.000/6.3e-10, ln_long.bias:0.000/1.4e-07, ln_short.bias:0.000/1.7e-07, short_lstm.bias_ih_l0_reverse:0.000/7.3e-09, short_lstm.bias_hh_l0_reverse:0.000/7.3e-09, ln_short.weight:0.000/6.0e-10, conv.bias:0.000/5.5e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E10 | GN[0.071,0.000,0.000,0.071] | GD[2.1e-04,1.4e-02,6.3e-02] | UR[3.3e-08,1.2e-04] | lr=1.9e-04 | TR[0.104,0.17,0.071] | VL[0.100,0.14,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.063/2.1e-05, 0.weight:0.030/9.0e-07, 2.bias:0.014/1.2e-04, conv.weight:0.004/3.2e-07, 0.bias:0.003/1.0e-06, short2long.weight:0.001/2.6e-08, short_lstm.weight_ih_l0:0.001/3.5e-08, short_lstm.weight_ih_l0_reverse:0.001/2.3e-08, short_lstm.weight_hh_l0:0.000/3.8e-09, short_lstm.bias_ih_l0:0.000/3.6e-08, short_lstm.bias_hh_l0:0.000/3.3e-08, bn.weight:0.000/8.3e-09, bn.bias:0.000/1.5e-06, ln_long.bias:0.000/3.1e-07, short_lstm.bias_ih_l0_reverse:0.000/1.6e-08, short_lstm.bias_hh_l0_reverse:0.000/1.6e-08, short2long.bias:0.000/2.6e-08, ln_short.bias:0.000/2.2e-07, ln_long.weight:0.000/7.5e-10, ln_short.weight:0.000/5.2e-10, conv.bias:0.000/5.1e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E11 | GN[0.104,0.000,0.000,0.104] | GD[4.8e-04,1.9e-02,9.2e-02] | UR[7.5e-08,1.9e-04] | lr=1.9e-04 | TR[0.103,0.18,0.071] | VL[0.100,0.14,0.071] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.092/3.1e-05, 0.weight:0.043/1.3e-06, 2.bias:0.019/1.9e-04, conv.weight:0.009/6.4e-07, 0.bias:0.003/1.3e-06, short_lstm.weight_ih_l0:0.002/7.5e-08, short2long.weight:0.002/3.5e-08, short_lstm.weight_ih_l0_reverse:0.001/4.1e-08, bn.weight:0.000/2.1e-08, short_lstm.bias_ih_l0:0.000/8.0e-08, short_lstm.bias_hh_l0:0.000/7.6e-08, short_lstm.weight_hh_l0:0.000/7.1e-09, bn.bias:0.000/3.4e-06, ln_long.bias:0.000/4.2e-07, short_lstm.bias_ih_l0_reverse:0.000/2.8e-08, short_lstm.bias_hh_l0_reverse:0.000/2.8e-08, short2long.bias:0.000/3.8e-08, ln_short.bias:0.000/3.6e-07, ln_long.weight:0.000/9.1e-10, ln_short.weight:0.000/6.9e-10, conv.bias:0.000/9.3e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E12 | GN[0.106,0.000,0.000,0.106] | GD[5.8e-04,1.9e-02,9.4e-02] | UR[8.5e-08,2.4e-04] | lr=1.9e-04 | TR[0.102,0.19,0.070] | VL[0.100,0.13,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.094/3.1e-05, 0.weight:0.043/1.3e-06, 2.bias:0.019/2.4e-04, conv.weight:0.010/7.1e-07, 0.bias:0.003/1.3e-06, short_lstm.weight_ih_l0:0.002/8.5e-08, short2long.weight:0.002/3.2e-08, short_lstm.weight_ih_l0_reverse:0.001/4.1e-08, bn.weight:0.001/2.7e-08, short_lstm.bias_ih_l0:0.001/9.6e-08, short_lstm.bias_hh_l0:0.001/9.0e-08, short_lstm.weight_hh_l0:0.001/8.4e-09, bn.bias:0.000/4.0e-06, ln_long.bias:0.000/3.9e-07, short_lstm.bias_ih_l0_reverse:0.000/2.7e-08, short_lstm.bias_hh_l0_reverse:0.000/2.7e-08, short2long.bias:0.000/3.5e-08, ln_short.bias:0.000/3.4e-07, ln_long.weight:0.000/9.0e-10, ln_short.weight:0.000/7.0e-10, conv.bias:0.000/3.2e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E13 | GN[0.102,0.000,0.000,0.103] | GD[6.0e-04,1.8e-02,9.2e-02] | UR[8.0e-08,2.9e-04] | lr=1.8e-04 | TR[0.102,0.20,0.070] | VL[0.100,0.13,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.092/3.0e-05, 0.weight:0.042/1.2e-06, 2.bias:0.018/2.9e-04, conv.weight:0.009/6.7e-07, 0.bias:0.003/1.1e-06, short_lstm.weight_ih_l0:0.002/8.0e-08, short2long.weight:0.001/2.8e-08, short_lstm.weight_ih_l0_reverse:0.001/3.8e-08, bn.weight:0.001/2.6e-08, short_lstm.bias_ih_l0:0.001/9.7e-08, short_lstm.bias_hh_l0:0.001/9.2e-08, short_lstm.weight_hh_l0:0.001/8.9e-09, bn.bias:0.000/3.6e-06, short_lstm.bias_ih_l0_reverse:0.000/2.5e-08, short_lstm.bias_hh_l0_reverse:0.000/2.5e-08, ln_long.bias:0.000/3.3e-07, short2long.bias:0.000/3.0e-08, ln_short.bias:0.000/2.8e-07, ln_long.weight:0.000/7.6e-10, ln_short.weight:0.000/5.9e-10, conv.bias:0.000/1.1e-12, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E14 | GN[0.099,0.000,0.000,0.099] | GD[8.8e-04,1.7e-02,8.8e-02] | UR[1.1e-07,4.0e-04] | lr=1.8e-04 | TR[0.101,0.21,0.070] | VL[0.100,0.13,0.072] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.088/2.8e-05, 0.weight:0.041/1.1e-06, 2.bias:0.017/4.0e-04, conv.weight:0.012/8.0e-07, short_lstm.weight_ih_l0:0.003/1.1e-07, 0.bias:0.003/1.1e-06, short2long.weight:0.001/2.6e-08, short_lstm.weight_ih_l0_reverse:0.001/3.8e-08, short_lstm.bias_ih_l0:0.001/1.4e-07, short_lstm.bias_hh_l0:0.001/1.4e-07, short_lstm.weight_hh_l0:0.001/1.4e-08, bn.weight:0.001/3.1e-08, bn.bias:0.000/4.1e-06, short_lstm.bias_ih_l0_reverse:0.000/2.5e-08, short_lstm.bias_hh_l0_reverse:0.000/2.5e-08, ln_long.bias:0.000/3.0e-07, short2long.bias:0.000/2.9e-08, ln_short.bias:0.000/2.8e-07, ln_long.weight:0.000/7.2e-10, ln_short.weight:0.000/5.8e-10, conv.bias:0.000/8.9e-13, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00
+
+E15 | GN[0.154,0.000,0.000,0.155] | GD[1.8e-03,2.5e-02,1.4e-01] | UR[2.0e-07,9.2e-04] | lr=1.8e-04 | TR[0.101,0.22,0.069] | VL[0.101,0.13,0.071] | SR=0.011 | SL=0.00,HR=0.000 | topK(g/u)=2.weight:0.138/4.3e-05, 0.weight:0.062/1.7e-06, 2.bias:0.025/9.2e-04, conv.weight:0.018/1.2e-06, short_lstm.weight_ih_l0:0.006/2.0e-07, 0.bias:0.004/1.4e-06, short_lstm.bias_ih_l0:0.002/3.2e-07, short_lstm.bias_hh_l0:0.002/3.1e-07, short_lstm.weight_hh_l0:0.002/3.0e-08, short2long.weight:0.002/3.7e-08, short_lstm.weight_ih_l0_reverse:0.002/5.9e-08, bn.weight:0.001/5.4e-08, bn.bias:0.001/6.6e-06, short_lstm.bias_ih_l0_reverse:0.000/3.7e-08, short_lstm.bias_hh_l0_reverse:0.000/3.7e-08, ln_long.bias:0.000/4.0e-07, ln_short.bias:0.000/3.9e-07, short2long.bias:0.000/4.1e-08, ln_long.weight:0.000/8.2e-10, ln_short.weight:0.000/7.2e-10, conv.bias:0.000/1.1e-12, short_lstm.weight_hh_l0_reverse:0.000/0.0e+00

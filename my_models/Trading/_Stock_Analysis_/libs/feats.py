@@ -35,25 +35,25 @@ from scipy.stats import spearmanr, skew, kurtosis
 
 def create_features(
     df: pd.DataFrame,
-    window_multiplier: float = 1.0,
-    sma_short:   int   = 14,
-    sma_long:    int   = 28,
-    rsi_window:  int   = 14,
-    macd_fast:   int   = 12,
-    macd_slow:   int   = 26,
-    macd_sig:    int   = 9,
-    atr_window:  int   = 14,
-    bb_window:   int   = 20,
-    obv_sma:     int   = 14,
-    vwap_window: int   = 14,
+    mult_feats_win:   float = 1.0,
+    sma_short:        int   = 14,
+    sma_long:         int   = 28,
+    rsi_window:       int   = 14,
+    macd_fast:        int   = 12,
+    macd_slow:        int   = 26,
+    macd_sig:         int   = 9,
+    atr_window:       int   = 14,
+    bb_window:        int   = 20,
+    obv_sma:          int   = 14,
+    vwap_window:      int   = 14,
     vol_spike_window: int = 14
 ) -> pd.DataFrame:
     """
     Compute raw OHLCV features and classic indicators on 1-min bars,
-    scaling every lookback window by window_multiplier.
+    scaling every lookback window by mult_feats_win.
 
     Steps:
-      1) Scale all indicator windows via window_multiplier (including MACD).
+      1) Scale all indicator windows via mult_feats_win (including MACD).
       2) Compute simple returns and log-returns.
       3) Candlestick geometry: body, %body, upper/lower shadows, range_pct.
       4) RSI, MACD line/signal/diff, SMA(short/long) + percent deviations.
@@ -70,7 +70,7 @@ def create_features(
 
     # Helper to scale windows
     def WM(x: int) -> int:
-        return max(1, int(round(x * window_multiplier)))
+        return max(1, int(round(x * mult_feats_win)))
 
     # 1) scaled window lengths
     w_sma_s     = WM(sma_short)
@@ -300,7 +300,7 @@ def assign_feature_groups(
     # 1) Build reserved set (drop from grouping)
     reserved = {
         "hour","day_of_week","month",
-        "open","high","low","close","volume"
+        "open","high","low","close"
     }
     # add raw‐level BBands/SMA/VWAP
     for c in cols:
@@ -358,7 +358,8 @@ def assign_feature_groups(
     df_assign["group_final"] = df_assign.index.map(final_group)
     return df_assign
 
-    
+
+  
 ##########################################################################################################
 
 
@@ -419,7 +420,7 @@ def scale_with_splits(
 
     # 5) reserved vs feature columns
     reserved = {
-        "open","high","low","close","volume",
+        "open","high","low","close",
         params.label_col,
         "hour","day_of_week","month"
     }
@@ -548,7 +549,7 @@ def scale_with_splits(
 
     # 10) reassemble & drop raw columns
     df_all = pd.concat([df_tr_s, df_v_s, df_te_s]).sort_index()
-    to_drop = ["open","high","low","close","volume"] + [
+    to_drop = ["open","high","low","close"] + [
         c for c in df_all.columns
         if c.startswith("bb_lband_")
         or c.startswith("bb_hband_")

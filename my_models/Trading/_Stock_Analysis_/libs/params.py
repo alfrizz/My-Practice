@@ -17,15 +17,18 @@ from libs.models import simple_lstm, dual_lstm_smooth
 
 ticker = 'AAPL'
 label_col  = "signal" 
-month_to_check = '2023-10'
+month_to_check = '2024-06'
+
+smooth_sign_win = 15 # smoothing of the continuous target signal
+mult_feats_win = 1 # use 1 to generate features indicators with their standard windows size
 
 createCSVbase = False # set to True to regenerate the 'base' csv
-createCSVsign = True # set to True to regenerate the 'sign' csv
+createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.25078
+sel_val_rmse = 0.26212
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -48,7 +51,6 @@ trainval_csv = save_path / f"{ticker}_4_trainval.csv"
 sess_start         = datetime.strptime('14:30', '%H:%M').time()  
 sess_premark       = datetime.strptime('09:00' , '%H:%M').time()  
 sess_end           = datetime.strptime('21:00' , '%H:%M').time() 
-
 
 #########################################################################################################
 
@@ -107,37 +109,37 @@ def signal_parameters(ticker):
     look_back ==> length of historical window (how many minutes of history each training example contains): number of past time‐steps fed into the LSTM to predict next value
     '''
     if ticker == 'AAPL':
-        look_back = 60
+        look_back = 90
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - look_back, 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*look_back, 60))
-        smooth_sign_win = 3
         features_cols = ['sma_pct_14',
                          'atr_pct_14',
-                         'bb_w_20',
                          'rsi_14',
-                         'ret',
+                         'bb_w_20',
+                         'plus_di_14',
                          'range_pct',
                          'eng_ma',
-                         'plus_di_14',
-                         'obv_diff_14',
-                         'eng_atr_div',
                          'minus_di_14',
-                         'hour',
                          'eng_macd',
                          'macd_diff_12_26_9',
-                         'body',
+                         'body_pct',
                          'macd_line_12_26_9',
+                         'volume',
+                         'obv_diff_14',
                          'eng_rsi',
+                         'eng_atr_div',
+                         'eng_adx',
                          'adx_14',
-                         'eng_adx']
-        trailing_stop_pred = 0.2
-        pred_threshold = 0.2
+                         'hour',
+                         'body']
+        trailing_stop_pred = 0.5
+        pred_threshold = 0.1
         return_threshold = 0.01
         
-    return look_back, sess_start_pred, sess_start_shift, features_cols, smooth_sign_win, trailing_stop_pred, pred_threshold, return_threshold
+    return look_back, sess_start_pred, sess_start_shift, features_cols, trailing_stop_pred, pred_threshold, return_threshold
 
 # automatically executed function to get the parameters for the selected ticker
-look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick, smooth_sign_win_tick, trailing_stop_pred_tick, pred_threshold_tick, return_threshold_tick \
+look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick, trailing_stop_pred_tick, pred_threshold_tick, return_threshold_tick \
 = signal_parameters(ticker)
 
 
@@ -145,49 +147,35 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 
 hparams = {
-    # ── Input conv (first layer) ────────────────────────────────────────
+    #  ────────────────────────────────────────
     "CONV_K":                5,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
     "CONV_DILATION":         2,      # input conv dilation; ↑receptive field, ↓signal granularity
     # "SMOOTH_K":             3,      # regression-head conv kernel (unused in forward); ↑smoothing window, ↓reactivity
     # "SMOOTH_DILATION":      1,      # regression conv dilation (unused); ↑lag smoothing, ↓immediate response
+    "ALPHA_SMOOTH":          10,     # increase to smooth the predicted signal
     
-    # ── Short-term encoder (short Bi-LSTM) ─────────────────────────────
+    # ── lstm ─────────────────────────────
     "SHORT_UNITS":           192,      # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
     "LONG_UNITS":            256,      # projection / pred input dim (formerly long LSTM size); ↑feature width, ↓bottleneck risk
-    "DROPOUT_SHORT":         0.15,      # after short LSTM; ↑regularization, ↓retains sharp spikes
-    "DROPOUT_LONG":          0.15,      # after projection; ↑overfitting guard, ↓reactivity at head
+    "DROPOUT_SHORT":         0.2,      # after short LSTM; ↑regularization, ↓retains sharp spikes
+    "DROPOUT_LONG":          0.2,      # after projection; ↑overfitting guard, ↓reactivity at head
     
     # ── Projection (short -> final feature space) ──────────────────────
     # "PROJ_HIDDEN":          192,     # hidden dim for optional short2long MLP (Option B) -- commented until used
     # "PROJ_USE_MLP":         False,   # toggle single-linear vs small-MLP (unused) -- commented until used
     "PRED_HIDDEN":           128,      # optional head hidden dim 
     
-    # ── Regression head (last layer) ───────────────────────────────────
-    # "PRED_HIDDEN":          None,   # optional hidden dim for extra head layer (unused)
-    
-    # ── Attention / classification (kept for backward compatibility; unused) ─
-    # "ATT_HEADS":            6,      # kept for compatibility (attention not used) -- commented
-    # "ATT_DROPOUT":          0.15,   # kept for compatibility (unused) -- commented
-    
-    # —— Active Loss & Smoothing Hyperparameters —— 
-    # "DIFF1_WEIGHT":          1.0,    # L2 on negative Δ; ↑drop resistance, ↓upward bias
-    # "DIFF2_WEIGHT":          2.0,    # L2 on curvature; ↑smooth curves, ↓spike sharpness
-    # "SMOOTH_ALPHA":          0.05,   # EWMA decay; ↑weight on latest (more reactive), ↓history smoothing
-    # "SMOOTH_BETA":           100.0,  # Huber weight on slips; ↑drop resistance, ↓sensitivity to dips
-    # "SMOOTH_DELTA":          0.02,   # Huber δ for slip; ↑linear tolerance, ↓quadratic penalization
-    # "CLS_LOSS_WEIGHT":       0.10,   # BCE head weight (kept but unused); ↑spike emphasis, ↓regression focus
-    
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
-    "LR_EPOCHS_WARMUP":      3,      # constant LR before scheduler; ↑stable start, ↓early adaptation
-    "INITIAL_LR":            5e-5,   # start LR; ↑fast convergence, ↓risk of instability (test 2e-4 briefly)
-    "WEIGHT_DECAY":          5e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1.5,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ETA_MIN":               1e-6,   # min LR in cosine cycle; ↑fine-tuning tail, ↓floor on updates
-    "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time
-    "MAX_EPOCHS":            70,     # max epochs
-    "T_0":                   70,     # cosine cycle length (unchanged)
-    "T_MULT":                2,      # cycle multiplier (unchanged)
-    
+    "MAX_EPOCHS":            50,     # max epochs
+    "EARLY_STOP_PATIENCE":   5,      # no-improve epochs; ↑robustness to noise, ↓max training time 
+    "WEIGHT_DECAY":          2e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       2e-4,   # peak LR in the cycle
+    "ONECYCLE_DIV_FACTOR":   10,   # start_lr = max_lr / div_factor
+    "ONECYCLE_FINAL_DIV":    1000,    # end_lr   = max_lr / final_div_factor
+    "ONECYCLE_PCT_START":    0.1,   # fraction of total steps spent rising
+    "ONECYCLE_STRATEGY":     'cos', # or 'linear'
+
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           16,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch

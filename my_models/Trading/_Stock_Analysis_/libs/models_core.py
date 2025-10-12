@@ -549,10 +549,6 @@ def model_core_pipeline(
         sess_start=sess_start
     )
 
-    # ─── SANITY CHECK: verify scales of raw signal vs. return ───
-    print(f"###### FULL y_sig  mean±std: {y_sig.mean():.5f} ± {y_sig.std():.5f}")   # ######
-    print(f"###### FULL y_ret  mean±std: {y_ret.mean():.5f} ± {y_ret.std():.5f}")   # ######
-
     # 2) split into train/val/test by calendar day
     (train_split, val_split, test_split,
      samples_per_day,
@@ -812,16 +808,58 @@ def select_checkpoint(
 
 #########################################################################################################
 
-# ——— Single guard for run header ————————————————————————————————
+# # ——— Single guard for run header ————————————————————————————————
+# _RUN_STARTED = False
+# _RUN_LOCK    = threading.Lock()
+
+# def init_log(log_file: Path, hparams: dict | None = None, baselines: dict | None = None):
+#     """
+#     Emit the run header exactly once:
+#       • Timestamp
+#       • Hyperparameter dict (if given)
+#       • Forecast baselines (mean & persistence) for train/val (if given)
+
+#     Subsequent calls do nothing.
+#     """
+#     global _RUN_STARTED
+#     with _RUN_LOCK:
+#         if _RUN_STARTED:
+#             return
+
+#         sep = "-" * 150
+#         _append_log("\n" + sep, log_file)
+#         _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+
+#         if isinstance(hparams, dict) and hparams:
+#             _append_log("\nHYPERPARAMS:", log_file)
+#             for k, v in hparams.items():
+#                 _append_log(f"  {k} = {v}", log_file)
+
+#         if isinstance(baselines, dict) and baselines:
+#             _append_log("\nBASELINES:", log_file)
+#             _append_log(f"  TRAIN mean RMSE      = {baselines['base_tr_mean']:.5f}", log_file)
+#             _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
+#             _append_log(f"  VAL   mean RMSE      = {baselines['base_vl_mean']:.5f}", log_file)
+#             _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
+
+#         _RUN_STARTED = True
+
+
 _RUN_STARTED = False
 _RUN_LOCK    = threading.Lock()
 
-def init_log(log_file: Path, hparams: dict | None = None, baselines: dict | None = None):
+def init_log(
+    log_file:  Path,
+    hparams:   dict | None = None,
+    baselines: dict | None = None
+):
     """
-    Emit the run header exactly once:
-      • Timestamp
-      • Hyperparameter dict (if given)
-      • Forecast baselines (mean & persistence) for train/val (if given)
+    Emit the run header exactly once. Prints:
+      • A 150-char separator  
+      • RUN START timestamp (UTC)  
+      • Optional hyperparameters list  
+      • Optional baseline RMSEs for train/val (mean & persistence)  
+      • A sample “LOG FORMAT” comment explaining each field in the per-epoch summary.
 
     Subsequent calls do nothing.
     """
@@ -841,12 +879,29 @@ def init_log(log_file: Path, hparams: dict | None = None, baselines: dict | None
 
         if isinstance(baselines, dict) and baselines:
             _append_log("\nBASELINES:", log_file)
-            _append_log(f"  TRAIN mean RMSE      = {baselines['base_tr_mean']:.5f}", log_file)
+            _append_log(f"  TRAIN mean RMSE       = {baselines['base_tr_mean']:.5f}", log_file)
             _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
-            _append_log(f"  VAL   mean RMSE      = {baselines['base_vl_mean']:.5f}", log_file)
+            _append_log(f"  VAL   mean RMSE       = {baselines['base_vl_mean']:.5f}", log_file)
             _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
 
+        # Sample comment: explain the per-epoch log line format
+        _append_log(
+            "\n# PER-EPOCH LOG FORMAT:\n"
+            "#  E{ep:02d} | "
+            "GN[reg,cls,ter,tot] | "
+            "GD[med,p90,max] | "
+            "UR[med,max] | "
+            "lr={lr:.1e} | "
+            "TR[rmse,r2,mae] | "
+            "VL[rmse,r2,mae] | "
+            "SR={slope_rmse:.3f} | "
+            "SL={slip:.2f},HR={hub_max:.3f} | "
+            "topK(g/u)=param:grad_norm/update_ratio,...",
+            log_file
+        )
+
         _RUN_STARTED = True
+
 
 ######################
 
@@ -866,9 +921,107 @@ def _append_log(text: str, log_file: Path):
 ##############################################################
 
         
+# def log_epoch_summary(
+#     epoch:            int,
+#     model:            nn.Module,
+#     optimizer:        torch.optim.Optimizer,
+#     train_metrics:    dict,
+#     val_metrics:      dict,
+#     base_tr_mean:     float,
+#     base_tr_pers:     float,
+#     base_vl_mean:     float,
+#     base_vl_pers:     float,
+#     slip_thresh:      float,
+#     log_file:         Path,
+#     top_k:            int         = 999,
+#     hparams:          dict | None = None,
+# ):
+#     """
+#     One‐line summary per epoch.  Uses precomputed metrics and baseline constants.
+
+#     Args:
+#       train_metrics: dict with keys "rmse","mae","r2"
+#       val_metrics  : dict with keys "rmse","mae","r2"
+#       base_*       : four static baseline RMSEs
+#     """
+#     # 1) Header + static baselines once
+#     init_log(
+#         log_file,
+#         hparams=hparams,
+#         baselines={
+#             "base_tr_mean": base_tr_mean,
+#             "base_tr_pers": base_tr_pers,
+#             "base_vl_mean": base_vl_mean,
+#             "base_vl_pers": base_vl_pers,
+#         },
+#     )
+
+#     # 2) Gradient & parameter norms (same as before) …
+#     grads, pnorms = [], []
+#     reg_sq = cls_sq = ter_sq = all_sq = 0.0
+#     for name, p in model.named_parameters():
+#         pnorms.append(float(p.detach().norm().cpu()))
+#         g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+#         grads.append((name, g))
+#         sq = g * g
+#         all_sq += sq
+#         if name.startswith("pred"):       reg_sq += sq
+#         elif name.startswith("cls_head"): cls_sq += sq
+#         elif name.startswith("cls_ter"):   ter_sq += sq
+
+#     reg_g    = math.sqrt(reg_sq)
+#     cls_g    = math.sqrt(cls_sq)
+#     ter_g    = math.sqrt(ter_sq)
+#     tot_g    = math.sqrt(all_sq) if grads else 0.0
+
+#     gvals     = [g for _, g in grads]
+#     med_g     = float(sorted(gvals)[len(gvals)//2])     if gvals else 0.0
+#     p90_g     = float(sorted(gvals)[int(0.9*len(gvals))]) if gvals else 0.0
+#     max_g     = max(gvals)                               if gvals else 0.0
+#     zero_frac = sum(1 for v in gvals if v==0.0) / max(1,len(gvals))
+#     param_norm= math.sqrt(sum(p*p for p in pnorms))      if pnorms else 0.0
+
+#     # 3) Slip & hub
+#     hub     = getattr(model, "last_hub", None)
+#     hub_max = float(hub.max().cpu()) if hub is not None else 0.0
+#     slip    = float((hub>slip_thresh).float().mean().cpu()) if hub is not None else 0.0
+
+#     # 4) Pull metrics from dicts
+#     tr_rmse, tr_mae, tr_r2 = (
+#         train_metrics["rmse"],
+#         train_metrics["mae"],
+#         train_metrics["r2"],
+#     )
+#     vl_rmse, vl_mae, vl_r2 = (
+#         val_metrics["rmse"],
+#         val_metrics["mae"],
+#         val_metrics["r2"],
+#     )
+
+#     # 5) Learning rate
+#     lr = optimizer.param_groups[0]["lr"]
+
+#     # 6) Top‐K gradients
+#     topk   = sorted(grads, key=lambda x: x[1], reverse=True)[:top_k]
+#     topk_s = ",".join(f"{n}:{g:.3f}" for n,g in topk)
+
+#     # 7) Assemble & append the line
+#     line = (
+#         f"\nE{epoch:02d} | "
+#         f"GN(reg={reg_g:.3f},cls={cls_g:.3f},ter={ter_g:.3f},tot={tot_g:.3f}) | "
+#         f"lr={lr:.2e} | "
+#         f"tr(rmse={tr_rmse:.3f},r2={tr_r2:.3f},mae={tr_mae:.3f}) | "
+#         f"vl(rmse={vl_rmse:.3f},r2={vl_r2:.3f},mae={vl_mae:.3f}) | "
+#         f"slip={slip:.2f},hub={hub_max:.3f} | "
+#         f"top_grads={topk_s}"
+#     )
+#     _append_log(line, log_file)
+
+
+
 def log_epoch_summary(
     epoch:            int,
-    model:            nn.Module,
+    model:            torch.nn.Module,
     optimizer:        torch.optim.Optimizer,
     train_metrics:    dict,
     val_metrics:      dict,
@@ -878,18 +1031,26 @@ def log_epoch_summary(
     base_vl_pers:     float,
     slip_thresh:      float,
     log_file:         Path,
-    top_k:            int         = 999,
+    top_k:            int         = 3,
     hparams:          dict | None = None,
 ):
     """
-    One‐line summary per epoch.  Uses precomputed metrics and baseline constants.
+    One-line epoch summary with essential diagnostics. See init_log for format.
 
-    Args:
-      train_metrics: dict with keys "rmse","mae","r2"
-      val_metrics  : dict with keys "rmse","mae","r2"
-      base_*       : four static baseline RMSEs
+    Per-epoch fields:
+      GN[...]   : ℓ2‐norm of gradients in [regression, classification, term, total]
+      GD[...]   : gradient-norm distribution [median, 90th percentile, max]
+      UR[...]   : update-ratio distribution [median, max]
+      lr        : current learning rate
+      TR[...]   : training metrics [rmse, r2, mae]
+      VL[...]   : validation metrics [rmse, r2, mae]
+      SR        : slope‐RMSE on last validation batch
+      SL, HR    : slip‐rate & max hub (stateful LSTM state diagnostic)
+      topK(g/u) : top‐K params by grad‐norm, showing grad_norm/update_ratio
+
+    All values use consistent precision and engineering notation.
     """
-    # 1) Header + static baselines once
+    # 1) Header + baselines (only on first call)
     init_log(
         log_file,
         hparams=hparams,
@@ -901,66 +1062,83 @@ def log_epoch_summary(
         },
     )
 
-    # 2) Gradient & parameter norms (same as before) …
-    grads, pnorms = [], []
+    # 2) Collect per-parameter grad norms, update ratios, and block sums
+    recs = []  # (name, grad_norm, update_ratio)
     reg_sq = cls_sq = ter_sq = all_sq = 0.0
-    for name, p in model.named_parameters():
-        pnorms.append(float(p.detach().norm().cpu()))
-        g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
-        grads.append((name, g))
-        sq = g * g
-        all_sq += sq
-        if name.startswith("pred"):       reg_sq += sq
-        elif name.startswith("cls_head"): cls_sq += sq
-        elif name.startswith("cls_ter"):   ter_sq += sq
-
-    reg_g    = math.sqrt(reg_sq)
-    cls_g    = math.sqrt(cls_sq)
-    ter_g    = math.sqrt(ter_sq)
-    tot_g    = math.sqrt(all_sq) if grads else 0.0
-
-    gvals     = [g for _, g in grads]
-    med_g     = float(sorted(gvals)[len(gvals)//2])     if gvals else 0.0
-    p90_g     = float(sorted(gvals)[int(0.9*len(gvals))]) if gvals else 0.0
-    max_g     = max(gvals)                               if gvals else 0.0
-    zero_frac = sum(1 for v in gvals if v==0.0) / max(1,len(gvals))
-    param_norm= math.sqrt(sum(p*p for p in pnorms))      if pnorms else 0.0
-
-    # 3) Slip & hub
-    hub     = getattr(model, "last_hub", None)
-    hub_max = float(hub.max().cpu()) if hub is not None else 0.0
-    slip    = float((hub>slip_thresh).float().mean().cpu()) if hub is not None else 0.0
-
-    # 4) Pull metrics from dicts
-    tr_rmse, tr_mae, tr_r2 = (
-        train_metrics["rmse"],
-        train_metrics["mae"],
-        train_metrics["r2"],
-    )
-    vl_rmse, vl_mae, vl_r2 = (
-        val_metrics["rmse"],
-        val_metrics["mae"],
-        val_metrics["r2"],
-    )
-
-    # 5) Learning rate
     lr = optimizer.param_groups[0]["lr"]
 
-    # 6) Top‐K gradients
-    topk   = sorted(grads, key=lambda x: x[1], reverse=True)[:top_k]
-    topk_s = ",".join(f"{n}:{g:.3f}" for n,g in topk)
+    for name, p in model.named_parameters():
+        g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+        w = float(p.detach().norm().cpu())
+        u = (lr * g) / max(w, 1e-8)
+        recs.append((name, g, u))
 
-    # 7) Assemble & append the line
+        sq = g * g
+        all_sq += sq
+        if   name.startswith("pred"):     reg_sq += sq
+        elif name.startswith("cls_head"): cls_sq += sq
+        elif name.startswith("cls_ter"):  ter_sq += sq
+
+    # 3) Compute block gradient norms (GN) and gradient‐norm distribution (GD)
+    GN_reg = math.sqrt(reg_sq)
+    GN_cls = math.sqrt(cls_sq)
+    GN_ter = math.sqrt(ter_sq)
+    GN_tot = math.sqrt(all_sq)
+
+    g_vals = [g for _, g, _ in recs]
+    GD_med = sorted(g_vals)[len(g_vals)//2] if g_vals else 0.0
+    GD_p90 = sorted(g_vals)[int(0.9*len(g_vals))] if g_vals else 0.0
+    GD_max = max(g_vals)                           if g_vals else 0.0
+
+    # 4) Update‐ratio distribution (UR)
+    u_vals = [u for _, _, u in recs]
+    UR_med = sorted(u_vals)[len(u_vals)//2] if u_vals else 0.0
+    UR_max = max(u_vals)                         if u_vals else 0.0
+
+    # 5) Slip‐rate & max hub (stateful LSTM diagnostic)
+    hub    = getattr(model, "last_hub", None)
+    HR     = float(hub.max().cpu()) if hub is not None else 0.0
+    SL     = float((hub > slip_thresh).float().mean().cpu()) if hub is not None else 0.0
+
+    # 6) Slope‐RMSE (SR) on last validation batch
+    with torch.no_grad():
+        pv, tv = model.last_val_preds, model.last_val_targs
+        if pv is not None and tv is not None:
+            if pv.dim() == 1:
+                dp, dt = pv[1:]-pv[:-1], tv[1:]-tv[:-1]
+            else:
+                dp = pv[:,1:]-pv[:,:-1]
+                dt = tv[:,1:]-tv[:,:-1]
+            SR = torch.sqrt(((dp - dt)**2).mean()).item()
+        else:
+            SR = 0.0
+
+    # 7) Pull train/val RMSE, R², MAE
+    tr_rmse, tr_r2, tr_mae = train_metrics["rmse"], train_metrics["r2"], train_metrics["mae"]
+    vl_rmse, vl_r2, vl_mae = val_metrics["rmse"],   val_metrics["r2"],   val_metrics["mae"]
+
+    # 8) Top‐K parameter diagnostics: show only last two name segments + g/u
+    topk = sorted(recs, key=lambda x: x[1], reverse=True)[:top_k]
+    def short_name(n):
+        parts = n.split('.')
+        return ".".join(parts[-2:]) if len(parts) > 2 else n
+    topk_str = ", ".join(f"{short_name(n)}:{g:.3f}/{u:.1e}" for n, g, u in topk)
+
+    # 9) Assemble & append the log line
     line = (
         f"\nE{epoch:02d} | "
-        f"GN(reg={reg_g:.3f},cls={cls_g:.3f},ter={ter_g:.3f},tot={tot_g:.3f}) | "
-        f"lr={lr:.2e} | "
-        f"tr(rmse={tr_rmse:.3f},r2={tr_r2:.3f},mae={tr_mae:.3f}) | "
-        f"vl(rmse={vl_rmse:.3f},r2={vl_r2:.3f},mae={vl_mae:.3f}) | "
-        f"slip={slip:.2f},hub={hub_max:.3f} | "
-        f"top_grads={topk_s}"
+        f"GN[{GN_reg:.3f},{GN_cls:.3f},{GN_ter:.3f},{GN_tot:.3f}] | "
+        f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
+        f"UR[{UR_med:.1e},{UR_max:.1e}] | "
+        f"lr={lr:.1e} | "
+        f"TR[{tr_rmse:.3f},{tr_r2:.2f},{tr_mae:.3f}] | "
+        f"VL[{vl_rmse:.3f},{vl_r2:.2f},{vl_mae:.3f}] | "
+        f"SR={SR:.3f} | "
+        f"SL={SL:.2f},HR={HR:.3f} | "
+        f"topK(g/u)={topk_str}"
     )
     _append_log(line, log_file)
+
 
 
 ##############################################################
