@@ -132,8 +132,8 @@ def signal_parameters(ticker):
                          'adx_14',
                          'hour',
                          'body']
-        trailing_stop_pred = 0.5
-        pred_threshold = 0.1
+        trailing_stop_pred = 0.3
+        pred_threshold = 0.15
         return_threshold = 0.01
         
     return look_back, sess_start_pred, sess_start_shift, features_cols, trailing_stop_pred, pred_threshold, return_threshold
@@ -147,37 +147,39 @@ look_back_tick, sess_start_pred_tick, sess_start_shift_tick, features_cols_tick,
 
 
 hparams = {
-    #  ────────────────────────────────────────
-    "CONV_K":                5,      # input conv1d kernel; ↑local smoothing, ↓fine-detail capture
-    "CONV_DILATION":         2,      # input conv dilation; ↑receptive field, ↓signal granularity
-    # "SMOOTH_K":             3,      # regression-head conv kernel (unused in forward); ↑smoothing window, ↓reactivity
-    # "SMOOTH_DILATION":      1,      # regression conv dilation (unused); ↑lag smoothing, ↓immediate response
-    "ALPHA_SMOOTH":          10,     # increase to smooth the predicted signal
-    
-    # ── lstm ─────────────────────────────
-    "SHORT_UNITS":           192,      # short LSTM total hidden dim (bidirectional); ↑capacity for spike detail, ↓overfit & latency
-    "LONG_UNITS":            256,      # projection / pred input dim (formerly long LSTM size); ↑feature width, ↓bottleneck risk
-    "DROPOUT_SHORT":         0.2,      # after short LSTM; ↑regularization, ↓retains sharp spikes
-    "DROPOUT_LONG":          0.2,      # after projection; ↑overfitting guard, ↓reactivity at head
-    
-    # ── Projection (short -> final feature space) ──────────────────────
-    # "PROJ_HIDDEN":          192,     # hidden dim for optional short2long MLP (Option B) -- commented until used
-    # "PROJ_USE_MLP":         False,   # toggle single-linear vs small-MLP (unused) -- commented until used
-    "PRED_HIDDEN":           128,      # optional head hidden dim 
+
+    # ── Input convolution toggle ───────────# └─ only if USE_CONV=True:
+    "USE_CONV":        False,   # enable Conv1d+BN block
+    "CONV_K":           5,      # input Conv1d kernel size; ↑local smoothing, ↓fine-detail capture
+    "CONV_DILATION":    2,      # input Conv1d dilation; ↑receptive field, ↓signal granularity
+
+    # ── Short Bi-LSTM toggle ───────────────# └─ only if USE_SHORT_LSTM=True:
+    "USE_SHORT_LSTM":  False,   # enable short bidirectional LSTM
+    "SHORT_UNITS":     192,      # LSTM hidden dim; ↑spike capacity, ↓overfit & latency
+    "DROPOUT_SHORT":   0.2,      # after short LSTM; ↑regularization, ↓spike retention
+
+    # ── Long Bi-LSTM toggle (future) ────────# └─ only if USE_LONG_LSTM=True:
+    "USE_LONG_LSTM":   False,   # enable long bidirectional LSTM
+    "LONG_UNITS":      256,      # LSTM hidden dim; ↑feature width, ↓bottleneck risk
+    "DROPOUT_LONG":    0.2,      # after long LSTM (or projection); ↑regularization, ↓reactivity <<<=== used as "projection" dropout, when long_lstm is off
+
+    # ── Regression head & smoothing ───────────────────────────────────────────
+    "PRED_HIDDEN":     128,      # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "ALPHA_SMOOTH":      0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
     
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            50,     # max epochs
     "EARLY_STOP_PATIENCE":   5,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          2e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       2e-4,   # peak LR in the cycle
+    "WEIGHT_DECAY":          7e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              0.5,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,   # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    1000,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,   # fraction of total steps spent rising
     "ONECYCLE_STRATEGY":     'cos', # or 'linear'
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           16,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
+    "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch
     "NUM_WORKERS":           12,     # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
