@@ -520,7 +520,7 @@ def model_core_pipeline(
     train_prop: float,           # fraction of days → train
     val_prop: float,             # fraction of days → val
     train_batch: int,            # batch size for training
-    num_workers: int,            # DataLoader worker count
+    train_workers: int,            # DataLoader worker count
     prefetch_factor: int,        # DataLoader prefetch_factor
     signal_thresh: float,        # y_signal threshold
     return_thresh: float         # y_return threshold
@@ -538,7 +538,7 @@ def model_core_pipeline(
            X_te, y_sig_te, y_ret_te, raw_close_te, end_times_te,
            sess_start_time=sess_start,
            signal_thresh, return_thresh,
-           train_batch, num_workers, prefetch_factor
+           train_batch, train_workers, prefetch_factor
          )
       cleans up all intermediate arrays before returning.
     """
@@ -585,7 +585,7 @@ def model_core_pipeline(
         signal_thresh         = signal_thresh,
         return_thresh         = return_thresh,
         train_batch           = train_batch,
-        train_workers         = num_workers,
+        train_workers         = train_workers,
         train_prefetch_factor = prefetch_factor
     )
 
@@ -808,42 +808,6 @@ def select_checkpoint(
 
 #########################################################################################################
 
-# # ——— Single guard for run header ————————————————————————————————
-# _RUN_STARTED = False
-# _RUN_LOCK    = threading.Lock()
-
-# def init_log(log_file: Path, hparams: dict | None = None, baselines: dict | None = None):
-#     """
-#     Emit the run header exactly once:
-#       • Timestamp
-#       • Hyperparameter dict (if given)
-#       • Forecast baselines (mean & persistence) for train/val (if given)
-
-#     Subsequent calls do nothing.
-#     """
-#     global _RUN_STARTED
-#     with _RUN_LOCK:
-#         if _RUN_STARTED:
-#             return
-
-#         sep = "-" * 150
-#         _append_log("\n" + sep, log_file)
-#         _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
-
-#         if isinstance(hparams, dict) and hparams:
-#             _append_log("\nHYPERPARAMS:", log_file)
-#             for k, v in hparams.items():
-#                 _append_log(f"  {k} = {v}", log_file)
-
-#         if isinstance(baselines, dict) and baselines:
-#             _append_log("\nBASELINES:", log_file)
-#             _append_log(f"  TRAIN mean RMSE      = {baselines['base_tr_mean']:.5f}", log_file)
-#             _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
-#             _append_log(f"  VAL   mean RMSE      = {baselines['base_vl_mean']:.5f}", log_file)
-#             _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
-
-#         _RUN_STARTED = True
-
 
 _RUN_STARTED = False
 _RUN_LOCK    = threading.Lock()
@@ -872,17 +836,17 @@ def init_log(
         _append_log("\n" + sep, log_file)
         _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
 
-        if isinstance(hparams, dict) and hparams:
-            _append_log("\nHYPERPARAMS:", log_file)
-            for k, v in hparams.items():
-                _append_log(f"  {k} = {v}", log_file)
-
         if isinstance(baselines, dict) and baselines:
             _append_log("\nBASELINES:", log_file)
             _append_log(f"  TRAIN mean RMSE       = {baselines['base_tr_mean']:.5f}", log_file)
             _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
             _append_log(f"  VAL   mean RMSE       = {baselines['base_vl_mean']:.5f}", log_file)
             _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
+
+        if isinstance(hparams, dict) and hparams:
+            _append_log("\nHYPERPARAMS:", log_file)
+            for k, v in hparams.items():
+                _append_log(f"  {k} = {v}", log_file)
 
         # Sample comment: explain the per-epoch log line format
         _append_log(
@@ -919,104 +883,6 @@ def _append_log(text: str, log_file: Path):
 
 
 ##############################################################
-
-        
-# def log_epoch_summary(
-#     epoch:            int,
-#     model:            nn.Module,
-#     optimizer:        torch.optim.Optimizer,
-#     train_metrics:    dict,
-#     val_metrics:      dict,
-#     base_tr_mean:     float,
-#     base_tr_pers:     float,
-#     base_vl_mean:     float,
-#     base_vl_pers:     float,
-#     slip_thresh:      float,
-#     log_file:         Path,
-#     top_k:            int         = 999,
-#     hparams:          dict | None = None,
-# ):
-#     """
-#     One‐line summary per epoch.  Uses precomputed metrics and baseline constants.
-
-#     Args:
-#       train_metrics: dict with keys "rmse","mae","r2"
-#       val_metrics  : dict with keys "rmse","mae","r2"
-#       base_*       : four static baseline RMSEs
-#     """
-#     # 1) Header + static baselines once
-#     init_log(
-#         log_file,
-#         hparams=hparams,
-#         baselines={
-#             "base_tr_mean": base_tr_mean,
-#             "base_tr_pers": base_tr_pers,
-#             "base_vl_mean": base_vl_mean,
-#             "base_vl_pers": base_vl_pers,
-#         },
-#     )
-
-#     # 2) Gradient & parameter norms (same as before) …
-#     grads, pnorms = [], []
-#     reg_sq = cls_sq = ter_sq = all_sq = 0.0
-#     for name, p in model.named_parameters():
-#         pnorms.append(float(p.detach().norm().cpu()))
-#         g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
-#         grads.append((name, g))
-#         sq = g * g
-#         all_sq += sq
-#         if name.startswith("pred"):       reg_sq += sq
-#         elif name.startswith("cls_head"): cls_sq += sq
-#         elif name.startswith("cls_ter"):   ter_sq += sq
-
-#     reg_g    = math.sqrt(reg_sq)
-#     cls_g    = math.sqrt(cls_sq)
-#     ter_g    = math.sqrt(ter_sq)
-#     tot_g    = math.sqrt(all_sq) if grads else 0.0
-
-#     gvals     = [g for _, g in grads]
-#     med_g     = float(sorted(gvals)[len(gvals)//2])     if gvals else 0.0
-#     p90_g     = float(sorted(gvals)[int(0.9*len(gvals))]) if gvals else 0.0
-#     max_g     = max(gvals)                               if gvals else 0.0
-#     zero_frac = sum(1 for v in gvals if v==0.0) / max(1,len(gvals))
-#     param_norm= math.sqrt(sum(p*p for p in pnorms))      if pnorms else 0.0
-
-#     # 3) Slip & hub
-#     hub     = getattr(model, "last_hub", None)
-#     hub_max = float(hub.max().cpu()) if hub is not None else 0.0
-#     slip    = float((hub>slip_thresh).float().mean().cpu()) if hub is not None else 0.0
-
-#     # 4) Pull metrics from dicts
-#     tr_rmse, tr_mae, tr_r2 = (
-#         train_metrics["rmse"],
-#         train_metrics["mae"],
-#         train_metrics["r2"],
-#     )
-#     vl_rmse, vl_mae, vl_r2 = (
-#         val_metrics["rmse"],
-#         val_metrics["mae"],
-#         val_metrics["r2"],
-#     )
-
-#     # 5) Learning rate
-#     lr = optimizer.param_groups[0]["lr"]
-
-#     # 6) Top‐K gradients
-#     topk   = sorted(grads, key=lambda x: x[1], reverse=True)[:top_k]
-#     topk_s = ",".join(f"{n}:{g:.3f}" for n,g in topk)
-
-#     # 7) Assemble & append the line
-#     line = (
-#         f"\nE{epoch:02d} | "
-#         f"GN(reg={reg_g:.3f},cls={cls_g:.3f},ter={ter_g:.3f},tot={tot_g:.3f}) | "
-#         f"lr={lr:.2e} | "
-#         f"tr(rmse={tr_rmse:.3f},r2={tr_r2:.3f},mae={tr_mae:.3f}) | "
-#         f"vl(rmse={vl_rmse:.3f},r2={vl_r2:.3f},mae={vl_mae:.3f}) | "
-#         f"slip={slip:.2f},hub={hub_max:.3f} | "
-#         f"top_grads={topk_s}"
-#     )
-#     _append_log(line, log_file)
-
 
 
 def log_epoch_summary(
@@ -1143,13 +1009,3 @@ def log_epoch_summary(
 
 ##############################################################
 
-def linear_warmup(optimizer, epoch: int, warmup_epochs: int, initial_lr: float):
-    """
-    Linearly ramp the learning rate from 0 up to initial_lr over the first
-    `warmup_epochs`. After warmup, leave the cosine scheduler (or any other
-    scheduler) to take over.
-    """
-    if epoch <= warmup_epochs:
-        lr = initial_lr * (epoch / warmup_epochs)
-        for pg in optimizer.param_groups:
-            pg["lr"] = lr
