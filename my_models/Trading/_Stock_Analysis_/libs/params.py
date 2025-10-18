@@ -28,7 +28,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.09403
+sel_val_rmse = 0.09447
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -104,13 +104,13 @@ best_optuna_value, best_optuna_params = load_best_optuna_record()
 #########################################################################################################
 
 hparams = {
-    "LOOK_BACK":            90,      # length of each input window
+    "LOOK_BACK":            60,      # length of each input window
 
     # ── Input convolution toggle ──────────────────────────
     # only active if USE_CONV = True
-    "USE_CONV":             False,   # enable Conv1d + BatchNorm1d
-    "CONV_K":                5,      # Conv1d kernel size; ↑local smoothing, ↓fine-detail
-    "CONV_DILATION":         2,      # Conv1d dilation;   ↑receptive field, ↓granularity
+    "USE_CONV":              False,   # enable Conv1d + BatchNorm1d
+    "CONV_K":                3,      # Conv1d kernel size; ↑local smoothing, ↓fine-detail
+    "CONV_DILATION":         1,      # Conv1d dilation;   ↑receptive field, ↓granularity
 
     # ── Temporal ConvNet (TCN) toggle ────────────────────
     # only active if USE_TCN = True
@@ -120,45 +120,45 @@ hparams = {
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
     # only active if USE_SHORT_LSTM = True
-    "USE_SHORT_LSTM":       False,   # enable bidirectional “short” LSTM
-    "SHORT_UNITS":          192,     # short-LSTM hidden dim; ↑capacity, ↓latency
-    "DROPOUT_SHORT":        0.3,     # dropout after short-LSTM; ↑regularization
+    "USE_SHORT_LSTM":       True,   # enable bidirectional “short” LSTM
+    "SHORT_UNITS":          64,     # short-LSTM hidden dim; ↑capacity, ↓latency
+    "DROPOUT_SHORT":        0.05,     # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     # only active if USE_TRANSFORMER = True (requires use_short_lstm)
-    "USE_TRANSFORMER":      False,   # enable single-layer TransformerEncoder
+    "USE_TRANSFORMER":      True,   # enable single-layer TransformerEncoder
     "TRANSFORMER_LAYERS":   1,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
 
     # ── Projection + (optional) Long Bi-LSTM ──────────────
     # DROPOUT_LONG used either after projection or after long-LSTM
-    "DROPOUT_LONG":         0.15,    # dropout after projection (or long-LSTM)
+    "DROPOUT_LONG":         0.05,    # dropout after projection (or long-LSTM)
     "USE_LONG_LSTM":        False,   # enable bidirectional “long” LSTM
-    "LONG_UNITS":           256,     # long-LSTM hidden dim; ↑feature width
+    "LONG_UNITS":           128,     # long-LSTM hidden dim; ↑feature width
 
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
-    "FLATTEN_MODE":        "flatten",# format to be provided to regression head: "flatten" | "last" | "pool"
-    "PRED_HIDDEN":         256,      # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "FLATTEN_MODE":        "last",# format to be provided to regression head: "flatten" | "last" | "pool"
+    "PRED_HIDDEN":         64,      # head MLP hidden dim; ↑capacity, ↓over-parameterization
     "ALPHA_SMOOTH":          0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
-    "SKIP_ALPHA":           -3.0,    # learnable initial skip-gate logit for residual skip; sigmoid ≃0.05
+    "SKIP_ALPHA":           -10.0,    # learnable initial skip-gate logit for residual skip; 0: sigmoid ≃0.5, -3: sigmoid ≃0.05
     
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            70,     # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          5e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
+    "WEIGHT_DECAY":          1e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              20,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       3e-3,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
-    "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
-    "ONECYCLE_STRATEGY":     'cos',  # or 'linear'
+    "ONECYCLE_PCT_START":    0.15,    # fraction of total steps spent rising
+    "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear'
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
-    "TRAIN_PREFETCH_FACTOR": 2,      # prefetch factor; ↑loader speed, ↓memory overhead
+    "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 }
 
 #########################################################################################################
