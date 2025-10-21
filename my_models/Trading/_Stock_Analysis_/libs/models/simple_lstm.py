@@ -51,274 +51,6 @@ def _allocate_lstm_states(batch_size: int,
 
 ###############
 
-# class ModelClass(nn.Module):
-#     """
-#     Stateful CNN → optional TCN → BiLSTM(short) → optional Transformer
-#       → projection → optional BiLSTM(long) → flattened-window MLP head + gated skip.
-
-#     Gating flags (in __init__):
-#       use_conv, use_tcn, use_short_lstm, use_transformer, use_long_lstm
-
-#     Layer summary:
-#       0) Conv1d + BatchNorm1d + ReLU
-#       1) TCN: dilated Conv1d stack (params.TCN_LAYERS, TCN_KERNEL)
-#       2) Short BiLSTM → LayerNorm → Dropout
-#       3) TransformerEncoder (params.TRANSFORMER_*)
-#       4) Linear projection → LayerNorm → Dropout
-#       5) Long BiLSTM → LayerNorm → Dropout
-#       6) Flatten look-back window →
-#            • ln_flat: LayerNorm(window_len×long_units)
-#            • head_flat: WeightNorm(Linear→ReLU→Linear)
-#            • skip_proj + gate α (SKIP_ALPHA): gated linear skip
-#     Output: shape (batch_size, 1, 1)
-#     """
-#     def __init__(self,
-#                  n_feats: int,
-#                  short_units: int,
-#                  long_units: int,
-#                  dropout_short: float,
-#                  dropout_long: float,
-#                  pred_hidden: int,
-#                  window_len: int,
-#                  use_conv: bool,
-#                  use_tcn: bool,
-#                  use_short_lstm: bool,
-#                  use_transformer: bool,
-#                  use_long_lstm: bool,
-#                  flatten_mode: str,  
-#                 ):
-#         super().__init__()
-
-#         # Save dimensions & flags
-#         self.window_len      = window_len
-#         self.short_units     = short_units
-#         self.long_units      = long_units
-#         self.use_conv        = use_conv
-#         self.use_tcn         = use_tcn
-#         self.use_short_lstm  = use_short_lstm
-#         self.use_transformer = use_transformer
-#         self.use_long_lstm   = use_long_lstm
-
-#         # 0) Conv1d + BatchNorm1d or identity
-#         if use_conv:
-#             conv_k        = params.hparams["CONV_K"]
-#             conv_dilation = params.hparams["CONV_DILATION"]
-#             self.conv = nn.Conv1d(
-#                                     in_channels = n_feats,
-#                                     out_channels= n_feats,
-#                                     kernel_size = conv_k,
-#                                     dilation    = conv_dilation,
-#                                     padding     = (conv_k // 2) * conv_dilation
-#                                 )
-#             self.bn   = nn.BatchNorm1d(n_feats)
-#         else:
-#             self.conv = nn.Identity()
-#             self.bn   = nn.Identity()
-
-#         # 1) TCN: dilated Conv1d stack or identity
-#         if use_tcn:
-#             tcn_layers = params.hparams["TCN_LAYERS"]
-#             tcn_kernel = params.hparams["TCN_KERNEL"]
-#             blocks = []
-#             in_ch = n_feats
-#             for i in range(tcn_layers):
-#                 dil = 2 ** i
-#                 pad = (tcn_kernel // 2) * dil
-#                 blocks += [
-#                     nn.Conv1d(in_ch, n_feats, tcn_kernel,
-#                               dilation=dil, padding=pad),
-#                     nn.BatchNorm1d(n_feats),
-#                     nn.ReLU(inplace=True)
-#                 ]
-#                 in_ch = n_feats
-#             self.tcn = nn.Sequential(*blocks)
-#         else:
-#             self.tcn = nn.Identity()
-
-#         # 2) Short BiLSTM or identity
-#         if use_short_lstm:
-#             assert short_units % 2 == 0
-#             self.short_lstm = nn.LSTM(input_size=n_feats,
-#                                       hidden_size=short_units // 2,
-#                                       batch_first=True,
-#                                       bidirectional=True)
-#             self.ln_short = nn.LayerNorm(short_units)
-#             self.do_short = nn.Dropout(dropout_short)
-#         else:
-#             self.short_lstm = None
-#             self.ln_short   = nn.Identity()
-#             self.do_short   = nn.Identity()
-
-#         # buffers for short‐LSTM states
-#         self.h_short = None
-#         self.c_short = None
-
-#         # 3) TransformerEncoder or identity
-#         if use_transformer:
-#             assert use_short_lstm, "Transformer requires short_lstm output"
-#             layers  = params.hparams["TRANSFORMER_LAYERS"]
-#             heads   = params.hparams["TRANSFORMER_HEADS"]
-#             ff_mult = params.hparams["TRANSFORMER_FF_MULT"]
-#             d_model = short_units
-#             ff_dim  = d_model * ff_mult
-#             layer   = nn.TransformerEncoderLayer(
-#                 d_model=d_model,
-#                 nhead=heads,
-#                 dim_feedforward=ff_dim,
-#                 dropout=dropout_short
-#             )
-#             self.transformer = nn.TransformerEncoder(layer,
-#                                                      num_layers=layers)
-#         else:
-#             self.transformer = nn.Identity()
-
-#         # 4) Projection → LayerNorm → Dropout
-#         proj_in       = short_units if use_short_lstm else n_feats
-#         self.short2long = nn.Linear(proj_in, long_units)
-#         self.ln_proj    = nn.LayerNorm(long_units)
-#         self.do_proj    = nn.Dropout(dropout_long)
-
-#         # 5) Long BiLSTM or identity
-#         if use_long_lstm:
-#             assert long_units % 2 == 0
-#             self.long_lstm = nn.LSTM(input_size=long_units,
-#                                      hidden_size=long_units // 2,
-#                                      batch_first=True,
-#                                      bidirectional=True)
-#             self.ln_long = nn.LayerNorm(long_units)
-#             self.do_long = nn.Dropout(dropout_long)
-#         else:
-#             self.long_lstm = None
-#             self.ln_long   = nn.Identity()
-#             self.do_long   = nn.Identity()
-
-#         # buffers for long‐LSTM states
-#         self.h_long = None
-#         self.c_long = None
-
-#         # 6) Flatten + gated MLP head
-#         assert flatten_mode in ("flatten", "last", "pool")
-#         self.flatten_mode = flatten_mode
-#          # compute head input dim for full flatten only
-#         if flatten_mode == "flatten":
-#             flat_dim = window_len * long_units
-#         else:
-#             flat_dim = long_units
-#         self.ln_flat = nn.LayerNorm(flat_dim)
-#         self.head_flat = nn.Sequential(
-#             weight_norm(nn.Linear(flat_dim,    pred_hidden)),
-#             nn.ReLU(inplace=True),
-#             weight_norm(nn.Linear(pred_hidden, 1))
-#         )
-#         self.skip_proj  = weight_norm(nn.Linear(flat_dim, 1))
-#         self.skip_alpha = nn.Parameter(torch.tensor(params.hparams["SKIP_ALPHA"], dtype=torch.float32))
-
-#     def reset_short(self):
-#         """
-#         Called by _reset_states(): zeroes out short‐LSTM buffers at day change.
-#         """
-#         if self.h_short is not None:
-#             batch_sz        = self.h_short.size(1)
-#             device          = self.h_short.device
-#             self.h_short, self.c_short = _allocate_lstm_states(
-#                 batch_sz, self.short_units // 2, True, device
-#             )
-
-#     def reset_long(self):
-#         """
-#         Called by _reset_states(): zeroes out long‐LSTM buffers at week wrap.
-#         """
-#         if self.h_long is not None:
-#             batch_sz       = self.h_long.size(1)
-#             device         = self.h_long.device
-#             self.h_long, self.c_long = _allocate_lstm_states(
-#                 batch_sz, self.long_units // 2, True, device
-#             )
-
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         """
-#         x: (..., time_steps, feature_dim) or (time_steps, feature_dim)
-#         returns (batch_size, 1, 1)
-#         """
-#         # collapse to (batch_size, time_steps, feature_dim)
-#         if x.dim() > 3:
-#             *lead, time_steps, feature_dim = x.shape
-#             x = x.view(-1, time_steps, feature_dim)
-#         if x.dim() == 2:
-#             x = x.unsqueeze(0)
-#         batch_size, time_steps, feature_dim = x.shape
-
-#         # 0) Conv1d + BN + ReLU
-#         xc = x.transpose(1, 2)  
-#         xc = self.conv(xc); xc = self.bn(xc)
-#         xc = F.relu(xc)            
-#         x  = xc.transpose(1, 2)    
-
-#         # 1) TCN
-#         x  = self.tcn(x.transpose(1,2)).transpose(1,2)
-
-#         # 2) Short LSTM
-#         if self.use_short_lstm:
-#             if (self.h_short is None
-#                 or self.h_short.size(1) != batch_size):
-#                 self.h_short, self.c_short = _allocate_lstm_states(
-#                     batch_size, self.short_units // 2, True, x.device
-#                 )
-#             out_s, (h_s, c_s) = self.short_lstm(
-#                 x, (self.h_short, self.c_short))
-#             self.h_short, self.c_short = h_s.detach(), c_s.detach()
-#             out_s = self.ln_short(out_s); out_s = self.do_short(out_s)
-#         else:
-#             out_s = x
-
-#         # 3) Transformer
-#         if self.use_transformer:
-#             tr_in  = out_s.transpose(0, 1)
-#             tr_out = self.transformer(tr_in)
-#             out_s  = tr_out.transpose(0, 1)
-
-#         # 4) Projection → LN → Dropout
-#         out_p = self.short2long(out_s)
-#         out_p = self.ln_proj(out_p); out_p = self.do_proj(out_p)
-
-#         # 5) Long LSTM
-#         if self.use_long_lstm:
-#             if (self.h_long is None
-#                 or self.h_long.size(1) != batch_size):
-#                 self.h_long, self.c_long = _allocate_lstm_states(
-#                     batch_size, self.long_units // 2, True, out_p.device
-#                 )
-#             out_l, (h_l, c_l) = self.long_lstm(
-#                 out_p, (self.h_long, self.c_long))
-#             self.h_long, self.c_long = h_l.detach(), c_l.detach()
-#             out_l = self.ln_long(out_l); out_l = self.do_long(out_l)
-#         else:
-#             out_l = out_p
-
-#         # 6) Collapse time → (batch_size, flat_dim)
-#         if self.flatten_mode == "flatten":
-#             # require exactly window_len steps only in full-flatten mode
-#             assert time_steps == self.window_len, (
-#                 f"need {self.window_len} steps to flatten, got {time_steps}"
-#             )
-#             flat = out_l.reshape(batch_size, -1)
-#         elif self.flatten_mode == "last":
-#             flat = out_l[:, -1, :]
-#         else:  # "pool"
-#             flat = out_l.mean(dim=1)
-
-
-#         norm_flat = self.ln_flat(flat)
-#         main_out  = self.head_flat(norm_flat)
-#         gate      = torch.sigmoid(self.skip_alpha)
-#         skip_out  = self.skip_proj(norm_flat) * gate
-#         output    = main_out + skip_out
-
-#         return output.unsqueeze(-1)  # (batch_size, 1, 1)
-
-
-
-
 class PositionalEncoding(nn.Module):
     """
     Sinusoidal positional encodings so the Transformer knows each time‐step index.
@@ -342,6 +74,243 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:, : x.size(1), :]
         return self.dropout(x)
 
+############### 
+
+# class ModelClass(nn.Module):
+#     """
+#     Modular time-series regressor. Layers can be toggled independently:
+#       0) Conv1d + BatchNorm
+#       1) Temporal ConvNet (TCN)
+#       2) Short Bi-LSTM
+#       3) TransformerEncoder w/ optional feature projection
+#       4) Linear projection → LayerNorm → Dropout
+#       5) Long Bi-LSTM
+#       6) Flatten/Last/Pool → MLP head (no skip branch)
+#     Stateful LSTM buffers reset via _reset_states() per day/week.
+#     """
+#     def __init__(
+#         self,
+#         n_feats: int,
+#         short_units: int,
+#         long_units: int,
+#         dropout_short: float,
+#         dropout_long: float,
+#         pred_hidden: int,
+#         window_len: int,
+#         use_conv: bool,
+#         use_tcn: bool,
+#         use_short_lstm: bool,
+#         use_transformer: bool,
+#         use_long_lstm: bool,
+#         flatten_mode: str,
+#     ):
+#         super().__init__()
+#         self.window_len      = window_len
+#         self.short_units     = short_units
+#         self.long_units      = long_units
+#         self.use_conv        = use_conv
+#         self.use_tcn         = use_tcn
+#         self.use_short_lstm  = use_short_lstm
+#         self.use_transformer = use_transformer
+#         self.use_long_lstm   = use_long_lstm
+
+#         # 0) Conv1d + BatchNorm1d or Identity
+#         if use_conv:
+#             conv_k        = params.hparams["CONV_K"]
+#             conv_dilation = params.hparams["CONV_DILATION"]
+#             padding       = (conv_k // 2) * conv_dilation
+#             self.conv = nn.Conv1d(n_feats, n_feats,
+#                                   kernel_size=conv_k,
+#                                   dilation=conv_dilation,
+#                                   padding=padding)
+#             self.bn   = nn.BatchNorm1d(n_feats)
+#         else:
+#             self.conv = nn.Identity()
+#             self.bn   = nn.Identity()
+#         self.relu = nn.ReLU()
+
+#         # 1) TCN or Identity
+#         if use_tcn:
+#             tcn_layers = params.hparams["TCN_LAYERS"]
+#             tcn_kernel = params.hparams["TCN_KERNEL"]
+#             blocks, in_ch = [], n_feats
+#             for i in range(tcn_layers):
+#                 dilation = 2 ** i
+#                 padding  = (tcn_kernel // 2) * dilation
+#                 blocks += [
+#                     nn.Conv1d(in_ch, n_feats, tcn_kernel,
+#                               dilation=dilation, padding=padding),
+#                     nn.BatchNorm1d(n_feats),
+#                     nn.ReLU()
+#                 ]
+#                 in_ch = n_feats
+#             self.tcn = nn.Sequential(*blocks)
+#         else:
+#             self.tcn = nn.Identity()
+
+#         # 2) Short Bi-LSTM or Identity
+#         if use_short_lstm:
+#             assert short_units % 2 == 0
+#             self.short_lstm = nn.LSTM(
+#                 input_size=n_feats,
+#                 hidden_size=short_units // 2,
+#                 batch_first=True,
+#                 bidirectional=True
+#             )
+#             self.ln_short = nn.LayerNorm(short_units)
+#             self.do_short = nn.Dropout(dropout_short)
+#         else:
+#             self.short_lstm = None
+#             self.ln_short   = nn.Identity()
+#             self.do_short   = nn.Identity()
+#         self.h_short = None
+#         self.c_short = None
+
+#         # 3) Transformer w/ PositionalEncoding + optional feature projection
+#         if use_transformer:
+#             d_model = short_units
+#             heads   = params.hparams["TRANSFORMER_HEADS"]
+#             layers  = params.hparams["TRANSFORMER_LAYERS"]
+#             ff_mult = params.hparams["TRANSFORMER_FF_MULT"]
+#             ff_dim  = d_model * ff_mult
+
+#             in_proj_dim = short_units if use_short_lstm else n_feats
+#             self.feature_proj = nn.Linear(in_proj_dim, d_model)
+
+#             self.pos_enc    = PositionalEncoding(d_model, dropout_short, window_len)
+#             encoder_layer   = nn.TransformerEncoderLayer(
+#                 d_model         = d_model,
+#                 nhead           = heads,
+#                 dim_feedforward = ff_dim,
+#                 dropout         = dropout_short
+#             )
+#             self.transformer = nn.TransformerEncoder(
+#                 encoder_layer,
+#                 num_layers=layers
+#             )
+#         else:
+#             self.feature_proj = nn.Identity()
+#             self.pos_enc      = nn.Identity()
+#             self.transformer  = nn.Identity()
+
+#         # 4) Projection → LayerNorm → Dropout
+#         proj_in     = short_units if use_short_lstm else n_feats
+#         self.short2long = nn.Linear(proj_in, long_units)
+#         self.ln_proj    = nn.LayerNorm(long_units)
+#         self.do_proj    = nn.Dropout(dropout_long)
+
+#         # 5) Long Bi-LSTM or Identity
+#         if use_long_lstm:
+#             assert long_units % 2 == 0
+#             self.long_lstm = nn.LSTM(
+#                 input_size=long_units,
+#                 hidden_size=long_units // 2,
+#                 batch_first=True,
+#                 bidirectional=True
+#             )
+#             self.ln_long = nn.LayerNorm(long_units)
+#             self.do_long = nn.Dropout(dropout_long)
+#         else:
+#             self.long_lstm = None
+#             self.ln_long   = nn.Identity()
+#             self.do_long   = nn.Identity()
+#         self.h_long = None
+#         self.c_long = None
+
+#         # 6) Flatten/Last/Pool + plain MLP head
+#         assert flatten_mode in ("flatten", "last", "pool")
+#         self.flatten_mode = flatten_mode
+#         flat_dim = (window_len * long_units
+#                     if flatten_mode == "flatten"
+#                     else long_units)
+
+#         self.ln_flat   = nn.LayerNorm(flat_dim)
+#         self.head_flat = nn.Sequential(
+#             weight_norm(nn.Linear(flat_dim, pred_hidden)),
+#             nn.ReLU(),
+#             weight_norm(nn.Linear(pred_hidden, 1))
+#         )
+
+#     def reset_short(self):
+#         if self.h_short is not None:
+#             bsz, dev = self.h_short.size(1), self.h_short.device
+#             self.h_short, self.c_short = _allocate_lstm_states(
+#                 bsz, self.short_units // 2, True, dev
+#             )
+
+#     def reset_long(self):
+#         if self.h_long is not None:
+#             bsz, dev = self.h_long.size(1), self.h_long.device
+#             self.h_long, self.c_long = _allocate_lstm_states(
+#                 bsz, self.long_units // 2, True, dev
+#             )
+
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:
+#         # Collapse extra leading dims to (batch, time_steps, features)
+#         if x.dim() > 3:
+#             *lead, T, F = x.shape
+#             x = x.view(-1, T, F)
+#         if x.dim() == 2:
+#             x = x.unsqueeze(0)
+#         batch_size, time_steps, _ = x.shape
+
+#         # 0) Conv + BN + ReLU
+#         xc = x.transpose(1, 2)
+#         xc = self.conv(xc); xc = self.bn(xc); xc = self.relu(xc)
+#         x  = xc.transpose(1, 2)
+
+#         # 1) TCN
+#         tcn_out = self.tcn(x.transpose(1, 2)).transpose(1, 2)
+
+#         # 2) Short LSTM
+#         if self.use_short_lstm:
+#             if self.h_short is None or self.h_short.size(1) != batch_size:
+#                 self.h_short, self.c_short = _allocate_lstm_states(
+#                     batch_size, self.short_units // 2, True, x.device
+#                 )
+#             out_s, (h_s, c_s) = self.short_lstm(
+#                 tcn_out, (self.h_short, self.c_short)
+#             )
+#             self.h_short, self.c_short = h_s.detach(), c_s.detach()
+#             out_s = self.ln_short(out_s); out_s = self.do_short(out_s)
+#         else:
+#             out_s = tcn_out
+
+#         # 3) Transformer
+#         tr_in  = self.feature_proj(out_s)
+#         tr_in  = self.pos_enc(tr_in)
+#         tr_out = self.transformer(tr_in.transpose(0, 1))
+#         out_t  = tr_out.transpose(0, 1)
+
+#         # 4) Projection
+#         out_p = self.short2long(out_t)
+#         out_p = self.ln_proj(out_p); out_p = self.do_proj(out_p)
+
+#         # 5) Long LSTM
+#         if self.use_long_lstm:
+#             if self.h_long is None or self.h_long.size(1) != batch_size:
+#                 self.h_long, self.c_long = _allocate_lstm_states(
+#                     batch_size, self.long_units // 2, True, out_p.device
+#                 )
+#             out_l, (h_l, c_l) = self.long_lstm(
+#                 out_p, (self.h_long, self.c_long)
+#             )
+#             self.h_long, self.c_long = h_l.detach(), c_l.detach()
+#             out_l = self.ln_long(out_l); out_l = self.do_long(out_l)
+#         else:
+#             out_l = out_p
+
+#         # 6) Flatten/Last/Pool + MLP head
+#         if self.flatten_mode == "flatten":
+#             flat = out_l.reshape(batch_size, -1)
+#         elif self.flatten_mode == "last":
+#             flat = out_l[:, -1, :]
+#         else:  # "pool"
+#             flat = out_l.mean(dim=1)
+
+#         norm_flat = self.ln_flat(flat)
+#         main_out  = self.head_flat(norm_flat)  # (B, 1)
+#         return main_out.unsqueeze(-1)          # → (B, 1, 1)
 
 class ModelClass(nn.Module):
     """
@@ -352,7 +321,7 @@ class ModelClass(nn.Module):
       3) TransformerEncoder w/ optional feature projection
       4) Linear projection → LayerNorm → Dropout
       5) Long Bi-LSTM
-      6) Flatten/Last/Pool → gated MLP head
+      6) Flatten/Last/Pool → MLP head (no skip branch)
     Stateful LSTM buffers reset via _reset_states() per day/week.
     """
     def __init__(
@@ -380,6 +349,8 @@ class ModelClass(nn.Module):
         self.use_short_lstm  = use_short_lstm
         self.use_transformer = use_transformer
         self.use_long_lstm   = use_long_lstm
+        self.aux_head = weight_norm(nn.Linear(long_units, 1))  # a tiny auxiliary head that predicts every timestep
+
 
         # 0) Conv1d + BatchNorm1d or Identity
         if use_conv:
@@ -441,7 +412,6 @@ class ModelClass(nn.Module):
             ff_mult = params.hparams["TRANSFORMER_FF_MULT"]
             ff_dim  = d_model * ff_mult
 
-            # if no short LSTM, project raw features n_feats → d_model
             in_proj_dim = short_units if use_short_lstm else n_feats
             self.feature_proj = nn.Linear(in_proj_dim, d_model)
 
@@ -485,7 +455,7 @@ class ModelClass(nn.Module):
         self.h_long = None
         self.c_long = None
 
-        # 6) Flatten/Last/Pool + gated MLP head
+        # 6) Flatten/Last/Pool + plain MLP head
         assert flatten_mode in ("flatten", "last", "pool")
         self.flatten_mode = flatten_mode
         flat_dim = (window_len * long_units
@@ -497,10 +467,6 @@ class ModelClass(nn.Module):
             weight_norm(nn.Linear(flat_dim, pred_hidden)),
             nn.ReLU(),
             weight_norm(nn.Linear(pred_hidden, 1))
-        )
-        self.skip_proj  = weight_norm(nn.Linear(flat_dim, 1))
-        self.skip_alpha = nn.Parameter(
-            torch.tensor(params.hparams["SKIP_ALPHA"], dtype=torch.float32)
         )
 
     def reset_short(self):
@@ -526,75 +492,57 @@ class ModelClass(nn.Module):
             x = x.unsqueeze(0)
         batch_size, time_steps, _ = x.shape
 
-        # 0) Conv1d + BatchNorm + ReLU
-        #    input x: (B, T, feat) → transpose for Conv1d → back
-        xc = x.transpose(1, 2)                     # (B, feat, T)
-        xc = self.conv(xc)
-        xc = self.bn(xc)
-        xc = self.relu(xc)
-        x = xc.transpose(1, 2)                     # (B, T, feat)
+        # 0) Conv + BN + ReLU
+        xc = x.transpose(1, 2)
+        xc = self.conv(xc); xc = self.bn(xc); xc = self.relu(xc)
+        x  = xc.transpose(1, 2)
 
-        # 1) Temporal ConvNet (TCN)
-        #    same transpose pattern
-        tcn_out = self.tcn(x.transpose(1, 2))      # (B, feat, T)
-        tcn_out = tcn_out.transpose(1, 2)          # (B, T, feat)
+        # 1) TCN
+        tcn_out = self.tcn(x.transpose(1, 2)).transpose(1, 2)
 
-        # 2) Short Bi-LSTM (or identity)
+        # 2) Short LSTM
         if self.use_short_lstm:
-            # allocate or reuse state per batch
-            if (self.h_short is None or
-                self.h_short.size(1) != batch_size):
+            if self.h_short is None or self.h_short.size(1) != batch_size:
                 self.h_short, self.c_short = _allocate_lstm_states(
-                    batch_size,
-                    self.short_units // 2,
-                    True,
-                    x.device
+                    batch_size, self.short_units // 2, True, x.device
                 )
             out_s, (h_s, c_s) = self.short_lstm(
                 tcn_out, (self.h_short, self.c_short)
             )
-            # detach states for next batch
             self.h_short, self.c_short = h_s.detach(), c_s.detach()
-            out_s = self.ln_short(out_s)
-            out_s = self.do_short(out_s)
+            out_s = self.ln_short(out_s); out_s = self.do_short(out_s)
         else:
             out_s = tcn_out
 
-        # 3) TransformerEncoder w/ optional feature projection
-        #    project features → d_model if needed, add pos enc, encode
-        tr_in = self.feature_proj(out_s)           # (B, T, d_model)
-        tr_in = self.pos_enc(tr_in)                # (B, T, d_model)
-        # Transformer expects (T, B, d_model)
+        # 3) Transformer
+        tr_in  = self.feature_proj(out_s)
+        tr_in  = self.pos_enc(tr_in)
         tr_out = self.transformer(tr_in.transpose(0, 1))
-        out_t = tr_out.transpose(0, 1)             # (B, T, d_model)
+        out_t  = tr_out.transpose(0, 1)
 
-        # 4) Projection → LayerNorm → Dropout
+        # 4) Projection
         out_p = self.short2long(out_t)
-        out_p = self.ln_proj(out_p)
-        out_p = self.do_proj(out_p)
+        out_p = self.ln_proj(out_p); out_p = self.do_proj(out_p)
 
-        # 5) Long Bi-LSTM (or identity)
+        # 5) Long LSTM
         if self.use_long_lstm:
-            if (self.h_long is None or
-                self.h_long.size(1) != batch_size):
+            if self.h_long is None or self.h_long.size(1) != batch_size:
                 self.h_long, self.c_long = _allocate_lstm_states(
-                    batch_size,
-                    self.long_units // 2,
-                    True,
-                    out_p.device
+                    batch_size, self.long_units // 2, True, out_p.device
                 )
             out_l, (h_l, c_l) = self.long_lstm(
                 out_p, (self.h_long, self.c_long)
             )
             self.h_long, self.c_long = h_l.detach(), c_l.detach()
-            out_l = self.ln_long(out_l)
-            out_l = self.do_long(out_l)
+            out_l = self.ln_long(out_l); out_l = self.do_long(out_l)
         else:
             out_l = out_p
 
-        # 6) Flatten / Last / Pool → gated MLP head
+        aux_out = self.aux_head(out_l) # shape (B, T, 1)
+
+
+        # 6) Flatten/Last/Pool + MLP head
         if self.flatten_mode == "flatten":
-            # requires time_steps == window_len
             flat = out_l.reshape(batch_size, -1)
         elif self.flatten_mode == "last":
             flat = out_l[:, -1, :]
@@ -602,78 +550,116 @@ class ModelClass(nn.Module):
             flat = out_l.mean(dim=1)
 
         norm_flat = self.ln_flat(flat)
-        main_out  = self.head_flat(norm_flat)
-        gate      = torch.sigmoid(self.skip_alpha)
-        skip_out  = self.skip_proj(norm_flat) * gate
-        output    = main_out + skip_out            # (B, 1)
-
-        return output.unsqueeze(-1)                # → (B, 1, 1)
-
-
-
+        main_out  = self.head_flat(norm_flat)  # (B, 1)
+        return main_out.unsqueeze(-1), aux_out   # → ((B,1,1), (B,T,1))
+        
 ######################################################################################################
+
+# class SmoothMSELoss(nn.Module):
+#     """
+#     Combines pointwise MSE with a penalty on one-step differences to enforce
+#     that your model matches both the level and the slope of the target.
+
+#     Args:
+#       alpha (float): Weight of the slope-matching term.  
+#         If alpha <= 0, this loss reduces to standard MSELoss.
+
+#     Attributes:
+#       level_loss (nn.MSELoss): standard pointwise MSE.  
+#       alpha      (float)    : slope‐penalty multiplier.
+#     """
+#     def __init__(self, alpha: float = 10.0):
+#         super().__init__()
+#         self.level_loss = nn.MSELoss()
+#         self.alpha      = alpha
+
+#     def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
+#         """
+#         Compute combined loss.
+
+#         Inputs:
+#           preds, targs : tensors of shape (B,) or (B, W)
+#             – B if you’re computing on final‐window predictions
+#             – (B, W) if you pass full sequences of window‐end preds
+
+#         Workflow:
+#           1. L1 = MSE(preds, targs)
+#           2. If alpha <= 0, return L1 (pure MSE).
+#           3. Otherwise, compute one‐step diffs along dim=–1:
+#              dp = preds[...,1:] – preds[..., :-1]
+#              dt =  targs[...,1:] –  targs[..., :-1]
+#           4. L2 = MSE(dp, dt)
+#           5. return L1 + alpha * L2
+
+#         Returns:
+#           loss (torch.Tensor): scalar combining level + slope penalties.
+#         """
+#         # 1) pointwise MSE
+#         L1 = self.level_loss(preds, targs)
+
+#         # 2) if no smoothing penalty, exit early
+#         if self.alpha <= 0:
+#             return L1
+
+#         # 3) compute one-step differences
+#         if preds.dim() == 1:
+#             dp = preds[1:]    - preds[:-1]
+#             dt = targs[1:]    - targs[:-1]
+#         else:
+#             dp = preds[:, 1:] - preds[:, :-1]
+#             dt = targs[:, 1:] - targs[:, :-1]
+
+#         # 4) slope‐matching MSE
+#         L2 = self.level_loss(dp, dt)
+
+#         # 5) combined loss
+#         return L1 + self.alpha * L2
+
+
 
 class SmoothMSELoss(nn.Module):
     """
-    Combines pointwise MSE with a penalty on one-step differences to enforce
-    that your model matches both the level and the slope of the target.
+    Combined level + slope MSE, with special handling for 2D aux-loss.
 
-    Args:
-      alpha (float): Weight of the slope-matching term.  
-        If alpha <= 0, this loss reduces to standard MSELoss.
-
-    Attributes:
-      level_loss (nn.MSELoss): standard pointwise MSE.  
-      alpha      (float)    : slope‐penalty multiplier.
+    - 1D inputs (B,): standard MSE mean + α*MSE of one‐step diffs.
+    - 2D inputs (B, T): flattens to (B*T,) with reduction='sum' for level loss,
+      plus mean‐reduction slope penalty across time steps.
     """
-    def __init__(self, alpha: float = 10.0):
+    def __init__(self, alpha: float = 0.0):
         super().__init__()
-        self.level_loss = nn.MSELoss()
-        self.alpha      = alpha
+        self.alpha = alpha
 
     def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
-        """
-        Compute combined loss.
-
-        Inputs:
-          preds, targs : tensors of shape (B,) or (B, W)
-            – B if you’re computing on final‐window predictions
-            – (B, W) if you pass full sequences of window‐end preds
-
-        Workflow:
-          1. L1 = MSE(preds, targs)
-          2. If alpha <= 0, return L1 (pure MSE).
-          3. Otherwise, compute one‐step diffs along dim=–1:
-             dp = preds[...,1:] – preds[..., :-1]
-             dt =  targs[...,1:] –  targs[..., :-1]
-          4. L2 = MSE(dp, dt)
-          5. return L1 + alpha * L2
-
-        Returns:
-          loss (torch.Tensor): scalar combining level + slope penalties.
-        """
-        # 1) pointwise MSE
-        L1 = self.level_loss(preds, targs)
-
-        # 2) if no smoothing penalty, exit early
-        if self.alpha <= 0:
-            return L1
-
-        # 3) compute one-step differences
         if preds.dim() == 1:
-            dp = preds[1:]    - preds[:-1]
-            dt = targs[1:]    - targs[:-1]
-        else:
+            # final‐step head
+            L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
+            if self.alpha <= 0:
+                return L1
+            dp = preds[1:] - preds[:-1]
+            dt =  targs[1:] - targs[:-1]
+            L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
+            return L1 + self.alpha * L2
+
+        elif preds.dim() == 2:
+            # aux‐head over T steps
+            # level loss: sum so each step sends full gradient
+            flat_p = preds.reshape(-1)
+            flat_t = targs.reshape(-1)
+            L1 = torch.nn.functional.mse_loss(flat_p, flat_t, reduction="sum") / preds.size(1)
+
+            if self.alpha <= 0:
+                return L1
+
+            # slope penalty across time axis
             dp = preds[:, 1:] - preds[:, :-1]
-            dt = targs[:, 1:] - targs[:, :-1]
+            dt =  targs[:, 1:] - targs[:, :-1]
+            L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
+            return L1 + self.alpha * L2
 
-        # 4) slope‐matching MSE
-        L2 = self.level_loss(dp, dt)
+        else:
+            raise ValueError(f"Unsupported preds.dim()={preds.dim()}")
 
-        # 5) combined loss
-        return L1 + self.alpha * L2
 
-        
 ######################################################################################################
 
 def compute_baselines(loader) -> tuple[float, float]:
@@ -761,29 +747,33 @@ def _reset_states(
 
 ############### 
 
+
 # def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[dict, np.ndarray]:
 #     """
 #     One-step-per-window evaluation.
 
-#     For each sliding window in the loader:
-#       1. Reset short-term state on day rollover.
-#       2. Skip zero-length windows.
-#       3. Forward the sequence through the model.
-#       4. Unwrap and apply any extra regression head.
-#       5. Squeeze to (seq_len, window_len).
-#       6. Take the final time-step prediction and true target.
-#       7. Accumulate all preds & targs into flat arrays.
+#     For each batch from `loader`:
+#       1. Move batch to device, reset model back to day/week state.
+#       2. For each example in the batch, call _reset_states() exactly as before.
+#       3. Skip zero-length sequences.
+#       4. Collect each example’s valid daily_windows and true targets
+#          into Python lists.
+#       5. Concatenate all windows → one tensor of shape
+#          (total_windows, window_len, feat_dim). Same for targets.
+#       6. Call model(...) once on that big tensor.
+#       7. Unwrap regression head exactly as before.
+#       8. Squeeze to (total_windows,); append to all_preds/all_targs.
+#       9. At end, compute global metrics over the flattened lists.
 
 #     Returns:
-#       metrics: dict with global "rmse", "mae", "r2".
-#       preds:   np.ndarray of all predictions.
+#       metrics dict and flat np.ndarray of predictions.
 #     """
 #     device = next(model.parameters()).device
 #     model.to(device).eval()
 #     model.h_short = model.h_long = None
 #     prev_day = None
-
 #     all_preds, all_targs = [], []
+
 #     with torch.no_grad():
 #         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
 #                 tqdm(loader, desc="eval", leave=False):
@@ -793,33 +783,43 @@ def _reset_states(
 #             wd = wd.to(device)
 
 #             batch_size = x_batch.size(0)
+
+#             # --- GATHER ALL WINDOWS & TARGETS ---
+#             windows_list, targets_list = [], []
 #             for example_idx in range(batch_size):
 #                 prev_day = _reset_states(model, wd[example_idx], prev_day)
 
-#                 seq_len = int(seq_lengths[example_idx])
-#                 if seq_len == 0:
+#                 L = int(seq_lengths[example_idx])
+#                 if L == 0:
 #                     continue
 
-#                 # (seq_len, window_len, feature_dim)
-#                 daily_windows = x_batch[example_idx, :seq_len]
-#                 raw_out = model(daily_windows)
-#                 raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+#                 w = x_batch[example_idx, :L]                  # (L, window_len, feat)
+#                 t = y_signal[example_idx, :L].reshape(-1)      # (L,)
+#                 windows_list.append(w)
+#                 targets_list.append(t)
 
-#                 # ensure regression head if needed
-#                 if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
-#                     raw_reg = model.pred(raw_reg)
-#                 elif raw_reg.dim() == 2:
-#                     raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
+#             if not windows_list:
+#                 continue
 
-#                 # (seq_len, window_len)
-#                 seq_reg = raw_reg.squeeze(-1)
-#                 # final look-back prediction
-#                 preds_seq = seq_reg[:, -1]
-#                 # true sig target flattened
-#                 targs_seq = y_signal[example_idx, :seq_len].reshape(-1)
+#             windows_tensor = torch.cat(windows_list, dim=0)    # (sum_L, window_len, feat)
+#             targets_tensor = torch.cat(targets_list, dim=0)    # (sum_L,)
 
-#                 all_preds.extend(preds_seq.cpu().tolist())
-#                 all_targs.extend(targs_seq.cpu().tolist())
+#             # --- SINGLE FORWARD ---
+#             raw_out = model(windows_tensor)
+#             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+
+#             # ensure regression head if needed
+#             if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
+#                 raw_reg = model.pred(raw_reg)
+#             elif raw_reg.dim() == 2:
+#                 raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
+
+#             # (sum_L, window_len) → final-lookback pred
+#             seq_reg = raw_reg.squeeze(-1)
+#             preds   = seq_reg[:, -1]                         # (sum_L,)
+
+#             all_preds.extend(preds.cpu().tolist())
+#             all_targs.extend(targets_tensor.cpu().tolist())
 
 #     preds = np.array(all_preds, dtype=float)
 #     targs = np.array(all_targs, dtype=float)
@@ -829,26 +829,23 @@ def _reset_states(
 
 #     return _compute_metrics(preds, targs), preds
 
-
 def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[dict, np.ndarray]:
     """
     One-step-per-window evaluation.
 
-    For each batch from `loader`:
-      1. Move batch to device, reset model back to day/week state.
-      2. For each example in the batch, call _reset_states() exactly as before.
-      3. Skip zero-length sequences.
-      4. Collect each example’s valid daily_windows and true targets
-         into Python lists.
-      5. Concatenate all windows → one tensor of shape
-         (total_windows, window_len, feat_dim). Same for targets.
-      6. Call model(...) once on that big tensor.
-      7. Unwrap regression head exactly as before.
-      8. Squeeze to (total_windows,); append to all_preds/all_targs.
-      9. At end, compute global metrics over the flattened lists.
+    Behaviour (unchanged, with safer shape handling):
+      - Move batch to device and reset model day/week state via _reset_states.
+      - Collect valid per-example windows and targets into Python lists.
+      - Concatenate into tensors (total_windows, window_len, feat).
+      - Single model(...) call on that big tensor.
+      - Robustly unwrap regression head and auxiliary outputs without relying on `squeeze`
+        semantics that can collapse unexpected axes.
+      - Return metrics dict and flat numpy array of predictions.
 
-    Returns:
-      metrics dict and flat np.ndarray of predictions.
+    Important robustness guarantees added:
+      - Explicit handling of aux_out dims: supports (W, T, 1) and (W, T).
+      - Explicit handling of raw_reg dims: supports (W, T, 1), (W, T, F) and (W, T).
+      - Clear error raised on unexpected shapes to fail fast instead of producing silent, wrong results.
     """
     device = next(model.parameters()).device
     model.to(device).eval()
@@ -890,15 +887,48 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
             raw_out = model(windows_tensor)
             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-            # ensure regression head if needed
-            if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
-                raw_reg = model.pred(raw_reg)
+            # --- AUX OUTPUT: explicit shape handling ---
+            # Accept (W, T, 1) or (W, T)
+            # Build aux_seq as (W, T)
+            if hasattr(raw_out, "__len__") and len(raw_out) > 1:
+                aux_out = raw_out[1]
+            else:
+                # If model returned only one element, try to access attribute (legacy)
+                # but prefer explicit two-output models. If missing, raise.
+                raise ValueError("eval_on_loader expects model(...) to return (main_out, aux_out) tuple.")
+
+            if aux_out.dim() == 3:
+                # (W, T, 1)
+                _, T, last_dim = aux_out.shape
+                if last_dim != 1:
+                    raise ValueError(f"eval_on_loader: unexpected aux_out last dim {last_dim}")
+                aux_seq = aux_out.view(aux_out.size(0), T)
+            elif aux_out.dim() == 2:
+                # (W, T)
+                _, T = aux_out.shape
+                aux_seq = aux_out
+            else:
+                raise ValueError(f"eval_on_loader: unexpected aux_out.dim()={aux_out.dim()}")
+
+            # --- RAW REGRESSION UNWRAP: ensure seq_reg is (W, T) ---
+            if raw_reg.dim() == 3:
+                # raw_reg could be (W, T, 1) or (W, T, F)
+                if raw_reg.size(-1) == 1:
+                    seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+                else:
+                    # allow model.pred to accept (W, T, F) and return (W, T, 1)
+                    raw_reg_pred = model.pred(raw_reg)
+                    if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+                        raise ValueError("eval_on_loader: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+                    seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
             elif raw_reg.dim() == 2:
-                raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
+                # already (W, T)
+                seq_reg = raw_reg
+            else:
+                raise ValueError(f"eval_on_loader: unexpected raw_reg.dim()={raw_reg.dim()}")
 
             # (sum_L, window_len) → final-lookback pred
-            seq_reg = raw_reg.squeeze(-1)
-            preds   = seq_reg[:, -1]                         # (sum_L,)
+            preds = seq_reg[:, -1]                         # (sum_L,)
 
             all_preds.extend(preds.cpu().tolist())
             all_targs.extend(targets_tensor.cpu().tolist())
@@ -913,6 +943,8 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
 ############### 
 
+
+
 # def model_training_loop(
 #     model:                nn.Module,
 #     optimizer:            torch.optim.Optimizer,
@@ -924,32 +956,54 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #     max_epochs:          int,
 #     early_stop_patience: int,
 #     clipnorm:            float,
-#     alpha_smooth:        int,
+#     alpha_smooth:        float,
 # ) -> float:
 #     """
 #     Stateful training + per-epoch validation + logging.
 #     Uses OneCycleLR for linear warmup + cosine annealing.
 
-#     1. Precompute static baselines.
-#     2. For each epoch:
-#        • TRAIN: reset per-day state, forward each day's windows,
-#          accumulate SmoothMSELoss, collect preds/targs, step optimizer.
-#        • VALID: call `eval_on_loader` to get metrics.
-#        • Log, print summary, checkpoint, and early-stop.
+#     Steps:
+#       1. Compute static baselines on train & val.
+#       2. For each epoch:
+#          • TRAIN:
+#            – reset model to initial LSTM states.
+#            – for each batch:
+#              · move data to device, zero optimizer.
+#              · loop examples to call _reset_states(model, wd[i]).
+#              · collect all valid sliding windows and targets.
+#              · if any windows:
+#                · concatenate into (total_W, window_len, feat) tensor.
+#                · single forward(model) on that big tensor.
+#                · unwrap regression head as before.
+#                · extract final-step preds, compare to targets.
+#                · record preds/targs, compute smooth loss once.
+#                · backward, clip grads, step optimizer, update scheduler.
+#          • VALID: call eval_on_loader → metrics.
+#          • Log epoch summary, checkpoint, early stop.
 #     Returns:
-#       best validation RMSE across all epochs.
+#       best validation RMSE.
 #     """
 #     device = next(model.parameters()).device
 #     model.to(device)
 
+#     # 1) static baselines
 #     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
 #     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
 
 #     smooth_loss = SmoothMSELoss(alpha_smooth)
-#     live_plot  = plots.LiveRMSEPlot()
+#     aux_loss_weight  = params.hparams["AUX_LOSS_WEIGHT"]
+#     live_plot   = plots.LiveRMSEPlot()
 #     best_val, best_state, patience = float("inf"), None, 0
 
 #     for epoch in range(1, max_epochs + 1):
+        
+#         # -----------------------
+#         freeze_till = params.hparams["FREEZE_TILL"]
+#         if epoch <= freeze_till:
+#             for p in model.head_flat.parameters(): p.requires_grad=False
+#         else:
+#             for p in model.head_flat.parameters(): p.requires_grad=True
+
 #         # --- TRAIN PHASE ---
 #         model.train()
 #         model.h_short = model.h_long = None
@@ -964,45 +1018,60 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #             )
 #             optimizer.zero_grad(set_to_none=True)
 
-#             batch_loss = 0.0
-#             window_count = 0
 #             batch_size = x_batch.size(0)
 
+#             # --- GATHER WINDOWS & TARGETS ---
+#             windows_list, targets_list = [], []
 #             for example_idx in range(batch_size):
 #                 prev_day = _reset_states(model, wd[example_idx], prev_day)
-
-#                 seq_len = int(seq_lengths[example_idx])
-#                 if seq_len == 0:
+#                 L = int(seq_lengths[example_idx])
+#                 if L == 0:
 #                     continue
 
-#                 daily_windows = x_batch[example_idx, :seq_len]
-#                 raw_out = model(daily_windows)
-#                 raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+#                 w = x_batch[example_idx, :L]            # (L, window_len, feat)
+#                 t = y_signal[example_idx, :L].reshape(-1)  # (L,)
+#                 windows_list.append(w)
+#                 targets_list.append(t)
 
-#                 if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
-#                     raw_reg = model.pred(raw_reg)
-#                 elif raw_reg.dim() == 2:
-#                     raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
+#             if not windows_list:
+#                 continue
 
-#                 seq_reg    = raw_reg.squeeze(-1)
-#                 preds_seq  = seq_reg[:, -1]
-#                 targs_seq  = y_signal[example_idx, :seq_len].reshape(-1)
+#             # --- SINGLE BATCHED FORWARD ---
+#             windows_tensor = torch.cat(windows_list, dim=0)   # (total_W, window_len, feat)
+#             targets_tensor = torch.cat(targets_list, dim=0)   # (total_W,)
 
-#                 loss = smooth_loss(preds_seq, targs_seq)
-#                 batch_loss += loss
-#                 window_count += 1
+#             raw_out, aux_out = model(windows_tensor)
+#             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+#             T = aux_out.squeeze(-1).size(1) # get true window length
 
-#                 train_preds.extend(preds_seq.detach().cpu().tolist())
-#                 train_targs.extend(targs_seq.detach().cpu().tolist())
+#             targets_seq  = targets_tensor.unsqueeze(1).expand(-1, T)  # (W, T)
 
-#             if window_count > 0:
-#                 batch_loss = batch_loss / window_count
-#                 scaler.scale(batch_loss).backward()
-#                 scaler.unscale_(optimizer)
-#                 nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-#                 scaler.step(optimizer)
-#                 scaler.update()
-#                 scheduler.step()
+#             if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
+#                 raw_reg = model.pred(raw_reg)
+#             elif raw_reg.dim() == 2:
+#                 raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
+
+#             seq_reg    = raw_reg.squeeze(-1)            # shape (W, T)
+#             preds      = seq_reg[:, -1]                 # (W,)
+#             aux_seq    = aux_out.squeeze(-1)            # (W, T)
+            
+#             # compute losses
+#             loss_main = smooth_loss(preds, targets_tensor)
+#             loss_aux  = smooth_loss(aux_seq, targets_seq)
+
+#             # record for train metrics
+#             train_preds.extend(preds.detach().cpu().tolist())
+#             train_targs.extend(targets_tensor.cpu().tolist())
+
+#             # compute & backprop loss
+#             loss = loss_main + aux_loss_weight * loss_aux
+
+#             scaler.scale(loss).backward()
+#             scaler.unscale_(optimizer)
+#             nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+#             scaler.step(optimizer)
+#             scaler.update()
+#             scheduler.step()
 
 #         # --- METRICS & VALIDATION ---
 #         tr_metrics = _compute_metrics(
@@ -1033,12 +1102,254 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #         )
 #         live_plot.update(tr_rmse, vl_rmse)
 
+#         models_dir = Path(params.models_folder)
+#         best_val, improved, *_ = models_core.maybe_save_chkpt(
+#             models_dir, model, vl_rmse, best_val,
+#             {"rmse": tr_rmse}, {"rmse": vl_rmse},
+#             live_plot, params
+#         )
+
 #         print(
 #             f"Epoch {epoch:02d}  "
 #             f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
 #             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
-#             f"lr={current_lr:.2e}"
+#             f"lr={current_lr:.2e} |  "
+#             f"improved={improved == 1}"
 #         )
+    
+#         if improved:
+#             best_state, patience = {
+#                 k: v.cpu() for k, v in model.state_dict().items()
+#             }, 0
+#         else:
+#             patience += 1
+#             if patience >= early_stop_patience:
+#                 print(f"Early stopping at epoch {epoch}")
+#                 break
+
+#     # restore best
+#     if best_state is not None:
+#         model.load_state_dict(best_state)
+#         models_core.save_final_chkpt(
+#             models_dir, best_state, best_val, params,
+#             tr_metrics, vl_metrics, live_plot, suffix="_fin"
+#         )
+
+#     return best_val
+
+# def model_training_loop(
+#     model:                nn.Module,
+#     optimizer:            torch.optim.Optimizer,
+#     scheduler:            torch.optim.lr_scheduler.OneCycleLR,
+#     scaler:               torch.cuda.amp.GradScaler,
+#     train_loader,
+#     val_loader,
+#     *,
+#     max_epochs:          int,
+#     early_stop_patience: int,
+#     clipnorm:            float,
+#     alpha_smooth:        float,
+# ) -> float:
+#     """
+#     Stateful training + per-epoch validation + logging.
+
+#     Preserves your original high-level flow and semantics:
+#       - compute static baselines
+#       - per-epoch: optionally freeze head_flat for initial epochs
+#       - per-batch: reset LSTM states per day, gather valid windows into a
+#         single big tensor, single forward, compute main + aux losses, backprop,
+#         clip, step optimizer and scheduler
+#       - per-epoch: evaluate on validation loader, log, checkpoint, early stop
+
+#     Minimal, targeted robustness changes:
+#       - Explicit and safe handling of aux_out and raw_reg shapes (no fragile squeeze)
+#       - Clip gradient only on params that have .grad to avoid surprising behavior
+#       - Basic runtime assertion that scheduler.total_steps (if created outside)
+#         matches the runtime expectation (len(train_loader) * max_epochs)
+#       - Clear error messages on unexpected tensor shapes to fail fast
+#     """
+#     device = next(model.parameters()).device
+#     model.to(device)
+
+#     # Sanity check for scheduler total steps when scheduler was created outside
+#     try:
+#         expected_total = len(train_loader) * max_epochs
+#         # OneCycleLR stores total_steps internally in a protected attribute
+#         if hasattr(scheduler, "_total_steps"):
+#             if scheduler._total_steps != expected_total:
+#                 raise RuntimeError(
+#                     f"Scheduler total_steps mismatch: scheduler={scheduler._total_steps} expected={expected_total}"
+#                 )
+#     except Exception:
+#         # If scheduler doesn't expose internal attr, we don't block; this is a best-effort check.
+#         pass
+
+#     # 1) static baselines
+#     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
+#     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
+
+#     smooth_loss = SmoothMSELoss(alpha_smooth)
+#     aux_loss_weight  = params.hparams["AUX_LOSS_WEIGHT"]
+#     live_plot   = plots.LiveRMSEPlot()
+#     best_val, best_state, patience = float("inf"), None, 0
+
+#     for epoch in range(1, max_epochs + 1):
+#         freeze_till = params.hparams["FREEZE_TILL"]
+#         if epoch <= freeze_till:
+#             for p in model.head_flat.parameters():
+#                 p.requires_grad = False
+#         else:
+#             for p in model.head_flat.parameters():
+#                 p.requires_grad = True
+
+#         # --- TRAIN PHASE ---
+#         model.train()
+#         model.h_short = model.h_long = None
+#         train_preds, train_targs = [], []
+#         prev_day = None
+
+#         # accumulators for optional diagnostics (kept minimal)
+#         epoch_loss_main_sum = 0.0
+#         epoch_loss_aux_sum = 0.0
+#         epoch_loss_count = 0
+
+#         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+#                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
+
+#             x_batch, y_signal, wd = (
+#                 x_batch.to(device), y_signal.to(device), wd.to(device)
+#             )
+#             optimizer.zero_grad(set_to_none=True)
+
+#             batch_size = x_batch.size(0)
+
+#             # --- GATHER WINDOWS & TARGETS ---
+#             windows_list, targets_list = [], []
+#             for example_idx in range(batch_size):
+#                 prev_day = _reset_states(model, wd[example_idx], prev_day)
+#                 L = int(seq_lengths[example_idx])
+#                 if L == 0:
+#                     continue
+
+#                 w = x_batch[example_idx, :L]            # (L, window_len, feat)
+#                 t = y_signal[example_idx, :L].reshape(-1)  # (L,)
+#                 windows_list.append(w)
+#                 targets_list.append(t)
+
+#             if not windows_list:
+#                 continue
+
+#             # --- SINGLE BATCHED FORWARD ---
+#             windows_tensor = torch.cat(windows_list, dim=0)   # (total_W, window_len, feat)
+#             targets_tensor = torch.cat(targets_list, dim=0)   # (total_W,)
+
+#             raw_out = model(windows_tensor)
+#             # support tuple return (main_out, aux_out) or two-element list
+#             if isinstance(raw_out, (tuple, list)) and len(raw_out) >= 2:
+#                 raw_reg, aux_out = raw_out[0], raw_out[1]
+#             else:
+#                 # legacy: if model returned a single object earlier, keep backward compatibility
+#                 # but this code expects (main_out, aux_out); fail fast if not present
+#                 raise ValueError("model must return (main_out, aux_out) tuple in training")
+
+#             # --- AUX OUTPUT: explicit shape handling ---
+#             if aux_out.dim() == 3:
+#                 # (W, T, 1)
+#                 _, T, last_dim = aux_out.shape
+#                 if last_dim != 1:
+#                     raise ValueError(f"train: unexpected aux_out last dim {last_dim}")
+#                 aux_seq = aux_out.view(aux_out.size(0), T)
+#             elif aux_out.dim() == 2:
+#                 # (W, T)
+#                 _, T = aux_out.shape
+#                 aux_seq = aux_out
+#             else:
+#                 raise ValueError(f"train: unexpected aux_out.dim()={aux_out.dim()}")
+
+#             targets_seq  = targets_tensor.unsqueeze(1).expand(-1, T)  # (W, T)
+
+#             # --- RAW REGRESSION UNWRAP: ensure seq_reg is (W, T) ---
+#             if raw_reg.dim() == 3:
+#                 # raw_reg may be (W, T, 1) or (W, T, F)
+#                 if raw_reg.size(-1) == 1:
+#                     seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+#                 else:
+#                     # pass full tensor to model.pred which must accept (W, T, F) and return (W, T, 1)
+#                     raw_reg_pred = model.pred(raw_reg)
+#                     if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+#                         raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+#                     seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
+#             elif raw_reg.dim() == 2:
+#                 seq_reg = raw_reg
+#             else:
+#                 raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
+
+#             preds = seq_reg[:, -1]            # (W,)
+#             aux_seq = aux_seq                 # (W, T)
+
+#             # compute losses
+#             loss_main = smooth_loss(preds, targets_tensor)
+#             loss_aux  = smooth_loss(aux_seq, targets_seq)
+
+#             # update diagnostics
+#             epoch_loss_main_sum += float(loss_main.detach().cpu())
+#             epoch_loss_aux_sum += float(loss_aux.detach().cpu())
+#             epoch_loss_count += 1
+
+#             # record for train metrics
+#             train_preds.extend(preds.detach().cpu().tolist())
+#             train_targs.extend(targets_tensor.cpu().tolist())
+
+#             # compute & backprop loss
+#             loss = loss_main + aux_loss_weight * loss_aux
+
+#             scaler.scale(loss).backward()
+#             scaler.unscale_(optimizer)
+
+#             # Clip grads only over params that actually received gradients
+#             params_with_grad = [p for p in model.parameters() if p.grad is not None]
+#             if params_with_grad:
+#                 nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
+
+#             scaler.step(optimizer)
+#             scaler.update()
+#             scheduler.step()
+
+#         # --- METRICS & VALIDATION ---
+#         tr_metrics = _compute_metrics(
+#             np.array(train_preds, dtype=float),
+#             np.array(train_targs, dtype=float),
+#         )
+#         vl_metrics, _ = eval_on_loader(val_loader, model)
+
+#         # optional averaged loss diagnostics (safe: avoid division by zero)
+#         if epoch_loss_count > 0:
+#             avg_loss_main = epoch_loss_main_sum / epoch_loss_count
+#             avg_loss_aux = epoch_loss_aux_sum / epoch_loss_count
+#         else:
+#             avg_loss_main = avg_loss_aux = float("nan")
+
+#         # --- LOG & CHECKPOINT ---
+#         tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
+#         vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
+#         current_lr = optimizer.param_groups[0]["lr"]
+
+#         models_core.log_epoch_summary(
+#             epoch,
+#             model,
+#             optimizer,
+#             train_metrics   = tr_metrics,
+#             val_metrics     = vl_metrics,
+#             base_tr_mean    = base_tr_mean,
+#             base_tr_pers    = base_tr_pers,
+#             base_vl_mean    = base_vl_mean,
+#             base_vl_pers    = base_vl_pers,
+#             slip_thresh     = 1e-6,
+#             log_file        = params.log_file,
+#             top_k           = 999,
+#             hparams         = params.hparams,
+#         )
+#         live_plot.update(tr_rmse, vl_rmse)
 
 #         models_dir = Path(params.models_folder)
 #         best_val, improved, *_ = models_core.maybe_save_chkpt(
@@ -1046,6 +1357,16 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #             {"rmse": tr_rmse}, {"rmse": vl_rmse},
 #             live_plot, params
 #         )
+
+#         print(
+#             f"Epoch {epoch:02d}  "
+#             f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
+#             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
+#             f"lr={current_lr:.2e} |  "
+#             f"improved={improved == 1} | "
+#             f"loss_main={avg_loss_main:.5e}, loss_aux={avg_loss_aux:.5e}"
+#         )
+
 #         if improved:
 #             best_state, patience = {
 #                 k: v.cpu() for k, v in model.state_dict().items()
@@ -1077,50 +1398,85 @@ def model_training_loop(
     max_epochs:          int,
     early_stop_patience: int,
     clipnorm:            float,
-    alpha_smooth:        int,
+    alpha_smooth:        float,
 ) -> float:
     """
-    Stateful training + per-epoch validation + logging.
-    Uses OneCycleLR for linear warmup + cosine annealing.
+    Train loop (minimal, logging delegated to init_log / log_epoch_summary).
 
-    Steps:
-      1. Compute static baselines on train & val.
-      2. For each epoch:
-         • TRAIN:
-           – reset model to initial LSTM states.
-           – for each batch:
-             · move data to device, zero optimizer.
-             · loop examples to call _reset_states(model, wd[i]).
-             · collect all valid sliding windows and targets.
-             · if any windows:
-               · concatenate into (total_W, window_len, feat) tensor.
-               · single forward(model) on that big tensor.
-               · unwrap regression head as before.
-               · extract final-step preds, compare to targets.
-               · record preds/targs, compute smooth loss once.
-               · backward, clip grads, step optimizer, update scheduler.
-         • VALID: call eval_on_loader → metrics.
-         • Log epoch summary, checkpoint, early stop.
-    Returns:
-      best validation RMSE.
+    Responsibilities retained
+      - device placement
+      - scheduler total-steps sanity check (best-effort)
+      - baseline computation
+      - per-epoch training and validation
+      - gradient scaling, clipping, optimizer step, scheduler step
+      - metrics computation and checkpointing via models_core.maybe_save_chkpt
+
+    Logging policy
+      - Keep the loop free of verbose logging; expose only compact, read-only
+        epoch attributes for the logger:
+          model._last_epoch_elapsed (float seconds)
+          model._last_epoch_samples (int)
+          model._last_epoch_checkpoint (bool)
+      - Capture a one-time, detached first-batch snapshot on the first training
+        backward that contains shapes, detached loss scalars, and a small
+        grads summary for one-shot printing by init_log/log_epoch_summary.
+      - Still print a concise console line after each epoch (TRAIN/VALID metrics,
+        lr, improved flag, averaged losses) as requested.
     """
     device = next(model.parameters()).device
     model.to(device)
+
+    # Scheduler total_steps sanity check (best-effort)
+    try:
+        expected_total = len(train_loader) * max_epochs
+        if hasattr(scheduler, "_total_steps") and scheduler._total_steps != expected_total:
+            raise RuntimeError(
+                f"Scheduler total_steps mismatch: scheduler={scheduler._total_steps} expected={expected_total}"
+            )
+    except Exception:
+        pass  # do not block training for introspection failures
 
     # 1) static baselines
     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
 
     smooth_loss = SmoothMSELoss(alpha_smooth)
-    live_plot   = plots.LiveRMSEPlot()
+    live_plot = plots.LiveRMSEPlot()
     best_val, best_state, patience = float("inf"), None, 0
 
+    # Ensure any leftover snapshot is cleared before training (best-effort)
+    if hasattr(model, "_first_batch_snapshot"):
+        try:
+            delattr = getattr(model, "__delattr__", None)
+            if callable(delattr):
+                model.__delattr__("_first_batch_snapshot")
+        except Exception:
+            pass
+
+    models_dir = Path(params.models_folder)
+
+    # Flag used to capture per-first-backward grads info exactly once
+    first_snapshot_captured = False
+
     for epoch in range(1, max_epochs + 1):
+        freeze_till = params.hparams["FREEZE_TILL"]
+        for p in model.head_flat.parameters():
+            p.requires_grad = False if epoch <= freeze_till else True
+
         # --- TRAIN PHASE ---
         model.train()
         model.h_short = model.h_long = None
         train_preds, train_targs = [], []
         prev_day = None
+
+        # accumulators (kept minimal)
+        epoch_loss_main_sum = 0.0
+        epoch_loss_aux_sum = 0.0
+        epoch_loss_count = 0
+
+        # timing / throughput counters for this epoch (kept minimal)
+        epoch_start = datetime.utcnow().timestamp()
+        epoch_samples = 0
 
         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
@@ -1130,9 +1486,8 @@ def model_training_loop(
             )
             optimizer.zero_grad(set_to_none=True)
 
-            batch_size = x_batch.size(0)
-
             # --- GATHER WINDOWS & TARGETS ---
+            batch_size = x_batch.size(0)
             windows_list, targets_list = [], []
             for example_idx in range(batch_size):
                 prev_day = _reset_states(model, wd[example_idx], prev_day)
@@ -1153,25 +1508,116 @@ def model_training_loop(
             targets_tensor = torch.cat(targets_list, dim=0)   # (total_W,)
 
             raw_out = model(windows_tensor)
-            raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+            if isinstance(raw_out, (tuple, list)) and len(raw_out) >= 2:
+                raw_reg, aux_out = raw_out[0], raw_out[1]
+            else:
+                raise ValueError("model must return (main_out, aux_out) tuple in training")
 
-            if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
-                raw_reg = model.pred(raw_reg)
+            # --- AUX OUTPUT: explicit shape handling ---
+            if aux_out.dim() == 3:
+                _, T, last_dim = aux_out.shape
+                if last_dim != 1:
+                    raise ValueError(f"train: unexpected aux_out last dim {last_dim}")
+                aux_seq = aux_out.view(aux_out.size(0), T)
+            elif aux_out.dim() == 2:
+                _, T = aux_out.shape
+                aux_seq = aux_out
+            else:
+                raise ValueError(f"train: unexpected aux_out.dim()={aux_out.dim()}")
+
+            targets_seq = targets_tensor.unsqueeze(1).expand(-1, T)  # (W, T)
+
+            # --- RAW REGRESSION UNWRAP: ensure seq_reg is (W, T) ---
+            if raw_reg.dim() == 3:
+                if raw_reg.size(-1) == 1:
+                    seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+                else:
+                    raw_reg_pred = model.pred(raw_reg)
+                    if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+                        raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+                    seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
             elif raw_reg.dim() == 2:
-                raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
+                seq_reg = raw_reg
+            else:
+                raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
 
-            seq_reg = raw_reg.squeeze(-1)                     # (total_W, window_len)
-            preds   = seq_reg[:, -1]                          # (total_W,)
+            preds = seq_reg[:, -1]            # (W,)
+            aux_seq = aux_seq                 # (W, T)
+
+            # compute losses
+            loss = smooth_loss(preds, targets_tensor)
+            loss_aux = smooth_loss(aux_seq, targets_seq)
+
+            # update accumulators
+            epoch_loss_main_sum += float(loss.detach().cpu())
+            epoch_loss_aux_sum += float(loss_aux.detach().cpu())
+            epoch_loss_count += 1
 
             # record for train metrics
             train_preds.extend(preds.detach().cpu().tolist())
             train_targs.extend(targets_tensor.cpu().tolist())
 
-            # compute & backprop loss once
-            loss = smooth_loss(preds, targets_tensor)
+            # update sample counter (throughput)
+            epoch_samples += int(targets_tensor.size(0))
+
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+
+            # --- First-batch one-shot detached snapshot capture (read-only, best-effort)
+            # Capture once after the first backward to record shapes, loss scalars,
+            # per-group nonzero-grad counts and simple grad-presence booleans.
+            if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
+                try:
+                    # shapes & losses (detached CPU)
+                    raw_shape = tuple(raw_reg.detach().cpu().shape) if isinstance(raw_reg, torch.Tensor) else None
+                    aux_shape = tuple(aux_out.detach().cpu().shape) if isinstance(aux_out, torch.Tensor) else None
+                    lm_cpu = loss_main.detach().cpu()
+                    la_cpu = loss_aux.detach().cpu()
+
+                    # per-parameter grad presence and per-group nonzero-grad counts
+                    per_param_has_grad = {}
+                    group_nonzero_counts = []
+                    for g in optimizer.param_groups:
+                        cnt = 0
+                        for p in g.get("params", []):
+                            has = (p.grad is not None) and (p.grad.detach().abs().sum().item() > 0)
+                            per_param_has_grad[getattr(p, "name", None) or id(p)] = bool(has)
+                            if has:
+                                cnt += 1
+                        group_nonzero_counts.append(cnt)
+
+                    # simple boolean summary for backbone/head/aux (best-effort by name heuristic)
+                    backbone_has = any(
+                        ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
+                        for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long") or n.startswith("pred") == False
+                    )
+                    head_has = any(
+                        ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
+                        for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n
+                    )
+                    aux_has = any(
+                        ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
+                        for n, p in model.named_parameters() if n.startswith("aux") or "aux" in n
+                    )
+
+                    model._first_batch_snapshot = {
+                        "raw_reg_shape": raw_shape,
+                        "aux_out_shape": aux_shape,
+                        "loss_main": lm_cpu,
+                        "loss_aux": la_cpu,
+                        "aux_w": float(params.hparams.get("AUX_LOSS_WEIGHT", 0.0)),
+                        "group_nonzero_counts": group_nonzero_counts,
+                        "grads": {"backbone": bool(backbone_has), "head": bool(head_has), "aux": bool(aux_has)},
+                    }
+                except Exception:
+                    pass
+                first_snapshot_captured = True
+
+            # Clip grads only over params that actually received gradients
+            params_with_grad = [p for p in model.parameters() if p.grad is not None]
+            if params_with_grad:
+                nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
+
             scaler.step(optimizer)
             scaler.update()
             scheduler.step()
@@ -1183,41 +1629,61 @@ def model_training_loop(
         )
         vl_metrics, _ = eval_on_loader(val_loader, model)
 
-        # --- LOG & CHECKPOINT ---
+        # averaged loss diagnostics (safe: avoid division by zero)
+        if epoch_loss_count > 0:
+            avg_loss_main = epoch_loss_main_sum / epoch_loss_count
+            avg_loss_aux = epoch_loss_aux_sum / epoch_loss_count
+        else:
+            avg_loss_main = avg_loss_aux = float("nan")
+
+        # expose lightweight epoch timing and sample counters for logger (read-only)
+        epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
+        model._last_epoch_elapsed = float(epoch_elapsed)
+        model._last_epoch_samples = int(epoch_samples)
+
+        # --- LOG & CHECKPOINT (logging delegated to log_epoch_summary) ---
         tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
         vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
-        current_lr = optimizer.param_groups[0]["lr"]
 
         models_core.log_epoch_summary(
             epoch,
             model,
             optimizer,
-            train_metrics   = tr_metrics,
-            val_metrics     = vl_metrics,
-            base_tr_mean    = base_tr_mean,
-            base_tr_pers    = base_tr_pers,
-            base_vl_mean    = base_vl_mean,
-            base_vl_pers    = base_vl_pers,
-            slip_thresh     = 1e-6,
-            log_file        = params.log_file,
-            top_k           = 999,
-            hparams         = params.hparams,
+            train_metrics=tr_metrics,
+            val_metrics=vl_metrics,
+            base_tr_mean=base_tr_mean,
+            base_tr_pers=base_tr_pers,
+            base_vl_mean=base_vl_mean,
+            base_vl_pers=base_vl_pers,
+            slip_thresh=1e-6,
+            log_file=params.log_file,
+            top_k=999,
+            hparams=params.hparams,
         )
         live_plot.update(tr_rmse, vl_rmse)
 
-        print(
-            f"Epoch {epoch:02d}  "
-            f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
-            f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
-            f"lr={current_lr:.2e}"
-        )
-
-        models_dir = Path(params.models_folder)
+        # checkpointing: maybe_save_chkpt returns improved flag
         best_val, improved, *_ = models_core.maybe_save_chkpt(
             models_dir, model, vl_rmse, best_val,
             {"rmse": tr_rmse}, {"rmse": vl_rmse},
             live_plot, params
         )
+
+        # expose checkpoint event for logger (read-only)
+        model._last_epoch_checkpoint = bool(improved)
+
+        # concise console print after epoch (TRAIN/VALID metrics and averaged losses)
+        current_lr = optimizer.param_groups[0]["lr"]
+        print(
+            f"Epoch {epoch:02d}  "
+            f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
+            f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
+            f"lr={current_lr:.2e} |  "
+            f"improved={bool(improved)} | "
+            f"loss_main={avg_loss_main:.5e}, loss_aux={avg_loss_aux:.5e}"
+        )
+
+        # update best_state / patience logic (unchanged)
         if improved:
             best_state, patience = {
                 k: v.cpu() for k, v in model.state_dict().items()
@@ -1225,7 +1691,6 @@ def model_training_loop(
         else:
             patience += 1
             if patience >= early_stop_patience:
-                print(f"Early stopping at epoch {epoch}")
                 break
 
     # restore best
@@ -1236,4 +1701,16 @@ def model_training_loop(
             tr_metrics, vl_metrics, live_plot, suffix="_fin"
         )
 
+    # cleanup optional epoch attributes to avoid accidental persistence
+    for attr in ("_last_epoch_elapsed", "_last_epoch_samples", "_last_epoch_checkpoint"):
+        if hasattr(model, attr):
+            try:
+                delattr = getattr(model, "__delattr__", None)
+                if callable(delattr):
+                    model.__delattr__(attr)
+            except Exception:
+                pass
+
     return best_val
+
+

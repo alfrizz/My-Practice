@@ -28,7 +28,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.09447
+sel_val_rmse = 0.09354
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -120,39 +120,41 @@ hparams = {
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
     # only active if USE_SHORT_LSTM = True
-    "USE_SHORT_LSTM":       True,   # enable bidirectional “short” LSTM
-    "SHORT_UNITS":          64,     # short-LSTM hidden dim; ↑capacity, ↓latency
-    "DROPOUT_SHORT":        0.05,     # dropout after short-LSTM; ↑regularization
+    "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
+    "SHORT_UNITS":          64,      # short-LSTM hidden dim; ↑capacity, ↓latency
+    "DROPOUT_SHORT":        0.0,     # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     # only active if USE_TRANSFORMER = True (requires use_short_lstm)
-    "USE_TRANSFORMER":      True,   # enable single-layer TransformerEncoder
+    "USE_TRANSFORMER":      True,    # enable single-layer TransformerEncoder
     "TRANSFORMER_LAYERS":   1,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
 
     # ── Projection + (optional) Long Bi-LSTM ──────────────
     # DROPOUT_LONG used either after projection or after long-LSTM
-    "DROPOUT_LONG":         0.05,    # dropout after projection (or long-LSTM)
-    "USE_LONG_LSTM":        False,   # enable bidirectional “long” LSTM
-    "LONG_UNITS":           128,     # long-LSTM hidden dim; ↑feature width
+    "DROPOUT_LONG":         0.0,     # dropout after projection (or long-LSTM)
+    "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
+    "LONG_UNITS":           64,      # long-LSTM hidden dim; ↑feature width
 
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
-    "FLATTEN_MODE":        "last",# format to be provided to regression head: "flatten" | "last" | "pool"
-    "PRED_HIDDEN":         64,      # head MLP hidden dim; ↑capacity, ↓over-parameterization
-    "ALPHA_SMOOTH":          0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
-    "SKIP_ALPHA":           -10.0,    # learnable initial skip-gate logit for residual skip; 0: sigmoid ≃0.5, -3: sigmoid ≃0.05
-    
+    "FLATTEN_MODE":          "last",  # format to be provided to regression head: "flatten" | "last" | "pool"
+    "PRED_HIDDEN":           64,      # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "ALPHA_SMOOTH":          0.00,    # slope-penalty weight; ↑smoothness, ↓spike fidelity
+    # "SKIP_ALPHA":           -10.0,  # learnable initial skip-gate logit for residual skip; 0: sigmoid ≃0.5, -3: sigmoid ≃0.05
+
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
-    "MAX_EPOCHS":            70,     # max epochs
-    "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          1e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              20,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       3e-3,   # peak LR in the cycle
+    "MAX_EPOCHS":            90,     # max epochs
+    "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
+    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              10,     # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
-    "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
-    "ONECYCLE_PCT_START":    0.15,    # fraction of total steps spent rising
+    "ONECYCLE_FINAL_DIV":    50,     # end_lr   = max_lr / final_div_factor
+    "ONECYCLE_PCT_START":    0.2,    # fraction of total steps spent rising
     "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear'
+
+    "FREEZE_TILL":           5,      # freeze head_flat for this many epochs (guarded feature learning)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
@@ -190,8 +192,8 @@ def signal_parameters(ticker):
                          'adx_14',
                          'hour',
                          'body']
-        trailing_stop_pred = 0.3
-        pred_threshold = 0.15
+        trailing_stop_pred = 0.2
+        pred_threshold = 0.1
         return_threshold = 0.01
         
     return sess_start_pred, sess_start_shift, features_cols, trailing_stop_pred, pred_threshold, return_threshold

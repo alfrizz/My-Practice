@@ -637,9 +637,9 @@ def maybe_save_chkpt(
 ) -> tuple[float, bool, dict, dict, dict | None]:
     """
     Compare `vl_rmse` (current validation RMSE) against the best RMSE so far
-    (cur_best) *and* on‐disk checkpoints. If it’s an improvement, capture
-    the model’s weights, metrics, and plot for both folder‐best and
-    in‐run checkpointing.
+    (cur_best) and on-disk checkpoints. If it’s an improvement, capture
+    the model’s weights, metrics, and plot for both folder-best and
+    in-run checkpointing.
 
     Returns:
       updated_best_rmse : new best RMSE (float)
@@ -647,11 +647,21 @@ def maybe_save_chkpt(
       best_train_metrics: snapshot of train metrics at this best
       best_val_metrics  : snapshot of val   metrics at this best
       best_state_dict   : model.state_dict() if improved, else None
+
+    Notes (logging/audit):
+      - This function performs the save side-effect (torch.save) when a new
+        folder-best is found. To improve traceability, it emits a single,
+        compact audit line into the main log file (using params.log_file) at
+        the moment the file is written, containing the validation RMSE and
+        the checkpoint filename.
+      - Emitting that audit line here ties the on-disk artifact deterministically
+        to the log stream for reproducibility and postmortem analysis.
+      - All other logging (per-epoch summaries, header) is handled elsewhere.
     """
     # Ensure output folder exists
     models_dir.mkdir(exist_ok=True)
 
-    # 1) Gather on‐disk RMSEs to know if we're beating existing files
+    # 1) Gather on-disk RMSEs to know if we're beating existing files
     pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth"
     save_re = re.compile(pattern)
     existing_rmses = [
@@ -677,7 +687,7 @@ def maybe_save_chkpt(
         buf.seek(0)
         plot_bytes = buf.read()
 
-        # 3) If we also beat any on‐disk model, write a folder‐best checkpoint
+        # 3) If we also beat any on-disk model, write a folder-best checkpoint
         if updated_best < best_on_disk:
             fname = f"{params.ticker}_{updated_best:.5f}_chp.pth"
             ckpt = {
@@ -687,8 +697,19 @@ def maybe_save_chkpt(
                 "val_metrics":      best_vl,
                 "train_plot_png":   plot_bytes,
             }
-            torch.save(ckpt, models_dir / fname)
-            print(f"🔖 Saved folder‐best checkpoint (_chp): {fname}")
+            ckpt_path = models_dir / fname
+            torch.save(ckpt, ckpt_path)
+
+            # Minimal audit line written at the moment of the save so logs
+            # deterministically record which file was written for which val RMSE.
+            try:
+                _append_log(f"CHKPT SAVED vl={updated_best:.3f} path={ckpt_path}", params.log_file)
+            except Exception:
+                # best-effort: do not fail the save on logging errors
+                pass
+
+            # Keep original user-visible print for immediate feedback
+            print(f"🔖 Saved folder-best checkpoint (_chp): {fname}")
 
         return updated_best, improved, best_tr, best_vl, best_state
 
@@ -809,68 +830,252 @@ def select_checkpoint(
 #########################################################################################################
 
 
+# _RUN_STARTED = False
+# _RUN_LOCK    = threading.Lock()
+
+# def init_log(
+#     log_file:  Path,
+#     hparams:   dict | None = None,
+#     baselines: dict | None = None
+# ):
+#     """
+#     Emit the run header exactly once. Prints:
+#       • A 150-char separator  
+#       • RUN START timestamp (UTC)  
+#       • Optional hyperparameters list  
+#       • Optional baseline RMSEs for train/val (mean & persistence)  
+#       • A sample “LOG FORMAT” comment explaining each field in the per-epoch summary.
+
+#     Subsequent calls do nothing.
+#     """
+#     global _RUN_STARTED
+#     with _RUN_LOCK:
+#         if _RUN_STARTED:
+#             return
+
+#         sep = "-" * 150
+#         _append_log("\n" + sep, log_file)
+#         _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+
+#         if isinstance(baselines, dict) and baselines:
+#             _append_log("\nBASELINES:", log_file)
+#             _append_log(f"  TRAIN mean RMSE       = {baselines['base_tr_mean']:.5f}", log_file)
+#             _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
+#             _append_log(f"  VAL   mean RMSE       = {baselines['base_vl_mean']:.5f}", log_file)
+#             _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
+
+#         if isinstance(hparams, dict) and hparams:
+#             _append_log("\nHYPERPARAMS:", log_file)
+#             for k, v in hparams.items():
+#                 _append_log(f"  {k} = {v}", log_file)
+
+#         # Sample comment: explain the per-epoch log line format
+#         _append_log(
+#             "\n# PER-EPOCH LOG FORMAT:\n"
+#             "#  E{ep:02d} | "
+#             "GN[reg,cls,ter,tot] | "
+#             "GD[med,p90,max] | "
+#             "UR[med,max] | "
+#             "lr={lr:.1e} | "
+#             "TR[rmse,r2,mae] | "
+#             "VL[rmse,r2,mae] | "
+#             "SR={slope_rmse:.3f} | "
+#             "SL={slip:.2f},HR={hub_max:.3f} | "
+#             "topK(g/u)=param:grad_norm/update_ratio,...",
+#             log_file
+#         )
+
+#         _RUN_STARTED = True
+
 _RUN_STARTED = False
-_RUN_LOCK    = threading.Lock()
+_RUN_DEBUG_DONE = False
+_RUN_LOCK = threading.Lock()
 
 def init_log(
     log_file:  Path,
     hparams:   dict | None = None,
-    baselines: dict | None = None
+    baselines: dict | None = None,
+    # optional, read-only runtime objects (all optional; safe if None)
+    optimizer: torch.optim.Optimizer | None = None,
+    scheduler: object | None = None,
+    model: torch.nn.Module | None = None,
+    first_batch: dict | None = None,   # detached CPU snapshot: {"raw_reg_shape":..., "aux_out_shape":..., "loss_main":Tensor/num, "loss_aux":Tensor/num, "aux_w":float}
+    batch_losses: dict | None = None,  # kept for compatibility but not required or used
+    scaler: object | None = None,
 ):
     """
-    Emit the run header exactly once. Prints:
-      • A 150-char separator  
-      • RUN START timestamp (UTC)  
-      • Optional hyperparameters list  
-      • Optional baseline RMSEs for train/val (mean & persistence)  
-      • A sample “LOG FORMAT” comment explaining each field in the per-epoch summary.
+    Emit the run header exactly once and emit a single read-only runtime snapshot
+    exactly once when sufficient read-only information becomes available.
 
-    Subsequent calls do nothing.
+    What this writes (only once for the header; debug snapshot emitted at most once):
+      - 150-char separator and RUN START UTC timestamp
+      - Optional BASELINES block (train/val mean & persistence RMSE)
+      - Optional HYPERPARAMS block (key = value lines), followed by a single blank line
+      - PER-EPOCH LOG FORMAT help line
+      - One-shot static runtime snapshot (read-only, best-effort) including:
+          * DEBUG_OPT: optimizer param-group count, LR list, param counts per group (printed here only)
+          * SCHEDULER_STATIC: scheduler total_steps (if accessible)
+          * MODEL_STATIC: total/trainable/frozen param counts and small sample param names
+          * DEBUG_SHAPES: raw_reg/aux_out shapes and AUX_W (if detached snapshot available)
+          * DEBUG_LOSSES: detached loss scalars and weighted aux (if snapshot available)
+          * GROUP_NONZERO_COUNTS: per-optimizer-group nonzero-grad counts (one-shot, from first batch)
+          * DEBUG_GRADS: small boolean summary (backbone/head/aux) from first batch (one-shot)
+    Design constraints and guarantees:
+      - This function never mutates optimizer, model, scheduler, or scaler state.
+      - It does not run backward/unscale/zero_grad; logging is strictly read-only.
+      - All debug emissions are best-effort and exceptions are swallowed to avoid
+        interrupting training.
+      - The one-shot debug snapshot will print as soon as read-only info is available:
+        either via the explicit first_batch argument or via model._first_batch_snapshot.
+        init_log may therefore emit the snapshot on the first call or on a later call.
     """
-    global _RUN_STARTED
+    global _RUN_STARTED, _RUN_DEBUG_DONE
+
     with _RUN_LOCK:
-        if _RUN_STARTED:
-            return
+        # --- Header emitted exactly once ---
+        if not _RUN_STARTED:
+            sep = "-" * 150
+            _append_log("\n" + sep, log_file)
+            _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
 
-        sep = "-" * 150
-        _append_log("\n" + sep, log_file)
-        _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+            if isinstance(baselines, dict) and baselines:
+                _append_log("\nBASELINES:", log_file)
+                _append_log(f"  TRAIN mean RMSE        = {baselines['base_tr_mean']:.5f}", log_file)
+                _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
+                _append_log(f"  VAL   mean RMSE        = {baselines['base_vl_mean']:.5f}", log_file)
+                _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
 
-        if isinstance(baselines, dict) and baselines:
-            _append_log("\nBASELINES:", log_file)
-            _append_log(f"  TRAIN mean RMSE       = {baselines['base_tr_mean']:.5f}", log_file)
-            _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
-            _append_log(f"  VAL   mean RMSE       = {baselines['base_vl_mean']:.5f}", log_file)
-            _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
+            if isinstance(hparams, dict) and hparams:
+                _append_log("\nHYPERPARAMS:", log_file)
+                for k, v in hparams.items():
+                    _append_log(f"  {k} = {v}", log_file)
+                # explicit blank line after hyperparameters as requested
+                _append_log("", log_file)
 
-        if isinstance(hparams, dict) and hparams:
-            _append_log("\nHYPERPARAMS:", log_file)
-            for k, v in hparams.items():
-                _append_log(f"  {k} = {v}", log_file)
+            # Small static runtime snapshot (model/optimizer/scheduler summary) - best effort
+            try:
+                if optimizer is not None:
+                    try:
+                        opt_groups = len(optimizer.param_groups)
+                        opt_lrs = [g.get("lr", 0.0) for g in optimizer.param_groups]
+                        opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
+                        _append_log(
+                            f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}",
+                            log_file
+                        )
+                    except Exception:
+                        pass
 
-        # Sample comment: explain the per-epoch log line format
-        _append_log(
-            "\n# PER-EPOCH LOG FORMAT:\n"
-            "#  E{ep:02d} | "
-            "GN[reg,cls,ter,tot] | "
-            "GD[med,p90,max] | "
-            "UR[med,max] | "
-            "lr={lr:.1e} | "
-            "TR[rmse,r2,mae] | "
-            "VL[rmse,r2,mae] | "
-            "SR={slope_rmse:.3f} | "
-            "SL={slip:.2f},HR={hub_max:.3f} | "
-            "topK(g/u)=param:grad_norm/update_ratio,...",
-            log_file
-        )
+                # Scheduler static info (if accessible) printed once
+                if scheduler is not None:
+                    try:
+                        if hasattr(scheduler, "_total_steps"):
+                            _append_log(f"SCHEDULER total_steps={int(getattr(scheduler, '_total_steps'))}", log_file)
+                    except Exception:
+                        pass
 
-        _RUN_STARTED = True
+                if model is not None:
+                    try:
+                        total_params = sum(int(p.numel()) for p in model.parameters())
+                        trainable_params = sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
+                        frozen_params = total_params - trainable_params
+                        _append_log(
+                            f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}",
+                            log_file
+                        )
+                        names = [n for n, _ in model.named_parameters()][:10]
+                        _append_log(f"MODEL_SAMPLE_PARAMS: {names}", log_file)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # PER-EPOCH format help written once with the header
+            _append_log(
+                "\n# PER-EPOCH LOG FORMAT:\n"
+                "#  E{ep:02d} | "
+                "OPTS[{groups}:{lrs}] | "
+                "GN[reg,cls,ter,tot] | "
+                "GD[med,p90,max] | "
+                "UR[med,max] | "
+                "lr={lr:.1e} | "
+                "TR[rmse,r2,mae] | "
+                "VL[rmse,r2,mae] | "
+                "AUX=[ON|DISABLED] | "
+                "SR={slope_rmse:.3f} | "
+                "SL={slip:.2f},HR={hub_max:.3f} | "
+                "topK(g/u)=param:grad_norm/update_ratio,...",
+                log_file
+            )
+
+            _RUN_STARTED = True
+
+        # --- One-shot read-only runtime snapshot emitted at most once ---
+        # This block will run on subsequent calls until it successfully emits one
+        # or until emitted elsewhere; it will not mutate training state.
+        if not _RUN_DEBUG_DONE:
+            emitted = False
+            try:
+                # Prefer explicit detached snapshot passed via first_batch arg,
+                # otherwise fall back to model._first_batch_snapshot if present.
+                snapshot = first_batch if first_batch is not None else (getattr(model, "_first_batch_snapshot", None) if model is not None else None)
+
+                # If a detached snapshot is available, emit shapes/losses/grads (read-only)
+                if snapshot is not None:
+                    try:
+                        raw_shape = snapshot.get("raw_reg_shape")
+                        aux_shape = snapshot.get("aux_out_shape")
+                        aux_w = float(snapshot.get("aux_w", 0.0))
+                        _append_log(f"DEBUG_SHAPES raw_reg={raw_shape} aux_out={aux_shape} AUX_W={aux_w:.1e}", log_file)
+
+                        lm = snapshot.get("loss_main")
+                        la = snapshot.get("loss_aux")
+                        lm_f = float(lm) if lm is not None else float("nan")
+                        la_f = float(la) if la is not None else None
+                        waux = aux_w * (la_f if la_f is not None else 0.0)
+                        _append_log(f"DEBUG_LOSSES main={lm_f:.4e} aux={(la_f if la_f is not None else 'None')} w*aux={waux:.4e}", log_file)
+
+                        # GROUP_NONZERO_COUNTS if present in snapshot
+                        gnc = snapshot.get("group_nonzero_counts")
+                        if isinstance(gnc, (list, tuple)):
+                            _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
+
+                        # DEBUG_GRADS (backbone/head/aux) if present
+                        grads = snapshot.get("grads")
+                        if isinstance(grads, dict):
+                            _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+
+                        emitted = True
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            if emitted:
+                _RUN_DEBUG_DONE = True
+
 
 
 ######################
 
+# def _append_log(text: str, log_file: Path):
+#     """Append a line to log_file, creating parent dirs if needed."""
+#     try:
+#         log_file.parent.mkdir(parents=True, exist_ok=True)
+#         with open(log_file, "a", encoding="utf-8") as f:
+#             f.write(text)
+#             if not text.endswith("\n"):
+#                 f.write("\n")
+#             f.flush()
+#     except Exception:
+#         pass
+
 def _append_log(text: str, log_file: Path):
-    """Append a line to log_file, creating parent dirs if needed."""
+    """Append a line to log_file, creating parent dirs if needed.
+
+    This function is intentionally tolerant to I/O errors (best‑effort logging).
+    It always ensures a trailing newline is present.
+    """
     try:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         with open(log_file, "a", encoding="utf-8") as f:
@@ -879,11 +1084,131 @@ def _append_log(text: str, log_file: Path):
                 f.write("\n")
             f.flush()
     except Exception:
+        # Swallow logging errors to avoid crashing training; logging is diagnostic only.
         pass
-
 
 ##############################################################
 
+
+# def log_epoch_summary(
+#     epoch:            int,
+#     model:            torch.nn.Module,
+#     optimizer:        torch.optim.Optimizer,
+#     train_metrics:    dict,
+#     val_metrics:      dict,
+#     base_tr_mean:     float,
+#     base_tr_pers:     float,
+#     base_vl_mean:     float,
+#     base_vl_pers:     float,
+#     slip_thresh:      float,
+#     log_file:         Path,
+#     top_k:            int         = 3,
+#     hparams:          dict | None = None,
+# ):
+#     """
+#     One-line epoch summary with essential diagnostics. See init_log for format.
+
+#     Per-epoch fields:
+#       GN[...]   : ℓ2‐norm of gradients in [regression, classification, term, total]
+#       GD[...]   : gradient-norm distribution [median, 90th percentile, max]
+#       UR[...]   : update-ratio distribution [median, max]
+#       lr        : current learning rate
+#       TR[...]   : training metrics [rmse, r2, mae]
+#       VL[...]   : validation metrics [rmse, r2, mae]
+#       SR        : slope‐RMSE on last validation batch
+#       SL, HR    : slip‐rate & max hub (stateful LSTM state diagnostic)
+#       topK(g/u) : top‐K params by grad‐norm, showing grad_norm/update_ratio
+
+#     All values use consistent precision and engineering notation.
+#     """
+#     # 1) Header + baselines (only on first call)
+#     init_log(
+#         log_file,
+#         hparams=hparams,
+#         baselines={
+#             "base_tr_mean": base_tr_mean,
+#             "base_tr_pers": base_tr_pers,
+#             "base_vl_mean": base_vl_mean,
+#             "base_vl_pers": base_vl_pers,
+#         },
+#     )
+
+#     # 2) Collect per-parameter grad norms, update ratios, and block sums
+#     recs = []  # (name, grad_norm, update_ratio)
+#     reg_sq = cls_sq = ter_sq = all_sq = 0.0
+#     lr = optimizer.param_groups[0]["lr"]
+
+#     for name, p in model.named_parameters():
+#         g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+#         w = float(p.detach().norm().cpu())
+#         u = (lr * g) / max(w, 1e-8)
+#         recs.append((name, g, u))
+
+#         sq = g * g
+#         all_sq += sq
+#         if   name.startswith("pred"):     reg_sq += sq
+#         elif name.startswith("cls_head"): cls_sq += sq
+#         elif name.startswith("cls_ter"):  ter_sq += sq
+
+#     # 3) Compute block gradient norms (GN) and gradient‐norm distribution (GD)
+#     GN_reg = math.sqrt(reg_sq)
+#     GN_cls = math.sqrt(cls_sq)
+#     GN_ter = math.sqrt(ter_sq)
+#     GN_tot = math.sqrt(all_sq)
+
+#     g_vals = [g for _, g, _ in recs]
+#     GD_med = sorted(g_vals)[len(g_vals)//2] if g_vals else 0.0
+#     GD_p90 = sorted(g_vals)[int(0.9*len(g_vals))] if g_vals else 0.0
+#     GD_max = max(g_vals)                           if g_vals else 0.0
+
+#     # 4) Update‐ratio distribution (UR)
+#     u_vals = [u for _, _, u in recs]
+#     UR_med = sorted(u_vals)[len(u_vals)//2] if u_vals else 0.0
+#     UR_max = max(u_vals)                         if u_vals else 0.0
+
+#     # 5) Slip‐rate & max hub (stateful LSTM diagnostic)
+#     hub    = getattr(model, "last_hub", None)
+#     HR     = float(hub.max().cpu()) if hub is not None else 0.0
+#     SL     = float((hub > slip_thresh).float().mean().cpu()) if hub is not None else 0.0
+
+#     # 6) Slope‐RMSE (SR) on last validation batch
+#     with torch.no_grad():
+#         pv, tv = model.last_val_preds, model.last_val_targs
+#         if pv is not None and tv is not None:
+#             if pv.dim() == 1:
+#                 dp, dt = pv[1:]-pv[:-1], tv[1:]-tv[:-1]
+#             else:
+#                 dp = pv[:,1:]-pv[:,:-1]
+#                 dt = tv[:,1:]-tv[:,:-1]
+#             SR = torch.sqrt(((dp - dt)**2).mean()).item()
+#         else:
+#             SR = 0.0
+
+#     # 7) Pull train/val RMSE, R², MAE
+#     tr_rmse, tr_r2, tr_mae = train_metrics["rmse"], train_metrics["r2"], train_metrics["mae"]
+#     vl_rmse, vl_r2, vl_mae = val_metrics["rmse"],   val_metrics["r2"],   val_metrics["mae"]
+
+#     # 8) Top‐K parameter diagnostics: show only last two name segments + g/u
+#     topk = sorted(recs, key=lambda x: x[1], reverse=True)[:top_k]
+#     def short_name(n):
+#         parts = n.split('.')
+#         return ".".join(parts[-2:]) if len(parts) > 2 else n
+#     topk_str = ", ".join(f"{short_name(n)}:{g:.3f}/{u:.1e}" for n, g, u in topk)
+
+#     # 9) Assemble & append the log line
+#     line = (
+#         f"\nE{epoch:02d} | "
+#         f"GN[{GN_reg:.3f},{GN_cls:.3f},{GN_ter:.3f},{GN_tot:.3f}] | "
+#         f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
+#         f"UR[{UR_med:.1e},{UR_max:.1e}] | "
+#         f"lr={lr:.1e} | "
+#         f"TR[{tr_rmse:.3f},{tr_r2:.2f},{tr_mae:.3f}] | "
+#         f"VL[{vl_rmse:.3f},{vl_r2:.2f},{vl_mae:.3f}] | "
+#         f"SR={SR:.3f} | "
+#         f"SL={SL:.2f},HR={HR:.3f} | "
+#         f"topK(g/u)={topk_str}"
+#     )
+#     _append_log(line, log_file)
 
 def log_epoch_summary(
     epoch:            int,
@@ -899,24 +1224,32 @@ def log_epoch_summary(
     log_file:         Path,
     top_k:            int         = 3,
     hparams:          dict | None = None,
+    # compatibility kept: these args are not required by the normal call site
+    first_batch:      dict | None = None,   # read-only if supplied; logger prefers model._first_batch_snapshot
+    batch_losses:     dict | None = None,   # unused (kept for compatibility)
+    scaler:           object | None = None, # unused (kept for compatibility)
 ):
     """
-    One-line epoch summary with essential diagnostics. See init_log for format.
+    Write a compact, one-line epoch summary and emit a single read-only
+    first-batch debug snapshot exactly once when available.
 
-    Per-epoch fields:
-      GN[...]   : ℓ2‐norm of gradients in [regression, classification, term, total]
-      GD[...]   : gradient-norm distribution [median, 90th percentile, max]
-      UR[...]   : update-ratio distribution [median, max]
-      lr        : current learning rate
-      TR[...]   : training metrics [rmse, r2, mae]
-      VL[...]   : validation metrics [rmse, r2, mae]
-      SR        : slope‐RMSE on last validation batch
-      SL, HR    : slip‐rate & max hub (stateful LSTM state diagnostic)
-      topK(g/u) : top‐K params by grad‐norm, showing grad_norm/update_ratio
-
-    All values use consistent precision and engineering notation.
+    Responsibilities
+      - Ensure the run header and run-static block are emitted once via init_log.
+      - Emit a single read-only one-shot DEBUG snapshot (DEBUG_SHAPES, DEBUG_LOSSES,
+        DEBUG_GRADS and GROUP_NONZERO_COUNTS) at most once when a detached CPU
+        snapshot is available (first_batch or model._first_batch_snapshot).
+      - Produce a compact per-epoch one-line summary containing only values that
+        change each epoch: OPTS brief (with param counts), GN/GD/UR, lr, TR/VL,
+        AUX flag, SR/SL/HR, top-K param contributors.
+      - Append optional epoch timing/throughput and checkpoint marker when the
+        training loop exposes them on the model (read-only, optional).
+      - Append optional scheduler percent-complete and an optional GPU memory
+        high-water token if available (low-noise, read-only).
+      - Include an explicit primary LR token (LR_MAIN) for direct LR→metric correlation.
+      - Add lightweight layer-wise GN ratio diagnostics for a short list of
+        representative parameters to detect silent freezing or relative changes.
     """
-    # 1) Header + baselines (only on first call)
+    # 1) Ensure header + run-static info (init_log handles guards and one-shot debug if available)
     init_log(
         log_file,
         hparams=hparams,
@@ -926,12 +1259,48 @@ def log_epoch_summary(
             "base_vl_mean": base_vl_mean,
             "base_vl_pers": base_vl_pers,
         },
+        optimizer=optimizer,
+        model=model,
+        first_batch=first_batch or None,
     )
+
+    # 1b) One-shot read-only debug snapshot emitted once (if detached snapshot present)
+    # NOTE: DEBUG_OPT is intentionally NOT emitted here to avoid duplication (printed in init_log only).
+    global _RUN_DEBUG_DONE
+    if not _RUN_DEBUG_DONE:
+        snapshot = first_batch if first_batch is not None else getattr(model, "_first_batch_snapshot", None)
+        if snapshot is not None:
+            try:
+                # DEBUG_SHAPES and DEBUG_LOSSES from the detached snapshot (CPU)
+                raw_shape = snapshot.get("raw_reg_shape")
+                aux_shape = snapshot.get("aux_out_shape")
+                aux_w = float(snapshot.get("aux_w", 0.0))
+                _append_log(f"DEBUG_SHAPES raw_reg={raw_shape} aux_out={aux_shape} AUX_W={aux_w:.1e}", log_file)
+
+                lm = snapshot.get("loss_main")
+                la = snapshot.get("loss_aux")
+                lm_f = float(lm) if lm is not None else float("nan")
+                la_f = float(la) if la is not None else None
+                waux = aux_w * (la_f if la_f is not None else 0.0)
+                _append_log(f"DEBUG_LOSSES main={lm_f:.4e} aux={(la_f if la_f is not None else 'None')} w*aux={waux:.4e}", log_file)
+
+                # GROUP_NONZERO_COUNTS: per-optimizer-group nonzero-grad counts (one-shot)
+                gnc = snapshot.get("group_nonzero_counts")
+                if isinstance(gnc, (list, tuple)):
+                    _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
+
+                # optional DEBUG_GRADS booleans (backbone/head/aux)
+                grads = snapshot.get("grads")
+                if isinstance(grads, dict):
+                    _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+            except Exception:
+                pass
+            _RUN_DEBUG_DONE = True
 
     # 2) Collect per-parameter grad norms, update ratios, and block sums
     recs = []  # (name, grad_norm, update_ratio)
     reg_sq = cls_sq = ter_sq = all_sq = 0.0
-    lr = optimizer.param_groups[0]["lr"]
+    lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else 0.0
 
     for name, p in model.named_parameters():
         g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
@@ -945,7 +1314,7 @@ def log_epoch_summary(
         elif name.startswith("cls_head"): cls_sq += sq
         elif name.startswith("cls_ter"):  ter_sq += sq
 
-    # 3) Compute block gradient norms (GN) and gradient‐norm distribution (GD)
+    # 3) Compute block gradient norms (GN) and gradient-norm distribution (GD)
     GN_reg = math.sqrt(reg_sq)
     GN_cls = math.sqrt(cls_sq)
     GN_ter = math.sqrt(ter_sq)
@@ -956,26 +1325,26 @@ def log_epoch_summary(
     GD_p90 = sorted(g_vals)[int(0.9*len(g_vals))] if g_vals else 0.0
     GD_max = max(g_vals)                           if g_vals else 0.0
 
-    # 4) Update‐ratio distribution (UR)
+    # 4) Update-ratio distribution (UR)
     u_vals = [u for _, _, u in recs]
     UR_med = sorted(u_vals)[len(u_vals)//2] if u_vals else 0.0
     UR_max = max(u_vals)                         if u_vals else 0.0
 
-    # 5) Slip‐rate & max hub (stateful LSTM diagnostic)
+    # 5) Slip-rate & max hub (stateful LSTM diagnostic)
     hub    = getattr(model, "last_hub", None)
     HR     = float(hub.max().cpu()) if hub is not None else 0.0
     SL     = float((hub > slip_thresh).float().mean().cpu()) if hub is not None else 0.0
 
-    # 6) Slope‐RMSE (SR) on last validation batch
+    # 6) Slope-RMSE (SR) on last validation batch
     with torch.no_grad():
-        pv, tv = model.last_val_preds, model.last_val_targs
+        pv, tv = getattr(model, "last_val_preds", None), getattr(model, "last_val_targs", None)
         if pv is not None and tv is not None:
             if pv.dim() == 1:
-                dp, dt = pv[1:]-pv[:-1], tv[1:]-tv[:-1]
+                dp, dt = pv[1:] - pv[:-1], tv[1:] - tv[:-1]
             else:
-                dp = pv[:,1:]-pv[:,:-1]
-                dt = tv[:,1:]-tv[:,:-1]
-            SR = torch.sqrt(((dp - dt)**2).mean()).item()
+                dp = pv[:, 1:] - pv[:, :-1]
+                dt = tv[:, 1:] - tv[:, :-1]
+            SR = torch.sqrt(((dp - dt) ** 2).mean()).item()
         else:
             SR = 0.0
 
@@ -983,29 +1352,136 @@ def log_epoch_summary(
     tr_rmse, tr_r2, tr_mae = train_metrics["rmse"], train_metrics["r2"], train_metrics["mae"]
     vl_rmse, vl_r2, vl_mae = val_metrics["rmse"],   val_metrics["r2"],   val_metrics["mae"]
 
-    # 8) Top‐K parameter diagnostics: show only last two name segments + g/u
+    # 8) Top-K parameter diagnostics: show only last two name segments + g/u
     topk = sorted(recs, key=lambda x: x[1], reverse=True)[:top_k]
     def short_name(n):
         parts = n.split('.')
         return ".".join(parts[-2:]) if len(parts) > 2 else n
     topk_str = ", ".join(f"{short_name(n)}:{g:.3f}/{u:.1e}" for n, g, u in topk)
 
-    # 9) Assemble & append the log line
+    # 9) Assemble OPTS token (compact)
+    try:
+        opt_groups = len(optimizer.param_groups)
+        opt_lrs_sh = ",".join(f"{g.get('lr',0.0):.1e}" for g in optimizer.param_groups[:3]) + (",..." if len(optimizer.param_groups) > 3 else "")
+        opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
+        opt_token = f"OPTS[{opt_groups}:{opt_lrs_sh}|cnts={opt_counts}]"
+    except Exception:
+        opt_token = f"OPTS[1:{lr:.1e}]"
+
+    aux_disabled = False
+    if hparams is not None:
+        aux_disabled = float(hparams.get("AUX_LOSS_WEIGHT", 0.0)) == 0.0
+
+    # 10) Optional scheduler percent-complete token (read-only, best-effort)
+    sched_pct_token = ""
+    sched_obj = getattr(optimizer, "scheduler", None)
+    if sched_obj is None:
+        sched_obj = globals().get("scheduler", None)
+    try:
+        if sched_obj is not None and hasattr(sched_obj, "_total_steps"):
+            total = int(getattr(sched_obj, "_total_steps"))
+            # prefer a step counter if available, otherwise use last_epoch
+            step_idx = getattr(sched_obj, "last_epoch", None)
+            if step_idx is None:
+                step_idx = getattr(sched_obj, "_step_count", None)
+            if step_idx is not None and total > 0:
+                pct = min(100.0, max(0.0, 100.0 * float(step_idx) / float(total)))
+                sched_pct_token = f" SCHED_PCT={pct:.1f}%"
+    except Exception:
+        sched_pct_token = ""
+
+    # 11) Optional timing / throughput (if the training loop stored them on the model)
+    elapsed = getattr(model, "_last_epoch_elapsed", None)
+    samples = getattr(model, "_last_epoch_samples", None)
+    timing_token = ""
+    if elapsed is not None and samples is not None and elapsed > 0:
+        tp = samples / elapsed
+        timing_token = f" | T={elapsed:.1f}s,TP={tp:.1f}s/s"
+
+    # 12) Optional checkpoint marker (if training loop marked it on the model)
+    chk = getattr(model, "_last_epoch_checkpoint", False)
+    chk_token = " *CHKPT" if chk else ""
+
+    # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
+    gpu_token = ""
+    try:
+        if torch.cuda.is_available():
+            # report in GiB, small-cost read-only
+            max_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+            gpu_token = f" | GPU={max_mem:.2f}GiB"
+    except Exception:
+        gpu_token = ""
+
+    # 14) Primary LR scalar token (explicit, high-ROI and low-noise)
+    try:
+        primary_lr = optimizer.param_groups[0].get("lr", lr) if optimizer.param_groups else lr
+        lr_token = f"LR_MAIN={primary_lr:.1e}"
+    except Exception:
+        lr_token = f"LR_MAIN={lr:.1e}"
+
+    # 15) Layer-wise GN ratio diagnostics (small set of representative layers)
+    #    - Choose list from hparams.MONITOR_LAYERS if supplied, otherwise use a
+    #      sensible default set of representative parameter names.
+    #    - Maintain a baseline per-parameter GN on first observed epoch by
+    #      storing model._first_layer_gn (best-effort). Ratios are current/baseline.
+    layer_token = ""
+    try:
+        default_monitor = ["short_lstm.weight_ih_l0", "short2long.weight", "feature_proj.weight"]
+        monitor_list = []
+        if isinstance(hparams, dict) and hparams.get("MONITOR_LAYERS"):
+            monitor_list = list(hparams.get("MONITOR_LAYERS"))
+        else:
+            monitor_list = default_monitor
+
+        # Ensure a dict exists to store baseline GN observed first time
+        if not hasattr(model, "_first_layer_gn"):
+            try:
+                setattr(model, "_first_layer_gn", {})
+            except Exception:
+                pass
+
+        pairs = []
+        for name in monitor_list:
+            # best-effort: find exact match; if not found, skip silently
+            p = dict(model.named_parameters()).get(name)
+            if p is None:
+                continue
+            curr_g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+            baseline = None
+            try:
+                baseline = getattr(model, "_first_layer_gn", {}).get(name)
+            except Exception:
+                baseline = None
+            # if no baseline stored yet, store this epoch's value as baseline
+            if baseline is None:
+                try:
+                    model._first_layer_gn[name] = float(curr_g)
+                    ratio = 1.0
+                except Exception:
+                    ratio = 1.0
+            else:
+                ratio = curr_g / max(baseline, 1e-12)
+            pairs.append(f"{name.split('.')[-1]}:{curr_g:.3e}/{ratio:.2f}")
+        if pairs:
+            layer_token = " | LAYER_GN[" + ",".join(pairs) + "]"
+    except Exception:
+        layer_token = ""
+
+    # 16) Final line assembly (compact, per-epoch changing values only)
     line = (
         f"\nE{epoch:02d} | "
+        f"{opt_token} | "
         f"GN[{GN_reg:.3f},{GN_cls:.3f},{GN_ter:.3f},{GN_tot:.3f}] | "
         f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
         f"UR[{UR_med:.1e},{UR_max:.1e}] | "
+        f"{lr_token} | "
         f"lr={lr:.1e} | "
         f"TR[{tr_rmse:.3f},{tr_r2:.2f},{tr_mae:.3f}] | "
         f"VL[{vl_rmse:.3f},{vl_r2:.2f},{vl_mae:.3f}] | "
+        f"AUX={'DISABLED' if aux_disabled else 'ON'}{sched_pct_token} | "
         f"SR={SR:.3f} | "
         f"SL={SL:.2f},HR={HR:.3f} | "
         f"topK(g/u)={topk_str}"
+        f"{timing_token}{gpu_token}{chk_token}{layer_token}"
     )
     _append_log(line, log_file)
-
-
-
-##############################################################
-
