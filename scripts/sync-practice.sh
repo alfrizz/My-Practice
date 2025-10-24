@@ -54,9 +54,11 @@ unison \
   -links false \
   -fastcheck true \
   -repeat 10 \
+  -silent \
   -ignore 'Name .*' \
   -ignore 'Path jlenv/**' \
   -ignore 'Path snap/**' \
   -ignore 'Path bin/**' \
+  -ignore 'Name docker_tmp' \
   -ignore 'Name sync-practice.log' \
   -logfile "$LOG"
