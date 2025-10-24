@@ -11,7 +11,7 @@ import os
 import glob
 import json
 
-from libs.models import simple_lstm, dual_lstm_smooth
+# from libs.models import simple_lstm, dual_lstm_smooth
 
 #########################################################################################################
 
@@ -27,8 +27,8 @@ createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
-model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.09354
+# model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
+sel_val_rmse = 0.09330
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 

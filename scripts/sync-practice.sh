@@ -60,5 +60,7 @@ unison \
   -ignore 'Path snap/**' \
   -ignore 'Path bin/**' \
   -ignore 'Name docker_tmp' \
+  -ignore 'Name __pycache__' \
+  -ignore 'Name *.pyc' \
   -ignore 'Name sync-practice.log' \
   -logfile "$LOG"
