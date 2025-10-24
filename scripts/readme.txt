@@ -1,10 +1,10 @@
-This repository contains scripts and configuration files to build, run, and synchronize a Dockerized Jupyter Lab environment on WSL2 with GPU support and Unison-backed workspace syncing: 
+This repository contains scripts and configuration files to build, run, and synchronize a Dockerized Jupyter Lab environment on WSL2 with GPU support and Unison-backed workspace syncing:
 
 -----------------------------------------------
 
 pipreq			Bash helper to install Python packages into the running gpu-jl container, update requirements.txt, and keep it sorted/unique.
 
-Dockerfile		Defines the Docker image: starts from an NVIDIA PyTorch base, installs Python deps, and sets up the Jupyter Lab entrypoint
+Dockerfile		Defines the Docker image: starts from an NVIDIA PyTorch base, installs Python deps, and sets up the Jupyter Lab entrypoint.
 
 sysctl.conf             This file tweaks Linux memory and swap behavior.
                         (Additionally: Win + R, SystemPropertiesAdvanced.exe → System Properties → Advanced → Performance → Settings → Change Virtual Memory [Initial = 32768 MB, Maximum = 65536 MB])
@@ -54,11 +54,11 @@ localhostForwarding=true
 enabled       = true
 root          = /mnt/
 options       = "metadata,uid=1000,gid=1000,umask=022,fmask=111"
-networkDrives = true (?)
+networkDrives = true
 mountFsTab    = true
 
 [boot]
-command = su - alfrizz -c "/home/alfrizz/scripts/sync-practice.sh >> /home/alfrizz/scripts/sync-practice.log 2>&1 &"
+command = su - alfrizz -c "/home/alfrizz/my_practice/scripts/sync-practice.sh >> /home/alfrizz/my_practice/scripts/sync-practice.log 2>&1 &"
 
 [user]
 default = alfrizz

@@ -1,0 +1,44 @@
+Unison 2.51.5 (ocaml 4.13.1) started propagating changes at 15:33:01.89 on 16 Sep 2025
+[BGN] Updating file scripts/readme.txt from /home/alfrizz/my_practice to /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+[END] Updating file scripts/readme.txt
+Unison 2.51.5 (ocaml 4.13.1) finished propagating changes at 15:33:01.93 on 16 Sep 2025, 0.046 s
+Synchronization complete at 15:33:01  (1 item transferred, 0 skipped, 0 failed)
+Unison 2.51.5 (ocaml 4.13.1) started propagating changes at 15:33:35.37 on 16 Sep 2025
+[BGN] Updating file scripts/readme.txt from /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice to /home/alfrizz/my_practice
+[END] Updating file scripts/readme.txt
+Unison 2.51.5 (ocaml 4.13.1) finished propagating changes at 15:33:35.38 on 16 Sep 2025, 0.008 s
+Synchronization complete at 15:33:35  (1 item transferred, 0 skipped, 0 failed)
+=== [2025-09-16 15:52:28] Boot trigger: starting Unison ===
+[2025-09-16 15:52:28] G: ready and target exists.
+
+Unison 2.51.5 (ocaml 4.13.1) log started at 2025-09-16 at 15:52:28
+
+Unison 2.51.5 (ocaml 4.13.1) started propagating changes at 15:52:31.76 on 16 Sep 2025
+[BGN] Updating file scripts/readme.txt from /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice to /home/alfrizz/my_practice
+[END] Updating file scripts/readme.txt
+[BGN] Updating file scripts/sync-practice.sh from /home/alfrizz/my_practice to /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+[END] Updating file scripts/sync-practice.sh
+Unison 2.51.5 (ocaml 4.13.1) finished propagating changes at 15:52:31.84 on 16 Sep 2025, 0.079 s
+Synchronization complete at 15:52:31  (2 items transferred, 0 skipped, 0 failed)
+=== [2025-09-16 16:22:34] Boot trigger: starting Unison ===
+[2025-09-16 16:22:34] G: ready and target exists.
+
+Unison 2.51.5 (ocaml 4.13.1) log started at 2025-09-16 at 16:22:34
+
+Unison 2.51.5 (ocaml 4.13.1) started propagating changes at 16:22:37.36 on 16 Sep 2025
+[BGN] Updating file scripts/sync-practice.sh from /home/alfrizz/my_practice to /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+[END] Updating file scripts/sync-practice.sh
+Unison 2.51.5 (ocaml 4.13.1) finished propagating changes at 16:22:37.43 on 16 Sep 2025, 0.068 s
+Synchronization complete at 16:22:37  (1 item transferred, 0 skipped, 0 failed)
+Unison 2.51.5 (ocaml 4.13.1) started propagating changes at 16:23:43.78 on 16 Sep 2025
+[BGN] Updating file scripts/readme.txt from /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice to /home/alfrizz/my_practice
+[END] Updating file scripts/readme.txt
+Unison 2.51.5 (ocaml 4.13.1) finished propagating changes at 16:23:43.79 on 16 Sep 2025, 0.007 s
+Synchronization complete at 16:23:43  (1 item transferred, 0 skipped, 0 failed)
+Unison 2.51.5 (ocaml 4.13.1) started propagating changes at 16:24:16.77 on 16 Sep 2025
+[BGN] Updating file scripts/readme.txt from /home/alfrizz/my_practice to /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+[END] Updating file scripts/readme.txt
+[BGN] Copying properties for scripts/sync-practice.sh from /home/alfrizz/my_practice to /mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice
+[END] Copying properties for scripts/sync-practice.sh
+Unison 2.51.5 (ocaml 4.13.1) finished propagating changes at 16:24:16.84 on 16 Sep 2025, 0.063 s
+Synchronization complete at 16:24:16  (2 items transferred, 0 skipped, 0 failed)

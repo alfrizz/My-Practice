@@ -1,9 +1,9 @@
-name: jupyter
 services:
-  jupyter-service:
+  jupyter:
     container_name: gpu-jl
+
     build:
-      context: ${HOME}/scripts
+      context: ${HOME}/my_practice/scripts
       dockerfile: Dockerfile
     image: gpu-jl:latest
 
@@ -18,7 +18,7 @@ services:
 
     volumes:        
       - "/home/alfrizz/docker_tmp:/tmp"
-      - ${HOME}:/workspace
+      - ${HOME}/my_practice:/workspace
 
     working_dir: /workspace
 

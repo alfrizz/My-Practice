@@ -28,7 +28,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.09335
+sel_val_rmse = 0.09354
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -161,10 +161,6 @@ hparams = {
     "VAL_BATCH":             1,      # sequences per val batch
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
-
-    # Micro snapshot extras: opt-in during debugging; increase init-work/time when enabled
-    "MICRO_EXTRA":           True,   # when True compute param_bytes and extra env fields in the micro-snapshot (cost: small CPU work)
-    "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
 
 #########################################################################################################
