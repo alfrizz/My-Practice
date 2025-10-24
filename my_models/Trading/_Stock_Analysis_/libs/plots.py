@@ -16,6 +16,7 @@ from IPython.display import display, update_display, HTML
 import seaborn as sns
 sns.set_style("white")
 
+from tqdm.auto import tqdm
 from optuna.trial import TrialState
 import torch
 
@@ -137,159 +138,150 @@ class LiveRMSEPlot:
 
 #########################################################################################################
 
+
 def plot_trades(
     df,
-    col_signal1,
-    col_signal2,
-    col_action,
-    trades,
-    buy_threshold,
-    performance_stats,
-    start_plot=params.sess_start_pred_tick,
-    col_close='close',
-    features=None
+    col_signal1: str,
+    *,
+    col_close: str='close',
+    start_plot: 'datetime.time'=None,
+    features: list[str]=None,
+    col_signal2: str=None,
+    col_action: str=None,
+    trades: list[tuple]=None,
+    buy_threshold: float=None,
+    performance_stats: dict=None
 ):
     """
-    Plot price, signals, trades, and optional features with interval shading.
-
-    This function:
-      - Filters data to session hours ≥ start_plot.
-      - Computes buy-to-sell intervals and shades them full-height, toggled by “Trades.”
-      - Plots Close Price (primary y-axis), Target Signal, and optional Pred. Signal (secondary y-axis).
-      - Adds optional feature lines on the signal axis, hidden by default.
-      - Overlays trade segments in green with hover showing Return$ & Return%.
-      - Draws a togglable threshold line on the signal axis.
-      - Uses x unified hover for a single timestamp tooltip.
-      - Compresses legend spacing, increases fonts, and sets a taller figure height.
+    Plots:
+      - price (col_close)
+      - target signal (col_signal1)
+      - optional pred. signal (col_signal2)
+      - optional extra feature lines
+      - optional buy/sell intervals from (trades,col_action)
+      - optional threshold line
+      - unified hover, cleaned legend, tall figure
+    
+    All of col_signal2, col_action, trades, buy_threshold and performance_stats
+    are optional. Pass only what you need.
     """
-    # 1) Restrict to session hours
-    df = df.loc[df.index.time >= start_plot]
-
-    # 2) Compute buy→sell intervals
-    events = df[df[col_action] != 0][col_action]
-    intervals, last_buy = [], None
-    for ts, act in events.items():
-        if act == 1:
-            last_buy = ts
-        elif act == -1 and last_buy is not None:
-            intervals.append((last_buy, ts))
-            last_buy = None
+    # 1) filter by time if requested
+    if start_plot is not None:
+        df = df.loc[df.index.time >= start_plot]
 
     fig = go.Figure()
 
-    # 3) Define a full-height “paper-scale” axis y3
-    fig.update_layout(
-        yaxis3=dict(domain=[0,1], anchor='x', overlaying='y', visible=False)
-    )
+    # 2) draw trade‐interval bands if col_action + trades given
+    intervals = []
+    if col_action and trades is None:
+        # infer intervals from col_action
+        events, last_buy = df[col_action], None
+        for ts, act in events.items():
+            if act == 1:
+                last_buy = ts
+            elif act == -1 and last_buy is not None:
+                intervals.append((last_buy, ts))
+                last_buy = None
+    elif trades:
+        # assume trades is list of ((b_dt,s_dt),...,ret_pc)
+        intervals = [(b, s) for ((b,s),_,_) in trades]
 
-    # 4) Draw orange bands on y3, grouped under "<br>Trades"
-    for idx, (b0, b1) in enumerate(intervals):
-        fig.add_trace(go.Scatter(
-            x=[b0, b1, b1, b0, b0],
-            y=[0,    0,    1,    1,    0],
-            mode='none',
-            fill='toself',
-            fillcolor='rgba(255,165,0,0.25)',
-            legendgroup='Trades',
-            name='<br>Trades' if idx == 0 else None,
-            showlegend=(idx == 0),
-            hoverinfo='skip',
-            yaxis='y3'
-        ))
-
-    # 5a) Close Price (primary y-axis)
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df[col_close], mode='lines',
-        line=dict(color='grey', width=1),
-        name='<br>Close Price',
-        hovertemplate='Close Price: %{y:.3f}<extra></extra>'
-    ))
-
-    # 5b) Target Signal (secondary y-axis)
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df[col_signal1], mode='lines',
-        line=dict(color='blue', width=2, dash='dot'),
-        name='<br>Targ. Signal',
-        hovertemplate='Targ. Signal: %{y:.3f}<extra></extra>',
-        yaxis='y2'
-    ))
-
-    # 5c) Optional Predicted Signal (secondary y-axis)
-    if col_signal2:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df[col_signal2], mode='lines',
-            line=dict(color='darkred', width=2, dash='dot'),
-            name='<br>Pred. Signal',
-            hovertemplate='Pred. Signal: %{y:.3f}<extra></extra>',
-            yaxis='y2'
-        ))
-
-    # 6) Optional feature traces (secondary y-axis), hidden by default,
-    #    check that features is non-null and non-empty even if it's an Index
-    if features is not None and len(features) > 0:
-        for feat in features:
+    if intervals:
+        # full‐height axis for shading
+        fig.update_layout(yaxis3=dict(domain=[0,1], anchor='x', overlaying='y', visible=False))
+        for i,(b0,b1) in enumerate(intervals):
             fig.add_trace(go.Scatter(
-                x=df.index, y=df[feat], mode='lines',
-                line=dict(width=1),
-                name=f'<br>{feat}',
-                hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>',
-                yaxis='y2',
-                visible='legendonly'
+                x=[b0,b1,b1,b0,b0],
+                y=[0,0,1,1,0],
+                mode='none',
+                fill='toself',
+                fillcolor='rgba(255,165,0,0.25)',
+                legendgroup='Trades',
+                name='Trades' if i==0 else None,
+                showlegend=(i==0),
+                yaxis='y3',
+                hoverinfo='skip'
             ))
 
-    # 7) Overlay trades (green), grouped under "Trades"
-    abs_key = "Trades Returns ($)"
-    for i, ((b_dt, s_dt), _, ret_pc) in enumerate(trades, start=1):
-        seg = df.loc[b_dt:s_dt]
-        abs_gain = None
-        if performance_stats and abs_key in performance_stats:
-            abs_gain = performance_stats[abs_key][i-1]
-
-        hover_txt = (
-            f"Return$: {abs_gain:.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
-            if abs_gain is not None else
-            f"Return%: {ret_pc:.3f}%<extra></extra>"
-        )
-
-        fig.add_trace(go.Scatter(
-            x=seg.index, y=seg[col_close],
-            mode='lines+markers',
-            line=dict(color='green', width=1),
-            marker=dict(size=3, color='green'),
-            legendgroup='Trades',
-            name=None,
-            showlegend=False,
-            hovertemplate=hover_txt
-        ))
-
-    # 8) Threshold line toggle (secondary y-axis)
+    # 3) price line
     fig.add_trace(go.Scatter(
-        x=[df.index[0], df.index[-1]],
-        y=[buy_threshold, buy_threshold],
-        mode='lines',
-        line=dict(color='purple', dash='dot', width=1),
-        name='<br>Threshold',
-        hovertemplate=f"Threshold: {buy_threshold:.3f}<extra></extra>",
-        yaxis='y2'
+        x=df.index, y=df[col_close],
+        mode='lines', line=dict(color='grey',width=1),
+        name='Close', hovertemplate='Price: %{y:.3f}<extra></extra>'
     ))
 
-    # 9 & 10) Layout: unified hover, compressed legend, bump fonts, increase height
+    # 4) target signal
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df[col_signal1],
+        mode='lines', line=dict(color='blue',dash='dot',width=2),
+        name='Target Signal', yaxis='y2',
+        hovertemplate='Signal: %{y:.3f}<extra></extra>'
+    ))
+
+    # 5) optional pred. signal
+    if col_signal2 and col_signal2 in df:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df[col_signal2],
+            mode='lines', line=dict(color='crimson',dash='dot',width=2),
+            name='Pred Signal', yaxis='y2',
+            hovertemplate='Pred: %{y:.3f}<extra></extra>'
+        ))
+
+    # 6) optional features
+    if features:
+        for feat in features:
+            if feat in df:
+                fig.add_trace(go.Scatter(
+                    x=df.index, y=df[feat],
+                    mode='lines', line=dict(width=1),
+                    name=feat, yaxis='y2', visible='legendonly',
+                    hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
+                ))
+
+    # 7) overlay individual trade legs (green) if trades list given
+    if trades:
+        for i,((b_dt,s_dt),_,ret_pc) in enumerate(trades, start=1):
+            seg = df.loc[b_dt:s_dt, col_close]
+            abs_gain = None
+            if performance_stats and 'Trades Returns ($)' in performance_stats:
+                abs_gain = performance_stats['Trades Returns ($)'][i-1]
+            hover = (
+                f"Return$:{abs_gain:.3f}<br>Return%:{ret_pc:.3f}%<extra></extra>"
+                if abs_gain is not None
+                else f"Return%:{ret_pc:.3f}%<extra></extra>"
+            )
+            fig.add_trace(go.Scatter(
+                x=seg.index, y=seg.values,
+                mode='lines+markers',
+                line=dict(color='green',width=1),
+                marker=dict(size=3,color='green'),
+                legendgroup='Trades', showlegend=False,
+                hovertemplate=hover
+            ))
+
+    # 8) optional threshold
+    if buy_threshold is not None:
+        fig.add_trace(go.Scatter(
+            x=[df.index[0], df.index[-1]],
+            y=[buy_threshold, buy_threshold],
+            mode='lines', line=dict(color='purple',dash='dot',width=1),
+            name='Threshold', yaxis='y2',
+            hovertemplate=f"Thresh: {buy_threshold:.3f}<extra></extra>"
+        ))
+
+    # 9) layout tweaks
     fig.update_layout(
         hovermode='x unified',
-        hoverlabel=dict(font_size=12),
         template='plotly_white',
+        height=800,
         xaxis_title='Time',
         yaxis_title='Price',
-        height=900,
-        legend=dict(
-            font=dict(size=12),
-            itemsizing='constant',
-            tracegroupgap=0
-        ),
-        yaxis2=dict(title='Signals', overlaying='y', side='right', showgrid=False)
+        yaxis2=dict(overlaying='y',side='right',title='Signal',showgrid=False),
+        legend=dict(font=dict(size=12),tracegroupgap=4)
     )
 
     fig.show()
+
 
 #########################################################################################################
 
@@ -456,6 +448,133 @@ def aggregate_performance(
 #########################################################################################################
 
 
+# def plot_dual_histograms(
+#     df_before: pd.DataFrame,
+#     df_after: pd.DataFrame,
+#     sample: int | None = 50000,
+#     bins: int = 40,
+#     clip_pct: tuple[float, float] = (0.02, 0.98),
+# ):
+#     """
+#     For each feature column, plot how its
+#     distribution changes before vs. after scaling/transformation.
+
+#     Functionality:
+#       1) Auto-discover common feat_… columns in df_before & df_after.
+#       2) Optionally sample up to `sample` rows for speed.
+#       3) For numeric, high-cardinality features:
+#          - Compute clipped [pct lower, pct upper] ranges.
+#          - Overlay “before” histogram in blue (bottom x / left y).
+#          - Overlay “after” histogram in orange (top x / right y).
+#       4) For categorical or low-card features:
+#          - Draw side-by-side bar charts of value frequencies.
+#       5) Arrange subplots in a grid and clean up unused axes.
+#     """
+#     # 1) identify all feat_… columns present in both DataFrames
+#     feat_cols = [
+#         col for col in df_before.columns
+#         if col in df_after.columns
+#     ]
+#     if not feat_cols:
+#         raise ValueError("No overlapping features columns found in the two DataFrames.")
+
+#     # 2) optional random sampling to limit plotting cost
+#     if sample:
+#         n = min(len(df_before), len(df_after), sample)
+#         dfb = df_before.sample(n, random_state=0)
+#         dfa = df_after.sample(n, random_state=0)
+#     else:
+#         dfb, dfa = df_before, df_after
+
+#     # 3) prepare a grid of subplots
+#     cols = 2
+#     rows = math.ceil(len(feat_cols) / cols)
+#     fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4))
+#     axes = axes.flatten()
+
+#     # 4) loop over each feature and draw its before/after visualization
+#     for ax, feat in zip(axes, feat_cols):
+#         before = dfb[feat].dropna()
+#         after  = dfa[feat].dropna()
+
+#         # numeric & high-cardinality: dual overlaid histograms
+#         if pd.api.types.is_numeric_dtype(before) and before.nunique() > 10:
+#             # compute clipping bounds for each
+#             lo_b, hi_b = np.quantile(before, clip_pct)
+#             lo_a, hi_a = np.quantile(after,  clip_pct)
+
+#             edges_b = np.linspace(lo_b, hi_b, bins + 1)
+#             edges_a = np.linspace(lo_a, hi_a, bins + 1)
+
+#             # blue histogram on bottom x / left y
+#             ax.hist(before, bins=edges_b, color="C0", alpha=0.6, edgecolor="C0")
+#             ax.set_xlim(lo_b, hi_b)
+#             ax.margins(x=0)
+#             ax.spines["top"].set_visible(False)
+#             ax.spines["right"].set_visible(False)
+#             ax.spines["bottom"].set_color("C0")
+#             ax.spines["left"].set_color("C0")
+#             ax.tick_params(axis="x", colors="C0", rotation=45)
+#             ax.tick_params(axis="y", colors="C0")
+
+#             # orange histogram on top x / right y
+#             ax_top    = ax.twiny()
+#             ax_orange = ax_top.twinx()
+
+#             ax_orange.hist(after, bins=edges_a, color="C1", alpha=0.6, edgecolor="C1")
+#             ax_top.set_xlim(lo_a, hi_a)
+#             ax_top.margins(x=0)
+
+#             # style top x-axis
+#             ax_top.spines["bottom"].set_visible(False)
+#             ax_top.spines["left"].set_visible(False)
+#             ax_top.spines["right"].set_visible(False)
+#             ax_top.spines["top"].set_color("C1")
+#             ax_top.xaxis.set_ticks_position("top")
+#             ax_top.xaxis.set_label_position("top")
+#             ax_top.tick_params(axis="x", colors="C1", rotation=45)
+
+#             # style right y-axis
+#             ax_orange.spines["bottom"].set_visible(False)
+#             ax_orange.spines["left"].set_visible(False)
+#             ax_orange.spines["top"].set_visible(False)
+#             ax_orange.spines["right"].set_color("C1")
+#             ax_orange.yaxis.set_ticks_position("right")
+#             ax_orange.yaxis.set_label_position("right")
+#             ax_orange.tick_params(axis="y", colors="C1", labelright=True)
+
+#         else:
+#             # categorical or low-cardinality: side-by-side frequency bars
+#             bd = before.value_counts(normalize=True).sort_index()
+#             ad = after .value_counts(normalize=True).sort_index()
+#             cats = sorted(set(bd.index) | set(ad.index))
+#             x = np.arange(len(cats))
+#             w = 0.4
+
+#             ax.bar(x - w/2, [bd.get(c, 0) for c in cats], w,
+#                    color="C0", alpha=0.6)
+#             ax.bar(x + w/2, [ad.get(c, 0) for c in cats], w,
+#                    color="C1", alpha=0.6)
+
+#             ax.spines["top"].set_visible(False)
+#             ax.spines["right"].set_visible(False)
+#             ax.spines["bottom"].set_color("black")
+#             ax.spines["left"].set_color("C0")
+#             ax.set_xticks(x)
+#             ax.set_xticklabels(cats, rotation=45)
+#             ax.tick_params(axis="y", colors="C0")
+
+#         ax.set_title(feat, color="black")
+
+#     # 5) hide any unused subplots
+#     for extra_ax in axes[len(feat_cols):]:
+#         extra_ax.axis("off")
+
+#     plt.tight_layout()
+#     plt.show()
+
+
+
 def plot_dual_histograms(
     df_before: pd.DataFrame,
     df_after: pd.DataFrame,
@@ -477,6 +596,7 @@ def plot_dual_histograms(
       4) For categorical or low-card features:
          - Draw side-by-side bar charts of value frequencies.
       5) Arrange subplots in a grid and clean up unused axes.
+      6) Show a tqdm progress bar per feature.
     """
     # 1) identify all feat_… columns present in both DataFrames
     feat_cols = [
@@ -500,8 +620,10 @@ def plot_dual_histograms(
     fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4))
     axes = axes.flatten()
 
-    # 4) loop over each feature and draw its before/after visualization
-    for ax, feat in zip(axes, feat_cols):
+    # 4) loop over each feature with a tqdm progress bar
+    for ax, feat in tqdm(zip(axes, feat_cols),
+                         total=len(feat_cols),
+                         desc="Plotting features"):
         before = dfb[feat].dropna()
         after  = dfa[feat].dropna()
 
@@ -580,7 +702,6 @@ def plot_dual_histograms(
 
     plt.tight_layout()
     plt.show()
-
 
 #########################################################################################################
 

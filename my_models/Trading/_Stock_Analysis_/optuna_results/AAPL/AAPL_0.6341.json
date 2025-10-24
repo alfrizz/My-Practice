@@ -1,0 +1,16 @@
+{
+  "value": 0.6340755555555555,
+  "params": {
+    "min_prof_thr": 0.028572283109887485,
+    "max_down_prop": 2.257722515771237,
+    "gain_tightening_factor": 25.975715816725515,
+    "merging_retracement_thr": 0.5957131023936048,
+    "merging_time_gap_thr": 5.864220810831211,
+    "tau_time": 15,
+    "tau_dur": 202,
+    "trailing_stop_pct": 0.04884231819088694,
+    "buy_threshold": 0.10047664029254562,
+    "beta_sat": 9.800665952752993,
+    "smoothing_window": 15
+  }
+}

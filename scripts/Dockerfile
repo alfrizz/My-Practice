@@ -17,3 +17,8 @@ RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["jupyter","lab","--no-browser","--ip=0.0.0.0","--allow-root","--NotebookApp.token="]
+
+
+# after changes:
+# docker-compose up -d --build
+

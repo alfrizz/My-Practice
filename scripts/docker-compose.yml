@@ -1,25 +1,24 @@
+name: jupyter
 services:
-  jupyter:
+  jupyter-service:
     container_name: gpu-jl
-
     build:
-      context: ${HOME}/my_practice/scripts
+      context: ${HOME}/scripts
       dockerfile: Dockerfile
     image: gpu-jl:latest
 
     restart: unless-stopped
 
     gpus: all
-    cpus: "16.0"
-    mem_limit: "26g"
-    shm_size: 24g     
+    cpus: "18.0"
+    mem_limit: "52g"
+    shm_size: 32g     
     ports:
       - "8888:8888"
 
     volumes:        
       - "/home/alfrizz/docker_tmp:/tmp"
-      - ${HOME}/my_practice:/workspace
-      - ${HOME}/my_practice/scripts/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
+      - ${HOME}:/workspace
 
     working_dir: /workspace
 
@@ -35,7 +34,7 @@ services:
 
 
 
-#### after changes ####
+##### after changes #####
 # docker-compose down
 # docker-compose up -d
 # docker-compose logs -f jupyter
