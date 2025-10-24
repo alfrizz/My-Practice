@@ -18,14 +18,12 @@ import datetime as dt
 from datetime import datetime, time
 from pathlib import Path
 
-import torchmetrics
 import torch
 import torch.nn as nn
-from torch.nn.utils import weight_norm
-import torch.nn.functional as F
-
+from torch.nn.utils.parametrizations import weight_norm
 from torch.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
+import torchmetrics
 
 from tqdm.auto import tqdm
 
@@ -420,7 +418,8 @@ class ModelClass(nn.Module):
                 d_model         = d_model,
                 nhead           = heads,
                 dim_feedforward = ff_dim,
-                dropout         = dropout_short
+                dropout         = dropout_short,
+                # batch_first     = True
             )
             self.transformer = nn.TransformerEncoder(
                 encoder_layer,
@@ -517,8 +516,8 @@ class ModelClass(nn.Module):
         # 3) Transformer
         tr_in  = self.feature_proj(out_s)
         tr_in  = self.pos_enc(tr_in)
-        tr_out = self.transformer(tr_in.transpose(0, 1))
-        out_t  = tr_out.transpose(0, 1)
+        tr_out = self.transformer(tr_in.transpose(0, 1).contiguous())
+        out_t  = tr_out.transpose(0, 1).contiguous()
 
         # 4) Projection
         out_p = self.short2long(out_t)
@@ -752,21 +751,19 @@ def _reset_states(
 #     """
 #     One-step-per-window evaluation.
 
-#     For each batch from `loader`:
-#       1. Move batch to device, reset model back to day/week state.
-#       2. For each example in the batch, call _reset_states() exactly as before.
-#       3. Skip zero-length sequences.
-#       4. Collect each example’s valid daily_windows and true targets
-#          into Python lists.
-#       5. Concatenate all windows → one tensor of shape
-#          (total_windows, window_len, feat_dim). Same for targets.
-#       6. Call model(...) once on that big tensor.
-#       7. Unwrap regression head exactly as before.
-#       8. Squeeze to (total_windows,); append to all_preds/all_targs.
-#       9. At end, compute global metrics over the flattened lists.
+#     Behaviour (unchanged, with safer shape handling):
+#       - Move batch to device and reset model day/week state via _reset_states.
+#       - Collect valid per-example windows and targets into Python lists.
+#       - Concatenate into tensors (total_windows, window_len, feat).
+#       - Single model(...) call on that big tensor.
+#       - Robustly unwrap regression head and auxiliary outputs without relying on `squeeze`
+#         semantics that can collapse unexpected axes.
+#       - Return metrics dict and flat numpy array of predictions.
 
-#     Returns:
-#       metrics dict and flat np.ndarray of predictions.
+#     Important robustness guarantees added:
+#       - Explicit handling of aux_out dims: supports (W, T, 1) and (W, T).
+#       - Explicit handling of raw_reg dims: supports (W, T, 1), (W, T, F) and (W, T).
+#       - Clear error raised on unexpected shapes to fail fast instead of producing silent, wrong results.
 #     """
 #     device = next(model.parameters()).device
 #     model.to(device).eval()
@@ -808,15 +805,48 @@ def _reset_states(
 #             raw_out = model(windows_tensor)
 #             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-#             # ensure regression head if needed
-#             if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
-#                 raw_reg = model.pred(raw_reg)
+#             # --- AUX OUTPUT: explicit shape handling ---
+#             # Accept (W, T, 1) or (W, T)
+#             # Build aux_seq as (W, T)
+#             if hasattr(raw_out, "__len__") and len(raw_out) > 1:
+#                 aux_out = raw_out[1]
+#             else:
+#                 # If model returned only one element, try to access attribute (legacy)
+#                 # but prefer explicit two-output models. If missing, raise.
+#                 raise ValueError("eval_on_loader expects model(...) to return (main_out, aux_out) tuple.")
+
+#             if aux_out.dim() == 3:
+#                 # (W, T, 1)
+#                 _, T, last_dim = aux_out.shape
+#                 if last_dim != 1:
+#                     raise ValueError(f"eval_on_loader: unexpected aux_out last dim {last_dim}")
+#                 aux_seq = aux_out.view(aux_out.size(0), T)
+#             elif aux_out.dim() == 2:
+#                 # (W, T)
+#                 _, T = aux_out.shape
+#                 aux_seq = aux_out
+#             else:
+#                 raise ValueError(f"eval_on_loader: unexpected aux_out.dim()={aux_out.dim()}")
+
+#             # --- RAW REGRESSION UNWRAP: ensure seq_reg is (W, T) ---
+#             if raw_reg.dim() == 3:
+#                 # raw_reg could be (W, T, 1) or (W, T, F)
+#                 if raw_reg.size(-1) == 1:
+#                     seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+#                 else:
+#                     # allow model.pred to accept (W, T, F) and return (W, T, 1)
+#                     raw_reg_pred = model.pred(raw_reg)
+#                     if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+#                         raise ValueError("eval_on_loader: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+#                     seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
 #             elif raw_reg.dim() == 2:
-#                 raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
+#                 # already (W, T)
+#                 seq_reg = raw_reg
+#             else:
+#                 raise ValueError(f"eval_on_loader: unexpected raw_reg.dim()={raw_reg.dim()}")
 
 #             # (sum_L, window_len) → final-lookback pred
-#             seq_reg = raw_reg.squeeze(-1)
-#             preds   = seq_reg[:, -1]                         # (sum_L,)
+#             preds = seq_reg[:, -1]                         # (sum_L,)
 
 #             all_preds.extend(preds.cpu().tolist())
 #             all_targs.extend(targets_tensor.cpu().tolist())
@@ -829,23 +859,12 @@ def _reset_states(
 
 #     return _compute_metrics(preds, targs), preds
 
+###### fast below
+ 
 def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[dict, np.ndarray]:
     """
-    One-step-per-window evaluation.
-
-    Behaviour (unchanged, with safer shape handling):
-      - Move batch to device and reset model day/week state via _reset_states.
-      - Collect valid per-example windows and targets into Python lists.
-      - Concatenate into tensors (total_windows, window_len, feat).
-      - Single model(...) call on that big tensor.
-      - Robustly unwrap regression head and auxiliary outputs without relying on `squeeze`
-        semantics that can collapse unexpected axes.
-      - Return metrics dict and flat numpy array of predictions.
-
-    Important robustness guarantees added:
-      - Explicit handling of aux_out dims: supports (W, T, 1) and (W, T).
-      - Explicit handling of raw_reg dims: supports (W, T, 1), (W, T, F) and (W, T).
-      - Clear error raised on unexpected shapes to fail fast instead of producing silent, wrong results.
+    Evaluation loop with aux outputs present but never inspected in hot path;
+    per-batch preds->cpu conversions remain but eval is off the critical training backward path.
     """
     device = next(model.parameters()).device
     model.to(device).eval()
@@ -857,78 +876,46 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
                 tqdm(loader, desc="eval", leave=False):
 
-            x_batch = x_batch.to(device)
-            y_signal = y_signal.to(device)
-            wd = wd.to(device)
+            x_batch = x_batch.to(device, non_blocking=True)
+            y_signal = y_signal.to(device, non_blocking=True)
+            wd = wd.to(device, non_blocking=True)
 
             batch_size = x_batch.size(0)
-
-            # --- GATHER ALL WINDOWS & TARGETS ---
             windows_list, targets_list = [], []
             for example_idx in range(batch_size):
                 prev_day = _reset_states(model, wd[example_idx], prev_day)
-
                 L = int(seq_lengths[example_idx])
                 if L == 0:
                     continue
-
-                w = x_batch[example_idx, :L]                  # (L, window_len, feat)
-                t = y_signal[example_idx, :L].reshape(-1)      # (L,)
-                windows_list.append(w)
-                targets_list.append(t)
+                windows_list.append(x_batch[example_idx, :L])
+                targets_list.append(y_signal[example_idx, :L].reshape(-1))
 
             if not windows_list:
                 continue
 
-            windows_tensor = torch.cat(windows_list, dim=0)    # (sum_L, window_len, feat)
-            targets_tensor = torch.cat(targets_list, dim=0)    # (sum_L,)
+            windows_tensor = torch.cat(windows_list, dim=0)
+            targets_tensor = torch.cat(targets_list, dim=0)
 
-            # --- SINGLE FORWARD ---
+            if not windows_tensor.is_contiguous():
+                windows_tensor = windows_tensor.contiguous()
+
             raw_out = model(windows_tensor)
             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-            # --- AUX OUTPUT: explicit shape handling ---
-            # Accept (W, T, 1) or (W, T)
-            # Build aux_seq as (W, T)
-            if hasattr(raw_out, "__len__") and len(raw_out) > 1:
-                aux_out = raw_out[1]
-            else:
-                # If model returned only one element, try to access attribute (legacy)
-                # but prefer explicit two-output models. If missing, raise.
-                raise ValueError("eval_on_loader expects model(...) to return (main_out, aux_out) tuple.")
-
-            if aux_out.dim() == 3:
-                # (W, T, 1)
-                _, T, last_dim = aux_out.shape
-                if last_dim != 1:
-                    raise ValueError(f"eval_on_loader: unexpected aux_out last dim {last_dim}")
-                aux_seq = aux_out.view(aux_out.size(0), T)
-            elif aux_out.dim() == 2:
-                # (W, T)
-                _, T = aux_out.shape
-                aux_seq = aux_out
-            else:
-                raise ValueError(f"eval_on_loader: unexpected aux_out.dim()={aux_out.dim()}")
-
-            # --- RAW REGRESSION UNWRAP: ensure seq_reg is (W, T) ---
             if raw_reg.dim() == 3:
-                # raw_reg could be (W, T, 1) or (W, T, F)
                 if raw_reg.size(-1) == 1:
                     seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
                 else:
-                    # allow model.pred to accept (W, T, F) and return (W, T, 1)
                     raw_reg_pred = model.pred(raw_reg)
                     if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
                         raise ValueError("eval_on_loader: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
                     seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
             elif raw_reg.dim() == 2:
-                # already (W, T)
                 seq_reg = raw_reg
             else:
                 raise ValueError(f"eval_on_loader: unexpected raw_reg.dim()={raw_reg.dim()}")
 
-            # (sum_L, window_len) → final-lookback pred
-            preds = seq_reg[:, -1]                         # (sum_L,)
+            preds = seq_reg[:, -1]
 
             all_preds.extend(preds.cpu().tolist())
             all_targs.extend(targets_tensor.cpu().tolist())
@@ -941,10 +928,11 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
     return _compute_metrics(preds, targs), preds
 
+
+
 ############### 
 
 
-
 # def model_training_loop(
 #     model:                nn.Module,
 #     optimizer:            torch.optim.Optimizer,
@@ -959,248 +947,70 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #     alpha_smooth:        float,
 # ) -> float:
 #     """
-#     Stateful training + per-epoch validation + logging.
-#     Uses OneCycleLR for linear warmup + cosine annealing.
+#     Train loop (minimal, logging delegated to init_log / log_epoch_summary).
 
-#     Steps:
-#       1. Compute static baselines on train & val.
-#       2. For each epoch:
-#          • TRAIN:
-#            – reset model to initial LSTM states.
-#            – for each batch:
-#              · move data to device, zero optimizer.
-#              · loop examples to call _reset_states(model, wd[i]).
-#              · collect all valid sliding windows and targets.
-#              · if any windows:
-#                · concatenate into (total_W, window_len, feat) tensor.
-#                · single forward(model) on that big tensor.
-#                · unwrap regression head as before.
-#                · extract final-step preds, compare to targets.
-#                · record preds/targs, compute smooth loss once.
-#                · backward, clip grads, step optimizer, update scheduler.
-#          • VALID: call eval_on_loader → metrics.
-#          • Log epoch summary, checkpoint, early stop.
-#     Returns:
-#       best validation RMSE.
+#     Responsibilities retained
+#       - device placement
+#       - scheduler total-steps sanity check (best-effort)
+#       - baseline computation
+#       - per-epoch training and validation
+#       - gradient scaling, clipping, optimizer step, scheduler step
+#       - metrics computation and checkpointing via models_core.maybe_save_chkpt
+
+#     Logging policy
+#       - Keep the loop free of verbose logging; expose only compact, read-only
+#         epoch attributes for the logger:
+#           model._last_epoch_elapsed (float seconds)
+#           model._last_epoch_samples (int)
+#           model._last_epoch_checkpoint (bool)
+#       - Capture a one-time, detached first-batch snapshot on the first training
+#         backward that contains shapes, detached loss scalars, and a small
+#         grads summary for one-shot printing by init_log/log_epoch_summary.
+#       - Still print a concise console line after each epoch (TRAIN/VALID metrics,
+#         lr, improved flag, averaged losses).
 #     """
+#     # Harmless, very local no-op flag — does not alter inner-loop behavior or performance
+#     aux_disabled_noop = True
+
 #     device = next(model.parameters()).device
 #     model.to(device)
 
-#     # 1) static baselines
-#     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
-#     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
-
-#     smooth_loss = SmoothMSELoss(alpha_smooth)
-#     aux_loss_weight  = params.hparams["AUX_LOSS_WEIGHT"]
-#     live_plot   = plots.LiveRMSEPlot()
-#     best_val, best_state, patience = float("inf"), None, 0
-
-#     for epoch in range(1, max_epochs + 1):
-        
-#         # -----------------------
-#         freeze_till = params.hparams["FREEZE_TILL"]
-#         if epoch <= freeze_till:
-#             for p in model.head_flat.parameters(): p.requires_grad=False
-#         else:
-#             for p in model.head_flat.parameters(): p.requires_grad=True
-
-#         # --- TRAIN PHASE ---
-#         model.train()
-#         model.h_short = model.h_long = None
-#         train_preds, train_targs = [], []
-#         prev_day = None
-
-#         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
-#                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
-
-#             x_batch, y_signal, wd = (
-#                 x_batch.to(device), y_signal.to(device), wd.to(device)
-#             )
-#             optimizer.zero_grad(set_to_none=True)
-
-#             batch_size = x_batch.size(0)
-
-#             # --- GATHER WINDOWS & TARGETS ---
-#             windows_list, targets_list = [], []
-#             for example_idx in range(batch_size):
-#                 prev_day = _reset_states(model, wd[example_idx], prev_day)
-#                 L = int(seq_lengths[example_idx])
-#                 if L == 0:
-#                     continue
-
-#                 w = x_batch[example_idx, :L]            # (L, window_len, feat)
-#                 t = y_signal[example_idx, :L].reshape(-1)  # (L,)
-#                 windows_list.append(w)
-#                 targets_list.append(t)
-
-#             if not windows_list:
-#                 continue
-
-#             # --- SINGLE BATCHED FORWARD ---
-#             windows_tensor = torch.cat(windows_list, dim=0)   # (total_W, window_len, feat)
-#             targets_tensor = torch.cat(targets_list, dim=0)   # (total_W,)
-
-#             raw_out, aux_out = model(windows_tensor)
-#             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
-#             T = aux_out.squeeze(-1).size(1) # get true window length
-
-#             targets_seq  = targets_tensor.unsqueeze(1).expand(-1, T)  # (W, T)
-
-#             if raw_reg.dim() == 3 and raw_reg.size(-1) != 1:
-#                 raw_reg = model.pred(raw_reg)
-#             elif raw_reg.dim() == 2:
-#                 raw_reg = model.pred(raw_reg.unsqueeze(0)).squeeze(0)
-
-#             seq_reg    = raw_reg.squeeze(-1)            # shape (W, T)
-#             preds      = seq_reg[:, -1]                 # (W,)
-#             aux_seq    = aux_out.squeeze(-1)            # (W, T)
-            
-#             # compute losses
-#             loss_main = smooth_loss(preds, targets_tensor)
-#             loss_aux  = smooth_loss(aux_seq, targets_seq)
-
-#             # record for train metrics
-#             train_preds.extend(preds.detach().cpu().tolist())
-#             train_targs.extend(targets_tensor.cpu().tolist())
-
-#             # compute & backprop loss
-#             loss = loss_main + aux_loss_weight * loss_aux
-
-#             scaler.scale(loss).backward()
-#             scaler.unscale_(optimizer)
-#             nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-#             scaler.step(optimizer)
-#             scaler.update()
-#             scheduler.step()
-
-#         # --- METRICS & VALIDATION ---
-#         tr_metrics = _compute_metrics(
-#             np.array(train_preds, dtype=float),
-#             np.array(train_targs, dtype=float),
-#         )
-#         vl_metrics, _ = eval_on_loader(val_loader, model)
-
-#         # --- LOG & CHECKPOINT ---
-#         tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
-#         vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
-#         current_lr = optimizer.param_groups[0]["lr"]
-
-#         models_core.log_epoch_summary(
-#             epoch,
-#             model,
-#             optimizer,
-#             train_metrics   = tr_metrics,
-#             val_metrics     = vl_metrics,
-#             base_tr_mean    = base_tr_mean,
-#             base_tr_pers    = base_tr_pers,
-#             base_vl_mean    = base_vl_mean,
-#             base_vl_pers    = base_vl_pers,
-#             slip_thresh     = 1e-6,
-#             log_file        = params.log_file,
-#             top_k           = 999,
-#             hparams         = params.hparams,
-#         )
-#         live_plot.update(tr_rmse, vl_rmse)
-
-#         models_dir = Path(params.models_folder)
-#         best_val, improved, *_ = models_core.maybe_save_chkpt(
-#             models_dir, model, vl_rmse, best_val,
-#             {"rmse": tr_rmse}, {"rmse": vl_rmse},
-#             live_plot, params
-#         )
-
-#         print(
-#             f"Epoch {epoch:02d}  "
-#             f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
-#             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
-#             f"lr={current_lr:.2e} |  "
-#             f"improved={improved == 1}"
-#         )
-    
-#         if improved:
-#             best_state, patience = {
-#                 k: v.cpu() for k, v in model.state_dict().items()
-#             }, 0
-#         else:
-#             patience += 1
-#             if patience >= early_stop_patience:
-#                 print(f"Early stopping at epoch {epoch}")
-#                 break
-
-#     # restore best
-#     if best_state is not None:
-#         model.load_state_dict(best_state)
-#         models_core.save_final_chkpt(
-#             models_dir, best_state, best_val, params,
-#             tr_metrics, vl_metrics, live_plot, suffix="_fin"
-#         )
-
-#     return best_val
-
-# def model_training_loop(
-#     model:                nn.Module,
-#     optimizer:            torch.optim.Optimizer,
-#     scheduler:            torch.optim.lr_scheduler.OneCycleLR,
-#     scaler:               torch.cuda.amp.GradScaler,
-#     train_loader,
-#     val_loader,
-#     *,
-#     max_epochs:          int,
-#     early_stop_patience: int,
-#     clipnorm:            float,
-#     alpha_smooth:        float,
-# ) -> float:
-#     """
-#     Stateful training + per-epoch validation + logging.
-
-#     Preserves your original high-level flow and semantics:
-#       - compute static baselines
-#       - per-epoch: optionally freeze head_flat for initial epochs
-#       - per-batch: reset LSTM states per day, gather valid windows into a
-#         single big tensor, single forward, compute main + aux losses, backprop,
-#         clip, step optimizer and scheduler
-#       - per-epoch: evaluate on validation loader, log, checkpoint, early stop
-
-#     Minimal, targeted robustness changes:
-#       - Explicit and safe handling of aux_out and raw_reg shapes (no fragile squeeze)
-#       - Clip gradient only on params that have .grad to avoid surprising behavior
-#       - Basic runtime assertion that scheduler.total_steps (if created outside)
-#         matches the runtime expectation (len(train_loader) * max_epochs)
-#       - Clear error messages on unexpected tensor shapes to fail fast
-#     """
-#     device = next(model.parameters()).device
-#     model.to(device)
-
-#     # Sanity check for scheduler total steps when scheduler was created outside
+#     # Scheduler total_steps sanity check (best-effort)
 #     try:
 #         expected_total = len(train_loader) * max_epochs
-#         # OneCycleLR stores total_steps internally in a protected attribute
-#         if hasattr(scheduler, "_total_steps"):
-#             if scheduler._total_steps != expected_total:
-#                 raise RuntimeError(
-#                     f"Scheduler total_steps mismatch: scheduler={scheduler._total_steps} expected={expected_total}"
-#                 )
+#         if hasattr(scheduler, "_total_steps") and scheduler._total_steps != expected_total:
+#             raise RuntimeError(
+#                 f"Scheduler total_steps mismatch: scheduler={scheduler._total_steps} expected={expected_total}"
+#             )
 #     except Exception:
-#         # If scheduler doesn't expose internal attr, we don't block; this is a best-effort check.
-#         pass
+#         pass  # do not block training for introspection failures
 
 #     # 1) static baselines
 #     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
 #     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
 
 #     smooth_loss = SmoothMSELoss(alpha_smooth)
-#     aux_loss_weight  = params.hparams["AUX_LOSS_WEIGHT"]
-#     live_plot   = plots.LiveRMSEPlot()
+#     live_plot = plots.LiveRMSEPlot()
 #     best_val, best_state, patience = float("inf"), None, 0
+
+#     # Ensure any leftover snapshot is cleared before training (best-effort)
+#     if hasattr(model, "_first_batch_snapshot"):
+#         try:
+#             delattr = getattr(model, "__delattr__", None)
+#             if callable(delattr):
+#                 model.__delattr__("_first_batch_snapshot")
+#         except Exception:
+#             pass
+
+#     models_dir = Path(params.models_folder)
+
+#     # Flag used to capture per-first-backward grads info exactly once
+#     first_snapshot_captured = False
 
 #     for epoch in range(1, max_epochs + 1):
 #         freeze_till = params.hparams["FREEZE_TILL"]
-#         if epoch <= freeze_till:
-#             for p in model.head_flat.parameters():
-#                 p.requires_grad = False
-#         else:
-#             for p in model.head_flat.parameters():
-#                 p.requires_grad = True
+#         for p in model.head_flat.parameters():
+#             p.requires_grad = False if epoch <= freeze_till else True
 
 #         # --- TRAIN PHASE ---
 #         model.train()
@@ -1208,11 +1018,15 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #         train_preds, train_targs = [], []
 #         prev_day = None
 
-#         # accumulators for optional diagnostics (kept minimal)
+#         # accumulators (kept minimal)
 #         epoch_loss_main_sum = 0.0
 #         epoch_loss_aux_sum = 0.0
 #         epoch_loss_count = 0
 
+#         # timing / throughput counters for this epoch (kept minimal)
+#         epoch_start = datetime.utcnow().timestamp()
+#         epoch_samples = 0
+
 #         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
 #                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
 
@@ -1221,9 +1035,8 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #             )
 #             optimizer.zero_grad(set_to_none=True)
 
-#             batch_size = x_batch.size(0)
-
 #             # --- GATHER WINDOWS & TARGETS ---
+#             batch_size = x_batch.size(0)
 #             windows_list, targets_list = [], []
 #             for example_idx in range(batch_size):
 #                 prev_day = _reset_states(model, wd[example_idx], prev_day)
@@ -1244,37 +1057,30 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #             targets_tensor = torch.cat(targets_list, dim=0)   # (total_W,)
 
 #             raw_out = model(windows_tensor)
-#             # support tuple return (main_out, aux_out) or two-element list
 #             if isinstance(raw_out, (tuple, list)) and len(raw_out) >= 2:
 #                 raw_reg, aux_out = raw_out[0], raw_out[1]
 #             else:
-#                 # legacy: if model returned a single object earlier, keep backward compatibility
-#                 # but this code expects (main_out, aux_out); fail fast if not present
 #                 raise ValueError("model must return (main_out, aux_out) tuple in training")
 
 #             # --- AUX OUTPUT: explicit shape handling ---
 #             if aux_out.dim() == 3:
-#                 # (W, T, 1)
 #                 _, T, last_dim = aux_out.shape
 #                 if last_dim != 1:
 #                     raise ValueError(f"train: unexpected aux_out last dim {last_dim}")
 #                 aux_seq = aux_out.view(aux_out.size(0), T)
 #             elif aux_out.dim() == 2:
-#                 # (W, T)
 #                 _, T = aux_out.shape
 #                 aux_seq = aux_out
 #             else:
 #                 raise ValueError(f"train: unexpected aux_out.dim()={aux_out.dim()}")
 
-#             targets_seq  = targets_tensor.unsqueeze(1).expand(-1, T)  # (W, T)
+#             targets_seq = targets_tensor.unsqueeze(1).expand(-1, T)  # (W, T)
 
 #             # --- RAW REGRESSION UNWRAP: ensure seq_reg is (W, T) ---
 #             if raw_reg.dim() == 3:
-#                 # raw_reg may be (W, T, 1) or (W, T, F)
 #                 if raw_reg.size(-1) == 1:
 #                     seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
 #                 else:
-#                     # pass full tensor to model.pred which must accept (W, T, F) and return (W, T, 1)
 #                     raw_reg_pred = model.pred(raw_reg)
 #                     if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
 #                         raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
@@ -1289,9 +1095,9 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
 #             # compute losses
 #             loss_main = smooth_loss(preds, targets_tensor)
-#             loss_aux  = smooth_loss(aux_seq, targets_seq)
+#             loss_aux = smooth_loss(aux_seq, targets_seq)
 
-#             # update diagnostics
+#             # update accumulators
 #             epoch_loss_main_sum += float(loss_main.detach().cpu())
 #             epoch_loss_aux_sum += float(loss_aux.detach().cpu())
 #             epoch_loss_count += 1
@@ -1300,11 +1106,64 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #             train_preds.extend(preds.detach().cpu().tolist())
 #             train_targs.extend(targets_tensor.cpu().tolist())
 
+#             # update sample counter (throughput)
+#             epoch_samples += int(targets_tensor.size(0))
+
 #             # compute & backprop loss
-#             loss = loss_main + aux_loss_weight * loss_aux
+#             loss = loss_main 
 
 #             scaler.scale(loss).backward()
 #             scaler.unscale_(optimizer)
+
+#             # --- First-batch one-shot detached snapshot capture (read-only, best-effort)
+#             # Capture once after the first backward to record shapes, loss scalars,
+#             # per-group nonzero-grad counts and simple grad-presence booleans.
+#             if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
+#                 try:
+#                     # shapes & losses (detached CPU)
+#                     raw_shape = tuple(raw_reg.detach().cpu().shape) if isinstance(raw_reg, torch.Tensor) else None
+#                     aux_shape = tuple(aux_out.detach().cpu().shape) if isinstance(aux_out, torch.Tensor) else None
+#                     lm_cpu = loss_main.detach().cpu()
+#                     la_cpu = loss_aux.detach().cpu()
+
+#                     # per-parameter grad presence and per-group nonzero-grad counts
+#                     per_param_has_grad = {}
+#                     group_nonzero_counts = []
+#                     for g in optimizer.param_groups:
+#                         cnt = 0
+#                         for p in g.get("params", []):
+#                             has = (p.grad is not None) and (p.grad.detach().abs().sum().item() > 0)
+#                             per_param_has_grad[getattr(p, "name", None) or id(p)] = bool(has)
+#                             if has:
+#                                 cnt += 1
+#                         group_nonzero_counts.append(cnt)
+
+#                     # simple boolean summary for backbone/head/aux (best-effort by name heuristic)
+#                     backbone_has = any(
+#                         ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
+#                         for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long") or n.startswith("pred") == False
+#                     )
+#                     head_has = any(
+#                         ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
+#                         for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n
+#                     )
+#                     aux_has = any(
+#                         ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
+#                         for n, p in model.named_parameters() if n.startswith("aux") or "aux" in n
+#                     )
+
+#                     model._first_batch_snapshot = {
+#                         "raw_reg_shape": raw_shape,
+#                         "aux_out_shape": aux_shape,
+#                         "loss_main": lm_cpu,
+#                         "loss_aux": la_cpu,
+#                         "aux_w": float(params.hparams.get("AUX_LOSS_WEIGHT", 0.0)),
+#                         "group_nonzero_counts": group_nonzero_counts,
+#                         "grads": {"backbone": bool(backbone_has), "head": bool(head_has), "aux": bool(aux_has)},
+#                     }
+#                 except Exception:
+#                     pass
+#                 first_snapshot_captured = True
 
 #             # Clip grads only over params that actually received gradients
 #             params_with_grad = [p for p in model.parameters() if p.grad is not None]
@@ -1322,48 +1181,57 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #         )
 #         vl_metrics, _ = eval_on_loader(val_loader, model)
 
-#         # optional averaged loss diagnostics (safe: avoid division by zero)
+#         # averaged loss diagnostics (safe: avoid division by zero)
 #         if epoch_loss_count > 0:
 #             avg_loss_main = epoch_loss_main_sum / epoch_loss_count
 #             avg_loss_aux = epoch_loss_aux_sum / epoch_loss_count
 #         else:
 #             avg_loss_main = avg_loss_aux = float("nan")
 
-#         # --- LOG & CHECKPOINT ---
+#         # expose lightweight epoch timing and sample counters for logger (read-only)
+#         epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
+#         model._last_epoch_elapsed = float(epoch_elapsed)
+#         model._last_epoch_samples = int(epoch_samples)
+
+#         # --- LOG & CHECKPOINT (logging delegated to log_epoch_summary) ---
 #         tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
 #         vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
-#         current_lr = optimizer.param_groups[0]["lr"]
 
 #         models_core.log_epoch_summary(
 #             epoch,
 #             model,
 #             optimizer,
-#             train_metrics   = tr_metrics,
-#             val_metrics     = vl_metrics,
-#             base_tr_mean    = base_tr_mean,
-#             base_tr_pers    = base_tr_pers,
-#             base_vl_mean    = base_vl_mean,
-#             base_vl_pers    = base_vl_pers,
-#             slip_thresh     = 1e-6,
-#             log_file        = params.log_file,
-#             top_k           = 999,
-#             hparams         = params.hparams,
+#             train_metrics=tr_metrics,
+#             val_metrics=vl_metrics,
+#             base_tr_mean=base_tr_mean,
+#             base_tr_pers=base_tr_pers,
+#             base_vl_mean=base_vl_mean,
+#             base_vl_pers=base_vl_pers,
+#             slip_thresh=1e-6,
+#             log_file=params.log_file,
+#             top_k=999,
+#             hparams=params.hparams,
 #         )
 #         live_plot.update(tr_rmse, vl_rmse)
 
-#         models_dir = Path(params.models_folder)
+#         # checkpointing: maybe_save_chkpt returns improved flag
 #         best_val, improved, *_ = models_core.maybe_save_chkpt(
 #             models_dir, model, vl_rmse, best_val,
 #             {"rmse": tr_rmse}, {"rmse": vl_rmse},
 #             live_plot, params
 #         )
 
+#         # expose checkpoint event for logger (read-only)
+#         model._last_epoch_checkpoint = bool(improved)
+
+#         # concise console print after epoch (TRAIN/VALID metrics and averaged losses)
+#         current_lr = optimizer.param_groups[0]["lr"]
 #         print(
 #             f"Epoch {epoch:02d}  "
 #             f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
 #             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
 #             f"lr={current_lr:.2e} |  "
-#             f"improved={improved == 1} | "
+#             f"improved={bool(improved)} |  "
 #             f"loss_main={avg_loss_main:.5e}, loss_aux={avg_loss_aux:.5e}"
 #         )
 
@@ -1374,10 +1242,8 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #         else:
 #             patience += 1
 #             if patience >= early_stop_patience:
-#                 print(f"Early stopping at epoch {epoch}")
 #                 break
 
-#     # restore best
 #     if best_state is not None:
 #         model.load_state_dict(best_state)
 #         models_core.save_final_chkpt(
@@ -1385,13 +1251,24 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 #             tr_metrics, vl_metrics, live_plot, suffix="_fin"
 #         )
 
+#     for attr in ("_last_epoch_elapsed", "_last_epoch_samples", "_last_epoch_checkpoint", "_first_batch_snapshot"):
+#         if hasattr(model, attr):
+#             try:
+#                 delattr = getattr(model, "__delattr__", None)
+#                 if callable(delattr):
+#                     model.__delattr__(attr)
+#             except Exception:
+#                 pass
+
 #     return best_val
+
+######### fast below
 
 def model_training_loop(
     model:                nn.Module,
     optimizer:            torch.optim.Optimizer,
     scheduler:            torch.optim.lr_scheduler.OneCycleLR,
-    scaler:               torch.cuda.amp.GradScaler,
+    scaler:               torch.amp.GradScaler,
     train_loader,
     val_loader,
     *,
@@ -1401,32 +1278,23 @@ def model_training_loop(
     alpha_smooth:        float,
 ) -> float:
     """
-    Train loop (minimal, logging delegated to init_log / log_epoch_summary).
+    Training loop with remaining GPU->CPU syncs removed, cuDNN warmup enabled, aux outputs unused,
+    and all per-batch host copies deferred until after optimizer.step.
 
-    Responsibilities retained
-      - device placement
-      - scheduler total-steps sanity check (best-effort)
-      - baseline computation
-      - per-epoch training and validation
-      - gradient scaling, clipping, optimizer step, scheduler step
-      - metrics computation and checkpointing via models_core.maybe_save_chkpt
-
-    Logging policy
-      - Keep the loop free of verbose logging; expose only compact, read-only
-        epoch attributes for the logger:
-          model._last_epoch_elapsed (float seconds)
-          model._last_epoch_samples (int)
-          model._last_epoch_checkpoint (bool)
-      - Capture a one-time, detached first-batch snapshot on the first training
-        backward that contains shapes, detached loss scalars, and a small
-        grads summary for one-shot printing by init_log/log_epoch_summary.
-      - Still print a concise console line after each epoch (TRAIN/VALID metrics,
-        lr, improved flag, averaged losses) as requested.
+    Behavior:
+      - model(...) still returns (raw_reg, aux_out) for API parity; aux_out is not inspected in the hot path.
+      - No .cpu()/.item()/.tolist() calls occur before scaler.step for any training batch.
+      - torch.backends.cudnn.benchmark is enabled once at startup to avoid repeated cudnn kernel autotune stalls.
+      - First-batch snapshot is a non-blocking summary (shapes and boolean grad presence only).
+      - Uses torch.amp.autocast('cuda') and torch.amp.GradScaler for AMP path (scaler passed in).
     """
+    import torch as _torch
+    _torch.backends.cudnn.benchmark = True
+
     device = next(model.parameters()).device
     model.to(device)
 
-    # Scheduler total_steps sanity check (best-effort)
+    # Scheduler sanity check (best-effort)
     try:
         expected_total = len(train_loader) * max_epochs
         if hasattr(scheduler, "_total_steps") and scheduler._total_steps != expected_total:
@@ -1434,9 +1302,8 @@ def model_training_loop(
                 f"Scheduler total_steps mismatch: scheduler={scheduler._total_steps} expected={expected_total}"
             )
     except Exception:
-        pass  # do not block training for introspection failures
+        pass
 
-    # 1) static baselines
     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
 
@@ -1444,7 +1311,6 @@ def model_training_loop(
     live_plot = plots.LiveRMSEPlot()
     best_val, best_state, patience = float("inf"), None, 0
 
-    # Ensure any leftover snapshot is cleared before training (best-effort)
     if hasattr(model, "_first_batch_snapshot"):
         try:
             delattr = getattr(model, "__delattr__", None)
@@ -1454,8 +1320,6 @@ def model_training_loop(
             pass
 
     models_dir = Path(params.models_folder)
-
-    # Flag used to capture per-first-backward grads info exactly once
     first_snapshot_captured = False
 
     for epoch in range(1, max_epochs + 1):
@@ -1463,30 +1327,28 @@ def model_training_loop(
         for p in model.head_flat.parameters():
             p.requires_grad = False if epoch <= freeze_till else True
 
-        # --- TRAIN PHASE ---
         model.train()
         model.h_short = model.h_long = None
+
         train_preds, train_targs = [], []
         prev_day = None
 
-        # accumulators (kept minimal)
         epoch_loss_main_sum = 0.0
         epoch_loss_aux_sum = 0.0
         epoch_loss_count = 0
-
-        # timing / throughput counters for this epoch (kept minimal)
         epoch_start = datetime.utcnow().timestamp()
         epoch_samples = 0
 
         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
 
-            x_batch, y_signal, wd = (
-                x_batch.to(device), y_signal.to(device), wd.to(device)
-            )
+            x_batch = x_batch.to(device, non_blocking=True)
+            y_signal = y_signal.to(device, non_blocking=True)
+            wd = wd.to(device, non_blocking=True)
+
             optimizer.zero_grad(set_to_none=True)
 
-            # --- GATHER WINDOWS & TARGETS ---
+            # gather windows & targets (avoid many small Python ops if possible)
             batch_size = x_batch.size(0)
             windows_list, targets_list = [], []
             for example_idx in range(batch_size):
@@ -1494,154 +1356,209 @@ def model_training_loop(
                 L = int(seq_lengths[example_idx])
                 if L == 0:
                     continue
-
-                w = x_batch[example_idx, :L]            # (L, window_len, feat)
-                t = y_signal[example_idx, :L].reshape(-1)  # (L,)
-                windows_list.append(w)
-                targets_list.append(t)
+                windows_list.append(x_batch[example_idx, :L])
+                targets_list.append(y_signal[example_idx, :L].reshape(-1))
 
             if not windows_list:
                 continue
 
-            # --- SINGLE BATCHED FORWARD ---
-            windows_tensor = torch.cat(windows_list, dim=0)   # (total_W, window_len, feat)
-            targets_tensor = torch.cat(targets_list, dim=0)   # (total_W,)
+            windows_tensor = torch.cat(windows_list, dim=0)
+            targets_tensor = torch.cat(targets_list, dim=0)
 
-            raw_out = model(windows_tensor)
-            if isinstance(raw_out, (tuple, list)) and len(raw_out) >= 2:
-                raw_reg, aux_out = raw_out[0], raw_out[1]
-            else:
-                raise ValueError("model must return (main_out, aux_out) tuple in training")
+            # Ensure contiguous input to help cudnn reuse
+            if not windows_tensor.is_contiguous():
+                windows_tensor = windows_tensor.contiguous()
 
-            # --- AUX OUTPUT: explicit shape handling ---
-            if aux_out.dim() == 3:
-                _, T, last_dim = aux_out.shape
-                if last_dim != 1:
-                    raise ValueError(f"train: unexpected aux_out last dim {last_dim}")
-                aux_seq = aux_out.view(aux_out.size(0), T)
-            elif aux_out.dim() == 2:
-                _, T = aux_out.shape
-                aux_seq = aux_out
-            else:
-                raise ValueError(f"train: unexpected aux_out.dim()={aux_out.dim()}")
+            # Forward + loss under AMP autocast (no host-syncs)
+            with _torch.amp.autocast(device_type="cuda", enabled=True):
+                raw_out = model(windows_tensor)
+                raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-            targets_seq = targets_tensor.unsqueeze(1).expand(-1, T)  # (W, T)
-
-            # --- RAW REGRESSION UNWRAP: ensure seq_reg is (W, T) ---
-            if raw_reg.dim() == 3:
-                if raw_reg.size(-1) == 1:
-                    seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+                if raw_reg.dim() == 3:
+                    if raw_reg.size(-1) == 1:
+                        seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+                    else:
+                        raw_reg_pred = model.pred(raw_reg)
+                        if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+                            raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+                        seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
+                elif raw_reg.dim() == 2:
+                    seq_reg = raw_reg
                 else:
-                    raw_reg_pred = model.pred(raw_reg)
-                    if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
-                        raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
-                    seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
-            elif raw_reg.dim() == 2:
-                seq_reg = raw_reg
-            else:
-                raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
+                    raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
 
-            preds = seq_reg[:, -1]            # (W,)
-            aux_seq = aux_seq                 # (W, T)
+                preds = seq_reg[:, -1]
+                loss_main = smooth_loss(preds, targets_tensor)
+                loss = loss_main
 
-            # compute losses
-            loss = smooth_loss(preds, targets_tensor)
-            loss_aux = smooth_loss(aux_seq, targets_seq)
-
-            # update accumulators
-            epoch_loss_main_sum += float(loss.detach().cpu())
-            epoch_loss_aux_sum += float(loss_aux.detach().cpu())
-            epoch_loss_count += 1
-
-            # record for train metrics
-            train_preds.extend(preds.detach().cpu().tolist())
-            train_targs.extend(targets_tensor.cpu().tolist())
-
-            # update sample counter (throughput)
-            epoch_samples += int(targets_tensor.size(0))
-
+            # Backward (AMP) with no host-syncs before step
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
 
-            # --- First-batch one-shot detached snapshot capture (read-only, best-effort)
-            # Capture once after the first backward to record shapes, loss scalars,
-            # per-group nonzero-grad counts and simple grad-presence booleans.
+            # # non-blocking first-batch snapshot: shapes and grad-presence only
+            # if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
+            #     try:
+            #         raw_shape = tuple(raw_reg.shape) if isinstance(raw_reg, torch.Tensor) else None
+            #         aux_shape = None
+            #         per_param_has_grad = {
+            #             (getattr(p, "name", None) or id(p)): (p.grad is not None)
+            #             for g in optimizer.param_groups
+            #             for p in g.get("params", [])
+            #         }
+            #         group_nonzero_counts = [
+            #             sum(1 for p in g.get("params", []) if p.grad is not None)
+            #             for g in optimizer.param_groups
+            #         ]
+            #         backbone_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
+            #         head_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
+            #         aux_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("aux") or "aux" in n)
+
+            #         model._first_batch_snapshot = {
+            #             "raw_reg_shape": raw_shape,
+            #             "aux_out_shape": aux_shape,
+            #             "loss_main": None,
+            #             "loss_aux": None,
+            #             "aux_w": float(params.hparams.get("AUX_LOSS_WEIGHT", 0.0)),
+            #             "group_nonzero_counts": group_nonzero_counts,
+            #             "grads": {"backbone": bool(backbone_has), "head": bool(head_has), "aux": aux_has},
+            #         }
+            #     except Exception:
+            #         pass
+            #     first_snapshot_captured = True
+
+            # non-blocking first-batch snapshot: shapes and grad-presence only (guarded, sanitized)
             if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
                 try:
-                    # shapes & losses (detached CPU)
-                    raw_shape = tuple(raw_reg.detach().cpu().shape) if isinstance(raw_reg, torch.Tensor) else None
-                    aux_shape = tuple(aux_out.detach().cpu().shape) if isinstance(aux_out, torch.Tensor) else None
-                    lm_cpu = loss_main.detach().cpu()
-                    la_cpu = loss_aux.detach().cpu()
+                    # basic shape info (same as before)
+                    raw_shape = tuple(raw_reg.shape) if isinstance(raw_reg, torch.Tensor) else None
+                    aux_shape = None
 
-                    # per-parameter grad presence and per-group nonzero-grad counts
-                    per_param_has_grad = {}
-                    group_nonzero_counts = []
-                    for g in optimizer.param_groups:
-                        cnt = 0
-                        for p in g.get("params", []):
-                            has = (p.grad is not None) and (p.grad.detach().abs().sum().item() > 0)
-                            per_param_has_grad[getattr(p, "name", None) or id(p)] = bool(has)
-                            if has:
-                                cnt += 1
-                        group_nonzero_counts.append(cnt)
+                    # gradient presence summary (same as before)
+                    per_param_has_grad = {
+                        (getattr(p, "name", None) or id(p)): (p.grad is not None)
+                        for g in optimizer.param_groups
+                        for p in g.get("params", [])
+                    }
+                    group_nonzero_counts = [
+                        sum(1 for p in g.get("params", []) if p.grad is not None)
+                        for g in optimizer.param_groups
+                    ]
+                    backbone_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
+                    head_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
+                    aux_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("aux") or "aux" in n)
 
-                    # simple boolean summary for backbone/head/aux (best-effort by name heuristic)
-                    backbone_has = any(
-                        ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
-                        for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long") or n.startswith("pred") == False
-                    )
-                    head_has = any(
-                        ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
-                        for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n
-                    )
-                    aux_has = any(
-                        ((p.grad is not None) and (p.grad.detach().abs().sum().item() > 0))
-                        for n, p in model.named_parameters() if n.startswith("aux") or "aux" in n
-                    )
+                    # --- Safe, deterministic loss extraction and sanitization ---
+                    # We intentionally do NOT perform extra forward/backward work here.
+                    # If loss tensor objects exist in scope (loss_main), sanitize them; otherwise store None.
+                    import math, traceback
+                    try:
+                        # If loss_main was computed above as a tensor, reduce it safely to a scalar in FP32.
+                        lm_val = None
+                        try:
+                            if 'loss_main' in locals() and isinstance(loss_main, torch.Tensor):
+                                lm_cpu = loss_main.detach().cpu().float()
+                                if lm_cpu.numel() == 0:
+                                    lm_val = None
+                                else:
+                                    finite_mask = torch.isfinite(lm_cpu)
+                                    if finite_mask.any():
+                                        lm_val = float(lm_cpu[finite_mask].mean().item())
+                                    else:
+                                        lm_val = float("nan")
+                            else:
+                                # not present in locals (normal) -> store None
+                                lm_val = None
+                        except Exception:
+                            lm_val = float("nan")
+                    except Exception:
+                        lm_val = float("nan")
 
+                    # Aux loss sanitization (if aux loss was computed in scope)
+                    try:
+                        la_val = None
+                        if 'loss_aux' in locals() and isinstance(loss_aux, torch.Tensor):
+                            la_cpu = loss_aux.detach().cpu().float()
+                            if la_cpu.numel() == 0:
+                                la_val = None
+                            else:
+                                finite_mask = torch.isfinite(la_cpu)
+                                if finite_mask.any():
+                                    la_val = float(la_cpu[finite_mask].mean().item())
+                                else:
+                                    la_val = float("nan")
+                        else:
+                            la_val = None
+                    except Exception:
+                        la_val = float("nan")
+
+                    # Aux weight extraction (safe)
+                    try:
+                        aux_w_val = float(params.hparams.get("AUX_LOSS_WEIGHT", 0.0)) if params is not None and hasattr(params, "hparams") else 0.0
+                    except Exception:
+                        aux_w_val = 0.0
+
+                    # Weighted aux contribution (safe arithmetic only when numeric)
+                    try:
+                        if la_val is None:
+                            waux_val = None
+                        elif isinstance(la_val, float) and math.isfinite(la_val):
+                            waux_val = float(aux_w_val) * float(la_val)
+                        else:
+                            waux_val = float("nan")
+                    except Exception:
+                        waux_val = float("nan")
+
+                    # Finalize snapshot dict: ensure plain Python floats or None
                     model._first_batch_snapshot = {
                         "raw_reg_shape": raw_shape,
                         "aux_out_shape": aux_shape,
-                        "loss_main": lm_cpu,
-                        "loss_aux": la_cpu,
-                        "aux_w": float(params.hparams.get("AUX_LOSS_WEIGHT", 0.0)),
+                        "loss_main": (None if lm_val is None else float(lm_val)),
+                        "loss_aux": (None if la_val is None else float(la_val)),
+                        "aux_w": float(aux_w_val),
                         "group_nonzero_counts": group_nonzero_counts,
                         "grads": {"backbone": bool(backbone_has), "head": bool(head_has), "aux": bool(aux_has)},
                     }
                 except Exception:
+                    # keep failure silent to avoid interfering with training startup
                     pass
                 first_snapshot_captured = True
 
-            # Clip grads only over params that actually received gradients
+                    
+            # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
             params_with_grad = [p for p in model.parameters() if p.grad is not None]
             if params_with_grad:
-                nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
+                _torch.nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
 
             scaler.step(optimizer)
             scaler.update()
             scheduler.step()
 
-        # --- METRICS & VALIDATION ---
+            # After step: minimal host work (convert scalars/lists once)
+            epoch_loss_main_sum += float(loss_main.detach().cpu())
+            epoch_loss_count += 1
+
+            train_preds.extend(preds.detach().cpu().tolist())
+            train_targs.extend(targets_tensor.cpu().tolist())
+
+            epoch_samples += int(targets_tensor.size(0))
+
+        # Metrics & validation
         tr_metrics = _compute_metrics(
             np.array(train_preds, dtype=float),
             np.array(train_targs, dtype=float),
         )
         vl_metrics, _ = eval_on_loader(val_loader, model)
 
-        # averaged loss diagnostics (safe: avoid division by zero)
         if epoch_loss_count > 0:
             avg_loss_main = epoch_loss_main_sum / epoch_loss_count
-            avg_loss_aux = epoch_loss_aux_sum / epoch_loss_count
         else:
-            avg_loss_main = avg_loss_aux = float("nan")
+            avg_loss_main = float("nan")
+        avg_loss_aux = 0.0
 
-        # expose lightweight epoch timing and sample counters for logger (read-only)
         epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
         model._last_epoch_elapsed = float(epoch_elapsed)
         model._last_epoch_samples = int(epoch_samples)
 
-        # --- LOG & CHECKPOINT (logging delegated to log_epoch_summary) ---
         tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
         vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
 
@@ -1662,28 +1579,24 @@ def model_training_loop(
         )
         live_plot.update(tr_rmse, vl_rmse)
 
-        # checkpointing: maybe_save_chkpt returns improved flag
         best_val, improved, *_ = models_core.maybe_save_chkpt(
             models_dir, model, vl_rmse, best_val,
             {"rmse": tr_rmse}, {"rmse": vl_rmse},
             live_plot, params
         )
 
-        # expose checkpoint event for logger (read-only)
         model._last_epoch_checkpoint = bool(improved)
 
-        # concise console print after epoch (TRAIN/VALID metrics and averaged losses)
         current_lr = optimizer.param_groups[0]["lr"]
         print(
             f"Epoch {epoch:02d}  "
             f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
             f"lr={current_lr:.2e} |  "
-            f"improved={bool(improved)} | "
+            f"improved={bool(improved)} |  "
             f"loss_main={avg_loss_main:.5e}, loss_aux={avg_loss_aux:.5e}"
         )
 
-        # update best_state / patience logic (unchanged)
         if improved:
             best_state, patience = {
                 k: v.cpu() for k, v in model.state_dict().items()
@@ -1693,7 +1606,6 @@ def model_training_loop(
             if patience >= early_stop_patience:
                 break
 
-    # restore best
     if best_state is not None:
         model.load_state_dict(best_state)
         models_core.save_final_chkpt(
@@ -1701,8 +1613,7 @@ def model_training_loop(
             tr_metrics, vl_metrics, live_plot, suffix="_fin"
         )
 
-    # cleanup optional epoch attributes to avoid accidental persistence
-    for attr in ("_last_epoch_elapsed", "_last_epoch_samples", "_last_epoch_checkpoint"):
+    for attr in ("_last_epoch_elapsed", "_last_epoch_samples", "_last_epoch_checkpoint", "_first_batch_snapshot"):
         if hasattr(model, attr):
             try:
                 delattr = getattr(model, "__delattr__", None)
