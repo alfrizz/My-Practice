@@ -24,7 +24,7 @@ shrink-wsl.ps1          WSL maintenance: prunes old `/tmp` files and Jupyter che
                         Manually execute on elevated Powershell, run:=> PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File "G:\My Drive\Ingegneria\Data Science GD\My-Practice\scripts\shrink-wsl.ps1"
 shrink-wsl.log          Timestamped record of every action, disk-free and VHDX-size before/after maintenance, and compaction output.  
 
-sync-practice.sh	Bash script run at WSL boot: waits for G: drive, then runs Unison in batch mode to sync /home/alfrizz/my_practice ↔ G: folder.
+sync-practice.sh	Bash script run at WSL boot: waits for G: drive, then runs Unison in batch mode to sync /home/alfrizz ↔ G: folder.
 sync-practice.log       Logs of syncs between wsl and G:
 
 -----------------------------------------------
@@ -58,7 +58,7 @@ networkDrives = true
 mountFsTab    = true
 
 [boot]
-command = su - alfrizz -c "/home/alfrizz/my_practice/scripts/sync-practice.sh >> /home/alfrizz/my_practice/scripts/sync-practice.log 2>&1 &"
+command = su - alfrizz -c "/home/alfrizz/scripts/sync-practice.sh >> /home/alfrizz/scripts/sync-practice.log 2>&1 &"
 
 [user]
 default = alfrizz

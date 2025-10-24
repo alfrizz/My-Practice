@@ -5,7 +5,7 @@
 .DESCRIPTION
   Deletes only:
     • /tmp entries older than 3h  
-    • .ipynb_checkpoints dirs under ~/my_practice  
+    • .ipynb_checkpoints dirs under ~/ 
   Then runs fstrim, quiesces WSL, stops LxssManager+VMCompute, compacts ext4.vhdx,
   restarts services, warms up Ubuntu, and logs BEFORE/AFTER sizes + all outputs.
 #>
@@ -45,7 +45,8 @@ wsl -d Ubuntu-22.04 --cd / -u root -- bash -c "sed -i '/^\s*networkDrives/d' /et
 
 #── 4) LOCATE VHDX & LOG BEFORE ---------------------------------------------
 $vhdx = "$env:LOCALAPPDATA\Packages\CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc\LocalState\ext4.vhdx"
-Write-Log "VHDX path: $vhdx"
+Write-Log "VHDX p
+ath: $vhdx"
 if (-not (Test-Path $vhdx)) {
   Write-Log "ERROR: ext4.vhdx not found"; throw 'Missing VHDX'
 }
@@ -86,12 +87,12 @@ Write-Log '/tmp cleanup done'
 #── 8) LIST & DELETE .ipynb_checkpoints ------------------------------------
 Write-Log 'Listing .ipynb_checkpoints dirs…'
 $cpList = wsl -d Ubuntu-22.04 --cd / -u root -- bash -c `
-  'find /home/alfrizz/my_practice -type d -name ".ipynb_checkpoints" -prune -print' 2>$null
+  'find /home/alfrizz -type d -name ".ipynb_checkpoints" -prune -print' 2>$null
 foreach ($p in $cpList) { Write-Log "  [DEL] chkpt$p" }
 
 Write-Log 'Deleting .ipynb_checkpoints…'
 wsl -d Ubuntu-22.04 --cd / -u root -- bash -c `
-  'find /home/alfrizz/my_practice -type d -name ".ipynb_checkpoints" -prune -exec rm -rf {} + || true' 2>$null
+  'find /home/alfrizz -type d -name ".ipynb_checkpoints" -prune -exec rm -rf {} + || true' 2>$null
 Write-Log 'Checkpoints cleanup done'
 
 #── 9) FSTRIM --------------------------------------------------------------

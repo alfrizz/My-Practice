@@ -3,7 +3,7 @@ services:
     container_name: gpu-jl
 
     build:
-      context: ${HOME}/my_practice/scripts
+      context: ${HOME}/scripts
       dockerfile: Dockerfile
     image: gpu-jl:latest
 
@@ -18,7 +18,7 @@ services:
 
     volumes:        
       - "/home/alfrizz/docker_tmp:/tmp"
-      - ${HOME}/my_practice:/workspace
+      - ${HOME}:/workspace
 
     working_dir: /workspace
 
