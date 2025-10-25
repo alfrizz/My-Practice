@@ -452,9 +452,18 @@ def _reset_states(
  
 def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[dict, np.ndarray]:
     """
-    Evaluation loop with aux outputs present but never inspected in hot path;
-    per-batch preds->cpu conversions remain but eval is off the critical training backward path.
-    """
+    Evaluate `model` on `loader` and return metrics plus CPU numpy predictions.
+
+    Behavior
+    - Runs model in eval mode with torch.no_grad.
+    - Accepts model outputs as raw_reg 
+    - Supports raw_reg with shape (W, T, 1) or (W, T) and uses model.pred when needed.
+    - Aggregates per-segment final-step predictions (seq_reg[:, -1]) and targets,
+      converts them to CPU numpy arrays for metric computation.
+    - Stores last_val_preds and last_val_targs on the model as torch.FloatTensors
+      for downstream diagnostics (slope RMSE etc).
+    - This function performs host copies (preds.cpu()) which is acceptable for eval
+      since it is off the training hot path.    """
     device = next(model.parameters()).device
     model.to(device).eval()
     model.h_short = model.h_long = None
@@ -866,15 +875,20 @@ def model_training_loop(
     alpha_smooth:        float,
 ) -> float:
     """
-    Training loop with remaining GPU->CPU syncs removed, cuDNN warmup enabled,
-    and all per-batch host copies deferred until after optimizer.step.
-
-    Behavior:
-      - model(...) still returns (raw_reg, aux_out) for API parity; aux_out is not inspected in the hot path.
-      - No .cpu()/.item()/.tolist() calls occur before scaler.step for any training batch.
-      - torch.backends.cudnn.benchmark is enabled once at startup to avoid repeated cudnn kernel autotune stalls.
-      - First-batch snapshot is a non-blocking summary (shapes and boolean grad presence only).
-      - Uses torch.amp.autocast('cuda') and torch.amp.GradScaler for AMP path (scaler passed in).
+    Train `model` with AMP and one-cycle LR while minimizing GPU->CPU syncs.
+    
+    - AMP hot path: forward/backward under torch.amp.autocast and torch.amp.GradScaler;
+      host work (detach/to-list) deferred until after scaler.step to avoid blocking.
+    - Captures a cheap first-batch snapshot (shapes and boolean grad-presence) without
+      forcing GPU->CPU copies at startup.
+    - Performs gradient clipping, scaler.step/optimizer.step and scheduler.step every batch.
+    - Logs epoch metrics, checkpointing and lightweight diagnostics; AUX paths are disabled
+      in the hot path.
+    
+    Parameters: model, optimizer, scheduler, scaler, train_loader, val_loader,
+    max_epochs, early_stop_patience, clipnorm, alpha_smooth.
+    
+    Returns: best_val (best validation metric observed).
     """
     import torch as _torch
     _torch.backends.cudnn.benchmark = True
@@ -898,14 +912,6 @@ def model_training_loop(
     smooth_loss = SmoothMSELoss(alpha_smooth)
     live_plot = plots.LiveRMSEPlot()
     best_val, best_state, patience = float("inf"), None, 0
-
-    # if hasattr(model, "_first_batch_snapshot"):
-    #     try:
-    #         delattr = getattr(model, "__delattr__", None)
-    #         if callable(delattr):
-    #             model.__delattr__("_first_batch_snapshot")
-    #     except Exception:
-    #         pass
 
     models_dir = Path(params.models_folder)
     first_snapshot_captured = False
@@ -952,9 +958,9 @@ def model_training_loop(
             windows_tensor = torch.cat(windows_list, dim=0)
             targets_tensor = torch.cat(targets_list, dim=0)
 
-            # Ensure contiguous input to help cudnn reuse
-            if not windows_tensor.is_contiguous():
-                windows_tensor = windows_tensor.contiguous()
+            # # Ensure contiguous input to help cudnn reuse
+            # if not windows_tensor.is_contiguous():
+            #     windows_tensor = windows_tensor.contiguous()
 
             # Forward + loss under AMP autocast (no host-syncs)
             with _torch.amp.autocast(device_type="cuda", enabled=True):
@@ -982,38 +988,27 @@ def model_training_loop(
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
 
-            # # non-blocking first-batch snapshot: shapes and grad-presence only (guarded, sanitized)
-            # if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
-            #     try:
-            #         raw_shape = tuple(raw_reg.shape) if isinstance(raw_reg, torch.Tensor) else None
+            # lightweight first-batch snapshot (non-blocking, cheap)
+            if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
+                try:
+                    raw_shape = tuple(raw_reg.shape) if isinstance(raw_reg, torch.Tensor) else None
+            
+                    group_nonzero_counts = [
+                        sum(1 for p in g.get("params", []) if p.grad is not None)
+                        for g in optimizer.param_groups
+                    ]
+                    backbone_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
+                    head_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
+            
+                    model._first_batch_snapshot = {
+                        "raw_reg_shape": raw_shape,
+                        "group_nonzero_counts": group_nonzero_counts,
+                        "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
+                    }
+                except Exception:
+                    pass
+                first_snapshot_captured = True
 
-            #         group_nonzero_counts = [
-            #             sum(1 for p in g.get("params", []) if p.grad is not None)
-            #             for g in optimizer.param_groups
-            #         ]
-            #         backbone_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
-            #         head_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
-
-            #         lm_val = None
-            #         if isinstance(loss_main, torch.Tensor):
-            #             try:
-            #                 lm_cpu = loss_main.detach().cpu().float()
-            #                 if lm_cpu.numel() > 0:
-            #                     finite_mask = torch.isfinite(lm_cpu)
-            #                     if finite_mask.any():
-            #                         lm_val = float(lm_cpu[finite_mask].mean().item())
-            #             except Exception:
-            #                 lm_val = None
-
-            #         model._first_batch_snapshot = {
-            #             "raw_reg_shape": raw_shape,
-            #             "loss_main": (None if lm_val is None else float(lm_val)),
-            #             "group_nonzero_counts": group_nonzero_counts,
-            #             "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
-            #         }
-            #     except Exception:
-            #         pass
-            #     first_snapshot_captured = True
 
             # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
             params_with_grad = [p for p in model.parameters() if p.grad is not None]
@@ -1103,13 +1098,11 @@ def model_training_loop(
             tr_metrics, vl_metrics, live_plot, suffix="_fin"
         )
 
-    for attr in ("_last_epoch_elapsed", "_last_epoch_samples", "_last_epoch_checkpoint", "_first_batch_snapshot"):
-        if hasattr(model, attr):
-            try:
-                delattr = getattr(model, "__delattr__", None)
-                if callable(delattr):
-                    model.__delattr__(attr)
-            except Exception:
-                pass
+    for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):
+        try:
+            delattr(model, attr)
+        except Exception:
+            pass
+
 
     return best_val

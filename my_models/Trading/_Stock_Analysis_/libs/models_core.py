@@ -1336,6 +1336,383 @@ def collect_or_run_forward_micro_snapshot(
 
 ###############
 
+# _RUN_STARTED = False
+# _RUN_DEBUG_DONE = False
+# _RUN_LOCK = threading.Lock()
+
+# def init_log(
+#     log_file:  Path,
+#     hparams:   dict | None = None,
+#     baselines: dict | None = None,
+#     # optional, read-only runtime objects (all optional; safe if None)
+#     optimizer: torch.optim.Optimizer | None = None,
+#     scheduler: object | None = None,
+#     model: torch.nn.Module | None = None,
+#     first_batch: dict | None = None,   # detached CPU snapshot
+#     batch_losses: dict | None = None,
+#     scaler: object | None = None,
+# ):
+
+#     global _RUN_STARTED, _RUN_DEBUG_DONE
+
+#     with _RUN_LOCK:
+#         # --- Header emitted exactly once ---
+#         if not _RUN_STARTED:
+#             sep = "-" * 150
+#             _append_log("\n" + sep, log_file)
+#             _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+
+#             if isinstance(baselines, dict) and baselines:
+#                 _append_log("\nBASELINES:", log_file)
+#                 _append_log(f"  TRAIN mean RMSE        = {baselines['base_tr_mean']:.5f}", log_file)
+#                 _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
+#                 _append_log(f"  VAL   mean RMSE        = {baselines['base_vl_mean']:.5f}", log_file)
+#                 _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
+
+#             if isinstance(hparams, dict) and hparams:
+#                 _append_log("\nHYPERPARAMS:", log_file)
+#                 for k, v in hparams.items():
+#                     _append_log(f"  {k} = {v}", log_file)
+#                 _append_log("", log_file)
+
+#             # Expanded PER-EPOCH format help (detailed, human-friendly)
+#             _append_log("PER-EPOCH LOG FORMAT (explanatory):", log_file)
+#             _append_log("  E{ep:02d}                : epoch number formatted with two digits", log_file)
+#             _append_log("  OPTS[{groups}:{lrs}]     : optimizer groups and learning rates (list of group LR strings)", log_file)
+#             _append_log("  GN[reg,cls,ter,tot]      : gradient norms for regularizer, classification, term, and total (per-epoch summary)", log_file)
+#             _append_log("  GD[med,p90,max]         : gradient delta statistics (median, 90th percentile, maximum) used for stability checks", log_file)
+#             _append_log("  UR[med,max]             : update ratio statistics (median,max) measuring step/param magnitude ratio", log_file)
+#             _append_log("  lr={lr:.1e}             : current learning rate (main/backbone) reported in scientific notation", log_file)
+#             _append_log("  TR[rmse,r2,mae]         : training metrics (RMSE, R^2, MAE) aggregated across training set", log_file)
+#             _append_log("  VL[rmse,r2,mae]         : validation metrics (RMSE, R^2, MAE) aggregated on the validation set", log_file)
+#             _append_log("  AUX=[ON|DISABLED]       : whether auxiliary losses/heads are active", log_file)
+#             _append_log("  SR={slope_rmse:.3f}     : slope RMSE diagnostic measuring calibration of trend predictions", log_file)
+#             _append_log("  SL={slip:.2f},HR={hub_max:.3f} : slip and hub max indicators for recent prediction horizons", log_file)
+#             _append_log("  topK(g/u)=param:grad_norm/update_ratio,... : the top-k parameter entries by gradient norm and their update ratios", log_file)
+#             _append_log("  Additional single-run diagnostics printed once in the header:", log_file)
+#             _append_log("    DEBUG_SHAPES raw_reg=(N,1,1) aux_out=None AUX_W=... : shapes from a detached first batch snapshot", log_file)
+#             _append_log("    GROUP_NONZERO_COUNTS [k1,k2,...]             : per-group nonzero counts used for diagnostics", log_file)
+#             _append_log("    DEBUG_GRADS backbone=... head=... aux=...    : boolean flags indicating whether gradients were observed in those parts", log_file)
+#             _append_log("    MICRODETAIL ms: full_forward=...ms preds_cpu=...ms nseg=... seg/s=... mean_len=... gpuMB=... cpuB=... syncs=...", log_file)
+#             _append_log("      -> full_forward: wall-clock ms for the sampled forward over prepared windows", log_file)
+#             _append_log("      -> preds_cpu: ms to detach and copy predictions to CPU (post-forward host cost)", log_file)
+#             _append_log("      -> nseg: number of flattened segments forwarded (useful to normalize throughput)", log_file)
+#             _append_log("      -> seg/s: inferred segments per second (throughput) = nseg / full_forward_seconds", log_file)
+#             _append_log("      -> mean_len: average per-segment time-series length in timesteps", log_file)
+#             _append_log("      -> gpuMB: approximate peak GPU memory (MB) observed during forward", log_file)
+#             _append_log("      -> cpuB: bytes copied to CPU for predictions (human-readable KB/MB)", log_file)
+#             _append_log("      -> syncs: explicit torch.cuda.synchronize() counts used for timing accuracy", log_file)
+#             _append_log("      -> gpuRes: peak GPU reserved memory in MB (helps detect fragmentation)", log_file)
+#             _append_log("      -> actMB: estimated activation footprint (MB) computed from allocated delta", log_file)
+#             _append_log("      -> out_shape/out_dtype/out_numel: model output shape, dtype and number of elements", log_file)
+#             _append_log("      -> collector_ms: wall-clock ms spent by the collector (init-log overhead)", log_file)
+#             _append_log("      -> dataloader_ms: ms to fetch the sampled batch from the dataloader", log_file)
+#             _append_log("      -> param_bytes: total parameter memory in bytes (shown if MICRO_EXTRA enabled)", log_file)
+#             _append_log("", log_file)
+
+    #         # --- compact runtime summary (legacy single-line appearance) ---
+    #         try:
+    #             debug_opt_line = None
+    #             if optimizer is not None:
+    #                 try:
+    #                     opt_groups = len(optimizer.param_groups)
+    #                     opt_lrs = [g.get("lr", 0.0) for g in optimizer.param_groups]
+    #                     opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
+    #                     debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
+    #                 except Exception:
+    #                     debug_opt_line = None
+
+    #             model_static_line = None
+    #             model_sample_params_line = None
+    #             param_bytes_line = None
+    #             if model is not None:
+    #                 try:
+    #                     total_params = sum(int(p.numel()) for p in model.parameters())
+    #                     trainable_params = sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
+    #                     frozen_params = total_params - trainable_params
+    #                     model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
+    #                     names = [n for n, _ in model.named_parameters()][:10]
+    #                     model_sample_params_line = f"MODEL_SAMPLE_PARAMS: {names}"
+    #                     try:
+    #                         param_bytes = getattr(model, "_micro_snapshot", {}).get("param_bytes")
+    #                         if param_bytes is not None:
+    #                             if param_bytes >= 1024 * 1024:
+    #                                 param_bytes_line = f"param_bytes={param_bytes//(1024*1024)}MB"
+    #                             elif param_bytes >= 1024:
+    #                                 param_bytes_line = f"param_bytes={param_bytes//1024}KB"
+    #                             else:
+    #                                 param_bytes_line = f"param_bytes={param_bytes}B"
+    #                     except Exception:
+    #                         param_bytes_line = None
+    #                 except Exception:
+    #                     model_static_line = None
+    #                     model_sample_params_line = None
+    #                     param_bytes_line = None
+
+    #             per_epoch_compact = (
+    #                 "# PER-EPOCH LOG FORMAT: "
+    #                 "#  E{ep:02d} | OPTS[{groups}:{lrs}] | GN[reg,cls,ter,tot] | GD[med,p90,max] | UR[med,max] | lr={lr:.1e} | "
+    #                 "TR[rmse,r2,mae] | VL[rmse,r2,mae] | AUX=[ON|DISABLED] | SR={slope_rmse:.3f} | SL={slip:.2f},HR={hub_max:.3f} | "
+    #                 "topK(g/u)=param:grad_norm/update_ratio,..."
+    #             )
+
+    #             compact_parts = []
+    #             if debug_opt_line: compact_parts.append(debug_opt_line)
+    #             if model_static_line: compact_parts.append(model_static_line)
+    #             if model_sample_params_line: compact_parts.append(model_sample_params_line)
+    #             if param_bytes_line: compact_parts.append(param_bytes_line)
+    #             compact_parts.append(per_epoch_compact)
+    #             _append_log(" ".join(compact_parts), log_file)
+    #         except Exception:
+    #             pass
+
+    #         _RUN_STARTED = True
+
+    # # --- One-shot read-only runtime snapshot emitted at most once (complete, robust) ---
+    # if not _RUN_DEBUG_DONE:
+    #     emitted = False
+
+    #     try:
+    #         snapshot = first_batch if first_batch is not None else (getattr(model, "_first_batch_snapshot", None) if model is not None else None)
+    #     except Exception:
+    #         snapshot = None
+
+    #     # FIRST: produce/fetch a micro-snapshot (collector). tqdm removed per request.
+    #     try:
+    #         tloader = locals().get("train_loader", None) or globals().get("train_loader", None)
+    #         prms = locals().get("params", None) or globals().get("params", None)
+    #         clipval = None
+    #         try:
+    #             clipval = prms.hparams["CLIPNORM"] if prms is not None else None
+    #         except Exception:
+    #             clipval = None
+
+    #         try:
+    #             _ = collect_or_run_forward_micro_snapshot(
+    #                 model=model,
+    #                 train_loader=tloader,
+    #                 params=prms,
+    #                 log_file=log_file,
+    #                 clipnorm=clipval,
+    #             )
+    #         except Exception:
+    #             pass
+    #     except Exception:
+    #         pass
+    #     ######################
+    #     try:
+    #         fb = getattr(model, "_first_batch_snapshot", None)
+    #     except Exception:
+    #         fb = None
+        
+    #     try:
+    #         if isinstance(fb, dict):
+    #             try:
+    #                 raw_shape = fb.get("raw_reg_shape")
+    #                 aux_shape = fb.get("aux_out_shape")
+    #                 aux_w = fb.get("aux_w", 0.0)
+    #                 _append_log(f"DEBUG_SHAPES raw_reg={raw_shape} aux_out={aux_shape} AUX_W={aux_w:.1e}", log_file)
+        
+    #                 lm = fb.get("loss_main")
+    #                 la = fb.get("loss_aux")
+        
+    #                 def _fmt(v):
+    #                     try:
+    #                         import math, torch
+    #                         if isinstance(v, torch.Tensor):
+    #                             v_cpu = v.detach().cpu()
+    #                             if v_cpu.numel() == 0:
+    #                                 return "None"
+    #                             if v_cpu.numel() > 1:
+    #                                 finite = torch.isfinite(v_cpu)
+    #                                 if finite.any():
+    #                                     val = float(v_cpu[finite].mean().item())
+    #                                 else:
+    #                                     return "NaN"
+    #                             else:
+    #                                 val = float(v_cpu.item())
+    #                         elif v is None:
+    #                             return "None"
+    #                         else:
+    #                             val = float(v)
+    #                         return f"{val:.4e}" if math.isfinite(val) else "NaN"
+    #                     except Exception:
+    #                         return "NaN"
+        
+    #                 lm_str = _fmt(lm)
+    #                 la_str = _fmt(la)
+        
+    #                 try:
+    #                     if la is None:
+    #                         waux_str = "None"
+    #                     else:
+    #                         import math, torch
+    #                         if isinstance(la, (float, int)) and math.isfinite(float(la)):
+    #                             waux_str = f"{float(aux_w) * float(la):.4e}"
+    #                         else:
+    #                             if isinstance(la, torch.Tensor):
+    #                                 la_cpu = la.detach().cpu()
+    #                                 if la_cpu.numel() > 0 and torch.isfinite(la_cpu).any():
+    #                                     la_mean = float(la_cpu[torch.isfinite(la_cpu)].mean().item())
+    #                                     waux_str = f"{float(aux_w) * la_mean:.4e}"
+    #                                 else:
+    #                                     waux_str = "NaN"
+    #                             else:
+    #                                 waux_str = "NaN"
+    #                 except Exception:
+    #                     waux_str = "NaN"
+        
+    #                 # _append_log(f"DEBUG_LOSSES main={lm_str} aux={la_str} w*aux={waux_str}", log_file)
+        
+    #                 gnc = fb.get("group_nonzero_counts")
+    #                 if isinstance(gnc, (list, tuple)):
+    #                     _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
+        
+    #                 grads = fb.get("grads")
+    #                 if isinstance(grads, dict):
+    #                     _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+    #             except Exception:
+    #                 pass
+    #     except Exception:
+    #         pass
+        
+        # # Try to print the richer micro-snapshot (preferred). If absent, fall back to first-batch snapshot.
+        # try:
+        #     micro_ms = getattr(model, "_micro_snapshot", None)
+        # except Exception:
+        #     micro_ms = None
+
+        # # Emit MICRODETAIL when available (guarded, exhaustive)
+        # try:
+        #     if isinstance(micro_ms, dict):
+        #         ms = micro_ms
+        #         parts = []
+        #         # core timings and throughput
+        #         parts.append(f"full_forward={ms.get('full_forward_ms', None):.2f}ms" if ms.get('full_forward_ms') is not None else "full_forward=None")
+        #         parts.append(f"preds_cpu={ms.get('preds_cpu_ms', None):.2f}ms" if ms.get('preds_cpu_ms') is not None else "preds_cpu=None")
+        #         parts.append(f"nseg={ms.get('num_segments', None)}")
+        #         parts.append(f"seg/s={int(ms.get('segments_per_sec')) if ms.get('segments_per_sec') is not None else 'None'}")
+        #         parts.append(f"mean_len={ms.get('mean_seg_len', None):.2f}" if ms.get('mean_seg_len') is not None else "mean_len=None")
+        #         # memory summary
+        #         parts.append(f"gpuMB={ms['gpu_peak_mb']}" if ms.get("gpu_peak_mb") is not None else "gpuMB=None")
+        #         parts.append(f"gpuRes={ms['gpu_reserved_mb']}" if ms.get("gpu_reserved_mb") is not None else "gpuRes=None")
+        #         # precise bytes
+        #         parts.append(f"gpuAllocBytes={ms['gpu_allocated_bytes']}" if ms.get("gpu_allocated_bytes") is not None else "gpuAllocBytes=None")
+        #         parts.append(f"gpuResBytes={ms['gpu_reserved_bytes']}" if ms.get("gpu_reserved_bytes") is not None else "gpuResBytes=None")
+        #         # cpu copy bytes (human readable)
+        #         if ms.get("cpu_copy_bytes") is not None:
+        #             try:
+        #                 b = int(ms['cpu_copy_bytes'])
+        #                 if b >= 1024 * 1024:
+        #                     parts.append(f"cpuB={b//(1024*1024)}MB")
+        #                 elif b >= 1024:
+        #                     parts.append(f"cpuB={b//1024}KB")
+        #                 else:
+        #                     parts.append(f"cpuB={b}B")
+        #             except Exception:
+        #                 parts.append("cpuB=None")
+        #         else:
+        #             parts.append("cpuB=None")
+        #         # syncs and activation
+        #         parts.append(f"syncs={ms.get('device_syncs_count', None)}")
+        #         parts.append(f"p50seg={ms.get('per_segment_p50_ms', None):.2f}ms" if ms.get('per_segment_p50_ms') is not None else "p50seg=None")
+        #         parts.append(f"p90seg={ms.get('per_segment_p90_ms', None):.2f}ms" if ms.get('per_segment_p90_ms') is not None else "p90seg=None")
+        #         parts.append(f"actMB={ms.get('activation_mb', None)}")
+        #         # output metadata
+        #         parts.append(f"out_shape={ms.get('out_shape', None)}")
+        #         parts.append(f"out_dtype={ms.get('out_dtype', None)}")
+        #         parts.append(f"out_numel={ms.get('out_numel', None)}")
+        #         if ms.get("out_bytes") is not None:
+        #             try:
+        #                 ob = int(ms['out_bytes'])
+        #                 if ob >= 1024 * 1024:
+        #                     parts.append(f"out_bytes={ob//(1024*1024)}MB")
+        #                 elif ob >= 1024:
+        #                     parts.append(f"out_bytes={ob//1024}KB")
+        #                 else:
+        #                     parts.append(f"out_bytes={ob}B")
+        #             except Exception:
+        #                 parts.append("out_bytes=None")
+        #         else:
+        #             parts.append("out_bytes=None")
+        #         if ms.get("windows_bytes") is not None:
+        #             try:
+        #                 wb = int(ms['windows_bytes'])
+        #                 parts.append(f"windows_bytes={wb//1024}KB" if wb >= 1024 else f"windows_bytes={wb}B")
+        #             except Exception:
+        #                 parts.append("windows_bytes=None")
+        #         else:
+        #             parts.append("windows_bytes=None")
+        #         # collector/dataloader/param bytes
+        #         parts.append(f"collector_ms={ms.get('collector_ms', None):.1f}ms" if ms.get('collector_ms') is not None else "collector_ms=None")
+        #         parts.append(f"dataloader_ms={ms.get('dataloader_ms', None):.1f}ms" if ms.get('dataloader_ms') is not None else "dataloader_ms=None")
+        #         if ms.get("param_bytes") is not None:
+        #             try:
+        #                 pb = int(ms['param_bytes'])
+        #                 if pb >= 1024 * 1024:
+        #                     parts.append(f"param_bytes={pb//(1024*1024)}MB")
+        #                 elif pb >= 1024:
+        #                     parts.append(f"param_bytes={pb//1024}KB")
+        #                 else:
+        #                     parts.append(f"param_bytes={pb}B")
+        #             except Exception:
+        #                 parts.append("param_bytes=None")
+        #         else:
+        #             parts.append("param_bytes=None")
+        #         # env metadata
+        #         env = ms.get("env", {})
+        #         parts.append(f"env=torch={env.get('torch')} cuda={env.get('cuda')} dev={env.get('device_name')}")
+        #         try:
+        #             _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
+        #             emitted = True
+        #         except Exception:
+        #             pass
+        # except Exception:
+        #     pass
+
+        # # If micro-snapshot was not printed, fall back to printing first-batch snapshot (guarded)
+        # try:
+        #     if not emitted and snapshot is not None:
+        #             # weighted aux contribution printed safely if both aux_w and loss_aux numeric
+        #             try:
+        #                 if la is None:
+        #                     waux_str = "None"
+        #                 else:
+        #                     import math, torch
+        #                     if isinstance(la, (float, int)) and math.isfinite(float(la)):
+        #                         waux_val = float(aux_w) * float(la)
+        #                         waux_str = f"{waux_val:.4e}"
+        #                     else:
+        #                         if isinstance(la, torch.Tensor):
+        #                             la_cpu = la.detach().cpu()
+        #                             if la_cpu.numel() > 0 and torch.isfinite(la_cpu).any():
+        #                                 la_mean = float(la_cpu[torch.isfinite(la_cpu)].mean().item())
+        #                                 waux_val = float(aux_w) * la_mean
+        #                                 waux_str = f"{waux_val:.4e}"
+        #                             else:
+        #                                 waux_str = "NaN"
+        #                         else:
+        #                             waux_str = "NaN"
+        #             except Exception:
+        #                 waux_str = "NaN"
+
+        #             gnc = snapshot.get("group_nonzero_counts")
+        #             if isinstance(gnc, (list, tuple)):
+        #                 _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
+
+        #             grads = snapshot.get("grads")
+        #             if isinstance(grads, dict):
+        #                 _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+
+        #             emitted = True
+        # except Exception:
+        #     # outer guard: continue without failing init_log
+        #     pass
+
+        # if emitted:
+        #     _RUN_DEBUG_DONE = True
+
+
 _RUN_STARTED = False
 _RUN_DEBUG_DONE = False
 _RUN_LOCK = threading.Lock()
@@ -1352,7 +1729,15 @@ def init_log(
     batch_losses: dict | None = None,
     scaler: object | None = None,
 ):
+    """
+    Emit a one-time run header and static diagnostics into the log.
 
+    - Writes run start, baselines and hyperparameters once.
+    - Prints a compact, human-friendly guide to the per-epoch one-line summary
+      format that the logger emits for each epoch.
+    - Does not mutate any provided objects; all runtime reads are best-effort
+      and read-only. First-batch / micro snapshots are handled elsewhere.
+    """
     global _RUN_STARTED, _RUN_DEBUG_DONE
 
     with _RUN_LOCK:
@@ -1385,15 +1770,13 @@ def init_log(
             _append_log("  lr={lr:.1e}             : current learning rate (main/backbone) reported in scientific notation", log_file)
             _append_log("  TR[rmse,r2,mae]         : training metrics (RMSE, R^2, MAE) aggregated across training set", log_file)
             _append_log("  VL[rmse,r2,mae]         : validation metrics (RMSE, R^2, MAE) aggregated on the validation set", log_file)
-            _append_log("  AUX=[ON|DISABLED]       : whether auxiliary losses/heads are active", log_file)
             _append_log("  SR={slope_rmse:.3f}     : slope RMSE diagnostic measuring calibration of trend predictions", log_file)
             _append_log("  SL={slip:.2f},HR={hub_max:.3f} : slip and hub max indicators for recent prediction horizons", log_file)
             _append_log("  topK(g/u)=param:grad_norm/update_ratio,... : the top-k parameter entries by gradient norm and their update ratios", log_file)
             _append_log("  Additional single-run diagnostics printed once in the header:", log_file)
-            _append_log("    DEBUG_SHAPES raw_reg=(N,1,1) aux_out=None AUX_W=... : shapes from a detached first batch snapshot", log_file)
-            _append_log("    DEBUG_LOSSES main=... aux=... w*aux=...        : detached losses (main, aux) and weighted aux contribution", log_file)
+            _append_log("    DEBUG_SHAPES raw_reg=(N,1,1): shapes from a detached first batch snapshot", log_file)
             _append_log("    GROUP_NONZERO_COUNTS [k1,k2,...]             : per-group nonzero counts used for diagnostics", log_file)
-            _append_log("    DEBUG_GRADS backbone=... head=... aux=...    : boolean flags indicating whether gradients were observed in those parts", log_file)
+            _append_log("    DEBUG_GRADS backbone=... head=...    : boolean flags indicating whether gradients were observed in those parts", log_file)
             _append_log("    MICRODETAIL ms: full_forward=...ms preds_cpu=...ms nseg=... seg/s=... mean_len=... gpuMB=... cpuB=... syncs=...", log_file)
             _append_log("      -> full_forward: wall-clock ms for the sampled forward over prepared windows", log_file)
             _append_log("      -> preds_cpu: ms to detach and copy predictions to CPU (post-forward host cost)", log_file)
@@ -1410,6 +1793,7 @@ def init_log(
             _append_log("      -> dataloader_ms: ms to fetch the sampled batch from the dataloader", log_file)
             _append_log("      -> param_bytes: total parameter memory in bytes (shown if MICRO_EXTRA enabled)", log_file)
             _append_log("", log_file)
+
 
             # --- compact runtime summary (legacy single-line appearance) ---
             try:
@@ -1453,7 +1837,7 @@ def init_log(
                 per_epoch_compact = (
                     "# PER-EPOCH LOG FORMAT: "
                     "#  E{ep:02d} | OPTS[{groups}:{lrs}] | GN[reg,cls,ter,tot] | GD[med,p90,max] | UR[med,max] | lr={lr:.1e} | "
-                    "TR[rmse,r2,mae] | VL[rmse,r2,mae] | AUX=[ON|DISABLED] | SR={slope_rmse:.3f} | SL={slip:.2f},HR={hub_max:.3f} | "
+                    "TR[rmse,r2,mae] | VL[rmse,r2,mae] | SR={slope_rmse:.3f} | SL={slip:.2f},HR={hub_max:.3f} | "
                     "topK(g/u)=param:grad_norm/update_ratio,..."
                 )
 
@@ -1500,7 +1884,7 @@ def init_log(
                 pass
         except Exception:
             pass
-        ######################
+        
         try:
             fb = getattr(model, "_first_batch_snapshot", None)
         except Exception:
@@ -1510,60 +1894,7 @@ def init_log(
             if isinstance(fb, dict):
                 try:
                     raw_shape = fb.get("raw_reg_shape")
-                    aux_shape = fb.get("aux_out_shape")
-                    aux_w = fb.get("aux_w", 0.0)
-                    _append_log(f"DEBUG_SHAPES raw_reg={raw_shape} aux_out={aux_shape} AUX_W={aux_w:.1e}", log_file)
-        
-                    lm = fb.get("loss_main")
-                    la = fb.get("loss_aux")
-        
-                    def _fmt(v):
-                        try:
-                            import math, torch
-                            if isinstance(v, torch.Tensor):
-                                v_cpu = v.detach().cpu()
-                                if v_cpu.numel() == 0:
-                                    return "None"
-                                if v_cpu.numel() > 1:
-                                    finite = torch.isfinite(v_cpu)
-                                    if finite.any():
-                                        val = float(v_cpu[finite].mean().item())
-                                    else:
-                                        return "NaN"
-                                else:
-                                    val = float(v_cpu.item())
-                            elif v is None:
-                                return "None"
-                            else:
-                                val = float(v)
-                            return f"{val:.4e}" if math.isfinite(val) else "NaN"
-                        except Exception:
-                            return "NaN"
-        
-                    lm_str = _fmt(lm)
-                    la_str = _fmt(la)
-        
-                    try:
-                        if la is None:
-                            waux_str = "None"
-                        else:
-                            import math, torch
-                            if isinstance(la, (float, int)) and math.isfinite(float(la)):
-                                waux_str = f"{float(aux_w) * float(la):.4e}"
-                            else:
-                                if isinstance(la, torch.Tensor):
-                                    la_cpu = la.detach().cpu()
-                                    if la_cpu.numel() > 0 and torch.isfinite(la_cpu).any():
-                                        la_mean = float(la_cpu[torch.isfinite(la_cpu)].mean().item())
-                                        waux_str = f"{float(aux_w) * la_mean:.4e}"
-                                    else:
-                                        waux_str = "NaN"
-                                else:
-                                    waux_str = "NaN"
-                    except Exception:
-                        waux_str = "NaN"
-        
-                    _append_log(f"DEBUG_LOSSES main={lm_str} aux={la_str} w*aux={waux_str}", log_file)
+                    _append_log(f"DEBUG_SHAPES raw_reg={raw_shape}", log_file)
         
                     gnc = fb.get("group_nonzero_counts")
                     if isinstance(gnc, (list, tuple)):
@@ -1571,12 +1902,13 @@ def init_log(
         
                     grads = fb.get("grads")
                     if isinstance(grads, dict):
-                        _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+                        _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
                 except Exception:
                     pass
         except Exception:
             pass
-        
+
+
         # Try to print the richer micro-snapshot (preferred). If absent, fall back to first-batch snapshot.
         try:
             micro_ms = getattr(model, "_micro_snapshot", None)
@@ -1674,86 +2006,21 @@ def init_log(
         # If micro-snapshot was not printed, fall back to printing first-batch snapshot (guarded)
         try:
             if not emitted and snapshot is not None:
-                try:
-                    raw_shape = snapshot.get("raw_reg_shape")
-                    aux_shape = snapshot.get("aux_out_shape")
-                    aux_w = snapshot.get("aux_w", 0.0)
-                    _append_log(f"DEBUG_SHAPES raw_reg={raw_shape} aux_out={aux_shape} AUX_W={aux_w:.1e}", log_file)
-
-                    # Guarded printing for losses: handle None, NaN, tensors safely
-                    lm = snapshot.get("loss_main")
-                    la = snapshot.get("loss_aux")
-
-                    def _format_loss(v):
-                        try:
-                            import math, torch
-                            if isinstance(v, torch.Tensor):
-                                v_cpu = v.detach().cpu()
-                                if v_cpu.numel() == 0:
-                                    return "None"
-                                if v_cpu.numel() > 1:
-                                    finite = torch.isfinite(v_cpu)
-                                    if finite.any():
-                                        val = float(v_cpu[finite].mean().item())
-                                    else:
-                                        return "NaN"
-                                else:
-                                    val = float(v_cpu.item())
-                            elif v is None:
-                                return "None"
-                            else:
-                                val = float(v)
-                            return f"{val:.4e}" if math.isfinite(val) else "NaN"
-                        except Exception:
-                            return "NaN"
-
-                    lm_str = _format_loss(lm)
-                    la_str = _format_loss(la)
-
-                    # weighted aux contribution printed safely if both aux_w and loss_aux numeric
-                    try:
-                        if la is None:
-                            waux_str = "None"
-                        else:
-                            import math, torch
-                            if isinstance(la, (float, int)) and math.isfinite(float(la)):
-                                waux_val = float(aux_w) * float(la)
-                                waux_str = f"{waux_val:.4e}"
-                            else:
-                                if isinstance(la, torch.Tensor):
-                                    la_cpu = la.detach().cpu()
-                                    if la_cpu.numel() > 0 and torch.isfinite(la_cpu).any():
-                                        la_mean = float(la_cpu[torch.isfinite(la_cpu)].mean().item())
-                                        waux_val = float(aux_w) * la_mean
-                                        waux_str = f"{waux_val:.4e}"
-                                    else:
-                                        waux_str = "NaN"
-                                else:
-                                    waux_str = "NaN"
-                    except Exception:
-                        waux_str = "NaN"
-
-                    _append_log(f"DEBUG_LOSSES main={lm_str} aux={la_str} w*aux={waux_str}", log_file)
-
                     gnc = snapshot.get("group_nonzero_counts")
                     if isinstance(gnc, (list, tuple)):
                         _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
 
                     grads = snapshot.get("grads")
                     if isinstance(grads, dict):
-                        _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+                        _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
 
                     emitted = True
-                except Exception:
-                    # inner guard: continue without failing init_log
-                    pass
         except Exception:
             # outer guard: continue without failing init_log
             pass
 
         if emitted:
             _RUN_DEBUG_DONE = True
-
 
 
 ######################
@@ -1779,6 +2046,275 @@ def _append_log(text: str, log_file: Path):
 ##############################################################
 
 
+# def log_epoch_summary(
+#     epoch:            int,
+#     model:            torch.nn.Module,
+#     optimizer:        torch.optim.Optimizer,
+#     train_metrics:    dict,
+#     val_metrics:      dict,
+#     base_tr_mean:     float,
+#     base_tr_pers:     float,
+#     base_vl_mean:     float,
+#     base_vl_pers:     float,
+#     slip_thresh:      float,
+#     log_file:         Path,
+#     top_k:            int         = 3,
+#     hparams:          dict | None = None,
+#     # compatibility kept: these args are not required by the normal call site
+#     first_batch:      dict | None = None,   # read-only if supplied; logger prefers model._first_batch_snapshot
+#     batch_losses:     dict | None = None,   # unused (kept for compatibility)
+#     scaler:           object | None = None, # unused (kept for compatibility)
+# ):
+#     """
+#     Write a compact, one-line epoch summary and emit a single read-only
+#     first-batch debug snapshot exactly once when available.
+
+#     Responsibilities
+#       - Ensure the run header and run-static block are emitted once via init_log.
+#       - Emit a single read-only one-shot DEBUG snapshot (DEBUG_SHAPES,
+#         DEBUG_GRADS and GROUP_NONZERO_COUNTS) at most once when a detached CPU
+#         snapshot is available (first_batch or model._first_batch_snapshot).
+#       - Produce a compact per-epoch one-line summary containing only values that
+#         change each epoch: OPTS brief (with param counts), GN/GD/UR, lr, TR/VL,
+#         AUX flag, SR/SL/HR, top-K param contributors.
+#       - Append optional epoch timing/throughput and checkpoint marker when the
+#         training loop exposes them on the model (read-only, optional).
+#       - Append optional scheduler percent-complete and an optional GPU memory
+#         high-water token if available (low-noise, read-only).
+#       - Include an explicit primary LR token (LR_MAIN) for direct LR→metric correlation.
+#       - Add lightweight layer-wise GN ratio diagnostics for a short list of
+#         representative parameters to detect silent freezing or relative changes.
+#     """
+    # # 1) Ensure header + run-static info (init_log handles guards and one-shot debug if available)
+    # init_log(
+    #     log_file,
+    #     hparams=hparams,
+    #     baselines={
+    #         "base_tr_mean": base_tr_mean,
+    #         "base_tr_pers": base_tr_pers,
+    #         "base_vl_mean": base_vl_mean,
+    #         "base_vl_pers": base_vl_pers,
+    #     },
+    #     optimizer=optimizer,
+    #     model=model,
+    #     first_batch=first_batch or None,
+    # )
+
+    # # 1b) One-shot read-only debug snapshot emitted once (if detached snapshot present)
+    # # NOTE: DEBUG_OPT is intentionally NOT emitted here to avoid duplication (printed in init_log only).
+    # global _RUN_DEBUG_DONE
+    # if not _RUN_DEBUG_DONE:
+    #     snapshot = first_batch if first_batch is not None else getattr(model, "_first_batch_snapshot", None)
+    #     if snapshot is not None:
+    #         try:
+    #             # DEBUG_SHAPES from the detached snapshot (CPU)
+    #             raw_shape = snapshot.get("raw_reg_shape")
+    #             aux_shape = snapshot.get("aux_out_shape")
+    #             aux_w = float(snapshot.get("aux_w", 0.0))
+    #             _append_log(f"DEBUG_SHAPES raw_reg={raw_shape} aux_out={aux_shape} AUX_W={aux_w:.1e}", log_file)
+
+    #             # GROUP_NONZERO_COUNTS: per-optimizer-group nonzero-grad counts (one-shot)
+    #             gnc = snapshot.get("group_nonzero_counts")
+    #             if isinstance(gnc, (list, tuple)):
+    #                 _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
+
+    #             # optional DEBUG_GRADS booleans (backbone/head/aux)
+    #             grads = snapshot.get("grads")
+    #             if isinstance(grads, dict):
+    #                 _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+    #         except Exception:
+    #             pass
+    #         _RUN_DEBUG_DONE = True
+
+    # # 2) Collect per-parameter grad norms, update ratios, and block sums
+    # recs = []  # (name, grad_norm, update_ratio)
+    # reg_sq = cls_sq = ter_sq = all_sq = 0.0
+    # lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else 0.0
+
+    # for name, p in model.named_parameters():
+    #     g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+    #     w = float(p.detach().norm().cpu())
+    #     u = (lr * g) / max(w, 1e-8)
+    #     recs.append((name, g, u))
+
+    #     sq = g * g
+    #     all_sq += sq
+    #     if   name.startswith("pred"):     reg_sq += sq
+    #     elif name.startswith("cls_head"): cls_sq += sq
+    #     elif name.startswith("cls_ter"):  ter_sq += sq
+
+    # # 3) Compute block gradient norms (GN) and gradient-norm distribution (GD)
+    # GN_reg = math.sqrt(reg_sq)
+    # GN_cls = math.sqrt(cls_sq)
+    # GN_ter = math.sqrt(ter_sq)
+    # GN_tot = math.sqrt(all_sq)
+
+    # g_vals = [g for _, g, _ in recs]
+    # GD_med = sorted(g_vals)[len(g_vals)//2] if g_vals else 0.0
+    # GD_p90 = sorted(g_vals)[int(0.9*len(g_vals))] if g_vals else 0.0
+    # GD_max = max(g_vals)                           if g_vals else 0.0
+
+    # # 4) Update-ratio distribution (UR)
+    # u_vals = [u for _, _, u in recs]
+    # UR_med = sorted(u_vals)[len(u_vals)//2] if u_vals else 0.0
+    # UR_max = max(u_vals)                         if u_vals else 0.0
+
+    # # 5) Slip-rate & max hub (stateful LSTM diagnostic)
+    # hub    = getattr(model, "last_hub", None)
+    # HR     = float(hub.max().cpu()) if hub is not None else 0.0
+    # SL     = float((hub > slip_thresh).float().mean().cpu()) if hub is not None else 0.0
+
+    # # 6) Slope-RMSE (SR) on last validation batch
+    # with torch.no_grad():
+    #     pv, tv = getattr(model, "last_val_preds", None), getattr(model, "last_val_targs", None)
+    #     if pv is not None and tv is not None:
+    #         if pv.dim() == 1:
+    #             dp, dt = pv[1:] - pv[:-1], tv[1:] - tv[:-1]
+    #         else:
+    #             dp = pv[:, 1:] - pv[:, :-1]
+    #             dt = tv[:, 1:] - tv[:, :-1]
+    #         SR = torch.sqrt(((dp - dt) ** 2).mean()).item()
+    #     else:
+    #         SR = 0.0
+
+    # # 7) Pull train/val RMSE, R², MAE
+    # tr_rmse, tr_r2, tr_mae = train_metrics["rmse"], train_metrics["r2"], train_metrics["mae"]
+    # vl_rmse, vl_r2, vl_mae = val_metrics["rmse"],   val_metrics["r2"],   val_metrics["mae"]
+
+    # # 8) Top-K parameter diagnostics: show only last two name segments + g/u
+    # topk = sorted(recs, key=lambda x: x[1], reverse=True)[:top_k]
+    # def short_name(n):
+    #     parts = n.split('.')
+    #     return ".".join(parts[-2:]) if len(parts) > 2 else n
+    # topk_str = ", ".join(f"{short_name(n)}:{g:.3f}/{u:.1e}" for n, g, u in topk)
+
+    # # 9) Assemble OPTS token (compact)
+    # try:
+    #     opt_groups = len(optimizer.param_groups)
+    #     opt_lrs_sh = ",".join(f"{g.get('lr',0.0):.1e}" for g in optimizer.param_groups[:3]) + (",..." if len(optimizer.param_groups) > 3 else "")
+    #     opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
+    #     opt_token = f"OPTS[{opt_groups}:{opt_lrs_sh}|cnts={opt_counts}]"
+    # except Exception:
+    #     opt_token = f"OPTS[1:{lr:.1e}]"
+
+    # aux_disabled = False
+    # if hparams is not None:
+    #     aux_disabled = float(hparams.get("AUX_LOSS_WEIGHT", 0.0)) == 0.0
+
+    # # 10) Optional scheduler percent-complete token (read-only, best-effort)
+    # sched_pct_token = ""
+    # sched_obj = getattr(optimizer, "scheduler", None)
+    # if sched_obj is None:
+    #     sched_obj = globals().get("scheduler", None)
+    # try:
+    #     if sched_obj is not None and hasattr(sched_obj, "_total_steps"):
+    #         total = int(getattr(sched_obj, "_total_steps"))
+    #         # prefer a step counter if available, otherwise use last_epoch
+    #         step_idx = getattr(sched_obj, "last_epoch", None)
+    #         if step_idx is None:
+    #             step_idx = getattr(sched_obj, "_step_count", None)
+    #         if step_idx is not None and total > 0:
+    #             pct = min(100.0, max(0.0, 100.0 * float(step_idx) / float(total)))
+    #             sched_pct_token = f" SCHED_PCT={pct:.1f}%"
+    # except Exception:
+    #     sched_pct_token = ""
+
+    # # 11) Optional timing / throughput (if the training loop stored them on the model)
+    # elapsed = getattr(model, "_last_epoch_elapsed", None)
+    # samples = getattr(model, "_last_epoch_samples", None)
+    # timing_token = ""
+    # if elapsed is not None and samples is not None and elapsed > 0:
+    #     tp = samples / elapsed
+    #     timing_token = f" | T={elapsed:.1f}s,TP={tp:.1f}s/s"
+
+    # # 12) Optional checkpoint marker (if training loop marked it on the model)
+    # chk = getattr(model, "_last_epoch_checkpoint", False)
+    # chk_token = " *CHKPT" if chk else ""
+
+    # # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
+    # gpu_token = ""
+    # try:
+    #     if torch.cuda.is_available():
+    #         # report in GiB, small-cost read-only
+    #         max_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+    #         gpu_token = f" | GPU={max_mem:.2f}GiB"
+    # except Exception:
+    #     gpu_token = ""
+
+    # # 14) Primary LR scalar token (explicit, high-ROI and low-noise)
+    # try:
+    #     primary_lr = optimizer.param_groups[0].get("lr", lr) if optimizer.param_groups else lr
+    #     lr_token = f"LR_MAIN={primary_lr:.1e}"
+    # except Exception:
+    #     lr_token = f"LR_MAIN={lr:.1e}"
+
+    # # 15) Layer-wise GN ratio diagnostics (small set of representative layers)
+    # #    - Choose list from hparams.MONITOR_LAYERS if supplied, otherwise use a
+    # #      sensible default set of representative parameter names.
+    # #    - Maintain a baseline per-parameter GN on first observed epoch by
+    # #      storing model._first_layer_gn (best-effort). Ratios are current/baseline.
+    # layer_token = ""
+    # try:
+    #     default_monitor = ["short_lstm.weight_ih_l0", "short2long.weight", "feature_proj.weight"]
+    #     monitor_list = []
+    #     if isinstance(hparams, dict) and hparams.get("MONITOR_LAYERS"):
+    #         monitor_list = list(hparams.get("MONITOR_LAYERS"))
+    #     else:
+    #         monitor_list = default_monitor
+
+    #     # Ensure a dict exists to store baseline GN observed first time
+    #     if not hasattr(model, "_first_layer_gn"):
+    #         try:
+    #             setattr(model, "_first_layer_gn", {})
+    #         except Exception:
+    #             pass
+
+    #     pairs = []
+    #     for name in monitor_list:
+    #         # best-effort: find exact match; if not found, skip silently
+    #         p = dict(model.named_parameters()).get(name)
+    #         if p is None:
+    #             continue
+    #         curr_g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+    #         baseline = None
+    #         try:
+    #             baseline = getattr(model, "_first_layer_gn", {}).get(name)
+    #         except Exception:
+    #             baseline = None
+    #         # if no baseline stored yet, store this epoch's value as baseline
+    #         if baseline is None:
+    #             try:
+    #                 model._first_layer_gn[name] = float(curr_g)
+    #                 ratio = 1.0
+    #             except Exception:
+    #                 ratio = 1.0
+    #         else:
+    #             ratio = curr_g / max(baseline, 1e-12)
+    #         pairs.append(f"{name.split('.')[-1]}:{curr_g:.3e}/{ratio:.2f}")
+    #     if pairs:
+    #         layer_token = " | LAYER_GN[" + ",".join(pairs) + "]"
+    # except Exception:
+    #     layer_token = ""
+
+    # # 16) Final line assembly (compact, per-epoch changing values only)
+    # line = (
+    #     f"\nE{epoch:02d} | "
+    #     f"{opt_token} | "
+    #     f"GN[{GN_reg:.3f},{GN_cls:.3f},{GN_ter:.3f},{GN_tot:.3f}] | "
+    #     f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
+    #     f"UR[{UR_med:.1e},{UR_max:.1e}] | "
+    #     f"{lr_token} | "
+    #     f"lr={lr:.1e} | "
+    #     f"TR[{tr_rmse:.3f},{tr_r2:.2f},{tr_mae:.3f}] | "
+    #     f"VL[{vl_rmse:.3f},{vl_r2:.2f},{vl_mae:.3f}] | "
+    #     f"AUX={'DISABLED' if aux_disabled else 'ON'}{sched_pct_token} | "
+    #     f"SR={SR:.3f} | "
+    #     f"SL={SL:.2f},HR={HR:.3f} | "
+    #     f"topK(g/u)={topk_str}"
+    #     f"{timing_token}{gpu_token}{chk_token}{layer_token}"
+    # )
+    # _append_log(line, log_file)
+
 def log_epoch_summary(
     epoch:            int,
     model:            torch.nn.Module,
@@ -1799,25 +2335,26 @@ def log_epoch_summary(
     scaler:           object | None = None, # unused (kept for compatibility)
 ):
     """
-    Write a compact, one-line epoch summary and emit a single read-only
-    first-batch debug snapshot exactly once when available.
+    Emit a compact per-epoch summary and a single read-only first-batch snapshot.
 
-    Responsibilities
-      - Ensure the run header and run-static block are emitted once via init_log.
-      - Emit a single read-only one-shot DEBUG snapshot (DEBUG_SHAPES, DEBUG_LOSSES,
-        DEBUG_GRADS and GROUP_NONZERO_COUNTS) at most once when a detached CPU
-        snapshot is available (first_batch or model._first_batch_snapshot).
-      - Produce a compact per-epoch one-line summary containing only values that
-        change each epoch: OPTS brief (with param counts), GN/GD/UR, lr, TR/VL,
-        AUX flag, SR/SL/HR, top-K param contributors.
-      - Append optional epoch timing/throughput and checkpoint marker when the
-        training loop exposes them on the model (read-only, optional).
-      - Append optional scheduler percent-complete and an optional GPU memory
-        high-water token if available (low-noise, read-only).
-      - Include an explicit primary LR token (LR_MAIN) for direct LR→metric correlation.
-      - Add lightweight layer-wise GN ratio diagnostics for a short list of
-        representative parameters to detect silent freezing or relative changes.
+    - Writes a one-time run header and static info via init_log.
+    - Emits a single read-only DEBUG snapshot (DEBUG_SHAPES, DEBUG_GRADS,
+      GROUP_NONZERO_COUNTS) when a detached CPU snapshot (first_batch or
+      model._first_batch_snapshot) is available; snapshot is non-blocking and
+      contains no loss scalars.
+    - Produces a compact per-epoch line with OPTS, gradient norms (GN),
+      gradient-distribution (GD), update-ratio (UR), primary LR token (LR_MAIN),
+      train/val metrics (TR/VL), scheduler percent-complete (SCHED_PCT),
+      slope/slip/hub diagnostics (SR/SL/HR), top-K parameter contributors and
+      optional timing, checkpoint and GPU tokens.
+    - Stores lightweight layer-wise GN baselines on the model for relative
+      diagnostics (model._first_layer_gn) in a best-effort, non-fatal way.
+
+    Parameters: see function signature.
+
+    Returns: None (appends a single line to log_file).
     """
+
     # 1) Ensure header + run-static info (init_log handles guards and one-shot debug if available)
     init_log(
         log_file,
@@ -1840,28 +2377,19 @@ def log_epoch_summary(
         snapshot = first_batch if first_batch is not None else getattr(model, "_first_batch_snapshot", None)
         if snapshot is not None:
             try:
-                # DEBUG_SHAPES and DEBUG_LOSSES from the detached snapshot (CPU)
+                # DEBUG_SHAPES from the detached snapshot (CPU)
                 raw_shape = snapshot.get("raw_reg_shape")
-                aux_shape = snapshot.get("aux_out_shape")
-                aux_w = float(snapshot.get("aux_w", 0.0))
-                _append_log(f"DEBUG_SHAPES raw_reg={raw_shape} aux_out={aux_shape} AUX_W={aux_w:.1e}", log_file)
-
-                lm = snapshot.get("loss_main")
-                la = snapshot.get("loss_aux")
-                lm_f = float(lm) if lm is not None else float("nan")
-                la_f = float(la) if la is not None else None
-                waux = aux_w * (la_f if la_f is not None else 0.0)
-                _append_log(f"DEBUG_LOSSES main={lm_f:.4e} aux={(la_f if la_f is not None else 'None')} w*aux={waux:.4e}", log_file)
+                _append_log(f"DEBUG_SHAPES raw_reg={raw_shape}", log_file)
 
                 # GROUP_NONZERO_COUNTS: per-optimizer-group nonzero-grad counts (one-shot)
                 gnc = snapshot.get("group_nonzero_counts")
                 if isinstance(gnc, (list, tuple)):
                     _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
 
-                # optional DEBUG_GRADS booleans (backbone/head/aux)
+                # optional DEBUG_GRADS booleans (backbone/head).
                 grads = snapshot.get("grads")
                 if isinstance(grads, dict):
-                    _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')} aux={grads.get('aux')}", log_file)
+                    _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
             except Exception:
                 pass
             _RUN_DEBUG_DONE = True
@@ -1937,10 +2465,6 @@ def log_epoch_summary(
     except Exception:
         opt_token = f"OPTS[1:{lr:.1e}]"
 
-    aux_disabled = False
-    if hparams is not None:
-        aux_disabled = float(hparams.get("AUX_LOSS_WEIGHT", 0.0)) == 0.0
-
     # 10) Optional scheduler percent-complete token (read-only, best-effort)
     sched_pct_token = ""
     sched_obj = getattr(optimizer, "scheduler", None)
@@ -1955,7 +2479,7 @@ def log_epoch_summary(
                 step_idx = getattr(sched_obj, "_step_count", None)
             if step_idx is not None and total > 0:
                 pct = min(100.0, max(0.0, 100.0 * float(step_idx) / float(total)))
-                sched_pct_token = f" SCHED_PCT={pct:.1f}%"
+                sched_pct_token = f"SCHED_PCT={pct:.1f}%"
     except Exception:
         sched_pct_token = ""
 
@@ -2037,6 +2561,7 @@ def log_epoch_summary(
         layer_token = ""
 
     # 16) Final line assembly (compact, per-epoch changing values only)
+    sched_field = f"{sched_pct_token} | " if sched_pct_token else ""
     line = (
         f"\nE{epoch:02d} | "
         f"{opt_token} | "
@@ -2047,11 +2572,10 @@ def log_epoch_summary(
         f"lr={lr:.1e} | "
         f"TR[{tr_rmse:.3f},{tr_r2:.2f},{tr_mae:.3f}] | "
         f"VL[{vl_rmse:.3f},{vl_r2:.2f},{vl_mae:.3f}] | "
-        f"AUX={'DISABLED' if aux_disabled else 'ON'}{sched_pct_token} | "
+        f"{sched_field}"
         f"SR={SR:.3f} | "
         f"SL={SL:.2f},HR={HR:.3f} | "
         f"topK(g/u)={topk_str}"
         f"{timing_token}{gpu_token}{chk_token}{layer_token}"
     )
     _append_log(line, log_file)
-
