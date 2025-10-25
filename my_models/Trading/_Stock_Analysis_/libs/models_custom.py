@@ -485,8 +485,8 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
             windows_tensor = torch.cat(windows_list, dim=0)
             targets_tensor = torch.cat(targets_list, dim=0)
 
-            if not windows_tensor.is_contiguous():
-                windows_tensor = windows_tensor.contiguous()
+            # if not windows_tensor.is_contiguous():
+            #     windows_tensor = windows_tensor.contiguous()
 
             raw_out = model(windows_tensor)
             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
@@ -522,6 +522,336 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 ############### 
 
 
+# def model_training_loop(
+#     model:                nn.Module,
+#     optimizer:            torch.optim.Optimizer,
+#     scheduler:            torch.optim.lr_scheduler.OneCycleLR,
+#     scaler:               torch.amp.GradScaler,
+#     train_loader,
+#     val_loader,
+#     *,
+#     max_epochs:          int,
+#     early_stop_patience: int,
+#     clipnorm:            float,
+#     alpha_smooth:        float,
+# ) -> float:
+#     """
+#     Training loop with remaining GPU->CPU syncs removed, cuDNN warmup enabled, aux outputs unused,
+#     and all per-batch host copies deferred until after optimizer.step.
+
+#     Behavior:
+#       - model(...) still returns (raw_reg, aux_out) for API parity; aux_out is not inspected in the hot path.
+#       - No .cpu()/.item()/.tolist() calls occur before scaler.step for any training batch.
+#       - torch.backends.cudnn.benchmark is enabled once at startup to avoid repeated cudnn kernel autotune stalls.
+#       - First-batch snapshot is a non-blocking summary (shapes and boolean grad presence only).
+#       - Uses torch.amp.autocast('cuda') and torch.amp.GradScaler for AMP path (scaler passed in).
+#     """
+#     import torch as _torch
+#     _torch.backends.cudnn.benchmark = True
+
+#     device = next(model.parameters()).device
+#     model.to(device)
+
+#     # Scheduler sanity check (best-effort)
+#     try:
+#         expected_total = len(train_loader) * max_epochs
+#         if hasattr(scheduler, "_total_steps") and scheduler._total_steps != expected_total:
+#             raise RuntimeError(
+#                 f"Scheduler total_steps mismatch: scheduler={scheduler._total_steps} expected={expected_total}"
+#             )
+#     except Exception:
+#         pass
+
+#     base_tr_mean, base_tr_pers = compute_baselines(train_loader)
+#     base_vl_mean, base_vl_pers = compute_baselines(val_loader)
+
+#     smooth_loss = SmoothMSELoss(alpha_smooth)
+#     live_plot = plots.LiveRMSEPlot()
+#     best_val, best_state, patience = float("inf"), None, 0
+
+#     if hasattr(model, "_first_batch_snapshot"):
+#         try:
+#             delattr = getattr(model, "__delattr__", None)
+#             if callable(delattr):
+#                 model.__delattr__("_first_batch_snapshot")
+#         except Exception:
+#             pass
+
+#     models_dir = Path(params.models_folder)
+#     first_snapshot_captured = False
+
+#     for epoch in range(1, max_epochs + 1):
+#         freeze_till = params.hparams["FREEZE_TILL"]
+#         for p in model.head_flat.parameters():
+#             p.requires_grad = False if epoch <= freeze_till else True
+
+#         model.train()
+#         model.h_short = model.h_long = None
+
+#         train_preds, train_targs = [], []
+#         prev_day = None
+
+#         epoch_loss_main_sum = 0.0
+#         epoch_loss_aux_sum = 0.0
+#         epoch_loss_count = 0
+#         epoch_start = datetime.utcnow().timestamp()
+#         epoch_samples = 0
+
+#         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+#                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
+
+#             x_batch = x_batch.to(device, non_blocking=True)
+#             y_signal = y_signal.to(device, non_blocking=True)
+#             wd = wd.to(device, non_blocking=True)
+
+#             optimizer.zero_grad(set_to_none=True)
+
+#             # gather windows & targets (avoid many small Python ops if possible)
+#             batch_size = x_batch.size(0)
+#             windows_list, targets_list = [], []
+#             for example_idx in range(batch_size):
+#                 prev_day = _reset_states(model, wd[example_idx], prev_day)
+#                 L = int(seq_lengths[example_idx])
+#                 if L == 0:
+#                     continue
+#                 windows_list.append(x_batch[example_idx, :L])
+#                 targets_list.append(y_signal[example_idx, :L].reshape(-1))
+
+#             if not windows_list:
+#                 continue
+
+#             windows_tensor = torch.cat(windows_list, dim=0)
+#             targets_tensor = torch.cat(targets_list, dim=0)
+
+#             # Ensure contiguous input to help cudnn reuse
+#             if not windows_tensor.is_contiguous():
+#                 windows_tensor = windows_tensor.contiguous()
+
+#             # Forward + loss under AMP autocast (no host-syncs)
+#             with _torch.amp.autocast(device_type="cuda", enabled=True):
+#                 raw_out = model(windows_tensor)
+#                 raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+
+#                 if raw_reg.dim() == 3:
+#                     if raw_reg.size(-1) == 1:
+#                         seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+#                     else:
+#                         raw_reg_pred = model.pred(raw_reg)
+#                         if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+#                             raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+#                         seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
+#                 elif raw_reg.dim() == 2:
+#                     seq_reg = raw_reg
+#                 else:
+#                     raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
+
+#                 preds = seq_reg[:, -1]
+#                 loss_main = smooth_loss(preds, targets_tensor)
+#                 loss = loss_main
+
+#             # Backward (AMP) with no host-syncs before step
+#             scaler.scale(loss).backward()
+#             scaler.unscale_(optimizer)
+
+#             # non-blocking first-batch snapshot: shapes and grad-presence only (guarded, sanitized)
+#             if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
+#                 try:
+#                     # basic shape info (same as before)
+#                     raw_shape = tuple(raw_reg.shape) if isinstance(raw_reg, torch.Tensor) else None
+#                     aux_shape = None
+
+#                     # gradient presence summary (same as before)
+#                     per_param_has_grad = {
+#                         (getattr(p, "name", None) or id(p)): (p.grad is not None)
+#                         for g in optimizer.param_groups
+#                         for p in g.get("params", [])
+#                     }
+#                     group_nonzero_counts = [
+#                         sum(1 for p in g.get("params", []) if p.grad is not None)
+#                         for g in optimizer.param_groups
+#                     ]
+#                     backbone_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
+#                     head_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
+#                     aux_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("aux") or "aux" in n)
+
+#                     # --- Safe, deterministic loss extraction and sanitization ---
+#                     # We intentionally do NOT perform extra forward/backward work here.
+#                     # If loss tensor objects exist in scope (loss_main), sanitize them; otherwise store None.
+#                     import math, traceback
+#                     try:
+#                         # If loss_main was computed above as a tensor, reduce it safely to a scalar in FP32.
+#                         lm_val = None
+#                         try:
+#                             if 'loss_main' in locals() and isinstance(loss_main, torch.Tensor):
+#                                 lm_cpu = loss_main.detach().cpu().float()
+#                                 if lm_cpu.numel() == 0:
+#                                     lm_val = None
+#                                 else:
+#                                     finite_mask = torch.isfinite(lm_cpu)
+#                                     if finite_mask.any():
+#                                         lm_val = float(lm_cpu[finite_mask].mean().item())
+#                                     else:
+#                                         lm_val = float("nan")
+#                             else:
+#                                 # not present in locals (normal) -> store None
+#                                 lm_val = None
+#                         except Exception:
+#                             lm_val = float("nan")
+#                     except Exception:
+#                         lm_val = float("nan")
+
+#                     # Aux loss sanitization (if aux loss was computed in scope)
+#                     try:
+#                         la_val = None
+#                         if 'loss_aux' in locals() and isinstance(loss_aux, torch.Tensor):
+#                             la_cpu = loss_aux.detach().cpu().float()
+#                             if la_cpu.numel() == 0:
+#                                 la_val = None
+#                             else:
+#                                 finite_mask = torch.isfinite(la_cpu)
+#                                 if finite_mask.any():
+#                                     la_val = float(la_cpu[finite_mask].mean().item())
+#                                 else:
+#                                     la_val = float("nan")
+#                         else:
+#                             la_val = None
+#                     except Exception:
+#                         la_val = float("nan")
+
+#                     # Aux weight extraction (safe)
+#                     try:
+#                         aux_w_val = float(params.hparams.get("AUX_LOSS_WEIGHT", 0.0)) if params is not None and hasattr(params, "hparams") else 0.0
+#                     except Exception:
+#                         aux_w_val = 0.0
+
+#                     # Weighted aux contribution (safe arithmetic only when numeric)
+#                     try:
+#                         if la_val is None:
+#                             waux_val = None
+#                         elif isinstance(la_val, float) and math.isfinite(la_val):
+#                             waux_val = float(aux_w_val) * float(la_val)
+#                         else:
+#                             waux_val = float("nan")
+#                     except Exception:
+#                         waux_val = float("nan")
+
+#                     # Finalize snapshot dict: ensure plain Python floats or None
+#                     model._first_batch_snapshot = {
+#                         "raw_reg_shape": raw_shape,
+#                         "aux_out_shape": aux_shape,
+#                         "loss_main": (None if lm_val is None else float(lm_val)),
+#                         "loss_aux": (None if la_val is None else float(la_val)),
+#                         "aux_w": float(aux_w_val),
+#                         "group_nonzero_counts": group_nonzero_counts,
+#                         "grads": {"backbone": bool(backbone_has), "head": bool(head_has), "aux": bool(aux_has)},
+#                     }
+#                 except Exception:
+#                     # keep failure silent to avoid interfering with training startup
+#                     pass
+#                 first_snapshot_captured = True
+
+                    
+#             # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
+#             params_with_grad = [p for p in model.parameters() if p.grad is not None]
+#             if params_with_grad:
+#                 _torch.nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
+
+#             scaler.step(optimizer)
+#             scaler.update()
+#             scheduler.step()
+
+#             # After step: minimal host work (convert scalars/lists once)
+#             epoch_loss_main_sum += float(loss_main.detach().cpu())
+#             epoch_loss_count += 1
+
+#             train_preds.extend(preds.detach().cpu().tolist())
+#             train_targs.extend(targets_tensor.cpu().tolist())
+
+#             epoch_samples += int(targets_tensor.size(0))
+
+#         # Metrics & validation
+#         tr_metrics = _compute_metrics(
+#             np.array(train_preds, dtype=float),
+#             np.array(train_targs, dtype=float),
+#         )
+#         vl_metrics, _ = eval_on_loader(val_loader, model)
+
+#         if epoch_loss_count > 0:
+#             avg_loss_main = epoch_loss_main_sum / epoch_loss_count
+#         else:
+#             avg_loss_main = float("nan")
+#         avg_loss_aux = 0.0
+
+#         epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
+#         model._last_epoch_elapsed = float(epoch_elapsed)
+#         model._last_epoch_samples = int(epoch_samples)
+
+#         tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
+#         vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
+
+#         models_core.log_epoch_summary(
+#             epoch,
+#             model,
+#             optimizer,
+#             train_metrics=tr_metrics,
+#             val_metrics=vl_metrics,
+#             base_tr_mean=base_tr_mean,
+#             base_tr_pers=base_tr_pers,
+#             base_vl_mean=base_vl_mean,
+#             base_vl_pers=base_vl_pers,
+#             slip_thresh=1e-6,
+#             log_file=params.log_file,
+#             top_k=999,
+#             hparams=params.hparams,
+#         )
+#         live_plot.update(tr_rmse, vl_rmse)
+
+#         best_val, improved, *_ = models_core.maybe_save_chkpt(
+#             models_dir, model, vl_rmse, best_val,
+#             {"rmse": tr_rmse}, {"rmse": vl_rmse},
+#             live_plot, params
+#         )
+
+#         model._last_epoch_checkpoint = bool(improved)
+
+#         current_lr = optimizer.param_groups[0]["lr"]
+#         print(
+#             f"Epoch {epoch:02d}  "
+#             f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
+#             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
+#             f"lr={current_lr:.2e} |  "
+#             f"improved={bool(improved)} |  "
+#             f"loss_main={avg_loss_main:.5e}, loss_aux={avg_loss_aux:.5e}"
+#         )
+
+#         if improved:
+#             best_state, patience = {
+#                 k: v.cpu() for k, v in model.state_dict().items()
+#             }, 0
+#         else:
+#             patience += 1
+#             if patience >= early_stop_patience:
+#                 break
+
+#     if best_state is not None:
+#         model.load_state_dict(best_state)
+#         models_core.save_final_chkpt(
+#             models_dir, best_state, best_val, params,
+#             tr_metrics, vl_metrics, live_plot, suffix="_fin"
+#         )
+
+#     for attr in ("_last_epoch_elapsed", "_last_epoch_samples", "_last_epoch_checkpoint", "_first_batch_snapshot"):
+#         if hasattr(model, attr):
+#             try:
+#                 delattr = getattr(model, "__delattr__", None)
+#                 if callable(delattr):
+#                     model.__delattr__(attr)
+#             except Exception:
+#                 pass
+
+#     return best_val
+
+
 def model_training_loop(
     model:                nn.Module,
     optimizer:            torch.optim.Optimizer,
@@ -536,7 +866,7 @@ def model_training_loop(
     alpha_smooth:        float,
 ) -> float:
     """
-    Training loop with remaining GPU->CPU syncs removed, cuDNN warmup enabled, aux outputs unused,
+    Training loop with remaining GPU->CPU syncs removed, cuDNN warmup enabled,
     and all per-batch host copies deferred until after optimizer.step.
 
     Behavior:
@@ -569,13 +899,13 @@ def model_training_loop(
     live_plot = plots.LiveRMSEPlot()
     best_val, best_state, patience = float("inf"), None, 0
 
-    if hasattr(model, "_first_batch_snapshot"):
-        try:
-            delattr = getattr(model, "__delattr__", None)
-            if callable(delattr):
-                model.__delattr__("_first_batch_snapshot")
-        except Exception:
-            pass
+    # if hasattr(model, "_first_batch_snapshot"):
+    #     try:
+    #         delattr = getattr(model, "__delattr__", None)
+    #         if callable(delattr):
+    #             model.__delattr__("_first_batch_snapshot")
+    #     except Exception:
+    #         pass
 
     models_dir = Path(params.models_folder)
     first_snapshot_captured = False
@@ -592,7 +922,6 @@ def model_training_loop(
         prev_day = None
 
         epoch_loss_main_sum = 0.0
-        epoch_loss_aux_sum = 0.0
         epoch_loss_count = 0
         epoch_start = datetime.utcnow().timestamp()
         epoch_samples = 0
@@ -653,104 +982,39 @@ def model_training_loop(
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
 
-            # non-blocking first-batch snapshot: shapes and grad-presence only (guarded, sanitized)
-            if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
-                try:
-                    # basic shape info (same as before)
-                    raw_shape = tuple(raw_reg.shape) if isinstance(raw_reg, torch.Tensor) else None
-                    aux_shape = None
+            # # non-blocking first-batch snapshot: shapes and grad-presence only (guarded, sanitized)
+            # if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
+            #     try:
+            #         raw_shape = tuple(raw_reg.shape) if isinstance(raw_reg, torch.Tensor) else None
 
-                    # gradient presence summary (same as before)
-                    per_param_has_grad = {
-                        (getattr(p, "name", None) or id(p)): (p.grad is not None)
-                        for g in optimizer.param_groups
-                        for p in g.get("params", [])
-                    }
-                    group_nonzero_counts = [
-                        sum(1 for p in g.get("params", []) if p.grad is not None)
-                        for g in optimizer.param_groups
-                    ]
-                    backbone_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
-                    head_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
-                    aux_has = any((p.grad is not None) for n, p in model.named_parameters() if n.startswith("aux") or "aux" in n)
+            #         group_nonzero_counts = [
+            #             sum(1 for p in g.get("params", []) if p.grad is not None)
+            #             for g in optimizer.param_groups
+            #         ]
+            #         backbone_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
+            #         head_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
 
-                    # --- Safe, deterministic loss extraction and sanitization ---
-                    # We intentionally do NOT perform extra forward/backward work here.
-                    # If loss tensor objects exist in scope (loss_main), sanitize them; otherwise store None.
-                    import math, traceback
-                    try:
-                        # If loss_main was computed above as a tensor, reduce it safely to a scalar in FP32.
-                        lm_val = None
-                        try:
-                            if 'loss_main' in locals() and isinstance(loss_main, torch.Tensor):
-                                lm_cpu = loss_main.detach().cpu().float()
-                                if lm_cpu.numel() == 0:
-                                    lm_val = None
-                                else:
-                                    finite_mask = torch.isfinite(lm_cpu)
-                                    if finite_mask.any():
-                                        lm_val = float(lm_cpu[finite_mask].mean().item())
-                                    else:
-                                        lm_val = float("nan")
-                            else:
-                                # not present in locals (normal) -> store None
-                                lm_val = None
-                        except Exception:
-                            lm_val = float("nan")
-                    except Exception:
-                        lm_val = float("nan")
+            #         lm_val = None
+            #         if isinstance(loss_main, torch.Tensor):
+            #             try:
+            #                 lm_cpu = loss_main.detach().cpu().float()
+            #                 if lm_cpu.numel() > 0:
+            #                     finite_mask = torch.isfinite(lm_cpu)
+            #                     if finite_mask.any():
+            #                         lm_val = float(lm_cpu[finite_mask].mean().item())
+            #             except Exception:
+            #                 lm_val = None
 
-                    # Aux loss sanitization (if aux loss was computed in scope)
-                    try:
-                        la_val = None
-                        if 'loss_aux' in locals() and isinstance(loss_aux, torch.Tensor):
-                            la_cpu = loss_aux.detach().cpu().float()
-                            if la_cpu.numel() == 0:
-                                la_val = None
-                            else:
-                                finite_mask = torch.isfinite(la_cpu)
-                                if finite_mask.any():
-                                    la_val = float(la_cpu[finite_mask].mean().item())
-                                else:
-                                    la_val = float("nan")
-                        else:
-                            la_val = None
-                    except Exception:
-                        la_val = float("nan")
+            #         model._first_batch_snapshot = {
+            #             "raw_reg_shape": raw_shape,
+            #             "loss_main": (None if lm_val is None else float(lm_val)),
+            #             "group_nonzero_counts": group_nonzero_counts,
+            #             "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
+            #         }
+            #     except Exception:
+            #         pass
+            #     first_snapshot_captured = True
 
-                    # Aux weight extraction (safe)
-                    try:
-                        aux_w_val = float(params.hparams.get("AUX_LOSS_WEIGHT", 0.0)) if params is not None and hasattr(params, "hparams") else 0.0
-                    except Exception:
-                        aux_w_val = 0.0
-
-                    # Weighted aux contribution (safe arithmetic only when numeric)
-                    try:
-                        if la_val is None:
-                            waux_val = None
-                        elif isinstance(la_val, float) and math.isfinite(la_val):
-                            waux_val = float(aux_w_val) * float(la_val)
-                        else:
-                            waux_val = float("nan")
-                    except Exception:
-                        waux_val = float("nan")
-
-                    # Finalize snapshot dict: ensure plain Python floats or None
-                    model._first_batch_snapshot = {
-                        "raw_reg_shape": raw_shape,
-                        "aux_out_shape": aux_shape,
-                        "loss_main": (None if lm_val is None else float(lm_val)),
-                        "loss_aux": (None if la_val is None else float(la_val)),
-                        "aux_w": float(aux_w_val),
-                        "group_nonzero_counts": group_nonzero_counts,
-                        "grads": {"backbone": bool(backbone_has), "head": bool(head_has), "aux": bool(aux_has)},
-                    }
-                except Exception:
-                    # keep failure silent to avoid interfering with training startup
-                    pass
-                first_snapshot_captured = True
-
-                    
             # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
             params_with_grad = [p for p in model.parameters() if p.grad is not None]
             if params_with_grad:
@@ -780,7 +1044,6 @@ def model_training_loop(
             avg_loss_main = epoch_loss_main_sum / epoch_loss_count
         else:
             avg_loss_main = float("nan")
-        avg_loss_aux = 0.0
 
         epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
         model._last_epoch_elapsed = float(epoch_elapsed)
@@ -821,7 +1084,7 @@ def model_training_loop(
             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
             f"lr={current_lr:.2e} |  "
             f"improved={bool(improved)} |  "
-            f"loss_main={avg_loss_main:.5e}, loss_aux={avg_loss_aux:.5e}"
+            f"loss_main={avg_loss_main:.5e}"
         )
 
         if improved:
@@ -850,5 +1113,3 @@ def model_training_loop(
                 pass
 
     return best_val
-
-
