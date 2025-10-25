@@ -140,8 +140,7 @@ hparams = {
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
     "FLATTEN_MODE":          "last",  # format to be provided to regression head: "flatten" | "last" | "pool"
     "PRED_HIDDEN":           64,      # head MLP hidden dim; ↑capacity, ↓over-parameterization
-    "ALPHA_SMOOTH":          0.00,    # slope-penalty weight; ↑smoothness, ↓spike fidelity
-    # "SKIP_ALPHA":           -10.0,  # learnable initial skip-gate logit for residual skip; 0: sigmoid ≃0.5, -3: sigmoid ≃0.05
+    "ALPHA_SMOOTH":          0.5,    # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs

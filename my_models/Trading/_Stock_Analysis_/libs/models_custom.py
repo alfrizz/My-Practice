@@ -74,248 +74,6 @@ class PositionalEncoding(nn.Module):
 
 ############### 
 
-# class ModelClass(nn.Module):
-#     """
-#     Modular time-series regressor. Layers can be toggled independently:
-#       0) Conv1d + BatchNorm
-#       1) Temporal ConvNet (TCN)
-#       2) Short Bi-LSTM
-#       3) TransformerEncoder w/ optional feature projection
-#       4) Linear projection → LayerNorm → Dropout
-#       5) Long Bi-LSTM
-#       6) Flatten/Last/Pool → MLP head (no skip branch)
-#     Stateful LSTM buffers reset via _reset_states() per day/week.
-#     """
-#     def __init__(
-#         self,
-#         n_feats: int,
-#         short_units: int,
-#         long_units: int,
-#         dropout_short: float,
-#         dropout_long: float,
-#         pred_hidden: int,
-#         window_len: int,
-#         use_conv: bool,
-#         use_tcn: bool,
-#         use_short_lstm: bool,
-#         use_transformer: bool,
-#         use_long_lstm: bool,
-#         flatten_mode: str,
-#     ):
-#         super().__init__()
-#         self.window_len      = window_len
-#         self.short_units     = short_units
-#         self.long_units      = long_units
-#         self.use_conv        = use_conv
-#         self.use_tcn         = use_tcn
-#         self.use_short_lstm  = use_short_lstm
-#         self.use_transformer = use_transformer
-#         self.use_long_lstm   = use_long_lstm
-#         self.aux_head = weight_norm(nn.Linear(long_units, 1))  # a tiny auxiliary head that predicts every timestep
-
-
-#         # 0) Conv1d + BatchNorm1d or Identity
-#         if use_conv:
-#             conv_k        = params.hparams["CONV_K"]
-#             conv_dilation = params.hparams["CONV_DILATION"]
-#             padding       = (conv_k // 2) * conv_dilation
-#             self.conv = nn.Conv1d(n_feats, n_feats,
-#                                   kernel_size=conv_k,
-#                                   dilation=conv_dilation,
-#                                   padding=padding)
-#             self.bn   = nn.BatchNorm1d(n_feats)
-#         else:
-#             self.conv = nn.Identity()
-#             self.bn   = nn.Identity()
-#         self.relu = nn.ReLU()
-
-#         # 1) TCN or Identity
-#         if use_tcn:
-#             tcn_layers = params.hparams["TCN_LAYERS"]
-#             tcn_kernel = params.hparams["TCN_KERNEL"]
-#             blocks, in_ch = [], n_feats
-#             for i in range(tcn_layers):
-#                 dilation = 2 ** i
-#                 padding  = (tcn_kernel // 2) * dilation
-#                 blocks += [
-#                     nn.Conv1d(in_ch, n_feats, tcn_kernel,
-#                               dilation=dilation, padding=padding),
-#                     nn.BatchNorm1d(n_feats),
-#                     nn.ReLU()
-#                 ]
-#                 in_ch = n_feats
-#             self.tcn = nn.Sequential(*blocks)
-#         else:
-#             self.tcn = nn.Identity()
-
-#         # 2) Short Bi-LSTM or Identity
-#         if use_short_lstm:
-#             assert short_units % 2 == 0
-#             self.short_lstm = nn.LSTM(
-#                 input_size=n_feats,
-#                 hidden_size=short_units // 2,
-#                 batch_first=True,
-#                 bidirectional=True
-#             )
-#             self.ln_short = nn.LayerNorm(short_units)
-#             self.do_short = nn.Dropout(dropout_short)
-#         else:
-#             self.short_lstm = None
-#             self.ln_short   = nn.Identity()
-#             self.do_short   = nn.Identity()
-#         self.h_short = None
-#         self.c_short = None
-
-#         # 3) Transformer w/ PositionalEncoding + optional feature projection
-#         if use_transformer:
-#             d_model = short_units
-#             heads   = params.hparams["TRANSFORMER_HEADS"]
-#             layers  = params.hparams["TRANSFORMER_LAYERS"]
-#             ff_mult = params.hparams["TRANSFORMER_FF_MULT"]
-#             ff_dim  = d_model * ff_mult
-
-#             in_proj_dim = short_units if use_short_lstm else n_feats
-#             self.feature_proj = nn.Linear(in_proj_dim, d_model)
-
-#             self.pos_enc    = PositionalEncoding(d_model, dropout_short, window_len)
-#             encoder_layer   = nn.TransformerEncoderLayer(
-#                 d_model         = d_model,
-#                 nhead           = heads,
-#                 dim_feedforward = ff_dim,
-#                 dropout         = dropout_short,
-#                 # batch_first     = True
-#             )
-#             self.transformer = nn.TransformerEncoder(
-#                 encoder_layer,
-#                 num_layers=layers
-#             )
-#         else:
-#             self.feature_proj = nn.Identity()
-#             self.pos_enc      = nn.Identity()
-#             self.transformer  = nn.Identity()
-
-#         # 4) Projection → LayerNorm → Dropout
-#         proj_in     = short_units if use_short_lstm else n_feats
-#         self.short2long = nn.Linear(proj_in, long_units)
-#         self.ln_proj    = nn.LayerNorm(long_units)
-#         self.do_proj    = nn.Dropout(dropout_long)
-
-#         # 5) Long Bi-LSTM or Identity
-#         if use_long_lstm:
-#             assert long_units % 2 == 0
-#             self.long_lstm = nn.LSTM(
-#                 input_size=long_units,
-#                 hidden_size=long_units // 2,
-#                 batch_first=True,
-#                 bidirectional=True
-#             )
-#             self.ln_long = nn.LayerNorm(long_units)
-#             self.do_long = nn.Dropout(dropout_long)
-#         else:
-#             self.long_lstm = None
-#             self.ln_long   = nn.Identity()
-#             self.do_long   = nn.Identity()
-#         self.h_long = None
-#         self.c_long = None
-
-#         # 6) Flatten/Last/Pool + plain MLP head
-#         assert flatten_mode in ("flatten", "last", "pool")
-#         self.flatten_mode = flatten_mode
-#         flat_dim = (window_len * long_units
-#                     if flatten_mode == "flatten"
-#                     else long_units)
-
-#         self.ln_flat   = nn.LayerNorm(flat_dim)
-#         self.head_flat = nn.Sequential(
-#             weight_norm(nn.Linear(flat_dim, pred_hidden)),
-#             nn.ReLU(),
-#             weight_norm(nn.Linear(pred_hidden, 1))
-#         )
-
-#     def reset_short(self):
-#         if self.h_short is not None:
-#             bsz, dev = self.h_short.size(1), self.h_short.device
-#             self.h_short, self.c_short = _allocate_lstm_states(
-#                 bsz, self.short_units // 2, True, dev
-#             )
-
-#     def reset_long(self):
-#         if self.h_long is not None:
-#             bsz, dev = self.h_long.size(1), self.h_long.device
-#             self.h_long, self.c_long = _allocate_lstm_states(
-#                 bsz, self.long_units // 2, True, dev
-#             )
-
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         # Collapse extra leading dims to (batch, time_steps, features)
-#         if x.dim() > 3:
-#             *lead, T, F = x.shape
-#             x = x.view(-1, T, F)
-#         if x.dim() == 2:
-#             x = x.unsqueeze(0)
-#         batch_size, time_steps, _ = x.shape
-
-#         # 0) Conv + BN + ReLU
-#         xc = x.transpose(1, 2)
-#         xc = self.conv(xc); xc = self.bn(xc); xc = self.relu(xc)
-#         x  = xc.transpose(1, 2)
-
-#         # 1) TCN
-#         tcn_out = self.tcn(x.transpose(1, 2)).transpose(1, 2)
-
-#         # 2) Short LSTM
-#         if self.use_short_lstm:
-#             if self.h_short is None or self.h_short.size(1) != batch_size:
-#                 self.h_short, self.c_short = _allocate_lstm_states(
-#                     batch_size, self.short_units // 2, True, x.device
-#                 )
-#             out_s, (h_s, c_s) = self.short_lstm(
-#                 tcn_out, (self.h_short, self.c_short)
-#             )
-#             self.h_short, self.c_short = h_s.detach(), c_s.detach()
-#             out_s = self.ln_short(out_s); out_s = self.do_short(out_s)
-#         else:
-#             out_s = tcn_out
-
-#         # 3) Transformer
-#         tr_in  = self.feature_proj(out_s)
-#         tr_in  = self.pos_enc(tr_in)
-#         tr_out = self.transformer(tr_in.transpose(0, 1).contiguous())
-#         out_t  = tr_out.transpose(0, 1).contiguous()
-
-#         # 4) Projection
-#         out_p = self.short2long(out_t)
-#         out_p = self.ln_proj(out_p); out_p = self.do_proj(out_p)
-
-#         # 5) Long LSTM
-#         if self.use_long_lstm:
-#             if self.h_long is None or self.h_long.size(1) != batch_size:
-#                 self.h_long, self.c_long = _allocate_lstm_states(
-#                     batch_size, self.long_units // 2, True, out_p.device
-#                 )
-#             out_l, (h_l, c_l) = self.long_lstm(
-#                 out_p, (self.h_long, self.c_long)
-#             )
-#             self.h_long, self.c_long = h_l.detach(), c_l.detach()
-#             out_l = self.ln_long(out_l); out_l = self.do_long(out_l)
-#         else:
-#             out_l = out_p
-
-#         aux_out = self.aux_head(out_l) # shape (B, T, 1)
-
-
-#         # 6) Flatten/Last/Pool + MLP head
-#         if self.flatten_mode == "flatten":
-#             flat = out_l.reshape(batch_size, -1)
-#         elif self.flatten_mode == "last":
-#             flat = out_l[:, -1, :]
-#         else:  # "pool"
-#             flat = out_l.mean(dim=1)
-
-#         norm_flat = self.ln_flat(flat)
-#         main_out  = self.head_flat(norm_flat)  # (B, 1)
-#         return main_out.unsqueeze(-1), aux_out   # → ((B,1,1), (B,T,1))
-
 
 class ModelClass(nn.Module):
     """
@@ -567,48 +325,24 @@ class ModelClass(nn.Module):
 
 class SmoothMSELoss(nn.Module):
     """
-    Combined level + slope MSE, with special handling for 2D aux-loss.
-
-    - 1D inputs (B,): standard MSE mean + α*MSE of one‐step diffs.
-    - 2D inputs (B, T): flattens to (B*T,) with reduction='sum' for level loss,
-      plus mean‐reduction slope penalty across time steps.
+    Combined level + slope MSE: standard MSE mean + α*MSE of one‐step diffs.
     """
     def __init__(self, alpha: float = 0.0):
         super().__init__()
         self.alpha = alpha
 
     def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
-        if preds.dim() == 1:
-            # final‐step head
-            L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
-            if self.alpha <= 0:
-                return L1
-            dp = preds[1:] - preds[:-1]
-            dt =  targs[1:] - targs[:-1]
-            L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
-            return L1 + self.alpha * L2
+        # final‐step head
+        L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
+        if self.alpha <= 0:
+            return L1
+        dp = preds[1:] - preds[:-1]
+        dt =  targs[1:] - targs[:-1]
+        L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
+        return L1 + self.alpha * L2
 
-        elif preds.dim() == 2:
-            # aux‐head over T steps
-            # level loss: sum so each step sends full gradient
-            flat_p = preds.reshape(-1)
-            flat_t = targs.reshape(-1)
-            L1 = torch.nn.functional.mse_loss(flat_p, flat_t, reduction="sum") / preds.size(1)
+############################
 
-            if self.alpha <= 0:
-                return L1
-
-            # slope penalty across time axis
-            dp = preds[:, 1:] - preds[:, :-1]
-            dt =  targs[:, 1:] - targs[:, :-1]
-            L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
-            return L1 + self.alpha * L2
-
-        else:
-            raise ValueError(f"Unsupported preds.dim()={preds.dim()}")
-
-
-######################################################################################################
 
 def compute_baselines(loader) -> tuple[float, float]:
     """
@@ -640,6 +374,7 @@ def compute_baselines(loader) -> tuple[float, float]:
 
 ###############
 
+
 def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
     """
     Compute RMSE, MAE, and R² on flat NumPy arrays of predictions vs. targets.
@@ -663,6 +398,7 @@ def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
     return {"rmse": rmse, "mae": mae, "r2": r2}
 
 ############### 
+
 
 def _reset_states(
     model:    nn.Module,
@@ -693,7 +429,8 @@ def _reset_states(
 
     return day
 
-############### 
+
+###################################################################################################### 
 
  
 def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[dict, np.ndarray]:
@@ -743,18 +480,24 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
             raw_out = model(windows_tensor)
             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-            if raw_reg.dim() == 3:
-                if raw_reg.size(-1) == 1:
-                    seq_reg = raw_reg.reshape(raw_reg.size(0), raw_reg.size(1))
-                else:
-                    raw_reg_pred = model.pred(raw_reg)
-                    if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
-                        raise ValueError("eval_on_loader: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
-                    seq_reg = raw_reg_pred.reshape(raw_reg_pred.size(0), raw_reg_pred.size(1))
-            elif raw_reg.dim() == 2:
-                seq_reg = raw_reg
-            else:
-                raise ValueError(f"eval_on_loader: unexpected raw_reg.dim()={raw_reg.dim()}")
+            # if raw_reg.dim() == 3:
+            #     if raw_reg.size(-1) == 1:
+            #         seq_reg = raw_reg.reshape(raw_reg.size(0), raw_reg.size(1))
+            #     else:
+            #         raw_reg_pred = model.pred(raw_reg)
+            #         if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+            #             raise ValueError("eval_on_loader: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+            #         seq_reg = raw_reg_pred.reshape(raw_reg_pred.size(0), raw_reg_pred.size(1))
+            # elif raw_reg.dim() == 2:
+            #     seq_reg = raw_reg
+            # else:
+            #     raise ValueError(f"eval_on_loader: unexpected raw_reg.dim()={raw_reg.dim()}")
+
+            # require canonical output shape (W, T, 1)
+            if not (raw_reg.dim() == 3 and raw_reg.size(-1) == 1):
+                raise ValueError("eval_on_loader: model must return shape (W, T, 1)")
+            seq_reg = raw_reg.reshape(raw_reg.size(0), raw_reg.size(1))
+
 
             preds = seq_reg[:, -1]
 
@@ -771,7 +514,7 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
 
 
-############### 
+###################################################################################################### 
 
 
 def model_training_loop(
@@ -840,7 +583,7 @@ def model_training_loop(
         train_preds, train_targs = [], []
         prev_day = None
 
-        epoch_loss_main_sum = 0.0
+        epoch_loss_sum = 0.0
         epoch_loss_count = 0
         epoch_start = datetime.utcnow().timestamp()
         epoch_samples = 0
@@ -880,22 +623,26 @@ def model_training_loop(
                 raw_out = model(windows_tensor)
                 raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-                if raw_reg.dim() == 3:
-                    if raw_reg.size(-1) == 1:
-                        seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
-                    else:
-                        raw_reg_pred = model.pred(raw_reg)
-                        if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
-                            raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
-                        seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
-                elif raw_reg.dim() == 2:
-                    seq_reg = raw_reg
-                else:
-                    raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
+                # if raw_reg.dim() == 3:
+                #     if raw_reg.size(-1) == 1:
+                #         seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
+                #     else:
+                #         raw_reg_pred = model.pred(raw_reg)
+                #         if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
+                #             raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
+                #         seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
+                # elif raw_reg.dim() == 2:
+                #     seq_reg = raw_reg
+                # else:
+                #     raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
+
+                # Require canonical output shape (W, T, 1)
+                if not (raw_reg.dim() == 3 and raw_reg.size(-1) == 1):
+                    raise ValueError("train: model must return shape (W, T, 1)")
+                seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
 
                 preds = seq_reg[:, -1]
-                loss_main = smooth_loss(preds, targets_tensor)
-                loss = loss_main
+                loss = smooth_loss(preds, targets_tensor)
 
             # Backward (AMP) with no host-syncs before step
             scaler.scale(loss).backward()
@@ -933,7 +680,7 @@ def model_training_loop(
             scheduler.step()
 
             # After step: minimal host work (convert scalars/lists once)
-            epoch_loss_main_sum += float(loss_main.detach().cpu())
+            epoch_loss_sum += float(loss.detach().cpu())
             epoch_loss_count += 1
 
             train_preds.extend(preds.detach().cpu().tolist())
@@ -949,9 +696,9 @@ def model_training_loop(
         vl_metrics, _ = eval_on_loader(val_loader, model)
 
         if epoch_loss_count > 0:
-            avg_loss_main = epoch_loss_main_sum / epoch_loss_count
+            avg_loss = epoch_loss_sum / epoch_loss_count
         else:
-            avg_loss_main = float("nan")
+            avg_loss = float("nan")
 
         epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
         model._last_epoch_elapsed = float(epoch_elapsed)
@@ -992,7 +739,7 @@ def model_training_loop(
             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
             f"lr={current_lr:.2e} |  "
             f"improved={bool(improved)} |  "
-            f"loss_main={avg_loss_main:.5e}"
+            f"loss={avg_loss:.5e}"
         )
 
         if improved:

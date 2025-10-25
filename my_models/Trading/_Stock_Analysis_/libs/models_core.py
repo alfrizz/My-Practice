@@ -830,6 +830,27 @@ def select_checkpoint(
 #########################################################################################################
 
 
+def _append_log(text: str, log_file: Path):
+    """Append a line to log_file, creating parent dirs if needed.
+
+    This function is intentionally tolerant to I/O errors (best‑effort logging).
+    It always ensures a trailing newline is present.
+    """
+    try:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(text)
+            if not text.endswith("\n"):
+                f.write("\n")
+            f.flush()
+    except Exception:
+        # Swallow logging errors to avoid crashing training; logging is diagnostic only.
+        pass
+        
+        
+#############################################################
+
+
 def collect_or_run_forward_micro_snapshot(
     model, train_loader=None, params=None, log_file=None, clipnorm=None, return_snapshot=True
 ):
@@ -1628,27 +1649,7 @@ def init_log(
             _RUN_DEBUG_DONE = True
 
 
-######################
-
-
-def _append_log(text: str, log_file: Path):
-    """Append a line to log_file, creating parent dirs if needed.
-
-    This function is intentionally tolerant to I/O errors (best‑effort logging).
-    It always ensures a trailing newline is present.
-    """
-    try:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(text)
-            if not text.endswith("\n"):
-                f.write("\n")
-            f.flush()
-    except Exception:
-        # Swallow logging errors to avoid crashing training; logging is diagnostic only.
-        pass
-
-##############################################################
+#################################################################################################################################
 
 
 def log_epoch_summary(
