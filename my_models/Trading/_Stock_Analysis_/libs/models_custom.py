@@ -90,7 +90,6 @@ class ModelClass(nn.Module):
 
     Notes
       - The model returns only the primary prediction (main_out) with shape (B, 1, 1).
-      - No auxiliary head or auxiliary-loss outputs are created or returned.
       - The internal structure, parameter names, and forward-dataflow are preserved
         so external call sites that consume only the main output remain compatible.
     """
@@ -480,19 +479,6 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
             raw_out = model(windows_tensor)
             raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-            # if raw_reg.dim() == 3:
-            #     if raw_reg.size(-1) == 1:
-            #         seq_reg = raw_reg.reshape(raw_reg.size(0), raw_reg.size(1))
-            #     else:
-            #         raw_reg_pred = model.pred(raw_reg)
-            #         if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
-            #             raise ValueError("eval_on_loader: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
-            #         seq_reg = raw_reg_pred.reshape(raw_reg_pred.size(0), raw_reg_pred.size(1))
-            # elif raw_reg.dim() == 2:
-            #     seq_reg = raw_reg
-            # else:
-            #     raise ValueError(f"eval_on_loader: unexpected raw_reg.dim()={raw_reg.dim()}")
-
             # require canonical output shape (W, T, 1)
             if not (raw_reg.dim() == 3 and raw_reg.size(-1) == 1):
                 raise ValueError("eval_on_loader: model must return shape (W, T, 1)")
@@ -538,8 +524,7 @@ def model_training_loop(
     - Captures a cheap first-batch snapshot (shapes and boolean grad-presence) without
       forcing GPU->CPU copies at startup.
     - Performs gradient clipping, scaler.step/optimizer.step and scheduler.step every batch.
-    - Logs epoch metrics, checkpointing and lightweight diagnostics; AUX paths are disabled
-      in the hot path.
+    - Logs epoch metrics, checkpointing and lightweight diagnostics
     
     Parameters: model, optimizer, scheduler, scaler, train_loader, val_loader,
     max_epochs, early_stop_patience, clipnorm, alpha_smooth.
@@ -573,9 +558,6 @@ def model_training_loop(
     first_snapshot_captured = False
 
     for epoch in range(1, max_epochs + 1):
-        freeze_till = params.hparams["FREEZE_TILL"]
-        for p in model.head_flat.parameters():
-            p.requires_grad = False if epoch <= freeze_till else True
 
         model.train()
         model.h_short = model.h_long = None
@@ -623,19 +605,6 @@ def model_training_loop(
                 raw_out = model(windows_tensor)
                 raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-                # if raw_reg.dim() == 3:
-                #     if raw_reg.size(-1) == 1:
-                #         seq_reg = raw_reg.view(raw_reg.size(0), raw_reg.size(1))
-                #     else:
-                #         raw_reg_pred = model.pred(raw_reg)
-                #         if raw_reg_pred.dim() != 3 or raw_reg_pred.size(-1) != 1:
-                #             raise ValueError("train: model.pred must return shape (W, T, 1) when passed 3D raw_reg")
-                #         seq_reg = raw_reg_pred.view(raw_reg_pred.size(0), raw_reg_pred.size(1))
-                # elif raw_reg.dim() == 2:
-                #     seq_reg = raw_reg
-                # else:
-                #     raise ValueError(f"train: unexpected raw_reg.dim()={raw_reg.dim()}")
-
                 # Require canonical output shape (W, T, 1)
                 if not (raw_reg.dim() == 3 and raw_reg.size(-1) == 1):
                     raise ValueError("train: model must return shape (W, T, 1)")
@@ -646,6 +615,43 @@ def model_training_loop(
 
             # Backward (AMP) with no host-syncs before step
             scaler.scale(loss).backward()
+
+            ######################################################################################################
+        
+            # # DELETE_ME: single-batch non-AMP detect_anomaly (paste here for 1 batch then remove)
+            # optimizer.zero_grad()
+            # with torch.autograd.detect_anomaly():
+            #     raw_out = model(windows_tensor)
+            #     seq_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+            #     preds = seq_reg.view(seq_reg.size(0), seq_reg.size(1))[:, -1]
+            #     loss = smooth_loss(preds, targets_tensor)
+            #     loss.backward()
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+            #     optimizer.step()
+            # print("DELETE_ME: DEBUG_NON_AMP finished")
+
+
+
+            # # DELETE_ME: single-batch AMP detect_anomaly (paste here for 1 batch then remove)
+            # optimizer.zero_grad()
+            # with torch.autograd.detect_anomaly():
+            #     with torch.cuda.amp.autocast(enabled=True):
+            #         raw_out = model(windows_tensor)
+            #         seq_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+            #         preds = seq_reg.view(seq_reg.size(0), seq_reg.size(1))[:, -1]
+            #         loss = smooth_loss(preds, targets_tensor)
+            #     # backward via scaler to preserve AMP behavior for the traceback
+            #     scaler.scale(loss).backward()
+            #     # unscale for grad clipping (do not call scaler.step here; we only need the traceback)
+            #     scaler.unscale_(optimizer)
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
+            # print("DELETE_ME: DEBUG_AMP finished")
+
+
+
+            ######################################################################################################
+
+            
             scaler.unscale_(optimizer)
 
             # lightweight first-batch snapshot (non-blocking, cheap)
@@ -675,10 +681,104 @@ def model_training_loop(
             if params_with_grad:
                 _torch.nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
 
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
+            # scaler.step(optimizer)
+            # scaler.update()
+            # scheduler.step()
 
+            # Guard scheduler so it only advances when optimizer.step actually ran (prevents LR drift if GradScaler skipped the update)
+            _called = {"v": False}
+            _real = optimizer.step
+            optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
+            try:
+                scaler.step(optimizer)
+            finally:
+                scaler.update()
+            optimizer.step = _real
+            if _called["v"]:
+                scheduler.step()
+
+
+
+###############################################################################################################################################
+
+            # # BEGIN: robust AMP step + guard (DELETE_ME diagnostics — remove when fixed)
+            # import math, traceback, sys
+            
+            # # 1) Wrap optimizer.step to detect whether it is actually invoked by GradScaler
+            # _real_step = getattr(optimizer, "step", None)
+            # _step_was_called = {"hit": False}
+            # def _step_wrapper(*a, **k):
+            #     _step_was_called["hit"] = True
+            #     return _real_step(*a, **k)
+            # if _real_step is not None:
+            #     optimizer.step = _step_wrapper
+            
+            # # 2) Attempt AMP step and always update the scaler
+            # try:
+            #     scaler.step(optimizer)
+            # except Exception as exc:
+            #     print("DELETE_ME: scaler.step raised:", repr(exc), file=sys.stderr)
+            #     traceback.print_exc(file=sys.stderr)
+            # finally:
+            #     scaler.update()
+            
+            # # restore original optimizer.step to avoid side effects
+            # if _real_step is not None:
+            #     optimizer.step = _real_step
+            
+            # # 3) Per-parameter finite-check to help find NaN/Inf grads
+            # _bad = False
+            # for n, p in model.named_parameters():
+            #     if p.grad is None:
+            #         continue
+            #     try:
+            #         gnorm = float(p.grad.norm().cpu())
+            #     except Exception:
+            #         print(f"DELETE_ME: failed to read grad norm for {n}", file=sys.stderr)
+            #         _bad = True
+            #         continue
+            #     if not math.isfinite(gnorm):
+            #         print(f"DELETE_ME: non-finite grad detected: {n} norm={gnorm}", file=sys.stderr)
+            #         _bad = True
+            
+            # if _bad:
+            #     try:
+            #         print("DELETE_ME: loss:", float(loss.detach().cpu()), file=sys.stderr)
+            #     except Exception:
+            #         pass
+            #     try:
+            #         print("DELETE_ME: inputs min/max:", float(windows_tensor.min().item()), float(windows_tensor.max().item()), file=sys.stderr)
+            #         print("DELETE_ME: targets min/max:", float(targets_tensor.min().item()), float(targets_tensor.max().item()), file=sys.stderr)
+            #     except Exception:
+            #         pass
+            
+            # # 4) Decide whether optimizer actually stepped; synthesize minimal _step_count if needed
+            # opt_stepped = bool(_step_was_called["hit"]) or (
+            #     getattr(optimizer, "_step_count", None) not in (None, "<MISSING>") and getattr(optimizer, "_step_count", 0) > 0
+            # )
+            # if opt_stepped and getattr(optimizer, "_step_count", None) in (None, "<MISSING>"):
+            #     try:
+            #         optimizer._step_count = 1
+            #     except Exception:
+            #         pass
+            
+            # # 5) Advance scheduler only if optimizer truly stepped
+            # if opt_stepped:
+            #     scheduler.step()
+            # else:
+            #     if not getattr(model, "_sched_guard_warned", False):
+            #         print("DELETE_ME: scheduler.step() skipped because optimizer did not step", file=sys.stderr)
+            #         traceback.print_stack(limit=6, file=sys.stderr)
+            #         model._sched_guard_warned = True
+            # # END: robust AMP step + guard (DELETE_ME)
+
+
+
+###################################################################################################################################
+
+
+
+  
             # After step: minimal host work (convert scalars/lists once)
             epoch_loss_sum += float(loss.detach().cpu())
             epoch_loss_count += 1
@@ -738,8 +838,8 @@ def model_training_loop(
             f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
             f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
             f"lr={current_lr:.2e} |  "
-            f"improved={bool(improved)} |  "
-            f"loss={avg_loss:.5e}"
+            f"loss={avg_loss:.5e} |  "
+            f"improved={bool(improved)}"
         )
 
         if improved:
@@ -763,6 +863,5 @@ def model_training_loop(
             delattr(model, attr)
         except Exception:
             pass
-
 
     return best_val

@@ -11,6 +11,8 @@ import re
 import pandas as pd
 import numpy  as np
 import math
+import inspect, platform
+from time import perf_counter
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from numpy.lib.format import header_data_from_array_1_0, write_array_header_1_0
@@ -851,212 +853,378 @@ def _append_log(text: str, log_file: Path):
 #############################################################
 
 
-def collect_or_run_forward_micro_snapshot(
-    model, train_loader=None, params=None, log_file=None, clipnorm=None, return_snapshot=True
-):
+
+# def collect_or_run_forward_micro_snapshot(
+#     model, train_loader=None, params=None, optimizer=None, log_file=None, return_snapshot=True
+# ):
+#     """
+#     Forward-only micro-snapshot collector (drop-in).
+
+#     Purpose
+#     - Run a single, safe forward-only diagnostic snapshot and stash it at model._micro_snapshot.
+#     - Non-invasive: performs no backward, no optimizer, no scheduler side effects.
+#     - Additive: only adds guarded probes and keys; does not remove or rename existing snapshot keys.
+
+#     Optional flag (params.hparams)
+#     - MICRO_SAMPLE_K (int, default 0): sample per-segment latencies (p50/p90). Disabled by default.
+
+#     Produced snapshot keys (additive)
+#     - full_forward_ms, pred_extra_ms, preds_cpu_ms, num_segments, segments_per_sec, mean_seg_len,
+#       gpu_peak_mb, gpu_reserved_mb, gpu_allocated_bytes, gpu_reserved_bytes,
+#       cpu_copy_bytes, device_syncs_count, per_segment_p50_ms, per_segment_p90_ms, activation_mb,
+#       out_shape, out_dtype, out_numel, out_bytes, windows_bytes,
+#       collector_ms, dataloader_ms, param_bytes, backward_ms, step_block_ms
+
+#     Safety
+#     - All probes are guarded with try/except so collector never raises during init_log.
+#     """
+    
+    # t_entry = perf_counter()
+
+    # # Resolve missing args from globals then shallow caller frames
+    # g = globals()
+    # if model is None and "model" in g:
+    #     model = g["model"]
+    # if train_loader is None and "train_loader" in g:
+    #     train_loader = g["train_loader"]
+    # if params is None and "params" in g:
+    #     params = g["params"]
+
+    # if model is None or train_loader is None or params is None:
+    #     for frame_info in inspect.stack()[1:6]:
+    #         f_locals = frame_info.frame.f_locals
+    #         f_globals = frame_info.frame.f_globals
+    #         if model is None and "model" in f_locals:
+    #             model = f_locals["model"]
+    #         if model is None and "model" in f_globals:
+    #             model = f_globals["model"]
+    #         if train_loader is None and "train_loader" in f_locals:
+    #             train_loader = f_locals["train_loader"]
+    #         if train_loader is None and "train_loader" in f_globals:
+    #             train_loader = f_globals["train_loader"]
+    #         if params is None and "params" in f_locals:
+    #             params = f_locals["params"]
+    #         if params is None and "params" in f_globals:
+    #             params = f_globals["params"]
+    #         if model is not None and train_loader is not None and params is not None:
+    #             break
+
+    # # Skip if another successful collection already ran
+    # if getattr(model, "_microdetail_emitted", False):
+    #     return getattr(model, "_micro_snapshot", None)
+    # if getattr(model, "_micro_snapshot_in_progress", False):
+    #     return None
+    # model._micro_snapshot_in_progress = True
+
+    # # Fetch one batch; measure dataloader_ms when possible
+    # device = next(model.parameters()).device
+    # it = iter(train_loader)
+    # t0_dl = perf_counter()
+    # selected = next(it)
+    # t1_dl = perf_counter()
+    # dataloader_ms = (t1_dl - t0_dl) * 1000.0
+
+    # # Normalize batch
+    # elems = list(selected) if hasattr(selected, "__iter__") and not isinstance(selected, (str, bytes, dict)) else [selected]
+
+    # x_batch = elems[0]
+    # seq_lengths = elems[6] if len(elems) > 6 else None
+
+    # # Move inputs to device
+    # x_batch = x_batch.to(device)
+    # if seq_lengths.device != device:
+    #     seq_lengths = seq_lengths.to(device)
+
+    # # Derive dims
+    # B = x_batch.size(0) if x_batch.dim() >= 1 else 0
+    # G = x_batch.size(1) if x_batch.dim() >= 4 else 1
+    # seq_len_full = x_batch.size(2) if x_batch.dim() >= 3 else (x_batch.size(1) if x_batch.dim() >= 2 else None)
+    # feat_dim = x_batch.size(-1)
+    
+    # # Build per-sample segments padded/truncated to seq_len_full
+    # segments = []
+    # seg_lens = []
+    # for i in range(B):
+    #     sl = int(seq_lengths[i].item()) if torch.is_tensor(seq_lengths[i]) else int(seq_lengths[i])
+    #     if sl <= 0:
+    #         continue
+
+    #     sample_tensor = x_batch[i]
+    #     take = min(sl, seq_len_full)
+    #     try:
+    #         idx = torch.arange(take, device=sample_tensor.device)
+    #         seg = sample_tensor.index_select(1, idx)
+    #     except Exception:
+    #         seg = sample_tensor[:, :take, :] if sample_tensor.dim() >= 3 else sample_tensor[:take, :]
+
+    #     cur_len = seg.size(1) if seg.dim() >= 2 else seg.size(0)
+    #     if cur_len < seq_len_full:
+    #         pad_rows = seq_len_full - cur_len
+    #         pad_tensor = torch.zeros((seg.size(0), pad_rows, feat_dim), device=seg.device, dtype=seg.dtype) if seg.dim() >= 2 else torch.zeros((pad_rows, feat_dim), device=seg.device, dtype=seg.dtype)
+    #         seg = torch.cat([seg, pad_tensor], dim=1) if seg.dim() >= 2 else torch.cat([seg, pad_tensor], dim=0)
+
+    #     segments.append(seg)
+    #     seg_lens.append(take)
+
+    # # Stack and reshape to [N_segments, seq_len, feat]
+    # stacked = torch.stack(segments, dim=0)
+    # if stacked.dim() == 4:
+    #     B_valid, G_actual, seq_len_target, feat_dim = stacked.size()
+    #     windows_tensor = stacked.view(-1, seq_len_target, feat_dim).to(device)
+    # elif stacked.dim() == 3:
+    #     B_valid, seq_len_target, feat_dim = stacked.size()
+    #     windows_tensor = stacked.view(-1, seq_len_target, feat_dim).to(device)
+
+    # num_segments = int(windows_tensor.size(0))
+    # mean_seg_len = float(sum(seg_lens) / len(seg_lens)) if seg_lens else float(seq_len_target)
+
+    # # GPU tracking
+    # gpu_peak_mb = None
+    # gpu_reserved_mb = None
+    # gpu_allocated_bytes = None
+    # gpu_reserved_bytes = None
+    # if torch.cuda.is_available():
+    #     torch.cuda.reset_peak_memory_stats(device)
+
+    # # device sync helper
+    # syncs = 0
+    # def _sync():
+    #     nonlocal syncs
+    #     try:
+    #         torch.cuda.synchronize()
+    #         syncs += 1
+    #     except Exception:
+    #         pass
+
+    # # Baseline for activation
+    # activation_mb = None
+    # if torch.cuda.is_available():
+    #     _sync()
+    #     before_alloc = torch.cuda.memory_allocated(device)
+    #     before_reserved = torch.cuda.memory_reserved(device)
+    # else:
+    #     before_alloc = before_reserved = 0
+
+    # # Forward-only timing (AMP)
+    # _sync()
+    # t0 = perf_counter()
+    # with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
+    #     raw_out = model(windows_tensor)
+    # _sync()
+    # t1 = perf_counter()
+    # full_forward_ms = (t1 - t0) * 1000.0
+
+    # raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+
+    # # Activation and memory after forward
+    # if torch.cuda.is_available():
+    #     after_alloc = torch.cuda.memory_allocated(device)
+    #     after_reserved = torch.cuda.memory_reserved(device)
+    #     activation_bytes = max(0, after_alloc - before_alloc)
+    #     activation_mb = int(math.ceil(activation_bytes / (1024 ** 2)))
+    #     peak = torch.cuda.max_memory_allocated(device)
+    #     gpu_peak_mb = int(peak // (1024 ** 2))
+    #     reserved = torch.cuda.max_memory_reserved(device)
+    #     gpu_reserved_mb = int(reserved // (1024 ** 2))
+    #     # precise bytes
+    #     gpu_allocated_bytes = int(after_alloc)
+    #     gpu_reserved_bytes = int(reserved)
+    # else:
+    #     activation_mb = None
+    #     gpu_peak_mb = None
+    #     gpu_reserved_mb = None
+    #     gpu_allocated_bytes = None
+    #     gpu_reserved_bytes = None
+
+    # # CPU transfer timing and bytes; output metadata
+    # out_shape = tuple(raw_reg.shape)
+    # out_dtype = str(raw_reg.dtype)
+    # out_numel = int(raw_reg.numel())
+
+    # elem_w = getattr(windows_tensor, "element_size", None)
+    # windows_bytes = int(windows_tensor.numel()) * int(elem_w()) if callable(elem_w) else None
+    
+    # elem_o = getattr(raw_reg, "element_size", None)
+    # out_bytes = int(out_numel) * int(elem_o()) if out_numel is not None and callable(elem_o) else None
+
+    # preds = raw_reg.view(raw_reg.size(0), -1)[:, -1] if raw_reg.dim() >= 2 else raw_reg
+    # tc0 = perf_counter()
+    # cpu_tensor = preds.detach().cpu()
+    # tc1 = perf_counter()
+    # preds_cpu_ms = (tc1 - tc0) * 1000.0
+    # cpu_copy_bytes = int(cpu_tensor.numel() * cpu_tensor.element_size())
+
+    # # per-segment sampling controlled by params.hparams["MICRO_SAMPLE_K"]
+    # per_segment_p50_ms = None
+    # per_segment_p90_ms = None
+    # sample_k = int(params.hparams.get("MICRO_SAMPLE_K", 0)) if params is not None and hasattr(params, "hparams") else 0
+    # sample_k = max(0, min(256, sample_k))
+    # if sample_k > 0 and num_segments > 0:
+    #     k = min(num_segments, sample_k)
+    #     if num_segments <= k:
+    #         idxs = list(range(num_segments))
+    #     else:
+    #         stride = max(1, num_segments // k)
+    #         idxs = list(range(0, num_segments, stride))[:k]
+    #     seg_times = []
+    #     for ii in idxs:
+    #         seg = windows_tensor[ii : ii + 1]
+    #         _sync()
+    #         t0s = perf_counter()
+    #         with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
+    #             _ = model(seg)
+    #         _sync()
+    #         t1s = perf_counter()
+    #         seg_times.append((t1s - t0s) * 1000.0)
+    #     if seg_times:
+    #         seg_times_sorted = sorted(seg_times)
+    #         def _pct(arr, p):
+    #             n = len(arr)
+    #             if n == 0:
+    #                 return None
+    #             rank = int(math.floor(p / 100.0 * (n - 1)))
+    #             return float(arr[rank])
+    #         per_segment_p50_ms = _pct(seg_times_sorted, 50.0)
+    #         per_segment_p90_ms = _pct(seg_times_sorted, 90.0)
+
+    # t_exit = perf_counter()
+    # collector_ms = (t_exit - t_entry) * 1000.0
+
+    # param_bytes = int(sum(int(p.numel()) * int(getattr(p, "element_size", lambda: 4)()) for p in model.parameters()))
+
+    # # Environment metadata (cheap, helpful)
+    # env = {}
+    # env["python"] = platform.python_version()
+    # env["torch"] = getattr(torch, "__version__", None)
+    # env["cuda"] = getattr(torch.version, "cuda", None)
+    # env["device_name"] = torch.cuda.get_device_name(device)
+
+    # snapshot = {
+    #     "full_forward_ms": float(full_forward_ms),
+    #     "pred_extra_ms": None,
+    #     "preds_cpu_ms": float(preds_cpu_ms) if preds_cpu_ms is not None else None,
+    #     "num_segments": int(num_segments),
+    #     "segments_per_sec": float(num_segments / (full_forward_ms / 1000.0)) if full_forward_ms and num_segments else None,
+    #     "mean_seg_len": float(mean_seg_len),
+    #     "gpu_peak_mb": int(gpu_peak_mb) if gpu_peak_mb is not None else None,
+    #     "gpu_reserved_mb": int(gpu_reserved_mb) if gpu_reserved_mb is not None else None,
+    #     "gpu_allocated_bytes": int(gpu_allocated_bytes) if gpu_allocated_bytes is not None else None,
+    #     "gpu_reserved_bytes": int(gpu_reserved_bytes) if gpu_reserved_bytes is not None else None,
+    #     "cpu_copy_bytes": int(cpu_copy_bytes) if cpu_copy_bytes is not None else None,
+    #     "device_syncs_count": int(syncs),
+    #     "per_segment_p50_ms": float(per_segment_p50_ms) if per_segment_p50_ms is not None else None,
+    #     "per_segment_p90_ms": float(per_segment_p90_ms) if per_segment_p90_ms is not None else None,
+    #     "activation_mb": int(activation_mb) if activation_mb is not None else None,
+    #     "out_shape": out_shape,
+    #     "out_dtype": out_dtype,
+    #     "out_numel": int(out_numel) if out_numel is not None else None,
+    #     "out_bytes": int(out_bytes) if out_bytes is not None else None,
+    #     "windows_bytes": int(windows_bytes) if windows_bytes is not None else None,
+    #     "collector_ms": float(collector_ms),
+    #     "dataloader_ms": float(dataloader_ms) if dataloader_ms is not None else None,
+    #     "param_bytes": int(param_bytes) if param_bytes is not None else None,
+    #     "env": env,
+    #     "backward_ms": None,
+    #     "step_block_ms": None,
+    # }
+
+    #     # Emit canonical batch-shape line
+    # if log_file is not None and callable(globals().get("_append_log")):
+    #     _append_log(f"BATCH_SHAPE B={B} groups={G} seq_len_full={seq_len_full} feat={feat_dim}", log_file)
+
+    # # attach and mark done
+    # model._micro_snapshot = snapshot
+    # model._microdetail_emitted = True
+    # if hasattr(model, "_micro_snapshot_in_progress"):
+    #     delattr(model, "_micro_snapshot_in_progress")
+        
+    # setattr(model, "_micro_snapshot", snapshot)
+
+    # return snapshot if return_snapshot else None
+    
+def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None, optimizer=None, log_file=None, clipnorm=None, return_snapshot=True):
     """
-    Forward-only micro-snapshot collector (drop-in).
+    Run a safe, forward-only micro-snapshot collector for a single batch and attach the
+    canonical result to model._micro_snapshot.
 
     Purpose
-    - Run a single, safe forward-only diagnostic snapshot and stash it at model._micro_snapshot.
-    - Non-invasive: performs no backward, no optimizer, no scheduler side effects.
-    - Additive: only adds guarded probes and keys; does not remove or rename existing snapshot keys.
-
-    Optional flag (params.hparams)
-    - MICRO_SAMPLE_K (int, default 0): sample per-segment latencies (p50/p90). Disabled by default.
-
-    Produced snapshot keys (additive)
-    - full_forward_ms, pred_extra_ms, preds_cpu_ms, num_segments, segments_per_sec, mean_seg_len,
-      gpu_peak_mb, gpu_reserved_mb, gpu_allocated_bytes, gpu_reserved_bytes,
-      cpu_copy_bytes, device_syncs_count, per_segment_p50_ms, per_segment_p90_ms, activation_mb,
-      out_shape, out_dtype, out_numel, out_bytes, windows_bytes,
-      collector_ms, dataloader_ms, param_bytes, backward_ms, step_block_ms
-
-    Safety
-    - All probes are guarded with try/except so collector never raises during init_log.
+    - Run one forward pass over a compact set of per-sample windows derived from the first
+      batch of train_loader, measure timing/memory/IO metrics, and produce a single
+      deterministic dictionary (the "micro snapshot") that summarizes batch shape,
+      per-segment statistics, GPU/CPU usage, and lightweight optimizer/grad diagnostics.
+    - Attach the snapshot at model._micro_snapshot and mark emission with
+      model._microdetail_emitted to make the collector the single authoritative source
+      for init-time diagnostics.
     """
-    from time import perf_counter
-    import inspect, torch, traceback, math, platform
-
-    def _d(msg):
-        # Write collector debug into canonical run log when possible; otherwise remain silent.
-        try:
-            if log_file is not None and callable(globals().get("_append_log")):
-                try:
-                    _append_log("[micro-collector] " + str(msg), log_file)
-                    return
-                except Exception:
-                    pass
-        except Exception:
-            pass
 
     t_entry = perf_counter()
 
     # Resolve missing args from globals then shallow caller frames
-    try:
-        g = globals()
-        if model is None and "model" in g:
-            model = g["model"]
-        if train_loader is None and "train_loader" in g:
-            train_loader = g["train_loader"]
-        if params is None and "params" in g:
-            params = g["params"]
-    except Exception:
-        pass
+    g = globals()
+    if model is None and "model" in g:
+        model = g["model"]
+    if train_loader is None and "train_loader" in g:
+        train_loader = g["train_loader"]
+    if params is None and "params" in g:
+        params = g["params"]
 
     if model is None or train_loader is None or params is None:
-        try:
-            for frame_info in inspect.stack()[1:6]:
-                try:
-                    f_locals = frame_info.frame.f_locals
-                    f_globals = frame_info.frame.f_globals
-                    if model is None and "model" in f_locals:
-                        model = f_locals["model"]
-                    if model is None and "model" in f_globals:
-                        model = f_globals["model"]
-                    if train_loader is None and "train_loader" in f_locals:
-                        train_loader = f_locals["train_loader"]
-                    if train_loader is None and "train_loader" in f_globals:
-                        train_loader = f_globals["train_loader"]
-                    if params is None and "params" in f_locals:
-                        params = f_locals["params"]
-                    if params is None and "params" in f_globals:
-                        params = f_globals["params"]
-                    if model is not None and train_loader is not None and params is not None:
-                        break
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        for frame_info in inspect.stack()[1:6]:
+            f_locals = frame_info.frame.f_locals
+            f_globals = frame_info.frame.f_globals
+            if model is None and "model" in f_locals:
+                model = f_locals["model"]
+            if model is None and "model" in f_globals:
+                model = f_globals["model"]
+            if train_loader is None and "train_loader" in f_locals:
+                train_loader = f_locals["train_loader"]
+            if train_loader is None and "train_loader" in f_globals:
+                train_loader = f_globals["train_loader"]
+            if params is None and "params" in f_locals:
+                params = f_locals["params"]
+            if params is None and "params" in f_globals:
+                params = f_globals["params"]
+            if model is not None and train_loader is not None and params is not None:
+                break
 
-    # Return existing snapshot if present
+    # Skip if another successful collection already ran
+    if getattr(model, "_microdetail_emitted", False):
+        return getattr(model, "_micro_snapshot", None)
+    if getattr(model, "_micro_snapshot_in_progress", False):
+        return None
+    model._micro_snapshot_in_progress = True
+    model_was_training = model.training
     try:
-        ms = getattr(model, "_micro_snapshot", None)
-        if isinstance(ms, dict):
-            _d("existing snapshot present; returning")
-            return ms
-    except Exception:
-        pass
-
-    # Preconditions
-    if model is None:
-        _d("no model provided")
-        return None
-    if train_loader is None:
-        _d("no train_loader provided")
-        return None
-    if params is None:
-        _d("no params provided")
-        return None
-
-    # Device
-    try:
+        # Fetch one batch; measure dataloader_ms when possible
         device = next(model.parameters()).device
-    except Exception as e:
-        _d(f"cannot determine model device: {e}")
-        return None
-
-    # Fetch one batch; measure dataloader_ms when possible
-    selected = None
-    dataloader_ms = None
-    try:
         it = iter(train_loader)
         t0_dl = perf_counter()
         selected = next(it)
         t1_dl = perf_counter()
         dataloader_ms = (t1_dl - t0_dl) * 1000.0
-    except Exception:
-        try:
-            for b in train_loader:
-                selected = b
-                break
-        except Exception as e:
-            _d(f"error iterating train_loader: {e}")
-            return None
-    if selected is None:
-        _d("train_loader yielded no batch")
-        return None
 
-    # Canonical batch info into run log
-    try:
-        if isinstance(selected, (list, tuple)):
-            try:
-                x0 = selected[0]
-                if torch.is_tensor(x0):
-                    xshape = tuple(x0.shape)
-                    if log_file is not None and callable(globals().get("_append_log")):
-                        _append_log(f"BATCH_INFO x0_shape={xshape}", log_file)
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    _d(f"batch type={type(selected)} len={len(selected) if hasattr(selected,'__len__') else 'N/A'}")
-
-    # Normalize batch
-    try:
+        # Normalize batch
         elems = list(selected) if hasattr(selected, "__iter__") and not isinstance(selected, (str, bytes, dict)) else [selected]
-    except Exception:
-        elems = [selected]
 
-    try:
         x_batch = elems[0]
         seq_lengths = elems[6] if len(elems) > 6 else None
-    except Exception as e:
-        _d(f"indexing batch failed: {e}")
-        return None
 
-    if not torch.is_tensor(x_batch):
-        _d("x_batch is not a tensor at index 0")
-        return None
-    if seq_lengths is None or not torch.is_tensor(seq_lengths):
-        _d("seq_lengths not found or not a tensor at index 6")
-        return None
-
-    # Move inputs to device
-    try:
+        # Move inputs to device
         x_batch = x_batch.to(device)
-    except Exception as e:
-        _d(f"failed to move x_batch to device: {e}")
-        return None
-    try:
         if seq_lengths.device != device:
             seq_lengths = seq_lengths.to(device)
-    except Exception:
-        pass
 
-    # Derive dims
-    try:
+        # Derive dims
         B = x_batch.size(0) if x_batch.dim() >= 1 else 0
         G = x_batch.size(1) if x_batch.dim() >= 4 else 1
         seq_len_full = x_batch.size(2) if x_batch.dim() >= 3 else (x_batch.size(1) if x_batch.dim() >= 2 else None)
         feat_dim = x_batch.size(-1)
-    except Exception:
-        _d("cannot derive basic shapes from x_batch")
-        return None
-    if seq_len_full is None:
-        _d("cannot determine seq_len_full from x_batch")
-        return None
-
-    # Emit canonical batch-shape line
-    try:
-        if log_file is not None and callable(globals().get("_append_log")):
-            _append_log(f"BATCH_SHAPE B={B} groups={G} seq_len_full={seq_len_full} feat={feat_dim}", log_file)
-    except Exception:
-        pass
-
-    _d(f"x_batch.shape={tuple(x_batch.shape)} B={B} groups={G} seq_len_full={seq_len_full} feat={feat_dim}")
-
-    # Build per-sample segments padded/truncated to seq_len_full
-    segments = []
-    seg_lens = []
-    try:
+        
+        # Build per-sample segments padded/truncated to seq_len_full
+        segments = []
+        seg_lens = []
         for i in range(B):
-            try:
-                sl = int(seq_lengths[i].item()) if torch.is_tensor(seq_lengths[i]) else int(seq_lengths[i])
-            except Exception:
-                _d(f"cannot read seq length for sample {i}; skipping")
-                continue
+            sl = int(seq_lengths[i].item()) if torch.is_tensor(seq_lengths[i]) else int(seq_lengths[i])
             if sl <= 0:
                 continue
 
@@ -1076,16 +1244,8 @@ def collect_or_run_forward_micro_snapshot(
 
             segments.append(seg)
             seg_lens.append(take)
-    except Exception as e:
-        _d(f"failed while building segments: {e}")
-        return None
 
-    if not segments:
-        _d("no valid segments built (segments empty)")
-        return None
-
-    # Stack and reshape to [N_segments, seq_len, feat]
-    try:
+        # Stack and reshape to [N_segments, seq_len, feat]
         stacked = torch.stack(segments, dim=0)
         if stacked.dim() == 4:
             B_valid, G_actual, seq_len_target, feat_dim = stacked.size()
@@ -1093,58 +1253,38 @@ def collect_or_run_forward_micro_snapshot(
         elif stacked.dim() == 3:
             B_valid, seq_len_target, feat_dim = stacked.size()
             windows_tensor = stacked.view(-1, seq_len_target, feat_dim).to(device)
-        else:
-            _d(f"unexpected stacked.dim()={stacked.dim()}")
-            return None
-    except Exception as e:
-        _d(f"stack/reshape failed: {e}")
-        return None
 
-    num_segments = int(windows_tensor.size(0))
-    mean_seg_len = float(sum(seg_lens) / len(seg_lens)) if seg_lens else float(seq_len_target)
+        num_segments = int(windows_tensor.size(0))
+        mean_seg_len = float(sum(seg_lens) / len(seg_lens)) if seg_lens else float(seq_len_target)
 
-    # Record windows tensor bytes if possible
-    windows_bytes = None
-    try:
-        windows_bytes = int(windows_tensor.numel()) * int(getattr(windows_tensor, "element_size", lambda: 4)())
-    except Exception:
-        windows_bytes = None
-
-    # GPU tracking
-    gpu_peak_mb = None
-    gpu_reserved_mb = None
-    gpu_allocated_bytes = None
-    gpu_reserved_bytes = None
-    try:
+        # GPU tracking
+        gpu_peak_mb = None
+        gpu_reserved_mb = None
+        gpu_allocated_bytes = None
+        gpu_reserved_bytes = None
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats(device)
-    except Exception:
-        pass
 
-    # device sync helper
-    syncs = 0
-    def _sync():
-        nonlocal syncs
-        try:
-            torch.cuda.synchronize()
-            syncs += 1
-        except Exception:
-            pass
+        # device sync helper
+        syncs = 0
+        def _sync():
+            nonlocal syncs
+            try:
+                torch.cuda.synchronize()
+                syncs += 1
+            except Exception:
+                pass
 
-    # Baseline for activation
-    activation_mb = None
-    try:
+        # Baseline for activation
+        activation_mb = None
         if torch.cuda.is_available():
             _sync()
             before_alloc = torch.cuda.memory_allocated(device)
             before_reserved = torch.cuda.memory_reserved(device)
         else:
             before_alloc = before_reserved = 0
-    except Exception:
-        before_alloc = before_reserved = 0
 
-    # Forward-only timing (AMP)
-    try:
+        # Forward-only timing (AMP)
         _sync()
         t0 = perf_counter()
         with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
@@ -1152,14 +1292,10 @@ def collect_or_run_forward_micro_snapshot(
         _sync()
         t1 = perf_counter()
         full_forward_ms = (t1 - t0) * 1000.0
-    except Exception as e:
-        _d(f"forward pass failed: {e}\n{traceback.format_exc()}")
-        return None
 
-    raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+        raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
-    # Activation and memory after forward
-    try:
+        # Activation and memory after forward
         if torch.cuda.is_available():
             after_alloc = torch.cuda.memory_allocated(device)
             after_reserved = torch.cuda.memory_reserved(device)
@@ -1170,71 +1306,37 @@ def collect_or_run_forward_micro_snapshot(
             reserved = torch.cuda.max_memory_reserved(device)
             gpu_reserved_mb = int(reserved // (1024 ** 2))
             # precise bytes
-            try:
-                gpu_allocated_bytes = int(after_alloc)
-            except Exception:
-                gpu_allocated_bytes = None
-            try:
-                gpu_reserved_bytes = int(reserved)
-            except Exception:
-                gpu_reserved_bytes = None
+            gpu_allocated_bytes = int(after_alloc)
+            gpu_reserved_bytes = int(reserved)
         else:
             activation_mb = None
             gpu_peak_mb = None
             gpu_reserved_mb = None
             gpu_allocated_bytes = None
             gpu_reserved_bytes = None
-    except Exception:
-        activation_mb = None
-        gpu_peak_mb = None
-        gpu_reserved_mb = None
-        gpu_allocated_bytes = None
-        gpu_reserved_bytes = None
 
-    # CPU transfer timing and bytes; output metadata
-    preds_cpu_ms = None
-    cpu_copy_bytes = None
-    out_shape = None
-    out_dtype = None
-    out_numel = None
-    out_bytes = None
-    try:
-        try:
-            out_shape = tuple(raw_reg.shape)
-            out_dtype = str(raw_reg.dtype)
-            out_numel = int(raw_reg.numel())
-            try:
-                out_bytes = int(raw_reg.numel()) * int(getattr(raw_reg, "element_size", lambda: 2)())
-            except Exception:
-                out_bytes = None
-        except Exception:
-            out_shape = None
-            out_dtype = None
-            out_numel = None
-            out_bytes = None
+        # CPU transfer timing and bytes; output metadata
+        out_shape = tuple(raw_reg.shape)
+        out_dtype = str(raw_reg.dtype)
+        out_numel = int(raw_reg.numel())
+
+        elem_w = getattr(windows_tensor, "element_size", None)
+        windows_bytes = int(windows_tensor.numel()) * int(elem_w()) if callable(elem_w) else None
+        
+        elem_o = getattr(raw_reg, "element_size", None)
+        out_bytes = int(out_numel) * int(elem_o()) if out_numel is not None and callable(elem_o) else None
 
         preds = raw_reg.view(raw_reg.size(0), -1)[:, -1] if raw_reg.dim() >= 2 else raw_reg
         tc0 = perf_counter()
         cpu_tensor = preds.detach().cpu()
         tc1 = perf_counter()
         preds_cpu_ms = (tc1 - tc0) * 1000.0
-        try:
-            cpu_copy_bytes = int(cpu_tensor.numel() * cpu_tensor.element_size())
-        except Exception:
-            cpu_copy_bytes = None
-    except Exception:
-        preds_cpu_ms = None
-        cpu_copy_bytes = None
+        cpu_copy_bytes = int(cpu_tensor.numel() * cpu_tensor.element_size())
 
-    # per-segment sampling controlled by params.hparams["MICRO_SAMPLE_K"]
-    per_segment_p50_ms = None
-    per_segment_p90_ms = None
-    try:
-        sample_k = 0
-        try:
-            sample_k = int(params.hparams.get("MICRO_SAMPLE_K", 0)) if params is not None and hasattr(params, "hparams") else 0
-        except Exception:
-            sample_k = 0
+        # per-segment sampling controlled by params.hparams["MICRO_SAMPLE_K"]
+        per_segment_p50_ms = None
+        per_segment_p90_ms = None
+        sample_k = int(params.hparams.get("MICRO_SAMPLE_K", 0)) if params is not None and hasattr(params, "hparams") else 0
         sample_k = max(0, min(256, sample_k))
         if sample_k > 0 and num_segments > 0:
             k = min(num_segments, sample_k)
@@ -1245,17 +1347,14 @@ def collect_or_run_forward_micro_snapshot(
                 idxs = list(range(0, num_segments, stride))[:k]
             seg_times = []
             for ii in idxs:
-                try:
-                    seg = windows_tensor[ii : ii + 1]
-                    _sync()
-                    t0s = perf_counter()
-                    with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
-                        _ = model(seg)
-                    _sync()
-                    t1s = perf_counter()
-                    seg_times.append((t1s - t0s) * 1000.0)
-                except Exception:
-                    continue
+                seg = windows_tensor[ii : ii + 1]
+                _sync()
+                t0s = perf_counter()
+                with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
+                    _ = model(seg)
+                _sync()
+                t1s = perf_counter()
+                seg_times.append((t1s - t0s) * 1000.0)
             if seg_times:
                 seg_times_sorted = sorted(seg_times)
                 def _pct(arr, p):
@@ -1266,78 +1365,408 @@ def collect_or_run_forward_micro_snapshot(
                     return float(arr[rank])
                 per_segment_p50_ms = _pct(seg_times_sorted, 50.0)
                 per_segment_p90_ms = _pct(seg_times_sorted, 90.0)
-    except Exception:
-        per_segment_p50_ms = None
-        per_segment_p90_ms = None
 
-    t_exit = perf_counter()
-    collector_ms = (t_exit - t_entry) * 1000.0
+        t_exit = perf_counter()
+        collector_ms = (t_exit - t_entry) * 1000.0
 
-    param_bytes = int(sum(int(p.numel()) * int(getattr(p, "element_size", lambda: 4)()) for p in model.parameters()))
+        param_bytes = int(sum(int(p.numel()) * int(getattr(p, "element_size", lambda: 4)()) for p in model.parameters()))
 
-    # Environment metadata (cheap, helpful)
-    env = {}
-    try:
+        # Environment metadata (cheap, helpful)
+        env = {}
         env["python"] = platform.python_version()
-    except Exception:
-        env["python"] = None
-    try:
         env["torch"] = getattr(torch, "__version__", None)
-    except Exception:
-        env["torch"] = None
-    try:
         env["cuda"] = getattr(torch.version, "cuda", None)
-    except Exception:
-        env["cuda"] = None
-    try:
-        env["device_name"] = None
-        if torch.cuda.is_available():
+        env["device_name"] = torch.cuda.get_device_name(device)
+
+        # prefer explicit optimizer arg
+        opt = optimizer or getattr(model, "optimizer", None) or globals().get("optimizer", None)
+        optimizer_groups = getattr(opt, "param_groups", None) or []
+        group_nonzero_counts = [
+            sum(1 for p in (g.get("params") or []) if getattr(p, "grad", None) is not None)
+            for g in optimizer_groups
+        ]
+    
+        # single-pass named_parameters scan for grad flags
+        backbone_has = False
+        head_has = False
+        for n, p in list(model.named_parameters()):
+            has_grad = getattr(p, "grad", None) is not None
+            ln = n.lower()
+            if "pred" in ln or "head" in ln:
+                head_has = head_has or has_grad
+            else:
+                backbone_has = backbone_has or has_grad
+        
+        snapshot = {
+            "B": int(B),
+            "groups": int(G),
+            "seq_len_full": int(seq_len_full),
+            "feat_dim": int(feat_dim),
+            "raw_reg_shape": out_shape,                 # mirrors historical raw_reg_shape
+            "group_nonzero_counts": group_nonzero_counts,
+            "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
+            "full_forward_ms": float(full_forward_ms),
+            "pred_extra_ms": None,
+            "preds_cpu_ms": float(preds_cpu_ms) if preds_cpu_ms is not None else None,
+            "num_segments": int(num_segments),
+            "segments_per_sec": float(num_segments / (full_forward_ms / 1000.0)) if full_forward_ms and num_segments else None,
+            "expected_segments": int(B * G),
+            "sum_seg_lens": int(sum(seg_lens)) if seg_lens else 0,
+            "mean_seg_len": float(mean_seg_len),
+            "gpu_peak_mb": int(gpu_peak_mb) if gpu_peak_mb is not None else None,
+            "gpu_reserved_mb": int(gpu_reserved_mb) if gpu_reserved_mb is not None else None,
+            "gpu_allocated_bytes": int(gpu_allocated_bytes) if gpu_allocated_bytes is not None else None,
+            "gpu_reserved_bytes": int(gpu_reserved_bytes) if gpu_reserved_bytes is not None else None,
+            "cpu_copy_bytes": int(cpu_copy_bytes) if cpu_copy_bytes is not None else None,
+            "device_syncs_count": int(syncs),
+            "per_segment_p50_ms": float(per_segment_p50_ms) if per_segment_p50_ms is not None else None,
+            "per_segment_p90_ms": float(per_segment_p90_ms) if per_segment_p90_ms is not None else None,
+            "activation_mb": int(activation_mb) if activation_mb is not None else None,
+            "out_shape": out_shape,
+            "out_dtype": out_dtype,
+            "out_numel": int(out_numel) if out_numel is not None else None,
+            "out_bytes": int(out_bytes) if out_bytes is not None else None,
+            "windows_bytes": int(windows_bytes) if windows_bytes is not None else None,
+            "collector_ms": float(collector_ms),
+            "dataloader_ms": float(dataloader_ms) if dataloader_ms is not None else None,
+            "param_bytes": int(param_bytes) if param_bytes is not None else None,
+            "env": env,
+            "backward_ms": None,
+            "step_block_ms": None,
+        }
+
+        # attach and mark done
+        model._micro_snapshot = snapshot
+        model._microdetail_emitted = True
+        
+        if hasattr(model, "_micro_snapshot_in_progress"):
+            delattr(model, "_micro_snapshot_in_progress")
+        
+        return snapshot if return_snapshot else None
+
+    finally:
+        # always cleanup and restore
+        if hasattr(model, "_micro_snapshot_in_progress"):
             try:
-                env["device_name"] = torch.cuda.get_device_name(device)
+                delattr(model, "_micro_snapshot_in_progress")
             except Exception:
-                env["device_name"] = None
-    except Exception:
-        env["device_name"] = None
-
-    snapshot = {
-        "full_forward_ms": float(full_forward_ms),
-        "pred_extra_ms": None,
-        "preds_cpu_ms": float(preds_cpu_ms) if preds_cpu_ms is not None else None,
-        "num_segments": int(num_segments),
-        "segments_per_sec": float(num_segments / (full_forward_ms / 1000.0)) if full_forward_ms and num_segments else None,
-        "mean_seg_len": float(mean_seg_len),
-        "gpu_peak_mb": int(gpu_peak_mb) if gpu_peak_mb is not None else None,
-        "gpu_reserved_mb": int(gpu_reserved_mb) if gpu_reserved_mb is not None else None,
-        "gpu_allocated_bytes": int(gpu_allocated_bytes) if gpu_allocated_bytes is not None else None,
-        "gpu_reserved_bytes": int(gpu_reserved_bytes) if gpu_reserved_bytes is not None else None,
-        "cpu_copy_bytes": int(cpu_copy_bytes) if cpu_copy_bytes is not None else None,
-        "device_syncs_count": int(syncs),
-        "per_segment_p50_ms": float(per_segment_p50_ms) if per_segment_p50_ms is not None else None,
-        "per_segment_p90_ms": float(per_segment_p90_ms) if per_segment_p90_ms is not None else None,
-        "activation_mb": int(activation_mb) if activation_mb is not None else None,
-        "out_shape": out_shape,
-        "out_dtype": out_dtype,
-        "out_numel": int(out_numel) if out_numel is not None else None,
-        "out_bytes": int(out_bytes) if out_bytes is not None else None,
-        "windows_bytes": int(windows_bytes) if windows_bytes is not None else None,
-        "collector_ms": float(collector_ms),
-        "dataloader_ms": float(dataloader_ms) if dataloader_ms is not None else None,
-        "param_bytes": int(param_bytes) if param_bytes is not None else None,
-        "env": env,
-        "backward_ms": None,
-        "step_block_ms": None,
-    }
-
-    try:
-        setattr(model, "_micro_snapshot", snapshot)
-    except Exception:
-        pass
-
-    return snapshot if return_snapshot else None
-
+                pass
+        if model_was_training:
+            try:
+                model.train()
+            except Exception:
+                pass
 
 #########################################################################################################
 
+
+# _RUN_STARTED = False
+# _RUN_DEBUG_DONE = False
+# _RUN_LOCK = threading.Lock()
+
+# def init_log(
+#     log_file:  Path,
+#     hparams:   dict | None = None,
+#     baselines: dict | None = None,
+#     # optional, read-only runtime objects (all optional; safe if None)
+#     optimizer: torch.optim.Optimizer | None = None,
+#     scheduler: object | None = None,
+#     model: torch.nn.Module | None = None,
+#     first_batch: dict | None = None,   # detached CPU snapshot
+#     batch_losses: dict | None = None,
+#     scaler: object | None = None,
+# ):
+#     """
+#     Emit a one-time run header and static diagnostics into the log.
+
+#     - Writes run start, baselines and hyperparameters once.
+#     - Prints a compact, human-friendly guide to the per-epoch one-line summary
+#       format that the logger emits for each epoch.
+#     - Does not mutate any provided objects; all runtime reads are best-effort
+#       and read-only. First-batch / micro snapshots are handled elsewhere.
+#     """
+#     global _RUN_STARTED, _RUN_DEBUG_DONE
+
+#     with _RUN_LOCK:
+#         # --- Header emitted exactly once ---
+#         if not _RUN_STARTED:
+#             sep = "-" * 150
+#             _append_log("\n" + sep, log_file)
+#             _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+
+#             if isinstance(baselines, dict) and baselines:
+#                 _append_log("\nBASELINES:", log_file)
+#                 _append_log(f"  TRAIN mean RMSE        = {baselines['base_tr_mean']:.5f}", log_file)
+#                 _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
+#                 _append_log(f"  VAL   mean RMSE        = {baselines['base_vl_mean']:.5f}", log_file)
+#                 _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
+
+#             # Expanded PER-EPOCH format help (detailed, human-friendly)
+#             _append_log("PER-EPOCH LOG FORMAT (explanatory):", log_file)
+#             _append_log("  E{ep:02d}                : epoch number formatted with two digits", log_file)
+#             _append_log("  OPTS[{groups}:{lrs}]     : optimizer groups and learning rates (list of group LR strings)", log_file)
+#             _append_log("  GN[reg,cls,ter,tot]      : gradient norms for regularizer, classification, term, and total (per-epoch summary)", log_file)
+#             _append_log("  GD[med,p90,max]         : gradient delta statistics (median, 90th percentile, maximum) used for stability checks", log_file)
+#             _append_log("  UR[med,max]             : update ratio statistics (median,max) measuring step/param magnitude ratio", log_file)
+#             _append_log("  lr={lr:.1e}             : current learning rate (main/backbone) reported in scientific notation", log_file)
+#             _append_log("  TR[rmse,r2,mae]         : training metrics (RMSE, R^2, MAE) aggregated across training set", log_file)
+#             _append_log("  VL[rmse,r2,mae]         : validation metrics (RMSE, R^2, MAE) aggregated on the validation set", log_file)
+#             _append_log("  SR={slope_rmse:.3f}     : slope RMSE diagnostic measuring calibration of trend predictions", log_file)
+#             _append_log("  SL={slip:.2f},HR={hub_max:.3f} : slip and hub max indicators for recent prediction horizons", log_file)
+#             _append_log("  topK(g/u)=param:grad_norm/update_ratio,... : the top-k parameter entries by gradient norm and their update ratios", log_file)
+#             _append_log("  Additional single-run diagnostics printed once in the header:", log_file)
+#             _append_log("    DEBUG_SHAPES raw_reg=(N,1,1): shapes from a detached first batch snapshot", log_file)
+#             _append_log("    GROUP_NONZERO_COUNTS [k1,k2,...]             : per-group nonzero counts used for diagnostics", log_file)
+#             _append_log("    DEBUG_GRADS backbone=... head=...    : boolean flags indicating whether gradients were observed in those parts", log_file)
+#             _append_log("    MICRODETAIL ms: full_forward=...ms preds_cpu=...ms nseg=... seg/s=... mean_len=... gpuMB=... cpuB=... syncs=...", log_file)
+#             _append_log("      -> full_forward: wall-clock ms for the sampled forward over prepared windows", log_file)
+#             _append_log("      -> preds_cpu: ms to detach and copy predictions to CPU (post-forward host cost)", log_file)
+#             _append_log("      -> nseg: number of flattened segments forwarded (useful to normalize throughput)", log_file)
+#             _append_log("      -> seg/s: inferred segments per second (throughput) = nseg / full_forward_seconds", log_file)
+#             _append_log("      -> mean_len: average per-segment time-series length in timesteps", log_file)
+#             _append_log("      -> gpuMB: approximate peak GPU memory (MB) observed during forward", log_file)
+#             _append_log("      -> cpuB: bytes copied to CPU for predictions (human-readable KB/MB)", log_file)
+#             _append_log("      -> syncs: explicit torch.cuda.synchronize() counts used for timing accuracy", log_file)
+#             _append_log("      -> gpuRes: peak GPU reserved memory in MB (helps detect fragmentation)", log_file)
+#             _append_log("      -> actMB: estimated activation footprint (MB) computed from allocated delta", log_file)
+#             _append_log("      -> out_shape/out_dtype/out_numel: model output shape, dtype and number of elements", log_file)
+#             _append_log("      -> collector_ms: wall-clock ms spent by the collector (init-log overhead)", log_file)
+#             _append_log("      -> dataloader_ms: ms to fetch the sampled batch from the dataloader", log_file)
+#             _append_log("      -> param_bytes: total parameter memory in bytes", log_file)
+#             _append_log("", log_file)
+
+#             if isinstance(hparams, dict) and hparams:
+#                 _append_log("\nHYPERPARAMS:", log_file)
+#                 for k, v in hparams.items():
+#                     _append_log(f"  {k} = {v}", log_file)
+#                 _append_log("", log_file)
+
+#             # --- compact runtime summary (legacy single-line appearance) ---
+#             try:
+#                 debug_opt_line = None
+#                 if optimizer is not None:
+#                     try:
+#                         opt_groups = len(optimizer.param_groups)
+#                         opt_lrs = [g.get("lr", 0.0) for g in optimizer.param_groups]
+#                         opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
+#                         debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
+#                     except Exception:
+#                         debug_opt_line = None
+
+#                 model_static_line = None
+#                 model_sample_params_line = None
+#                 param_bytes_line = None
+#                 if model is not None:
+#                     try:
+#                         total_params = sum(int(p.numel()) for p in model.parameters())
+#                         trainable_params = sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
+#                         frozen_params = total_params - trainable_params
+#                         model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
+#                         names = [n for n, _ in model.named_parameters()][:10]
+#                         model_sample_params_line = f"MODEL_SAMPLE_PARAMS: {names}"
+#                         try:
+#                             param_bytes = getattr(model, "_micro_snapshot", {}).get("param_bytes")
+#                             if param_bytes is not None:
+#                                 if param_bytes >= 1024 * 1024:
+#                                     param_bytes_line = f"param_bytes={param_bytes//(1024*1024)}MB"
+#                                 elif param_bytes >= 1024:
+#                                     param_bytes_line = f"param_bytes={param_bytes//1024}KB"
+#                                 else:
+#                                     param_bytes_line = f"param_bytes={param_bytes}B"
+#                         except Exception:
+#                             param_bytes_line = None
+#                     except Exception:
+#                         model_static_line = None
+#                         model_sample_params_line = None
+#                         param_bytes_line = None
+
+#                 per_epoch_compact = (
+#                     "# PER-EPOCH LOG FORMAT: "
+#                     "#  E{ep:02d} | OPTS[{groups}:{lrs}] | GN[reg,cls,ter,tot] | GD[med,p90,max] | UR[med,max] | lr={lr:.1e} | "
+#                     "TR[rmse,r2,mae] | VL[rmse,r2,mae] | SR={slope_rmse:.3f} | SL={slip:.2f},HR={hub_max:.3f} | "
+#                     "topK(g/u)=param:grad_norm/update_ratio,..."
+#                 )
+
+#                 compact_parts = []
+#                 if debug_opt_line: compact_parts.append(debug_opt_line)
+#                 if model_static_line: compact_parts.append(model_static_line)
+#                 if model_sample_params_line: compact_parts.append(model_sample_params_line)
+#                 if param_bytes_line: compact_parts.append(param_bytes_line)
+#                 compact_parts.append(per_epoch_compact)
+#                 _append_log(" ".join(compact_parts), log_file)
+#             except Exception:
+#                 pass
+
+#             _RUN_STARTED = True
+
+#     # --- One-shot read-only runtime snapshot emitted at most once (complete, robust) ---
+#     if not _RUN_DEBUG_DONE:
+#         emitted = False
+
+#         try:
+#             snapshot = first_batch if first_batch is not None else (getattr(model, "_first_batch_snapshot", None) if model is not None else None)
+#         except Exception:
+#             snapshot = None
+
+#         # FIRST: produce/fetch a micro-snapshot (collector). tqdm removed per request.
+#         try:
+#             tloader = locals().get("train_loader", None) or globals().get("train_loader", None)
+#             prms = locals().get("params", None) or globals().get("params", None)
+#             clipval = None
+#             try:
+#                 clipval = prms.hparams["CLIPNORM"] if prms is not None else None
+#             except Exception:
+#                 clipval = None
+
+#             try:
+#                 _ = collect_or_run_forward_micro_snapshot(
+#                     model=model,
+#                     train_loader=tloader,
+#                     params=prms,
+#                     log_file=log_file,
+#                     clipnorm=clipval,
+#                 )
+#             except Exception:
+#                 pass
+#         except Exception:
+#             pass
+        
+#         try:
+#             fb = getattr(model, "_first_batch_snapshot", None)
+#         except Exception:
+#             fb = None
+        
+#         try:
+#             if isinstance(fb, dict):
+#                 try:
+#                     raw_shape = fb.get("raw_reg_shape")
+#                     _append_log(f"DEBUG_SHAPES raw_reg={raw_shape}", log_file)
+        
+#                     gnc = fb.get("group_nonzero_counts")
+#                     if isinstance(gnc, (list, tuple)):
+#                         _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
+        
+#                     grads = fb.get("grads")
+#                     if isinstance(grads, dict):
+#                         _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
+#                 except Exception:
+#                     pass
+#         except Exception:
+#             pass
+
+
+#         # Try to print the richer micro-snapshot (preferred). If absent, fall back to first-batch snapshot.
+#         try:
+#             micro_ms = getattr(model, "_micro_snapshot", None)
+#         except Exception:
+#             micro_ms = None
+
+#         # Emit MICRODETAIL when available (guarded, exhaustive)
+#         try:
+#             if isinstance(micro_ms, dict):
+#                 ms = micro_ms
+#                 parts = []
+#                 # core timings and throughput
+#                 parts.append(f"full_forward={ms.get('full_forward_ms', None):.2f}ms" if ms.get('full_forward_ms') is not None else "full_forward=None")
+#                 parts.append(f"preds_cpu={ms.get('preds_cpu_ms', None):.2f}ms" if ms.get('preds_cpu_ms') is not None else "preds_cpu=None")
+#                 parts.append(f"nseg={ms.get('num_segments', None)}")
+#                 parts.append(f"seg/s={int(ms.get('segments_per_sec')) if ms.get('segments_per_sec') is not None else 'None'}")
+#                 parts.append(f"mean_len={ms.get('mean_seg_len', None):.2f}" if ms.get('mean_seg_len') is not None else "mean_len=None")
+#                 # memory summary
+#                 parts.append(f"gpuMB={ms['gpu_peak_mb']}" if ms.get("gpu_peak_mb") is not None else "gpuMB=None")
+#                 parts.append(f"gpuRes={ms['gpu_reserved_mb']}" if ms.get("gpu_reserved_mb") is not None else "gpuRes=None")
+#                 # precise bytes
+#                 parts.append(f"gpuAllocBytes={ms['gpu_allocated_bytes']}" if ms.get("gpu_allocated_bytes") is not None else "gpuAllocBytes=None")
+#                 parts.append(f"gpuResBytes={ms['gpu_reserved_bytes']}" if ms.get("gpu_reserved_bytes") is not None else "gpuResBytes=None")
+#                 # cpu copy bytes (human readable)
+#                 if ms.get("cpu_copy_bytes") is not None:
+#                     try:
+#                         b = int(ms['cpu_copy_bytes'])
+#                         if b >= 1024 * 1024:
+#                             parts.append(f"cpuB={b//(1024*1024)}MB")
+#                         elif b >= 1024:
+#                             parts.append(f"cpuB={b//1024}KB")
+#                         else:
+#                             parts.append(f"cpuB={b}B")
+#                     except Exception:
+#                         parts.append("cpuB=None")
+#                 else:
+#                     parts.append("cpuB=None")
+#                 # syncs and activation
+#                 parts.append(f"syncs={ms.get('device_syncs_count', None)}")
+#                 parts.append(f"p50seg={ms.get('per_segment_p50_ms', None):.2f}ms" if ms.get('per_segment_p50_ms') is not None else "p50seg=None")
+#                 parts.append(f"p90seg={ms.get('per_segment_p90_ms', None):.2f}ms" if ms.get('per_segment_p90_ms') is not None else "p90seg=None")
+#                 parts.append(f"actMB={ms.get('activation_mb', None)}")
+#                 # output metadata
+#                 parts.append(f"out_shape={ms.get('out_shape', None)}")
+#                 parts.append(f"out_dtype={ms.get('out_dtype', None)}")
+#                 parts.append(f"out_numel={ms.get('out_numel', None)}")
+#                 if ms.get("out_bytes") is not None:
+#                     try:
+#                         ob = int(ms['out_bytes'])
+#                         if ob >= 1024 * 1024:
+#                             parts.append(f"out_bytes={ob//(1024*1024)}MB")
+#                         elif ob >= 1024:
+#                             parts.append(f"out_bytes={ob//1024}KB")
+#                         else:
+#                             parts.append(f"out_bytes={ob}B")
+#                     except Exception:
+#                         parts.append("out_bytes=None")
+#                 else:
+#                     parts.append("out_bytes=None")
+#                 if ms.get("windows_bytes") is not None:
+#                     try:
+#                         wb = int(ms['windows_bytes'])
+#                         parts.append(f"windows_bytes={wb//1024}KB" if wb >= 1024 else f"windows_bytes={wb}B")
+#                     except Exception:
+#                         parts.append("windows_bytes=None")
+#                 else:
+#                     parts.append("windows_bytes=None")
+#                 # collector/dataloader/param bytes
+#                 parts.append(f"collector_ms={ms.get('collector_ms', None):.1f}ms" if ms.get('collector_ms') is not None else "collector_ms=None")
+#                 parts.append(f"dataloader_ms={ms.get('dataloader_ms', None):.1f}ms" if ms.get('dataloader_ms') is not None else "dataloader_ms=None")
+#                 if ms.get("param_bytes") is not None:
+#                     try:
+#                         pb = int(ms['param_bytes'])
+#                         if pb >= 1024 * 1024:
+#                             parts.append(f"param_bytes={pb//(1024*1024)}MB")
+#                         elif pb >= 1024:
+#                             parts.append(f"param_bytes={pb//1024}KB")
+#                         else:
+#                             parts.append(f"param_bytes={pb}B")
+#                     except Exception:
+#                         parts.append("param_bytes=None")
+#                 else:
+#                     parts.append("param_bytes=None")
+#                 # env metadata
+#                 env = ms.get("env", {})
+#                 parts.append(f"env=torch={env.get('torch')} cuda={env.get('cuda')} dev={env.get('device_name')}")
+#                 try:
+#                     _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
+#                     emitted = True
+#                 except Exception:
+#                     pass
+#         except Exception:
+#             pass
+
+#         # If micro-snapshot was not printed, fall back to printing first-batch snapshot (guarded)
+#         try:
+#             if not emitted and snapshot is not None:
+#                     gnc = snapshot.get("group_nonzero_counts")
+#                     if isinstance(gnc, (list, tuple)):
+#                         _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
+
+#                     grads = snapshot.get("grads")
+#                     if isinstance(grads, dict):
+#                         _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
+
+#                     emitted = True
+#         except Exception:
+#             # outer guard: continue without failing init_log
+#             pass
+
+#         if emitted:
+#             _RUN_DEBUG_DONE = True
 
 _RUN_STARTED = False
 _RUN_DEBUG_DONE = False
@@ -1347,31 +1776,81 @@ def init_log(
     log_file:  Path,
     hparams:   dict | None = None,
     baselines: dict | None = None,
-    # optional, read-only runtime objects (all optional; safe if None)
     optimizer: torch.optim.Optimizer | None = None,
     scheduler: object | None = None,
     model: torch.nn.Module | None = None,
-    first_batch: dict | None = None,   # detached CPU snapshot
+    first_batch: dict | None = None,
     batch_losses: dict | None = None,
     scaler: object | None = None,
 ):
     """
-    Emit a one-time run header and static diagnostics into the log.
+    Emit run-start diagnostics and a single authoritative micro-snapshot to the log.
 
-    - Writes run start, baselines and hyperparameters once.
-    - Prints a compact, human-friendly guide to the per-epoch one-line summary
-      format that the logger emits for each epoch.
-    - Does not mutate any provided objects; all runtime reads are best-effort
-      and read-only. First-batch / micro snapshots are handled elsewhere.
+    Purpose
+    - Emit a compact run header, baselines and hyperparameters once per process.
+    - Attempt a one-shot micro-snapshot collection (via collect_or_run_forward_micro_snapshot)
+      and print a single canonical BATCH_SHAPE + MICRODETAIL line derived from the snapshot.
+    - Provide a deterministic fallback to legacy first-batch snapshot data if the collector
+      is unavailable.
     """
     global _RUN_STARTED, _RUN_DEBUG_DONE
 
     with _RUN_LOCK:
-        # --- Header emitted exactly once ---
         if not _RUN_STARTED:
             sep = "-" * 150
             _append_log("\n" + sep, log_file)
             _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+
+            _append_log("\nSINGLE RUN DIAGNOSTIC FORMAT (explanatory)", log_file)
+            _append_log("    BATCH_SHAPE B=... groups=... seq_len_full=... feat=... : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)", log_file)
+            _append_log("    MICRODETAIL ms: <k=v ...> : deterministic single-line dump of snapshot keys (sorted). Notable printed keys below reference exact snapshot field names and formats.", log_file)
+            _append_log("      -> B: number of batch samples used to build windows (snapshot.B)", log_file)
+            _append_log("      -> activation_mb: estimated activation footprint in MB computed from allocation delta (snapshot.activation_mb)", log_file)
+            _append_log("      -> backward_ms: placeholder for backward pass ms (None here; snapshot.backward_ms)", log_file)
+            _append_log("      -> collector_ms: total wall-clock ms spent by the collector (includes sampling, CPU/GPU syncs) (snapshot.collector_ms)", log_file)
+            _append_log("      -> cpu_copy_bytes: bytes copied to host for predictions, shown human-readable in log (snapshot.cpu_copy_bytes)", log_file)
+            _append_log("      -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)", log_file)
+            _append_log("      -> device_syncs_count: count of explicit torch.cuda.synchronize() calls used for timing accuracy (snapshot.device_syncs_count)", log_file)
+            _append_log("      -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)", log_file)
+            _append_log("      -> expected_segments: nominal B * groups (snapshot.expected_segments)", log_file)
+            _append_log("      -> feat_dim: feature dimension of inputs used to build windows (snapshot.feat_dim)", log_file)
+            _append_log("      -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)", log_file)
+            _append_log("      -> gpu_allocated_bytes / gpu_reserved_bytes: raw GPU bytes allocated/reserved (snapshot.gpu_allocated_bytes, snapshot.gpu_reserved_bytes)", log_file)
+            _append_log("      -> gpu_peak_mb / gpu_reserved_mb: peak/reserved GPU memory in MB (snapshot.gpu_peak_mb, snapshot.gpu_reserved_mb)", log_file)
+            _append_log("      -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)", log_file)
+            _append_log("      -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)", log_file)
+            _append_log("      -> groups: number of logical groups used when flattening windows (snapshot.groups)", log_file)
+            _append_log("      -> mean_seg_len: average per-segment time-series length in timesteps (snapshot.mean_seg_len)", log_file)
+            _append_log("      -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)", log_file)
+            _append_log("      -> out_bytes / out_dtype / out_numel / out_shape: model output bytes (human-readable in log), dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)", log_file)
+            _append_log("      -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)", log_file)
+            _append_log("      -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)", log_file)
+            _append_log("      -> pred_extra_ms / preds_cpu_ms: placeholder for extra pred cost and ms to detach+copy preds to CPU (snapshot.pred_extra_ms, snapshot.preds_cpu_ms)", log_file)
+            _append_log("      -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)", log_file)
+            _append_log("      -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)", log_file)
+            _append_log("      -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)", log_file)
+            _append_log("      -> step_block_ms: placeholder for step-block timing if measured (snapshot.step_block_ms)", log_file)
+            _append_log("      -> sum_seg_lens: sum of segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)", log_file)
+            _append_log("      -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)", log_file)
+            
+            _append_log("\nPER-EPOCH LOG FORMAT (explanatory):", log_file)
+            _append_log("  E{ep:02d}                : epoch number formatted with two digits", log_file)
+            _append_log("  OPTS[{groups}:{lrs}|cnts=[c1,c2,...]] : optimizer groups count, compact LR preview (first up to 3) and per-group parameter counts (from optimizer.param_groups)", log_file)
+            _append_log("  GN[reg,cls,ter,tot]      : gradient norms for name-buckets reg/cls/ter and total (sqrt of sum squares over matching named parameters; zero means no matching names found)", log_file)
+            _append_log("  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, 90th-percentile, and maximum (index-based p90)", log_file)
+            _append_log("  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)", log_file)
+            _append_log("  LR_MAIN={lr:.1e} | lr={lr:.1e} : primary LR token and explicit current lr printed in scientific notation", log_file)
+            _append_log("  TR[rmse,r2,mae]         : training metrics (RMSE, R^2, MAE) reported for the epoch (train_metrics)", log_file)
+            _append_log("  VL[rmse,r2,mae]         : validation metrics (RMSE, R^2, MAE) reported for the epoch (val_metrics)", log_file)
+            _append_log("  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_preds/model.last_val_targs (trend calibration)", log_file)
+            _append_log("  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults to 0.00/0.000 when missing)", log_file)
+            _append_log("  SCHED_PCT={pct:.1f}%     : optional scheduler percent-complete when scheduler exposes _total_steps and a step counter", log_file)
+            _append_log("  T={elapsed:.1f}s,TP={throughput:.1f}s/s : optional epoch elapsed and throughput if model stored _last_epoch_elapsed and _last_epoch_samples", log_file)
+            _append_log("  GPU={GiB:.2f}GiB         : optional high-water GPU memory in GiB when CUDA available (torch.cuda.max_memory_allocated)", log_file)
+            _append_log("  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy", log_file)
+            _append_log("  LAYER_GN[...]           : optional small set of monitored layer norms and ratio-to-baseline printed as name_short:curr_norm/ratio", log_file)
+            _append_log("  TOP_K(G/U)=param:grad_norm/update_ratio,... : top-k parameter entries by gradient norm with their update ratios (short names use last two name segments)", log_file)
+
 
             if isinstance(baselines, dict) and baselines:
                 _append_log("\nBASELINES:", log_file)
@@ -1379,275 +1858,101 @@ def init_log(
                 _append_log(f"  TRAIN persistence RMSE = {baselines['base_tr_pers']:.5f}", log_file)
                 _append_log(f"  VAL   mean RMSE        = {baselines['base_vl_mean']:.5f}", log_file)
                 _append_log(f"  VAL   persistence RMSE = {baselines['base_vl_pers']:.5f}", log_file)
-
+                
             if isinstance(hparams, dict) and hparams:
                 _append_log("\nHYPERPARAMS:", log_file)
                 for k, v in hparams.items():
                     _append_log(f"  {k} = {v}", log_file)
                 _append_log("", log_file)
 
-            # Expanded PER-EPOCH format help (detailed, human-friendly)
-            _append_log("PER-EPOCH LOG FORMAT (explanatory):", log_file)
-            _append_log("  E{ep:02d}                : epoch number formatted with two digits", log_file)
-            _append_log("  OPTS[{groups}:{lrs}]     : optimizer groups and learning rates (list of group LR strings)", log_file)
-            _append_log("  GN[reg,cls,ter,tot]      : gradient norms for regularizer, classification, term, and total (per-epoch summary)", log_file)
-            _append_log("  GD[med,p90,max]         : gradient delta statistics (median, 90th percentile, maximum) used for stability checks", log_file)
-            _append_log("  UR[med,max]             : update ratio statistics (median,max) measuring step/param magnitude ratio", log_file)
-            _append_log("  lr={lr:.1e}             : current learning rate (main/backbone) reported in scientific notation", log_file)
-            _append_log("  TR[rmse,r2,mae]         : training metrics (RMSE, R^2, MAE) aggregated across training set", log_file)
-            _append_log("  VL[rmse,r2,mae]         : validation metrics (RMSE, R^2, MAE) aggregated on the validation set", log_file)
-            _append_log("  SR={slope_rmse:.3f}     : slope RMSE diagnostic measuring calibration of trend predictions", log_file)
-            _append_log("  SL={slip:.2f},HR={hub_max:.3f} : slip and hub max indicators for recent prediction horizons", log_file)
-            _append_log("  topK(g/u)=param:grad_norm/update_ratio,... : the top-k parameter entries by gradient norm and their update ratios", log_file)
-            _append_log("  Additional single-run diagnostics printed once in the header:", log_file)
-            _append_log("    DEBUG_SHAPES raw_reg=(N,1,1): shapes from a detached first batch snapshot", log_file)
-            _append_log("    GROUP_NONZERO_COUNTS [k1,k2,...]             : per-group nonzero counts used for diagnostics", log_file)
-            _append_log("    DEBUG_GRADS backbone=... head=...    : boolean flags indicating whether gradients were observed in those parts", log_file)
-            _append_log("    MICRODETAIL ms: full_forward=...ms preds_cpu=...ms nseg=... seg/s=... mean_len=... gpuMB=... cpuB=... syncs=...", log_file)
-            _append_log("      -> full_forward: wall-clock ms for the sampled forward over prepared windows", log_file)
-            _append_log("      -> preds_cpu: ms to detach and copy predictions to CPU (post-forward host cost)", log_file)
-            _append_log("      -> nseg: number of flattened segments forwarded (useful to normalize throughput)", log_file)
-            _append_log("      -> seg/s: inferred segments per second (throughput) = nseg / full_forward_seconds", log_file)
-            _append_log("      -> mean_len: average per-segment time-series length in timesteps", log_file)
-            _append_log("      -> gpuMB: approximate peak GPU memory (MB) observed during forward", log_file)
-            _append_log("      -> cpuB: bytes copied to CPU for predictions (human-readable KB/MB)", log_file)
-            _append_log("      -> syncs: explicit torch.cuda.synchronize() counts used for timing accuracy", log_file)
-            _append_log("      -> gpuRes: peak GPU reserved memory in MB (helps detect fragmentation)", log_file)
-            _append_log("      -> actMB: estimated activation footprint (MB) computed from allocated delta", log_file)
-            _append_log("      -> out_shape/out_dtype/out_numel: model output shape, dtype and number of elements", log_file)
-            _append_log("      -> collector_ms: wall-clock ms spent by the collector (init-log overhead)", log_file)
-            _append_log("      -> dataloader_ms: ms to fetch the sampled batch from the dataloader", log_file)
-            _append_log("      -> param_bytes: total parameter memory in bytes", log_file)
-            _append_log("", log_file)
+            # --- compact runtime summary (single-line appearance) ---
+            debug_opt_line = None
+            if optimizer is not None:
+                opt_groups = len(optimizer.param_groups)
+                opt_lrs = [g.get("lr", 0.0) for g in optimizer.param_groups]
+                opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
+                debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
 
+            model_static_line = None
+            param_bytes_line = None
+            if model is not None:
+                total_params = sum(int(p.numel()) for p in model.parameters())
+                trainable_params = sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
+                frozen_params = total_params - trainable_params
+                model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
 
-            # --- compact runtime summary (legacy single-line appearance) ---
-            try:
-                debug_opt_line = None
-                if optimizer is not None:
-                    try:
-                        opt_groups = len(optimizer.param_groups)
-                        opt_lrs = [g.get("lr", 0.0) for g in optimizer.param_groups]
-                        opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
-                        debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
-                    except Exception:
-                        debug_opt_line = None
+                # prefer model._micro_snapshot param_bytes if available
+                param_bytes = None
+                micro_snap = getattr(model, "_micro_snapshot", None)
+                if isinstance(micro_snap, dict):
+                    param_bytes = micro_snap.get("param_bytes")
+                if param_bytes is not None:
+                    if param_bytes >= 1024 * 1024:
+                        param_bytes_line = f"param_bytes={param_bytes//(1024*1024)}MB"
+                    elif param_bytes >= 1024:
+                        param_bytes_line = f"param_bytes={param_bytes//1024}KB"
+                    else:
+                        param_bytes_line = f"param_bytes={param_bytes}B"
 
-                model_static_line = None
-                model_sample_params_line = None
-                param_bytes_line = None
-                if model is not None:
-                    try:
-                        total_params = sum(int(p.numel()) for p in model.parameters())
-                        trainable_params = sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
-                        frozen_params = total_params - trainable_params
-                        model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
-                        names = [n for n, _ in model.named_parameters()][:10]
-                        model_sample_params_line = f"MODEL_SAMPLE_PARAMS: {names}"
-                        try:
-                            param_bytes = getattr(model, "_micro_snapshot", {}).get("param_bytes")
-                            if param_bytes is not None:
-                                if param_bytes >= 1024 * 1024:
-                                    param_bytes_line = f"param_bytes={param_bytes//(1024*1024)}MB"
-                                elif param_bytes >= 1024:
-                                    param_bytes_line = f"param_bytes={param_bytes//1024}KB"
-                                else:
-                                    param_bytes_line = f"param_bytes={param_bytes}B"
-                        except Exception:
-                            param_bytes_line = None
-                    except Exception:
-                        model_static_line = None
-                        model_sample_params_line = None
-                        param_bytes_line = None
-
-                per_epoch_compact = (
-                    "# PER-EPOCH LOG FORMAT: "
-                    "#  E{ep:02d} | OPTS[{groups}:{lrs}] | GN[reg,cls,ter,tot] | GD[med,p90,max] | UR[med,max] | lr={lr:.1e} | "
-                    "TR[rmse,r2,mae] | VL[rmse,r2,mae] | SR={slope_rmse:.3f} | SL={slip:.2f},HR={hub_max:.3f} | "
-                    "topK(g/u)=param:grad_norm/update_ratio,..."
-                )
-
-                compact_parts = []
-                if debug_opt_line: compact_parts.append(debug_opt_line)
-                if model_static_line: compact_parts.append(model_static_line)
-                if model_sample_params_line: compact_parts.append(model_sample_params_line)
-                if param_bytes_line: compact_parts.append(param_bytes_line)
-                compact_parts.append(per_epoch_compact)
-                _append_log(" ".join(compact_parts), log_file)
-            except Exception:
-                pass
+            compact_parts = []
+            if debug_opt_line: compact_parts.append(debug_opt_line)
+            if model_static_line: compact_parts.append(model_static_line)
+            if param_bytes_line: compact_parts.append(param_bytes_line)
 
             _RUN_STARTED = True
 
-    # --- One-shot read-only runtime snapshot emitted at most once (complete, robust) ---
-    if not _RUN_DEBUG_DONE:
-        emitted = False
-
-        try:
-            snapshot = first_batch if first_batch is not None else (getattr(model, "_first_batch_snapshot", None) if model is not None else None)
-        except Exception:
-            snapshot = None
-
-        # FIRST: produce/fetch a micro-snapshot (collector). tqdm removed per request.
-        try:
+        # --- One-shot read-only runtime snapshot emitted at most once ---
+        if not _RUN_DEBUG_DONE:
+            
+            # Attempt to run the micro-snapshot collector if available
             tloader = locals().get("train_loader", None) or globals().get("train_loader", None)
             prms = locals().get("params", None) or globals().get("params", None)
-            clipval = None
-            try:
-                clipval = prms.hparams["CLIPNORM"] if prms is not None else None
-            except Exception:
-                clipval = None
-
-            try:
-                _ = collect_or_run_forward_micro_snapshot(
+            
+            if callable(globals().get("collect_or_run_forward_micro_snapshot", None)):
+                collect_or_run_forward_micro_snapshot(
                     model=model,
                     train_loader=tloader,
                     params=prms,
+                    optimizer=locals().get("optimizer", None) or globals().get("optimizer", None),
                     log_file=log_file,
-                    clipnorm=clipval,
                 )
-            except Exception:
-                pass
-        except Exception:
-            pass
-        
-        try:
-            fb = getattr(model, "_first_batch_snapshot", None)
-        except Exception:
-            fb = None
-        
-        try:
-            if isinstance(fb, dict):
-                try:
-                    raw_shape = fb.get("raw_reg_shape")
-                    _append_log(f"DEBUG_SHAPES raw_reg={raw_shape}", log_file)
-        
-                    gnc = fb.get("group_nonzero_counts")
-                    if isinstance(gnc, (list, tuple)):
-                        _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
-        
-                    grads = fb.get("grads")
-                    if isinstance(grads, dict):
-                        _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
-                except Exception:
-                    pass
-        except Exception:
-            pass
 
-
-        # Try to print the richer micro-snapshot (preferred). If absent, fall back to first-batch snapshot.
-        try:
+            # prefer micro snapshot (authoritative), then explicit first_batch, then legacy first_batch_snapshot
             micro_ms = getattr(model, "_micro_snapshot", None)
-        except Exception:
-            micro_ms = None
-
-        # Emit MICRODETAIL when available (guarded, exhaustive)
-        try:
+            
+            emitted = False
+            
+            # Emit DEBUG_SHAPES, GROUP_NONZERO_COUNTS, DEBUG_GRADS from micro snapshot if present
             if isinstance(micro_ms, dict):
                 ms = micro_ms
-                parts = []
-                # core timings and throughput
-                parts.append(f"full_forward={ms.get('full_forward_ms', None):.2f}ms" if ms.get('full_forward_ms') is not None else "full_forward=None")
-                parts.append(f"preds_cpu={ms.get('preds_cpu_ms', None):.2f}ms" if ms.get('preds_cpu_ms') is not None else "preds_cpu=None")
-                parts.append(f"nseg={ms.get('num_segments', None)}")
-                parts.append(f"seg/s={int(ms.get('segments_per_sec')) if ms.get('segments_per_sec') is not None else 'None'}")
-                parts.append(f"mean_len={ms.get('mean_seg_len', None):.2f}" if ms.get('mean_seg_len') is not None else "mean_len=None")
-                # memory summary
-                parts.append(f"gpuMB={ms['gpu_peak_mb']}" if ms.get("gpu_peak_mb") is not None else "gpuMB=None")
-                parts.append(f"gpuRes={ms['gpu_reserved_mb']}" if ms.get("gpu_reserved_mb") is not None else "gpuRes=None")
-                # precise bytes
-                parts.append(f"gpuAllocBytes={ms['gpu_allocated_bytes']}" if ms.get("gpu_allocated_bytes") is not None else "gpuAllocBytes=None")
-                parts.append(f"gpuResBytes={ms['gpu_reserved_bytes']}" if ms.get("gpu_reserved_bytes") is not None else "gpuResBytes=None")
-                # cpu copy bytes (human readable)
-                if ms.get("cpu_copy_bytes") is not None:
+                # single authoritative BATCH_SHAPE + MICRODETAIL from micro snapshot
+                _append_log(f"BATCH_SHAPE B={ms.get('B')} groups={ms.get('groups')} seq_len_full={ms.get('seq_len_full')} feat={ms.get('feat_dim')}", log_file)
+            
+                def _hb(v):
                     try:
-                        b = int(ms['cpu_copy_bytes'])
-                        if b >= 1024 * 1024:
-                            parts.append(f"cpuB={b//(1024*1024)}MB")
-                        elif b >= 1024:
-                            parts.append(f"cpuB={b//1024}KB")
-                        else:
-                            parts.append(f"cpuB={b}B")
+                        v = int(v)
                     except Exception:
-                        parts.append("cpuB=None")
-                else:
-                    parts.append("cpuB=None")
-                # syncs and activation
-                parts.append(f"syncs={ms.get('device_syncs_count', None)}")
-                parts.append(f"p50seg={ms.get('per_segment_p50_ms', None):.2f}ms" if ms.get('per_segment_p50_ms') is not None else "p50seg=None")
-                parts.append(f"p90seg={ms.get('per_segment_p90_ms', None):.2f}ms" if ms.get('per_segment_p90_ms') is not None else "p90seg=None")
-                parts.append(f"actMB={ms.get('activation_mb', None)}")
-                # output metadata
-                parts.append(f"out_shape={ms.get('out_shape', None)}")
-                parts.append(f"out_dtype={ms.get('out_dtype', None)}")
-                parts.append(f"out_numel={ms.get('out_numel', None)}")
-                if ms.get("out_bytes") is not None:
-                    try:
-                        ob = int(ms['out_bytes'])
-                        if ob >= 1024 * 1024:
-                            parts.append(f"out_bytes={ob//(1024*1024)}MB")
-                        elif ob >= 1024:
-                            parts.append(f"out_bytes={ob//1024}KB")
-                        else:
-                            parts.append(f"out_bytes={ob}B")
-                    except Exception:
-                        parts.append("out_bytes=None")
-                else:
-                    parts.append("out_bytes=None")
-                if ms.get("windows_bytes") is not None:
-                    try:
-                        wb = int(ms['windows_bytes'])
-                        parts.append(f"windows_bytes={wb//1024}KB" if wb >= 1024 else f"windows_bytes={wb}B")
-                    except Exception:
-                        parts.append("windows_bytes=None")
-                else:
-                    parts.append("windows_bytes=None")
-                # collector/dataloader/param bytes
-                parts.append(f"collector_ms={ms.get('collector_ms', None):.1f}ms" if ms.get('collector_ms') is not None else "collector_ms=None")
-                parts.append(f"dataloader_ms={ms.get('dataloader_ms', None):.1f}ms" if ms.get('dataloader_ms') is not None else "dataloader_ms=None")
-                if ms.get("param_bytes") is not None:
-                    try:
-                        pb = int(ms['param_bytes'])
-                        if pb >= 1024 * 1024:
-                            parts.append(f"param_bytes={pb//(1024*1024)}MB")
-                        elif pb >= 1024:
-                            parts.append(f"param_bytes={pb//1024}KB")
-                        else:
-                            parts.append(f"param_bytes={pb}B")
-                    except Exception:
-                        parts.append("param_bytes=None")
-                else:
-                    parts.append("param_bytes=None")
-                # env metadata
-                env = ms.get("env", {})
-                parts.append(f"env=torch={env.get('torch')} cuda={env.get('cuda')} dev={env.get('device_name')}")
-                try:
-                    _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
-                    emitted = True
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        # If micro-snapshot was not printed, fall back to printing first-batch snapshot (guarded)
-        try:
-            if not emitted and snapshot is not None:
-                    gnc = snapshot.get("group_nonzero_counts")
-                    if isinstance(gnc, (list, tuple)):
-                        _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
-
-                    grads = snapshot.get("grads")
-                    if isinstance(grads, dict):
-                        _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
-
-                    emitted = True
-        except Exception:
-            # outer guard: continue without failing init_log
-            pass
-
-        if emitted:
-            _RUN_DEBUG_DONE = True
-
+                        return str(v)
+                    if v >= 1024*1024: return f"{v//(1024*1024)}MB"
+                    if v >= 1024: return f"{v//1024}KB"
+                    return f"{v}B"
+            
+                def _fmt(k, v):
+                    if v is None: return f"{k}=None"
+                    if "bytes" in k or "param" in k or "cpu_copy" in k or "windows" in k:
+                        return f"{k}={_hb(v)}"
+                    if "shape" in k and not isinstance(v, str):
+                        return f"{k}={tuple(v)}"
+                    if isinstance(v, float):
+                        return f"{k}={v:.2f}"
+                    return f"{k}={v}"
+            
+                parts = [_fmt(k, ms.get(k)) for k in sorted(ms.keys())]
+                _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
+                emitted = True
+            
+            if emitted:
+                _RUN_DEBUG_DONE = True
 
 #################################################################################################################################
 
@@ -1672,24 +1977,14 @@ def log_epoch_summary(
     scaler:           object | None = None, # unused (kept for compatibility)
 ):
     """
-    Emit a compact per-epoch summary and a single read-only first-batch snapshot.
+    Emit a compact, human-readable per-epoch summary line and supporting diagnostics.
 
-    - Writes a one-time run header and static info via init_log.
-    - Emits a single read-only DEBUG snapshot (DEBUG_SHAPES, DEBUG_GRADS,
-      GROUP_NONZERO_COUNTS) when a detached CPU snapshot (first_batch or
-      model._first_batch_snapshot) is available; snapshot is non-blocking and
-      contains no loss scalars.
-    - Produces a compact per-epoch line with OPTS, gradient norms (GN),
-      gradient-distribution (GD), update-ratio (UR), primary LR token (LR_MAIN),
-      train/val metrics (TR/VL), scheduler percent-complete (SCHED_PCT),
-      slope/slip/hub diagnostics (SR/SL/HR), top-K parameter contributors and
-      optional timing, checkpoint and GPU tokens.
-    - Stores lightweight layer-wise GN baselines on the model for relative
-      diagnostics (model._first_layer_gn) in a best-effort, non-fatal way.
-
-    Parameters: see function signature.
-
-    Returns: None (appends a single line to log_file).
+    Purpose
+    - Produce a single-line epoch summary that combines optimizer structure, gradient
+      diagnostics, training/validation metrics, scheduler progress, timing/throughput,
+      GPU usage, checkpoint flag, and a small set of layer-wise gradient-ratio diagnostics.
+    - Provide deterministic, single-pass computations of per-parameter gradient norms
+      and update ratios to power the summary tokens.
     """
 
     # 1) Ensure header + run-static info (init_log handles guards and one-shot debug if available)
@@ -1707,46 +2002,51 @@ def log_epoch_summary(
         first_batch=first_batch or None,
     )
 
-    # 1b) One-shot read-only debug snapshot emitted once (if detached snapshot present)
-    # NOTE: DEBUG_OPT is intentionally NOT emitted here to avoid duplication (printed in init_log only).
-    global _RUN_DEBUG_DONE
-    if not _RUN_DEBUG_DONE:
-        snapshot = first_batch if first_batch is not None else getattr(model, "_first_batch_snapshot", None)
-        if snapshot is not None:
-            try:
-                # DEBUG_SHAPES from the detached snapshot (CPU)
-                raw_shape = snapshot.get("raw_reg_shape")
-                _append_log(f"DEBUG_SHAPES raw_reg={raw_shape}", log_file)
-
-                # GROUP_NONZERO_COUNTS: per-optimizer-group nonzero-grad counts (one-shot)
-                gnc = snapshot.get("group_nonzero_counts")
-                if isinstance(gnc, (list, tuple)):
-                    _append_log(f"GROUP_NONZERO_COUNTS {list(gnc)}", log_file)
-
-                # optional DEBUG_GRADS booleans (backbone/head).
-                grads = snapshot.get("grads")
-                if isinstance(grads, dict):
-                    _append_log(f"DEBUG_GRADS backbone={grads.get('backbone')} head={grads.get('head')}", log_file)
-            except Exception:
-                pass
-            _RUN_DEBUG_DONE = True
-
     # 2) Collect per-parameter grad norms, update ratios, and block sums
+    # Tailored to ModelClass: regression head lives under top-level prefix "head_flat".
     recs = []  # (name, grad_norm, update_ratio)
     reg_sq = cls_sq = ter_sq = all_sq = 0.0
     lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else 0.0
-
+    
+    # Hardcoded exact top-level prefixes for this model
+    REG_PREFIXES = {"head_flat"}   # regression head in ModelClass
+    CLS_PREFIXES = set()           # no classification head present in this model
+    TER_PREFIXES = set()           # no tertiary/term head present in this model
+    
     for name, p in model.named_parameters():
         g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
         w = float(p.detach().norm().cpu())
         u = (lr * g) / max(w, 1e-8)
         recs.append((name, g, u))
-
+    
         sq = g * g
         all_sq += sq
-        if   name.startswith("pred"):     reg_sq += sq
-        elif name.startswith("cls_head"): cls_sq += sq
-        elif name.startswith("cls_ter"):  ter_sq += sq
+    
+        top = name.split(".")[0]
+        if top in REG_PREFIXES:
+            reg_sq += sq
+        elif top in CLS_PREFIXES:
+            cls_sq += sq
+        elif top in TER_PREFIXES:
+            ter_sq += sq
+        # otherwise contributes only to GN_tot
+    
+    # 3) Compute block gradient norms (GN) and gradient-norm distribution (GD)
+    GN_reg = math.sqrt(reg_sq)
+    GN_cls = math.sqrt(cls_sq)
+    GN_ter = math.sqrt(ter_sq)
+    GN_tot = math.sqrt(all_sq)
+    
+    g_vals = [g for _, g, _ in recs]
+    if g_vals:
+        g_vals_sorted = sorted(g_vals)
+        n = len(g_vals_sorted)
+        GD_med = g_vals_sorted[n // 2]
+        GD_p90 = g_vals_sorted[int(math.floor(0.9 * (n - 1)))]
+        GD_max = g_vals_sorted[-1]
+    else:
+        GD_med = GD_p90 = GD_max = 0.0
+
 
     # 3) Compute block gradient norms (GN) and gradient-norm distribution (GD)
     GN_reg = math.sqrt(reg_sq)
@@ -1807,18 +2107,15 @@ def log_epoch_summary(
     sched_obj = getattr(optimizer, "scheduler", None)
     if sched_obj is None:
         sched_obj = globals().get("scheduler", None)
-    try:
-        if sched_obj is not None and hasattr(sched_obj, "_total_steps"):
-            total = int(getattr(sched_obj, "_total_steps"))
-            # prefer a step counter if available, otherwise use last_epoch
-            step_idx = getattr(sched_obj, "last_epoch", None)
-            if step_idx is None:
-                step_idx = getattr(sched_obj, "_step_count", None)
-            if step_idx is not None and total > 0:
-                pct = min(100.0, max(0.0, 100.0 * float(step_idx) / float(total)))
-                sched_pct_token = f"SCHED_PCT={pct:.1f}%"
-    except Exception:
-        sched_pct_token = ""
+    if sched_obj is not None and hasattr(sched_obj, "_total_steps"):
+        total = int(getattr(sched_obj, "_total_steps"))
+        # prefer a step counter if available, otherwise use last_epoch
+        step_idx = getattr(sched_obj, "last_epoch", None)
+        if step_idx is None:
+            step_idx = getattr(sched_obj, "_step_count", None)
+        if step_idx is not None and total > 0:
+            pct = min(100.0, max(0.0, 100.0 * float(step_idx) / float(total)))
+            sched_pct_token = f"SCHED_PCT={pct:.1f}%"
 
     # 11) Optional timing / throughput (if the training loop stored them on the model)
     elapsed = getattr(model, "_last_epoch_elapsed", None)
@@ -1834,13 +2131,10 @@ def log_epoch_summary(
 
     # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
     gpu_token = ""
-    try:
-        if torch.cuda.is_available():
-            # report in GiB, small-cost read-only
-            max_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
-            gpu_token = f" | GPU={max_mem:.2f}GiB"
-    except Exception:
-        gpu_token = ""
+    if torch.cuda.is_available():
+        # report in GiB, small-cost read-only
+        max_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
+        gpu_token = f" | GPU={max_mem:.2f}GiB"
 
     # 14) Primary LR scalar token (explicit, high-ROI and low-noise)
     try:
@@ -1855,47 +2149,41 @@ def log_epoch_summary(
     #    - Maintain a baseline per-parameter GN on first observed epoch by
     #      storing model._first_layer_gn (best-effort). Ratios are current/baseline.
     layer_token = ""
-    try:
-        default_monitor = ["short_lstm.weight_ih_l0", "short2long.weight", "feature_proj.weight"]
-        monitor_list = []
-        if isinstance(hparams, dict) and hparams.get("MONITOR_LAYERS"):
-            monitor_list = list(hparams.get("MONITOR_LAYERS"))
-        else:
-            monitor_list = default_monitor
+    default_monitor = ["short_lstm.weight_ih_l0", "short2long.weight", "feature_proj.weight"]
+    monitor_list = []
+    if isinstance(hparams, dict) and hparams.get("MONITOR_LAYERS"):
+        monitor_list = list(hparams.get("MONITOR_LAYERS"))
+    else:
+        monitor_list = default_monitor
 
-        # Ensure a dict exists to store baseline GN observed first time
-        if not hasattr(model, "_first_layer_gn"):
-            try:
-                setattr(model, "_first_layer_gn", {})
-            except Exception:
-                pass
+    # Ensure a dict exists to store baseline GN observed first time
+    if not hasattr(model, "_first_layer_gn"):
+        setattr(model, "_first_layer_gn", {})
 
-        pairs = []
-        for name in monitor_list:
-            # best-effort: find exact match; if not found, skip silently
-            p = dict(model.named_parameters()).get(name)
-            if p is None:
-                continue
-            curr_g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+    pairs = []
+    for name in monitor_list:
+        # best-effort: find exact match; if not found, skip silently
+        p = dict(model.named_parameters()).get(name)
+        if p is None:
+            continue
+        curr_g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+        baseline = None
+        try:
+            baseline = getattr(model, "_first_layer_gn", {}).get(name)
+        except Exception:
             baseline = None
+        # if no baseline stored yet, store this epoch's value as baseline
+        if baseline is None:
             try:
-                baseline = getattr(model, "_first_layer_gn", {}).get(name)
+                model._first_layer_gn[name] = float(curr_g)
+                ratio = 1.0
             except Exception:
-                baseline = None
-            # if no baseline stored yet, store this epoch's value as baseline
-            if baseline is None:
-                try:
-                    model._first_layer_gn[name] = float(curr_g)
-                    ratio = 1.0
-                except Exception:
-                    ratio = 1.0
-            else:
-                ratio = curr_g / max(baseline, 1e-12)
-            pairs.append(f"{name.split('.')[-1]}:{curr_g:.3e}/{ratio:.2f}")
-        if pairs:
-            layer_token = " | LAYER_GN[" + ",".join(pairs) + "]"
-    except Exception:
-        layer_token = ""
+                ratio = 1.0
+        else:
+            ratio = curr_g / max(baseline, 1e-12)
+        pairs.append(f"{name.split('.')[-1]}:{curr_g:.3e}/{ratio:.2f}")
+    if pairs:
+        layer_token = " | LAYER_GN[" + ",".join(pairs) + "]"
 
     # 16) Final line assembly (compact, per-epoch changing values only)
     sched_field = f"{sched_pct_token} | " if sched_pct_token else ""
@@ -1912,7 +2200,7 @@ def log_epoch_summary(
         f"{sched_field}"
         f"SR={SR:.3f} | "
         f"SL={SL:.2f},HR={HR:.3f} | "
-        f"topK(g/u)={topk_str}"
-        f"{timing_token}{gpu_token}{chk_token}{layer_token}"
+        f"{timing_token}{gpu_token}{chk_token}{layer_token} | "
+        f"\nTOP_K(G/U)={topk_str}"
     )
     _append_log(line, log_file)

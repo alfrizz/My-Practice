@@ -140,20 +140,20 @@ hparams = {
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
     "FLATTEN_MODE":          "last",  # format to be provided to regression head: "flatten" | "last" | "pool"
     "PRED_HIDDEN":           64,      # head MLP hidden dim; ↑capacity, ↓over-parameterization
-    "ALPHA_SMOOTH":          0.5,    # slope-penalty weight; ↑smoothness, ↓spike fidelity
+    "ALPHA_SMOOTH":          0.1,    # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
     "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              10,     # max grad norm; ↑training stability, ↓gradient expressivity
+    "CLIPNORM":              5,     # max grad norm; ↑training stability, ↓gradient expressivity
     "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    50,     # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.2,    # fraction of total steps spent rising
     "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear'
 
-    "FREEZE_TILL":           5,      # freeze head_flat for this many epochs (guarded feature learning)
+    # "FREEZE_TILL":           5,      # freeze head_flat for this many epochs (guarded feature learning)
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
