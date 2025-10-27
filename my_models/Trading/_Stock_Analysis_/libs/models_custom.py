@@ -343,29 +343,61 @@ class SmoothMSELoss(nn.Module):
 ############################
 
 
+# def compute_baselines(loader) -> tuple[float, float]:
+#     """
+#     Compute two static, one‐step‐per‐window baselines over all windows in `loader`:
+#       1) mean_rmse       – RMSE if you always predict μ = average y_sig per window
+#       2) persistence_rmse – RMSE if you always predict last‐seen (yₜ = yₜ₋₁)
+#     """
+#     nexts, last_deltas = [], []
+    
+#     for x_pad, y_sig, _y_bin, _y_ret, _y_ter, _rc, wd, ts_list, lengths in loader:
+#         for i, L in enumerate(lengths):
+#             if L < 1:
+#                 continue
+#             arr = y_sig[i, :L].view(-1).cpu().numpy()
+#             nexts.append(arr[-1])
+#             if L > 1:
+#                 last_deltas.append(arr[-1] - arr[-2])
+    
+#     nexts = np.array(nexts, dtype=float)
+#     mean_rmse = float(np.sqrt(((nexts - nexts.mean()) ** 2).mean()))
+    
+#     if last_deltas:
+#         last_deltas = np.array(last_deltas, dtype=float)
+#         persistence_rmse = float(np.sqrt((last_deltas ** 2).mean()))
+#     else:
+#         persistence_rmse = float("nan")
+        
+#     return mean_rmse, persistence_rmse
+
 def compute_baselines(loader) -> tuple[float, float]:
     """
-    Compute two static, one‐step‐per‐window baselines over all windows in `loader`:
-      1) mean_rmse       – RMSE if you always predict μ = average y_sig per window
-      2) persistence_rmse – RMSE if you always predict last‐seen (yₜ = yₜ₋₁)
+    Compute two static, one-step-per-window baselines over all windows in `loader`:
+      1) mean_rmse       – RMSE if you predict the per-window mean mu = mean(y_sig[:L]) for the target (last element)
+      2) persistence_rmse – RMSE if you predict the last-seen value y_{t-1} as the next value y_t
     """
-    nexts, last_deltas = [], []
+    mean_errors = []
+    last_deltas = []
     
     for x_pad, y_sig, _y_bin, _y_ret, _y_ter, _rc, wd, ts_list, lengths in loader:
         for i, L in enumerate(lengths):
             if L < 1:
                 continue
-            arr = y_sig[i, :L].view(-1).cpu().numpy()
-            nexts.append(arr[-1])
+            arr = y_sig[i, :L].view(-1).cpu().numpy().astype(float)
+            target = arr[-1]
+            mu = arr.mean()
+            mean_errors.append((target - mu) ** 2)
             if L > 1:
-                last_deltas.append(arr[-1] - arr[-2])
+                last_deltas.append((target - arr[-2]) ** 2)
     
-    nexts = np.array(nexts, dtype=float)
-    mean_rmse = float(np.sqrt(((nexts - nexts.mean()) ** 2).mean()))
+    if mean_errors:
+        mean_rmse = float(np.sqrt(np.mean(mean_errors)))
+    else:
+        mean_rmse = float("nan")
     
     if last_deltas:
-        last_deltas = np.array(last_deltas, dtype=float)
-        persistence_rmse = float(np.sqrt((last_deltas ** 2).mean()))
+        persistence_rmse = float(np.sqrt(np.mean(last_deltas)))
     else:
         persistence_rmse = float("nan")
         
@@ -615,42 +647,6 @@ def model_training_loop(
 
             # Backward (AMP) with no host-syncs before step
             scaler.scale(loss).backward()
-
-            ######################################################################################################
-        
-            # # DELETE_ME: single-batch non-AMP detect_anomaly (paste here for 1 batch then remove)
-            # optimizer.zero_grad()
-            # with torch.autograd.detect_anomaly():
-            #     raw_out = model(windows_tensor)
-            #     seq_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
-            #     preds = seq_reg.view(seq_reg.size(0), seq_reg.size(1))[:, -1]
-            #     loss = smooth_loss(preds, targets_tensor)
-            #     loss.backward()
-            #     torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-            #     optimizer.step()
-            # print("DELETE_ME: DEBUG_NON_AMP finished")
-
-
-
-            # # DELETE_ME: single-batch AMP detect_anomaly (paste here for 1 batch then remove)
-            # optimizer.zero_grad()
-            # with torch.autograd.detect_anomaly():
-            #     with torch.cuda.amp.autocast(enabled=True):
-            #         raw_out = model(windows_tensor)
-            #         seq_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
-            #         preds = seq_reg.view(seq_reg.size(0), seq_reg.size(1))[:, -1]
-            #         loss = smooth_loss(preds, targets_tensor)
-            #     # backward via scaler to preserve AMP behavior for the traceback
-            #     scaler.scale(loss).backward()
-            #     # unscale for grad clipping (do not call scaler.step here; we only need the traceback)
-            #     scaler.unscale_(optimizer)
-            #     torch.nn.utils.clip_grad_norm_(model.parameters(), clipnorm)
-            # print("DELETE_ME: DEBUG_AMP finished")
-
-
-
-            ######################################################################################################
-
             
             scaler.unscale_(optimizer)
 
@@ -681,10 +677,6 @@ def model_training_loop(
             if params_with_grad:
                 _torch.nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
 
-            # scaler.step(optimizer)
-            # scaler.update()
-            # scheduler.step()
-
             # Guard scheduler so it only advances when optimizer.step actually ran (prevents LR drift if GradScaler skipped the update)
             _called = {"v": False}
             _real = optimizer.step
@@ -696,88 +688,6 @@ def model_training_loop(
             optimizer.step = _real
             if _called["v"]:
                 scheduler.step()
-
-
-
-###############################################################################################################################################
-
-            # # BEGIN: robust AMP step + guard (DELETE_ME diagnostics — remove when fixed)
-            # import math, traceback, sys
-            
-            # # 1) Wrap optimizer.step to detect whether it is actually invoked by GradScaler
-            # _real_step = getattr(optimizer, "step", None)
-            # _step_was_called = {"hit": False}
-            # def _step_wrapper(*a, **k):
-            #     _step_was_called["hit"] = True
-            #     return _real_step(*a, **k)
-            # if _real_step is not None:
-            #     optimizer.step = _step_wrapper
-            
-            # # 2) Attempt AMP step and always update the scaler
-            # try:
-            #     scaler.step(optimizer)
-            # except Exception as exc:
-            #     print("DELETE_ME: scaler.step raised:", repr(exc), file=sys.stderr)
-            #     traceback.print_exc(file=sys.stderr)
-            # finally:
-            #     scaler.update()
-            
-            # # restore original optimizer.step to avoid side effects
-            # if _real_step is not None:
-            #     optimizer.step = _real_step
-            
-            # # 3) Per-parameter finite-check to help find NaN/Inf grads
-            # _bad = False
-            # for n, p in model.named_parameters():
-            #     if p.grad is None:
-            #         continue
-            #     try:
-            #         gnorm = float(p.grad.norm().cpu())
-            #     except Exception:
-            #         print(f"DELETE_ME: failed to read grad norm for {n}", file=sys.stderr)
-            #         _bad = True
-            #         continue
-            #     if not math.isfinite(gnorm):
-            #         print(f"DELETE_ME: non-finite grad detected: {n} norm={gnorm}", file=sys.stderr)
-            #         _bad = True
-            
-            # if _bad:
-            #     try:
-            #         print("DELETE_ME: loss:", float(loss.detach().cpu()), file=sys.stderr)
-            #     except Exception:
-            #         pass
-            #     try:
-            #         print("DELETE_ME: inputs min/max:", float(windows_tensor.min().item()), float(windows_tensor.max().item()), file=sys.stderr)
-            #         print("DELETE_ME: targets min/max:", float(targets_tensor.min().item()), float(targets_tensor.max().item()), file=sys.stderr)
-            #     except Exception:
-            #         pass
-            
-            # # 4) Decide whether optimizer actually stepped; synthesize minimal _step_count if needed
-            # opt_stepped = bool(_step_was_called["hit"]) or (
-            #     getattr(optimizer, "_step_count", None) not in (None, "<MISSING>") and getattr(optimizer, "_step_count", 0) > 0
-            # )
-            # if opt_stepped and getattr(optimizer, "_step_count", None) in (None, "<MISSING>"):
-            #     try:
-            #         optimizer._step_count = 1
-            #     except Exception:
-            #         pass
-            
-            # # 5) Advance scheduler only if optimizer truly stepped
-            # if opt_stepped:
-            #     scheduler.step()
-            # else:
-            #     if not getattr(model, "_sched_guard_warned", False):
-            #         print("DELETE_ME: scheduler.step() skipped because optimizer did not step", file=sys.stderr)
-            #         traceback.print_stack(limit=6, file=sys.stderr)
-            #         model._sched_guard_warned = True
-            # # END: robust AMP step + guard (DELETE_ME)
-
-
-
-###################################################################################################################################
-
-
-
   
             # After step: minimal host work (convert scalars/lists once)
             epoch_loss_sum += float(loss.detach().cpu())
