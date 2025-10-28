@@ -1611,7 +1611,6 @@ def log_epoch_summary(
     line = (
         f"\nE{epoch:02d} | "
         f"{opt_token} | "
-        # f"GN[{GN_reg:.3f},{GN_cls:.3f},{GN_ter:.3f},{GN_tot:.3f}] | "
         f"GN[{gn_items},TOT={GN_tot:.3f}] | "
         f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
         f"UR[{UR_med:.1e},{UR_max:.1e}] | "

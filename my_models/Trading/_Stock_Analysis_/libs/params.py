@@ -143,14 +143,14 @@ hparams = {
     "ALPHA_SMOOTH":          0.0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
     "USE_DELTA":             True,    # enable Delta baseline vs features predictions head
-    "LAMBDA_DELTA":          0.1,      # auxiliary residual loss weight; scales MSE(delta_pred, target - baseline)
+    "LAMBDA_DELTA":          0.05,      # auxiliary residual loss weight; scales MSE(delta_pred, target - baseline)
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
     "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              3,     # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       2e-3,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   5,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    50,     # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.2,    # fraction of total steps spent rising
@@ -164,7 +164,6 @@ hparams = {
 
     "TOP_K":                 99,     # number of selected parameters for log diagnostic
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
-
 }
 
 #########################################################################################################
