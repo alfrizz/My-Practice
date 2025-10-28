@@ -869,6 +869,7 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
     """
 
     t_entry = perf_counter()
+    intentional_syncs = 0
 
     # Resolve missing args from globals then shallow caller frames
     g = globals()
@@ -968,41 +969,31 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
         num_segments = int(windows_tensor.size(0))
         mean_seg_len = float(sum(seg_lens) / len(seg_lens)) if seg_lens else float(seq_len_target)
 
-        # GPU tracking
-        gpu_peak_mb = None
-        gpu_reserved_mb = None
-        gpu_allocated_bytes = None
-        gpu_reserved_bytes = None
+        # GPU tracking: reset peak only when CUDA is available
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats(device)
-
-        # device sync helper
-        syncs = 0
-        def _sync():
-            nonlocal syncs
-            try:
-                torch.cuda.synchronize()
-                syncs += 1
-            except Exception:
-                pass
-
-        # Baseline for activation
-        activation_mb = None
-        if torch.cuda.is_available():
-            _sync()
+            torch.cuda.synchronize()
             before_alloc = torch.cuda.memory_allocated(device)
             before_reserved = torch.cuda.memory_reserved(device)
         else:
             before_alloc = before_reserved = 0
 
-        # Forward-only timing (AMP)
-        _sync()
-        t0 = perf_counter()
-        with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
-            raw_out = model(windows_tensor)
-        _sync()
-        t1 = perf_counter()
-        full_forward_ms = (t1 - t0) * 1000.0
+        # Forward-only timing (AMP), use CUDA events when available; else use perf_counter
+        if torch.cuda.is_available():
+            e0 = torch.cuda.Event(enable_timing=True); e1 = torch.cuda.Event(enable_timing=True)
+            e0.record()
+            with torch.amp.autocast("cuda", enabled=True):
+                raw_out = model(windows_tensor)
+            e1.record()
+            # one explicit sync to ensure event completion and to read elapsed_time
+            torch.cuda.synchronize()
+            intentional_syncs += 1
+            full_forward_ms = e0.elapsed_time(e1)
+        else:
+            t0 = perf_counter()
+            with torch.amp.autocast("cuda", enabled=False):
+                raw_out = model(windows_tensor)
+            full_forward_ms = (perf_counter() - t0) * 1000.0
 
         raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
 
@@ -1016,15 +1007,10 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
             gpu_peak_mb = int(peak // (1024 ** 2))
             reserved = torch.cuda.max_memory_reserved(device)
             gpu_reserved_mb = int(reserved // (1024 ** 2))
-            # precise bytes
             gpu_allocated_bytes = int(after_alloc)
             gpu_reserved_bytes = int(reserved)
         else:
-            activation_mb = None
-            gpu_peak_mb = None
-            gpu_reserved_mb = None
-            gpu_allocated_bytes = None
-            gpu_reserved_bytes = None
+            activation_mb = gpu_peak_mb = gpu_reserved_mb = gpu_allocated_bytes = gpu_reserved_bytes = None
 
         # CPU transfer timing and bytes; output metadata
         out_shape = tuple(raw_reg.shape)
@@ -1038,17 +1024,14 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
         out_bytes = int(out_numel) * int(elem_o()) if out_numel is not None and callable(elem_o) else None
 
         preds = raw_reg.view(raw_reg.size(0), -1)[:, -1] if raw_reg.dim() >= 2 else raw_reg
-        tc0 = perf_counter()
-        cpu_tensor = preds.detach().cpu()
-        tc1 = perf_counter()
-        preds_cpu_ms = (tc1 - tc0) * 1000.0
-        cpu_copy_bytes = int(cpu_tensor.numel() * cpu_tensor.element_size())
+        cpu_copy_bytes = int(out_numel * (raw_reg.element_size() if callable(getattr(raw_reg, "element_size", None)) else 4))
 
         # per-segment sampling controlled by params.hparams["MICRO_SAMPLE_K"]
         per_segment_p50_ms = None
         per_segment_p90_ms = None
         sample_k = int(params.hparams.get("MICRO_SAMPLE_K", 0)) if params is not None and hasattr(params, "hparams") else 0
         sample_k = max(0, min(256, sample_k))
+        
         if sample_k > 0 and num_segments > 0:
             k = min(num_segments, sample_k)
             if num_segments <= k:
@@ -1056,16 +1039,29 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
             else:
                 stride = max(1, num_segments // k)
                 idxs = list(range(0, num_segments, stride))[:k]
-            seg_times = []
-            for ii in idxs:
-                seg = windows_tensor[ii : ii + 1]
-                _sync()
-                t0s = perf_counter()
-                with torch.amp.autocast("cuda", enabled=torch.cuda.is_available()):
+                
+        seg_times = []
+        seg_events = []  # store event pairs to read after single sync
+        for ii in idxs:
+            seg = windows_tensor[ii : ii + 1]
+            if torch.cuda.is_available():
+                seg_e0 = torch.cuda.Event(enable_timing=True); seg_e1 = torch.cuda.Event(enable_timing=True)
+                seg_e0.record()
+                with torch.amp.autocast("cuda", enabled=True):
                     _ = model(seg)
-                _sync()
-                t1s = perf_counter()
+                seg_e1.record()
+                seg_events.append((seg_e0, seg_e1))
+            else:
+                t0s = perf_counter(); _ = model(seg); t1s = perf_counter()
                 seg_times.append((t1s - t0s) * 1000.0)
+        
+        # if we recorded CUDA events, do one synchronize and extract elapsed times
+        if torch.cuda.is_available() and seg_events:
+            torch.cuda.synchronize()
+            intentional_syncs += 1
+            for e0, e1 in seg_events:
+                seg_times.append(e0.elapsed_time(e1))
+  
             if seg_times:
                 seg_times_sorted = sorted(seg_times)
                 def _pct(arr, p):
@@ -1080,6 +1076,10 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
         t_exit = perf_counter()
         collector_ms = (t_exit - t_entry) * 1000.0
 
+        # Estimate extra post-forward milliseconds (ms) consumed by CPU-side work
+        seg_times_sum = sum(seg_times) if 'seg_times' in locals() and seg_times else 0.0
+        pred_extra_ms = max(0.0, float(collector_ms) - float(full_forward_ms) - float(seg_times_sum))
+        
         param_bytes = int(sum(int(p.numel()) * int(getattr(p, "element_size", lambda: 4)()) for p in model.parameters()))
 
         # Environment metadata (cheap, helpful)
@@ -1087,7 +1087,11 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
         env["python"] = platform.python_version()
         env["torch"] = getattr(torch, "__version__", None)
         env["cuda"] = getattr(torch.version, "cuda", None)
-        env["device_name"] = torch.cuda.get_device_name(device)
+        if torch.cuda.is_available():
+            env["device_name"] = torch.cuda.get_device_name(device)
+        else:
+            env["device_name"] = platform.node()  # lightweight fallback host id
+
 
         # prefer explicit optimizer arg
         opt = optimizer or getattr(model, "optimizer", None) or globals().get("optimizer", None)
@@ -1117,8 +1121,7 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
             "group_nonzero_counts": group_nonzero_counts,
             "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
             "full_forward_ms": float(full_forward_ms),
-            "pred_extra_ms": None,
-            "preds_cpu_ms": float(preds_cpu_ms) if preds_cpu_ms is not None else None,
+            "pred_extra_ms": pred_extra_ms,
             "num_segments": int(num_segments),
             "segments_per_sec": float(num_segments / (full_forward_ms / 1000.0)) if full_forward_ms and num_segments else None,
             "expected_segments": int(B * G),
@@ -1129,7 +1132,7 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
             "gpu_allocated_bytes": int(gpu_allocated_bytes) if gpu_allocated_bytes is not None else None,
             "gpu_reserved_bytes": int(gpu_reserved_bytes) if gpu_reserved_bytes is not None else None,
             "cpu_copy_bytes": int(cpu_copy_bytes) if cpu_copy_bytes is not None else None,
-            "device_syncs_count": int(syncs),
+            "device_syncs_count": int(intentional_syncs),
             "per_segment_p50_ms": float(per_segment_p50_ms) if per_segment_p50_ms is not None else None,
             "per_segment_p90_ms": float(per_segment_p90_ms) if per_segment_p90_ms is not None else None,
             "activation_mb": int(activation_mb) if activation_mb is not None else None,
@@ -1142,8 +1145,7 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
             "dataloader_ms": float(dataloader_ms) if dataloader_ms is not None else None,
             "param_bytes": int(param_bytes) if param_bytes is not None else None,
             "env": env,
-            "backward_ms": None,
-            "step_block_ms": None,
+            "backward_ms": getattr(model, "_last_backward_ms", None),
         }
 
         # attach and mark done
@@ -1177,14 +1179,10 @@ _RUN_LOCK = threading.Lock()
 
 def init_log(
     log_file:  Path,
-    hparams:   dict | None = None,
-    baselines: dict | None = None,
-    optimizer: torch.optim.Optimizer | None = None,
-    scheduler: object | None = None,
-    model: torch.nn.Module | None = None,
-    first_batch: dict | None = None,
-    batch_losses: dict | None = None,
-    scaler: object | None = None,
+    hparams:   dict,
+    baselines: dict,
+    optimizer: torch.optim.Optimizer,
+    model: torch.nn.Module,
 ):
     """
     Emit run-start diagnostics and a single authoritative micro-snapshot to the log.
@@ -1203,57 +1201,58 @@ def init_log(
             sep = "-" * 150
             _append_log("\n" + sep, log_file)
             _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
-
+            
             _append_log("\nSINGLE RUN DIAGNOSTIC FORMAT (explanatory)", log_file)
-            _append_log("    BATCH_SHAPE B=... groups=... seq_len_full=... feat=... : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)", log_file)
-            _append_log("    MICRODETAIL ms: <k=v ...> : deterministic single-line dump of snapshot keys (sorted). Notable printed keys below reference exact snapshot field names and formats.", log_file)
+            _append_log("    BATCH_SHAPE B=32 groups=451 seq_len_full=60 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)", log_file)
+            _append_log("    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable", log_file)
             _append_log("      -> B: number of batch samples used to build windows (snapshot.B)", log_file)
+            _append_log("      -> groups: number of logical groups used when flattening windows (snapshot.groups)", log_file)
+            _append_log("      -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)", log_file)
+            _append_log("      -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)", log_file)
             _append_log("      -> activation_mb: estimated activation footprint in MB computed from allocation delta (snapshot.activation_mb)", log_file)
-            _append_log("      -> backward_ms: placeholder for backward pass ms (None here; snapshot.backward_ms)", log_file)
-            _append_log("      -> collector_ms: total wall-clock ms spent by the collector (includes sampling, CPU/GPU syncs) (snapshot.collector_ms)", log_file)
+            _append_log("      -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)", log_file)
+            _append_log("      -> collector_ms: total wall-clock ms spent by the collector including sampling and CPU/GPU syncs (snapshot.collector_ms)", log_file)
             _append_log("      -> cpu_copy_bytes: bytes copied to host for predictions, shown human-readable in log (snapshot.cpu_copy_bytes)", log_file)
             _append_log("      -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)", log_file)
-            _append_log("      -> device_syncs_count: count of explicit torch.cuda.synchronize() calls used for timing accuracy (snapshot.device_syncs_count)", log_file)
+            _append_log("      -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)", log_file)
             _append_log("      -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)", log_file)
-            _append_log("      -> expected_segments: nominal B * groups (snapshot.expected_segments)", log_file)
-            _append_log("      -> feat_dim: feature dimension of inputs used to build windows (snapshot.feat_dim)", log_file)
+            _append_log("      -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)", log_file)
             _append_log("      -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)", log_file)
-            _append_log("      -> gpu_allocated_bytes / gpu_reserved_bytes: raw GPU bytes allocated/reserved (snapshot.gpu_allocated_bytes, snapshot.gpu_reserved_bytes)", log_file)
-            _append_log("      -> gpu_peak_mb / gpu_reserved_mb: peak/reserved GPU memory in MB (snapshot.gpu_peak_mb, snapshot.gpu_reserved_mb)", log_file)
+            _append_log("      -> pred_extra_ms: estimated CPU-side post-forward ms (collector_ms - full_forward_ms - per-seg-sum) (snapshot.pred_extra_ms)", log_file)
+            _append_log("      -> gpu_allocated_bytes: raw GPU bytes allocated (snapshot.gpu_allocated_bytes)", log_file)
+            _append_log("      -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)", log_file)
+            _append_log("      -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)", log_file)
             _append_log("      -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)", log_file)
             _append_log("      -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)", log_file)
-            _append_log("      -> groups: number of logical groups used when flattening windows (snapshot.groups)", log_file)
             _append_log("      -> mean_seg_len: average per-segment time-series length in timesteps (snapshot.mean_seg_len)", log_file)
             _append_log("      -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)", log_file)
-            _append_log("      -> out_bytes / out_dtype / out_numel / out_shape: model output bytes (human-readable in log), dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)", log_file)
+            _append_log("      -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)", log_file)
             _append_log("      -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)", log_file)
             _append_log("      -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)", log_file)
-            _append_log("      -> pred_extra_ms / preds_cpu_ms: placeholder for extra pred cost and ms to detach+copy preds to CPU (snapshot.pred_extra_ms, snapshot.preds_cpu_ms)", log_file)
             _append_log("      -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)", log_file)
             _append_log("      -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)", log_file)
-            _append_log("      -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)", log_file)
-            _append_log("      -> step_block_ms: placeholder for step-block timing if measured (snapshot.step_block_ms)", log_file)
+            _append_log("      -> step_block_ms: placeholder for step-block timing if measured (snapshot.step_block_ms; reported 0.0 when not measured)", log_file)
             _append_log("      -> sum_seg_lens: sum of segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)", log_file)
             _append_log("      -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)", log_file)
             
             _append_log("\nPER-EPOCH LOG FORMAT (explanatory):", log_file)
             _append_log("  E{ep:02d}                : epoch number formatted with two digits", log_file)
-            _append_log("  OPTS[{groups}:{lrs}|cnts=[c1,c2,...]] : optimizer groups count, compact LR preview (first up to 3) and per-group parameter counts (from optimizer.param_groups)", log_file)
-            _append_log("  GN[reg,cls,ter,tot]      : gradient norms for name-buckets reg/cls/ter and total (sqrt of sum squares over matching named parameters; zero means no matching names found)", log_file)
-            _append_log("  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, 90th-percentile, and maximum (index-based p90)", log_file)
+            _append_log("  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts", log_file)
+            _append_log("  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)", log_file)
+            _append_log("  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum", log_file)
             _append_log("  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)", log_file)
-            _append_log("  LR_MAIN={lr:.1e} | lr={lr:.1e} : primary LR token and explicit current lr printed in scientific notation", log_file)
-            _append_log("  TR[rmse,r2,mae]         : training metrics (RMSE, R^2, MAE) reported for the epoch (train_metrics)", log_file)
-            _append_log("  VL[rmse,r2,mae]         : validation metrics (RMSE, R^2, MAE) reported for the epoch (val_metrics)", log_file)
+            _append_log("  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation", log_file)
+            _append_log("  TR[rmse,mae,r2]         : training metrics (RMSE, R^2, MAE) reported for the epoch (train_metrics)", log_file)
+            _append_log("  VL[rmse,mae,r2]         : validation metrics (RMSE, R^2, MAE) reported for the epoch (val_metrics)", log_file)
             _append_log("  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_preds/model.last_val_targs (trend calibration)", log_file)
             _append_log("  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults to 0.00/0.000 when missing)", log_file)
-            _append_log("  SCHED_PCT={pct:.1f}%     : optional scheduler percent-complete when scheduler exposes _total_steps and a step counter", log_file)
-            _append_log("  T={elapsed:.1f}s,TP={throughput:.1f}s/s : optional epoch elapsed and throughput if model stored _last_epoch_elapsed and _last_epoch_samples", log_file)
+            _append_log("  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB); in these logs FMB is high so validate baseline alignment", log_file)
+            _append_log("  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec or windows/sec depending on implementation)", log_file)
+            _append_log("  chk={val:.3f}           : checkpoint-score token printed as chk in the line (implementation-specific)", log_file)
             _append_log("  GPU={GiB:.2f}GiB         : optional high-water GPU memory in GiB when CUDA available (torch.cuda.max_memory_allocated)", log_file)
             _append_log("  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy", log_file)
-            _append_log("  LAYER_GN[...]           : optional small set of monitored layer norms and ratio-to-baseline printed as name_short:curr_norm/ratio", log_file)
-            _append_log("  TOP_K(G/U)=param:grad_norm/update_ratio,... : top-k parameter entries by gradient norm with their update ratios (short names use last two name segments)", log_file)
-
+            _append_log("  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio", log_file)
+            _append_log("  TOP_K(G/U)=name:grad_norm/update_ratio,... : top-k parameter entries by gradient norm with their update ratios (short names use last one or two name segments)", log_file)
 
             if isinstance(baselines, dict) and baselines:
                 _append_log("\nBASELINES:", log_file)
@@ -1320,7 +1319,6 @@ def init_log(
                     log_file=log_file,
                 )
 
-            # prefer micro snapshot (authoritative), then explicit first_batch, then legacy first_batch_snapshot
             micro_ms = getattr(model, "_micro_snapshot", None)
             
             emitted = False
@@ -1366,18 +1364,18 @@ def log_epoch_summary(
     optimizer:        torch.optim.Optimizer,
     train_metrics:    dict,
     val_metrics:      dict,
+    val_preds:        float,
+    val_base_preds:   float,
+    val_targets:      float,
     base_tr_mean:     float,
     base_tr_pers:     float,
     base_vl_mean:     float,
     base_vl_pers:     float,
-    slip_thresh:      float,
+    avg_main_loss:    float,
+    avg_aux_loss:     float,
     log_file:         Path,
-    top_k:            int         = 3,
-    hparams:          dict | None = None,
-    # compatibility kept: these args are not required by the normal call site
-    first_batch:      dict | None = None,   # read-only if supplied; logger prefers model._first_batch_snapshot
-    batch_losses:     dict | None = None,   # unused (kept for compatibility)
-    scaler:           object | None = None, # unused (kept for compatibility)
+    top_k:            int,
+    hparams:          dict,
 ):
     """
     Emit a compact, human-readable per-epoch summary line and supporting diagnostics.
@@ -1402,72 +1400,60 @@ def log_epoch_summary(
         },
         optimizer=optimizer,
         model=model,
-        first_batch=first_batch or None,
     )
 
-    # 2) Collect per-parameter grad norms, update ratios, and block sums
-    # Tailored to ModelClass: regression head lives under top-level prefix "head_flat".
-    recs = []  # (name, grad_norm, update_ratio)
-    reg_sq = cls_sq = ter_sq = all_sq = 0.0
+    # 2) detect top-level parameter groups ("heads") and their grad-norm totals — minimal
+    recs = []; prefix_sq = {}; all_sq = 0.0
     lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else 0.0
     
-    # Hardcoded exact top-level prefixes for this model
-    REG_PREFIXES = {"head_flat"}   # regression head in ModelClass
-    CLS_PREFIXES = set()           # no classification head present in this model
-    TER_PREFIXES = set()           # no tertiary/term head present in this model
-    
     for name, p in model.named_parameters():
-        g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+        if p.grad is None:
+            g = 0.0
+        else:
+            if getattr(p.grad, "is_sparse", False):
+                vals = p.grad.data.coalesce().values()
+                g = float(vals.norm().cpu()) if vals.numel() else 0.0
+            else:
+                g = float(p.grad.norm().cpu())
         w = float(p.detach().norm().cpu())
         u = (lr * g) / max(w, 1e-8)
         recs.append((name, g, u))
-    
-        sq = g * g
-        all_sq += sq
-    
-        top = name.split(".")[0]
-        if top in REG_PREFIXES:
-            reg_sq += sq
-        elif top in CLS_PREFIXES:
-            cls_sq += sq
-        elif top in TER_PREFIXES:
-            ter_sq += sq
-        # otherwise contributes only to GN_tot
-    
-    # 3) Compute block gradient norms (GN) and gradient-norm distribution (GD)
-    GN_reg = math.sqrt(reg_sq)
-    GN_cls = math.sqrt(cls_sq)
-    GN_ter = math.sqrt(ter_sq)
+        sq = g * g; all_sq += sq
+        pref = name.split('.', 1)[0]
+        prefix_sq[pref] = prefix_sq.get(pref, 0.0) + sq
+
+    g_vals = [g for _, g, _ in recs]; u_vals = [u for _, _, u in recs]
+
+    # per-prefix GN and total GN
+    prefix_gn = {p: math.sqrt(sq) for p, sq in prefix_sq.items()}
     GN_tot = math.sqrt(all_sq)
     
-    g_vals = [g for _, g, _ in recs]
+    # build a GN token listing all prefixes sorted by descending GN
+    sorted_prefixes = [p for p, _ in sorted(prefix_gn.items(), key=lambda x: x[1], reverse=True)]
+    gn_items = ",".join(f"{p}={prefix_gn[p]:.3f}" for p in sorted_prefixes) if sorted_prefixes else ""
+    # gn_token = f"GN[{gn_items},TOT={GN_tot:.3f}] | "
+
+    # 3) 4) safe percentiles for GD and UR
     if g_vals:
-        g_vals_sorted = sorted(g_vals)
-        n = len(g_vals_sorted)
-        GD_med = g_vals_sorted[n // 2]
-        GD_p90 = g_vals_sorted[int(math.floor(0.9 * (n - 1)))]
-        GD_max = g_vals_sorted[-1]
+        g_sorted = sorted(g_vals)
+        n = len(g_sorted)
+        GD_med = g_sorted[n // 2]
+        GD_p90 = g_sorted[max(0, min(n - 1, int(math.floor(0.9 * (n - 1)))))]
+        GD_max = g_sorted[-1]
     else:
         GD_med = GD_p90 = GD_max = 0.0
+    
+    if u_vals:
+        u_sorted = sorted(u_vals)
+        n_u = len(u_sorted)
+        UR_med = u_sorted[n_u // 2]
+        UR_max = u_sorted[-1]
+    else:
+        UR_med = UR_max = 0.0
 
-
-    # 3) Compute block gradient norms (GN) and gradient-norm distribution (GD)
-    GN_reg = math.sqrt(reg_sq)
-    GN_cls = math.sqrt(cls_sq)
-    GN_ter = math.sqrt(ter_sq)
-    GN_tot = math.sqrt(all_sq)
-
-    g_vals = [g for _, g, _ in recs]
-    GD_med = sorted(g_vals)[len(g_vals)//2] if g_vals else 0.0
-    GD_p90 = sorted(g_vals)[int(0.9*len(g_vals))] if g_vals else 0.0
-    GD_max = max(g_vals)                           if g_vals else 0.0
-
-    # 4) Update-ratio distribution (UR)
-    u_vals = [u for _, _, u in recs]
-    UR_med = sorted(u_vals)[len(u_vals)//2] if u_vals else 0.0
-    UR_max = max(u_vals)                         if u_vals else 0.0
 
     # 5) Slip-rate & max hub (stateful LSTM diagnostic)
+    slip_thresh=1e-6
     hub    = getattr(model, "last_hub", None)
     HR     = float(hub.max().cpu()) if hub is not None else 0.0
     SL     = float((hub > slip_thresh).float().mean().cpu()) if hub is not None else 0.0
@@ -1475,26 +1461,62 @@ def log_epoch_summary(
     # 6) Slope-RMSE (SR) on last validation batch
     with torch.no_grad():
         pv, tv = getattr(model, "last_val_preds", None), getattr(model, "last_val_targs", None)
-        if pv is not None and tv is not None:
+        SR = 0.0
+        if pv is not None and tv is not None and pv.numel() >= 2 and tv.numel() >= 2:
             if pv.dim() == 1:
                 dp, dt = pv[1:] - pv[:-1], tv[1:] - tv[:-1]
             else:
-                dp = pv[:, 1:] - pv[:, :-1]
-                dt = tv[:, 1:] - tv[:, :-1]
-            SR = torch.sqrt(((dp - dt) ** 2).mean()).item()
-        else:
-            SR = 0.0
+                if pv.size(1) >= 2 and tv.size(1) >= 2:
+                    dp = pv[:, 1:] - pv[:, :-1]
+                    dt = tv[:, 1:] - tv[:, :-1]
+                else:
+                    dp = dt = None
+            if dp is not None and dt is not None and dp.numel() > 0:
+                SR = float(torch.sqrt(((dp - dt) ** 2).mean()).item())
+
+    # 6.1) Fraction model better than baseline on validation (per-sample)
+    fraction_model_better = 0.0
+    if val_preds is not None and val_base_preds is not None and val_targets is not None:
+        # ensure numpy arrays (1D) and aligned length
+        vp = np.asarray(val_preds, dtype=float).ravel()
+        vb = np.asarray(val_base_preds, dtype=float).ravel()
+        vt = np.asarray(val_targets, dtype=float).ravel()
+        if vp.shape == vb.shape == vt.shape and vp.size > 0:
+            fraction_model_better = float((np.abs(vp - vt) < np.abs(vb - vt)).mean())
 
     # 7) Pull train/val RMSE, R², MAE
-    tr_rmse, tr_r2, tr_mae = train_metrics["rmse"], train_metrics["r2"], train_metrics["mae"]
-    vl_rmse, vl_r2, vl_mae = val_metrics["rmse"],   val_metrics["r2"],   val_metrics["mae"]
+    tr_rmse, tr_mae, tr_r2 = train_metrics["rmse"], train_metrics["mae"], train_metrics["r2"]
+    vl_rmse, vl_mae, vl_r2 = val_metrics["rmse"],   val_metrics["mae"],   val_metrics["r2"]
 
-    # 8) Top-K parameter diagnostics: show only last two name segments + g/u
-    topk = sorted(recs, key=lambda x: x[1], reverse=True)[:top_k]
+
+    # prepare loss tokens if available
+    loss_tokens = ""
+    loss_tokens = f"MAIN_LOSS={avg_main_loss:.4e}"
+    aux_ratio = avg_aux_loss / (avg_main_loss + 1e-12)
+    loss_tokens += f",AUX_LOSS={avg_aux_loss:.4e},AUX_RATIO={aux_ratio:.3e}"
+
+    # 8) # compact Top-K: dedupe by short name, show all non-zero, collapse tiny into one token
     def short_name(n):
-        parts = n.split('.')
-        return ".".join(parts[-2:]) if len(parts) > 2 else n
-    topk_str = ", ".join(f"{short_name(n)}:{g:.3f}/{u:.1e}" for n, g, u in topk)
+        if "parametrizations" in n:
+            return n.split('.')[-1]
+        return ".".join(n.split('.')[-3:])
+
+    
+    seen = {}
+    for name, g, u in recs:
+        if "parametrizations" in name:
+            continue
+        s = short_name(name)
+        if s not in seen or g > seen[s][0]:
+            seen[s] = (g, u)
+            
+    items = sorted(seen.items(), key=lambda kv: kv[1][0], reverse=True)
+    zero_thresh = 1e-6
+    display = [f"{s}:{g:.3f}/{u:.1e}" for s, (g, u) in items if g > zero_thresh]
+    zero_count = sum(1 for _, (g, _u) in items if g <= zero_thresh)
+    if zero_count:
+        display.append(f"zero:{zero_count}/0.000")
+    topk_str = ", ".join(display)
 
     # 9) Assemble OPTS token (compact)
     try:
@@ -1507,9 +1529,8 @@ def log_epoch_summary(
 
     # 10) Optional scheduler percent-complete token (read-only, best-effort)
     sched_pct_token = ""
-    sched_obj = getattr(optimizer, "scheduler", None)
-    if sched_obj is None:
-        sched_obj = globals().get("scheduler", None)
+    sched_obj = getattr(optimizer, "scheduler", None) or globals().get("scheduler", None)
+
     if sched_obj is not None and hasattr(sched_obj, "_total_steps"):
         total = int(getattr(sched_obj, "_total_steps"))
         # prefer a step counter if available, otherwise use last_epoch
@@ -1521,23 +1542,15 @@ def log_epoch_summary(
             sched_pct_token = f"SCHED_PCT={pct:.1f}%"
 
     # 11) Optional timing / throughput (if the training loop stored them on the model)
-    elapsed = getattr(model, "_last_epoch_elapsed", None)
-    samples = getattr(model, "_last_epoch_samples", None)
-    timing_token = ""
-    if elapsed is not None and samples is not None and elapsed > 0:
-        tp = samples / elapsed
-        timing_token = f" | T={elapsed:.1f}s,TP={tp:.1f}s/s"
+    elapsed = getattr(model, "_last_epoch_elapsed", 0)
+    samples = getattr(model, "_last_epoch_samples", 0)
+    tp = (samples / elapsed) if (elapsed and elapsed > 0) else 0.0
 
     # 12) Optional checkpoint marker (if training loop marked it on the model)
     chk = getattr(model, "_last_epoch_checkpoint", False)
-    chk_token = " *CHKPT" if chk else ""
 
-    # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
-    gpu_token = ""
-    if torch.cuda.is_available():
-        # report in GiB, small-cost read-only
-        max_mem = torch.cuda.max_memory_allocated() / (1024 ** 3)
-        gpu_token = f" | GPU={max_mem:.2f}GiB"
+    # # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
+    max_mem = (torch.cuda.max_memory_allocated() / (1024 ** 3)) if torch.cuda.is_available() else 0.0
 
     # 14) Primary LR scalar token (explicit, high-ROI and low-noise)
     try:
@@ -1547,10 +1560,6 @@ def log_epoch_summary(
         lr_token = f"LR_MAIN={lr:.1e}"
 
     # 15) Layer-wise GN ratio diagnostics (small set of representative layers)
-    #    - Choose list from hparams.MONITOR_LAYERS if supplied, otherwise use a
-    #      sensible default set of representative parameter names.
-    #    - Maintain a baseline per-parameter GN on first observed epoch by
-    #      storing model._first_layer_gn (best-effort). Ratios are current/baseline.
     layer_token = ""
     default_monitor = ["short_lstm.weight_ih_l0", "short2long.weight", "feature_proj.weight"]
     monitor_list = []
@@ -1569,7 +1578,14 @@ def log_epoch_summary(
         p = dict(model.named_parameters()).get(name)
         if p is None:
             continue
-        curr_g = float(p.grad.norm().cpu()) if p.grad is not None else 0.0
+        if p.grad is None:
+            curr_g = 0.0
+        elif getattr(p.grad, "is_sparse", False):
+            vals = p.grad.data.coalesce().values()
+            curr_g = float(vals.norm().cpu()) if vals.numel() else 0.0
+        else:
+            curr_g = float(p.grad.norm().cpu())
+
         baseline = None
         try:
             baseline = getattr(model, "_first_layer_gn", {}).get(name)
@@ -1584,26 +1600,34 @@ def log_epoch_summary(
                 ratio = 1.0
         else:
             ratio = curr_g / max(baseline, 1e-12)
-        pairs.append(f"{name.split('.')[-1]}:{curr_g:.3e}/{ratio:.2f}")
+            label = ".".join(name.split('.')[-2:])
+            pairs.append(f"{label}:{curr_g:.3e}/{ratio:.2f}")
+
     if pairs:
-        layer_token = " | LAYER_GN[" + ",".join(pairs) + "]"
+            layer_token = "LAYER_GN[" + ",".join(pairs) + "]"
 
     # 16) Final line assembly (compact, per-epoch changing values only)
-    sched_field = f"{sched_pct_token} | " if sched_pct_token else ""
+    sched_field = f"{sched_pct_token}" if sched_pct_token else ""
     line = (
         f"\nE{epoch:02d} | "
         f"{opt_token} | "
-        f"GN[{GN_reg:.3f},{GN_cls:.3f},{GN_ter:.3f},{GN_tot:.3f}] | "
+        # f"GN[{GN_reg:.3f},{GN_cls:.3f},{GN_ter:.3f},{GN_tot:.3f}] | "
+        f"GN[{gn_items},TOT={GN_tot:.3f}] | "
         f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
         f"UR[{UR_med:.1e},{UR_max:.1e}] | "
         f"{lr_token} | "
         f"lr={lr:.1e} | "
-        f"TR[{tr_rmse:.3f},{tr_r2:.2f},{tr_mae:.3f}] | "
-        f"VL[{vl_rmse:.3f},{vl_r2:.2f},{vl_mae:.3f}] | "
-        f"{sched_field}"
+        f"TR[{tr_rmse:.3f},{tr_mae:.3f},{tr_r2:.2f}] | "
+        f"VL[{vl_rmse:.3f},{vl_mae:.3f},{vl_r2:.2f}] | "
+        f"{loss_tokens} | "
+        f"{sched_field} | "
         f"SR={SR:.3f} | "
         f"SL={SL:.2f},HR={HR:.3f} | "
-        f"{timing_token}{gpu_token}{chk_token}{layer_token} | "
+        f"FMB={fraction_model_better:.4f} | "
+        f"T={elapsed:.1f}s,TP={tp:.1f}seg/s | "
+        f"chk={chk:.3f} | "
+        f"GPU={max_mem:.2f}GiB | "
+        f"{layer_token}"
         f"\nTOP_K(G/U)={topk_str}"
     )
     _append_log(line, log_file)

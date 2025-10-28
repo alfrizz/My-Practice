@@ -39,6 +39,17 @@ done
 
 # — Now that /mnt/g and $TARGET are ready, record the Boot trigger
 
+# Minimal auto-recovery for corrupted Unison archives: backup and move away any zero-size or unreadable archive files
+if ls "$HOME/.unison"/ar* >/dev/null 2>&1; then
+  for a in "$HOME/.unison"/ar*; do
+    if [ ! -s "$a" ] || ! head -c 1 "$a" >/dev/null 2>&1; then
+      mv "$HOME/.unison" "$HOME/.unison-corrupt-$(date +%s)" || true
+      mkdir -p "$HOME/.unison"
+      break
+    fi
+  done
+fi
+
 # --- Run Unison
 unison \
   -root "$HOME" \
@@ -63,4 +74,5 @@ unison \
   -ignore 'Name __pycache__' \
   -ignore 'Name *.pyc' \
   -ignore 'Name sync-practice.log' \
+  -ignore 'Name *.pth' \
   -logfile "$LOG"
