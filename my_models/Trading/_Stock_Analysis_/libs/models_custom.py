@@ -77,31 +77,15 @@ class PositionalEncoding(nn.Module):
 
 class ModelClass(nn.Module):
     """
-    Initialize a flexible, stateful sequence regression model composed of optional
-    Conv1d/TCN/Short-LSTM/Transformer/Projection/Long-LSTM blocks with a
-    small MLP prediction head and an optional delta correction head.
-
-    Architecture summary
-    - Input shape accepted: (B, T, F) or with extra leading dims (collapsed to (B, T, F)).
-    - Stage 0: Optional Conv1d + BatchNorm1d + ReLU applied across the feature dimension.
-    - Stage 1: Optional TCN implemented as stacked Conv1d + BatchNorm + ReLU blocks.
-    - Stage 2: Optional short (bidirectional) LSTM producing `short_units` features.
-      * Followed by LayerNorm and Dropout.
-      * Internal LSTM states held in self.h_short / self.c_short (stateful across calls).
-    - Stage 3: Optional Transformer encoder stack (positional encoding + linear feature_proj).
-    - Stage 4: Linear projection short->long dimension (short2long) + LayerNorm + Dropout.
-    - Stage 5: Optional long (bidirectional) LSTM producing `long_units` features.
-      * Followed by LayerNorm and Dropout.
-      * Internal LSTM states held in self.h_long / self.c_long (stateful across calls).
-    - Stage 6: Flattening strategy (one of "flatten", "last", "pool") producing a flat feature
-      vector of dimension `flat_dim` which equals `window_len*long_units` for "flatten" else `long_units`.
-      * LayerNorm applied to the flattened vector.
-    - Head(s):
-      * head_flat: MLP (weight_norm Linear -> ReLU -> weight_norm Linear) producing a 1-D baseline.
-      * baseline_lin: a small linear baseline per-feature (kept for legacy/aux uses).
-      * delta_head: optional linear head producing corrective residual; when disabled returns Identity
-        and training sets delta to zero.
-    - Returns from forward: (final, delta, base) each shaped (B, 1).
+    Multi-backbone sequence model with optional short/long LSTMs, transformer, and a baseline+delta head.
+    
+    Key behavior
+    - Input: (batch, time, features) windows.
+    - Options: conv, TCN, short/long Bi-LSTM, transformer; flatten modes: flatten/last/pool.
+    - head_flat: MLP producing baseline prediction (B,1).
+    - delta_head (optional): single-layer linear correction on same flattened features (B,1).
+    - forward returns (base, delta) each shaped (B,1); final prediction = base + delta.
+    - Statefulness: maintains detached LSTM states h_short/h_long across batches; reset helpers provided.
     """
     def __init__(
         self,
@@ -250,11 +234,10 @@ class ModelClass(nn.Module):
             nn.ReLU(),
             weight_norm(nn.Linear(pred_hidden, 1))
         )
-        self.baseline_lin = nn.Linear(n_feats, 1)
         if self.use_delta:
             self.delta_head = weight_norm(nn.Linear(flat_dim, 1))
         else:
-            self.delta_head = nn.Identity()
+            self.delta_head = None # nn.Identity()
 
     def reset_short(self):
         if self.h_short is not None:
@@ -334,20 +317,17 @@ class ModelClass(nn.Module):
             flat = out_l.mean(dim=1)
 
         norm_flat = self.ln_flat(flat)
-        main_out = self.head_flat(norm_flat)
-        assert main_out.ndim == 2 and main_out.shape[1] == 1, "head_flat must return (B,1)"
+        base_out = self.head_flat(norm_flat)
+        assert base_out.ndim == 2 and base_out.shape[1] == 1, "head_flat must return (B,1)"
 
         # 7) Delta baseline vs features predictions head
-        base = main_out.squeeze(-1)                           # baseline from MLP on norm_flat (B,)
+        base = base_out.squeeze(-1)                           # baseline from MLP on norm_flat (B,)
         if self.use_delta:
             delta = self.delta_head(norm_flat).squeeze(-1)    # correction from same features (B,)
         else:
             delta = torch.zeros(base.shape, device=base.device, dtype=base.dtype)
-        final = base + delta                                  # (B,)
-        
-        # return final, delta, base each as (B,1)
-        assert final.ndim == 1 and delta.ndim == 1 and base.ndim == 1, "expected flat vectors before unsqueeze"
-        return final.unsqueeze(-1), delta.unsqueeze(-1), base.unsqueeze(-1)
+
+        return base.unsqueeze(-1), delta.unsqueeze(-1)
 
 
 ######################################################################################################
@@ -372,65 +352,60 @@ class SmoothMSELoss(nn.Module):
         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
         return L1 + self.alpha * L2
 
+
 ############################
 
 
 def compute_baselines(loader) -> tuple[float, float]:
     """
-    Compute two static, one-step-per-window baselines over all windows in `loader`:
-      1) mean_rmse       – RMSE if you predict the per-window mean mu = mean(y_sig[:L]) for the target (last element)
-      2) persistence_rmse – RMSE if you predict the last-seen value y_{t-1} as the next value y_t
+    Compute mean_rmse and persistence_rmse assuming loader yields flattened batches.
+
+    Expects each batch from loader to be:
+      (x_flat, ysig_flat, ybin_flat, yret_flat, yter_flat, rc_flat, wd_expanded, ts_list, lengths)
+    where:
+      - ysig_flat: Tensor (N,) and lengths is a list of per-day counts summing to N
+
+    For each day we extract the day's arr = ysig_flat[offset:offset+L] and compute:
+      mean error: (target - mean(arr))^2  where target = arr[-1]
+      persistence error: (target - arr[-2])^2 when L > 1
+
+    Returns:
+      (mean_rmse, persistence_rmse)
     """
     mean_errors = []
     last_deltas = []
-    
-    for x_pad, y_sig, _y_bin, _y_ret, _y_ter, _rc, wd, ts_list, lengths in loader:
-        for i, L in enumerate(lengths):
-            if L < 1:
+
+    for batch in loader:
+        # Unpack strictly according to the flattened-collate contract
+        x_flat, y_sig, _ybin, _yret, _yter, _rc, wd_expanded, ts_list, lengths = batch
+
+        # Sanity checks
+        if not (isinstance(y_sig, torch.Tensor) and y_sig.dim() == 1):
+            raise RuntimeError(f"compute_baselines expects flattened y_sig (N,), got shape {getattr(y_sig,'shape',None)}")
+        if not (isinstance(lengths, (list, tuple)) and sum(lengths) == y_sig.size(0)):
+            raise RuntimeError(f"compute_baselines expects lengths summing to y_sig.size(0); got lengths={lengths} y_sig.shape={tuple(y_sig.shape)}")
+
+        start = 0
+        for L in lengths:
+            if L <= 0:
+                start += L
                 continue
-            arr = y_sig[i, :L].view(-1).cpu().numpy().astype(float)
+            end = start + L
+            arr = y_sig[start:end].view(-1).cpu().numpy().astype(float)
+            if arr.size == 0:
+                start = end
+                continue
             target = arr[-1]
             mu = arr.mean()
             mean_errors.append((target - mu) ** 2)
-            if L > 1:
+            if arr.size > 1:
                 last_deltas.append((target - arr[-2]) ** 2)
-    
-    if mean_errors:
-        mean_rmse = float(np.sqrt(np.mean(mean_errors)))
-    else:
-        mean_rmse = float("nan")
-    
-    if last_deltas:
-        persistence_rmse = float(np.sqrt(np.mean(last_deltas)))
-    else:
-        persistence_rmse = float("nan")
-        
+            start = end
+
+    mean_rmse = float(np.sqrt(np.mean(mean_errors))) if mean_errors else float("nan")
+    persistence_rmse = float(np.sqrt(np.mean(last_deltas))) if last_deltas else float("nan")
     return mean_rmse, persistence_rmse
 
-###############
-
-
-def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
-    """
-    Compute RMSE, MAE, and R² on flat NumPy arrays of predictions vs. targets.
-    """
-    if preds.size == 0:
-        return {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
-
-    diff = preds - targs
-    mse  = float((diff ** 2).mean())
-    mae  = float(np.abs(diff).mean())
-    rmse = float(np.sqrt(mse))
-
-    # R² = 1 − RSS/TSS
-    if preds.size < 2 or np.isclose(targs.var(), 0.0):
-        r2 = float("nan")
-    else:
-        tss = float(((targs - targs.mean()) ** 2).sum())
-        rss = float((diff ** 2).sum())
-        r2  = float("nan") if tss == 0.0 else 1.0 - (rss / tss)
-
-    return {"rmse": rmse, "mae": mae, "r2": r2}
 
 ############### 
 
@@ -464,89 +439,116 @@ def _reset_states(
 
     return day
 
+    
+###############
 
-###################################################################################################### 
+
+def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
+    """
+    Compute RMSE, MAE, and R² on flat NumPy arrays of predictions vs. targets.
+    """
+    if preds.size == 0:
+        return {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
+
+    diff = preds - targs
+    mse  = float((diff ** 2).mean())
+    mae  = float(np.abs(diff).mean())
+    rmse = float(np.sqrt(mse))
+
+    # R² = 1 − RSS/TSS
+    if preds.size < 2 or np.isclose(targs.var(), 0.0):
+        r2 = float("nan")
+    else:
+        tss = float(((targs - targs.mean()) ** 2).sum())
+        rss = float((diff ** 2).sum())
+        r2  = float("nan") if tss == 0.0 else 1.0 - (rss / tss)
+
+    return {"rmse": rmse, "mae": mae, "r2": r2}
+
+
+#################### 
+
 
 def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
                                        y_signal: torch.Tensor,
-                                       seq_lengths: torch.Tensor,
+                                       seq_lengths: list,
                                        wd_batch: torch.Tensor,
                                        reset_state_fn,
                                        model,
                                        prev_day=None):
     """
-    Build windows_tensor and per-window scalar targets_tensor for one batch.
+    Build (windows_tensor, targets_tensor, prev_day) from a flattened collate.
 
-    Returns (windows_tensor, targets_tensor, prev_day) where:
-      - windows_tensor: torch.Tensor shape (num_windows, T_i, F) on x_batch.device
-      - targets_tensor: torch.Tensor shape (num_windows,) on x_batch.device (one scalar last-step target per window)
-      - prev_day: updated prev_day from reset_state_fn calls
+    Assumes:
+      - x_batch: Tensor shape (N, T, F)  where N = sum(seq_lengths)
+      - y_signal: Tensor shape (N,)
+      - seq_lengths: list/tuple of per-day window counts [W0, W1, ...] summing to N
+      - wd_batch: per-day weekday tensor (len == B)
 
-    Caller must handle the (None, None, prev_day) case when no windows in batch.
+    Behaviour:
+      - Calls reset_state_fn once per day (using wd_batch[day_idx]) before that day's windows.
+      - Returns windows_tensor: (N, T, F), targets_tensor: (N,)
+      - If no windows present returns (None, None, prev_day)
     """
     device = x_batch.device
-    batch_size = x_batch.size(0)
+
+    # fixed window length (must exist in your global hparams)
+    try:
+        T = int(params.hparams["LOOK_BACK"])
+    except Exception:
+        raise RuntimeError("LOOK_BACK must be available in params.hparams for window assembly")
+
+    # Quick sanity
+    if not (isinstance(seq_lengths, (list, tuple)) and sum(seq_lengths) == x_batch.size(0)):
+        raise RuntimeError(f"_prepare_windows_and_targets_batch expects seq_lengths summing to x_batch.size(0); got seq_lengths={seq_lengths} x_batch.shape={tuple(x_batch.shape)}")
 
     windows_list = []
     targets_list = []
+    start = 0
 
-    for example_idx in range(batch_size):
-        # call reset_state_fn exactly as your loops do; preserve prev_day update
+    for day_idx, L in enumerate(seq_lengths):
+        # call reset once per day
         try:
-            prev_day = reset_state_fn(model, wd_batch[example_idx], prev_day)
+            prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)
         except TypeError:
-            # fallback if reset_state_fn uses a different signature wrapper
-            prev_day = reset_state_fn(model, example_idx, prev_day)
+            prev_day = reset_state_fn(model, day_idx, prev_day)
 
-        L = int(seq_lengths[example_idx])
-        if L == 0:
+        if L <= 0:
+            start += L
             continue
 
-        windows_list.append(x_batch[example_idx, :L])
-        # # collect last-step scalar target and preserve shape (1,) for torch.cat
-        # targets_list.append(y_signal[example_idx, :L][-1].reshape(1))
-        # collecting one target per window
-        targets_list.append(y_signal[example_idx, :L].reshape(-1))
+        end = start + L
+        day_windows = x_batch[start:end]     # (L, T, F)
+        day_targets = y_signal[start:end]    # (L,)
+
+        windows_list.append(day_windows)
+        targets_list.append(day_targets)
+        start = end
 
     if not windows_list:
         return None, None, prev_day
 
-    windows_tensor = torch.cat(windows_list, dim=0).to(device)
-    targets_tensor = torch.cat(targets_list, dim=0).to(device)
-
+    windows_tensor = torch.cat(windows_list, dim=0).to(device).float()   # (N, T, F)
+    targets_tensor = torch.cat(targets_list, dim=0).to(device).float()   # (N,)
     return windows_tensor, targets_tensor, prev_day
 
 
-##############################################
+
+########################
 
 
 def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Evaluate a stateful windowed model on a DataLoader and return metrics plus CPU arrays.
-
-    Purpose
-    - Run a deterministic evaluation pass over `loader` and produce aligned per-window
-      predictions, baseline predictions, and scalar targets for metric calculation.
-
-    Behavior and guarantees
-    - Puts model on the device of its parameters and sets model to eval mode with
-      torch.no_grad. Resets stateful hidden handles by setting model.h_short and
-      model.h_long to None and preserves `prev_day` semantics across batches.
-    - Uses the shared helper `_prepare_windows_and_targets_batch` to assemble a
-      windows tensor and a per-window 1-D targets tensor; if that helper returns
-      (None, None, prev_day) the batch is skipped.
-    - Calls model(windows_tensor) and accepts outputs that include at least the
-      first three tensors (final, delta, base) in their expected shapes; the
-      implementation extracts the first three returned values and asserts that
-      `final` has shape (W, 1).
-    - Aggregates per-window final predictions, per-window baseline predictions,
-      and per-window scalar targets in the same order into CPU numpy arrays.
-    - Stores the last-eval tensors on the model as float tensors named
-      `last_val_preds`, `last_val_targs`, and `last_val_base` for easy inspection.
-    - Returns a 4-tuple: `(metrics_dict, preds_np, base_preds_np, targets_np)` where
-      `metrics_dict` is the result of `_compute_metrics(preds_np, targets_np)`.
+    Run model validation over a loader and return metrics and predictions.
+    
+    Returns: (metrics_dict, preds_array, base_preds_array, targets_array)
+    - Moves model to current parameter device and runs in eval mode with no grad.
+    - Preserves model LSTM state across windows using prev_day and _prepare_windows_and_targets_batch.
+    - Calls model(windows) -> (base, delta) and composes final = base + delta.
+    - Collects CPU numpy arrays: preds (final), base_preds, and targets for metrics.
+    - Stores last_val_preds, last_val_targs, last_val_base on the model for quick inspection.
     """
-    device = next(model.parameters()).device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
     model.h_short = model.h_long = None
     prev_day = None
@@ -567,7 +569,8 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
             if windows_tensor is None:
                 continue
    
-            final_tensor, delta_tensor, base_tensor = model(windows_tensor)[:3]
+            base_tensor, delta_tensor = model(windows_tensor)
+            final_tensor = base_tensor + delta_tensor
             assert final_tensor.dim() == 2 and final_tensor.size(1) == 1
             
             # preds and base as CPU 1D lists
@@ -608,45 +611,33 @@ def model_training_loop(
     top_k:               int
 ) -> float:
     """
-    Train a stateful, windowed regression model using per-window batching and AMP.
-
-    Key responsibilities
-    - Iterates epochs and batches, preserving model state across windows via `prev_day`
-      and calling the shared helper `_prepare_windows_and_targets_batch` to build
-      the per-window input tensor and matching per-window scalar targets.
-    - Uses automatic mixed precision (torch.amp.autocast) and GradScaler for safe AMP
-      training and handles the case where scaler may skip optimizer.step (guarded scheduler.step).
-    - Computes three losses per forward:
-        * main_loss  — supervision on the model's baseline head (L2-ish via SmoothMSELoss).
-        * aux_loss   — L2 teaching signal for the delta head (delta_pred vs targets - baseline).
-        * final_loss — MSE-like loss on the model's final prediction (true objective for reporting).
-      Combined backprop uses loss = final_loss + lambda_delta * aux_loss.
-    - Performs gradient clipping (clip_grad_norm_) on parameters with gradients,
-      steps the optimizer through the scaler (scaler.step/scaler.update), and steps the scheduler
-      only when an optimizer update actually occurred (wraps optimizer.step).
-    - Records lightweight diagnostic snapshot on first batch to verify shapes/grad presence.
-    - Aggregates epoch-level metrics: average losses, RMSE/MAE/R2 (via _compute_metrics),
-      and runs validation with `eval_on_loader` which returns aligned per-window preds/base/targets.
-    - Calls models_core.log_epoch_summary and models_core.maybe_save_chkpt; if best model found,
-      stores best_state and saves final checkpoint at the end.
-    - Cleans a few ephemeral model attributes before returning.
+    Train the model with a baseline head and a detached residual (delta) head using AMP.
+    
+    Behavior summary
+    - model(windows) -> (base, delta); prediction total = base + delta.
+    - base is supervised by base_loss = SmoothMSELoss(base, targets).
+    - delta is trained to match detached residual delta_target = (targets - base).detach(); delta_loss = MSE(delta, delta_target).
+    - Combined objective: total_loss = base_loss + lambda_delta * delta_loss.
+    - Uses torch.amp.autocast + GradScaler; unscale -> clip_grad_norm -> scaler.step/update; scheduler.step guarded to only run when optimizer.step executed.
+    - Aggregates epoch metrics on total predictions and runs validation via eval_on_loader.
+    
+    Returns best_val (best validation RMSE).
     """
-    device = next(model.parameters()).device
+    # zero-init delta head bias so delta starts neutral
+    if getattr(model, "delta_head", None) is not None:
+        torch.nn.init.zeros_(model.delta_head.bias)
+        
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    expected_total = len(train_loader) * max_epochs
-    if hasattr(scheduler, "_total_steps") and scheduler._total_steps != expected_total:
-        raise RuntimeError(f"Scheduler total_steps mismatch: scheduler={scheduler._total_steps} expected={expected_total}")
-
-    base_tr_mean, base_tr_pers = compute_baselines(train_loader)
-    base_vl_mean, base_vl_pers = compute_baselines(val_loader)
-
-    smooth_loss = SmoothMSELoss(alpha_smooth)
     live_plot = plots.LiveRMSEPlot()
     best_val, best_state, patience = float("inf"), None, 0
-
     models_dir = Path(params.models_folder)
-    first_snapshot_captured = False
+
+    smooth_loss = SmoothMSELoss(alpha_smooth) # instantiate SmoothMSELoss
+    # compute baselines for logging
+    base_tr_mean, base_tr_pers = compute_baselines(train_loader)
+    base_vl_mean, base_vl_pers = compute_baselines(val_loader)
 
     for epoch in range(1, max_epochs + 1):
 
@@ -656,10 +647,9 @@ def model_training_loop(
         train_preds, train_targs = [], []
         prev_day = None
 
-        epoch_loss_sum = 0.0
-        epoch_main_loss_sum = 0.0
-        epoch_aux_loss_sum = 0.0
-        epoch_final_loss_sum = 0.0 
+        epoch_total_loss_sum = 0.0
+        epoch_base_loss_sum = 0.0
+        epoch_delta_loss_sum = 0.0
         epoch_loss_count = 0
         
         epoch_start = datetime.utcnow().timestamp()
@@ -682,64 +672,43 @@ def model_training_loop(
                 continue
 
             with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
-                final_tensor, delta_tensor, base_tensor = model(windows_tensor) # each shaped (B,1)
+ 
+                # model now returns primitive outputs: base (B,1) and delta (B,1)
+                base_tensor, delta_tensor = model(windows_tensor)  # base, delta each (B,1)
+                total_tensor = base_tensor + delta_tensor 
 
-                # flatten to vectors (B,)
-                preds      = final_tensor.reshape(final_tensor.size(0), -1)[:, 0]
-                delta_pred  = delta_tensor.reshape(delta_tensor.size(0), -1)[:, 0]
-                base_batch  = base_tensor.reshape(base_tensor.size(0), -1)[:, 0]
-                assert preds.shape[0] == targets_tensor.shape[0], "mismatch between model outputs and assembled targets"
-            
-                # MAIN: baseline supervised (baseline_head output)
-                main_loss = smooth_loss(base_batch, targets_tensor)
-                # AUX: teach delta to match residual (targets - baseline)
-                delta_target = targets_tensor - base_batch
-                aux_loss = (delta_pred - delta_target).pow(2).mean()
-                # final metric for reporting (true objective)
-                final_loss = smooth_loss(preds, targets_tensor)
-                # Combined objective used for backprop
-                loss = final_loss + lambda_delta * aux_loss
-        
+                # flatten to (B,) vectors, keep consistent names
+                total_tensor = total_tensor.reshape(total_tensor.size(0), -1)[:, 0]
+                delta_tensor = delta_tensor.reshape(delta_tensor.size(0), -1)[:, 0]
+                base_tensor  = base_tensor.reshape(base_tensor.size(0), -1)[:, 0]
+                assert total_tensor.shape[0] == targets_tensor.shape[0], "mismatch between model outputs and assembled targets"
+
+                # base loss: supervise the baseline head only
+                base_loss = smooth_loss(base_tensor, targets_tensor)
+                # teach delta to predict the detached residual
+                delta_target = (targets_tensor - base_tensor).detach()
+                delta_loss = (delta_tensor - delta_target).pow(2).mean()
+                # combined training objective (final scalar used for backward)
+                total_loss = base_loss + lambda_delta * delta_loss
+
             # Backward (AMP) with event timing and a single host sync
             if torch.cuda.is_available():
                 be0 = torch.cuda.Event(enable_timing=True); be1 = torch.cuda.Event(enable_timing=True)
                 be0.record()
-                scaler.scale(loss).backward()
+                scaler.scale(total_loss).backward()
                 be1.record()
                 torch.cuda.synchronize()    # single explicit sync to complete events
                 backward_ms = be0.elapsed_time(be1)
             else:
                 t0b = perf_counter()
-                scaler.scale(loss).backward()
+                scaler.scale(total_loss).backward()
                 backward_ms = (perf_counter() - t0b) * 1000.0
             model._last_backward_ms = backward_ms
 
             scaler.unscale_(optimizer)
 
-            # lightweight first-batch snapshot (non-blocking, cheap)
-            if (not first_snapshot_captured) and (not hasattr(model, "_first_batch_snapshot")):
-                try:
-                    raw_shape = tuple(final_tensor.shape) if isinstance(final_tensor, torch.Tensor) else None
-            
-                    group_nonzero_counts = [
-                        sum(1 for p in g.get("params", []) if p.grad is not None)
-                        for g in optimizer.param_groups
-                    ]
-                    backbone_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("short") or n.startswith("long"))
-                    head_has = any(p.grad is not None for n, p in model.named_parameters() if n.startswith("pred") or "pred" in n)
-            
-                    model._first_batch_snapshot = {
-                        "raw_reg_shape": raw_shape,
-                        "group_nonzero_counts": group_nonzero_counts,
-                        "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
-                    }
-                except Exception:
-                    pass
-                first_snapshot_captured = True
-
-
             # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
-            params_with_grad = [p for p in model.parameters() if p.grad is not None]
+            params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
             if params_with_grad:
                 torch.nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
 
@@ -757,13 +726,12 @@ def model_training_loop(
                 scheduler.step()
   
             # After step: minimal host work (convert scalars/lists once)
-            epoch_loss_sum += float(loss.detach().cpu())
-            epoch_main_loss_sum += float(main_loss.detach().cpu())
-            epoch_aux_loss_sum += float(aux_loss.detach().cpu()) 
-            epoch_final_loss_sum += float(final_loss.detach().cpu())
+            epoch_total_loss_sum += float(total_loss.detach().cpu())
+            epoch_base_loss_sum += float(base_loss.detach().cpu())
+            epoch_delta_loss_sum += float(delta_loss.detach().cpu())
             epoch_loss_count += 1
 
-            train_preds.extend(preds.detach().cpu().tolist())
+            train_preds.extend(total_tensor.detach().cpu().tolist())
             train_targs.extend(targets_tensor.cpu().tolist())
             epoch_samples += int(targets_tensor.size(0))
 
@@ -773,18 +741,17 @@ def model_training_loop(
             np.array(train_targs, dtype=float),
         )
         vl_metrics, vl_preds, vl_base_preds, vl_targs = eval_on_loader(val_loader, model)
-
-        avg_loss = epoch_loss_sum / max(1, epoch_loss_count)
-        avg_main_loss = epoch_main_loss_sum / max(1, epoch_loss_count)
-        avg_aux_loss  = epoch_aux_loss_sum  / max(1, epoch_loss_count) if params.hparams['USE_DELTA'] else 0.0
+        tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
+        vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
+        
+        avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
+        avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
+        avg_delta_loss = epoch_delta_loss_sum / max(1, epoch_loss_count)
 
         epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
         model._last_epoch_elapsed = float(epoch_elapsed)
         model._last_epoch_samples = int(epoch_samples)
-
-        tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
-        vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
-
+    
         models_core.log_epoch_summary(
             epoch,
             model,
@@ -798,8 +765,8 @@ def model_training_loop(
             base_tr_pers=base_tr_pers,
             base_vl_mean=base_vl_mean,
             base_vl_pers=base_vl_pers,
-            avg_main_loss=avg_main_loss,
-            avg_aux_loss=avg_aux_loss,
+            avg_base_loss=avg_base_loss,
+            avg_delta_loss=avg_delta_loss,
             log_file=params.log_file,
             top_k=top_k,
             hparams=params.hparams,

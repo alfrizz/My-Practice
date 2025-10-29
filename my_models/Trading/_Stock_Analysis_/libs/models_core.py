@@ -384,49 +384,115 @@ class DayWindowDataset(Dataset):
 ######################
 
 
+# def pad_collate(batch):
+#     """
+#     Pad variable-length per-day sequences into fixed tensors.
+
+#     Batch items (always 8-tuple):
+#       (x, y_sig, y_cls_bin, y_ret, y_ret_ter, rc, wd, end_ts)
+
+#     Returns 9 items:
+#       x_pad      Tensor (B, max_W, look_back, F)
+#       ysig_pad   Tensor (B, max_W)
+#       ybin_pad   Tensor (B, max_W)
+#       y_ret_pad  Tensor (B, max_W)
+#       yter_pad   LongTensor (B, max_W)
+#       rc_pad     Tensor (B, max_W)
+#       wd         LongTensor (B,)
+#       ts_list    list of end_ts per element
+#       lengths    list of true window counts per day
+#     """
+#     # Unpack fixed 8-tuple structure
+#     x_list, ysig_list, ybin_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
+
+#     # Remove leading batch dim from each day's tensors
+#     xs      = [x.squeeze(0) for x in x_list]
+#     ysig    = [y.squeeze(0) for y in ysig_list]
+#     ybin    = [yc.squeeze(0) for yc in ybin_list]
+#     yrets   = [r.squeeze(0) for r in yret_list]
+#     yter    = [t.squeeze(0) for t in yter_list]
+#     lengths = [seq.size(0) for seq in xs]
+
+#     # Pad along the time axis for each field
+#     x_pad    = pad_sequence(xs,   batch_first=True)
+#     ysig_pad = pad_sequence(ysig,   batch_first=True)
+#     ybin_pad = pad_sequence(ybin, batch_first=True)
+#     yret_pad = pad_sequence(yrets, batch_first=True)
+#     yter_pad = pad_sequence(yter, batch_first=True)
+#     rc_pad   = pad_sequence(rc_list, batch_first=True)
+
+#     # Weekday tensor and ts_list 
+#     wd_tensor = torch.tensor(wd_list, dtype=torch.long)
+
+#     # Return all padded tensors, timestamps, and sequence lengths
+#     return x_pad, ysig_pad, ybin_pad, yret_pad, yter_pad, rc_pad, wd_tensor, list(ts_list), lengths
+
 def pad_collate(batch):
     """
-    Pad variable-length per-day sequences into fixed tensors.
+    Pad variable-length per-day sequences into fixed tensors and return flattened per-window
+    arrays that match the model/training loop contract.
 
-    Batch items (always 8-tuple):
+    Input batch (each item is the DayWindowDataset 8-tuple):
       (x, y_sig, y_cls_bin, y_ret, y_ret_ter, rc, wd, end_ts)
 
-    Returns 9 items:
-      x_pad      Tensor (B, max_W, look_back, F)
-      ysig_pad   Tensor (B, max_W)
-      ybin_pad   Tensor (B, max_W)
-      y_ret_pad  Tensor (B, max_W)
-      yter_pad   LongTensor (B, max_W)
-      rc_pad     Tensor (B, max_W)
-      wd         LongTensor (B,)
-      ts_list    list of end_ts per element
-      lengths    list of true window counts per day
+    Behaviour and returns (9 items) — preserved names and ordering where possible:
+      x_flat      Tensor (N, look_back, F)         flattened windows from all days in batch
+      ysig_flat   Tensor (N,)                      flattened per-window scalar targets
+      ybin_flat   Tensor (N,)                      flattened per-window binary labels
+      yret_flat   Tensor (N,)                      flattened per-window returns
+      yter_flat   LongTensor (N,)                  flattened per-window ternary labels
+      rc_flat     Tensor (N,)                      flattened per-window raw_close values
+      wd_expanded LongTensor (N,)                  weekday value expanded per-window (aligns with flats)
+      ts_list     list of end_ts per-day (unchanged)
+      lengths     list of true window counts per day (unchanged)
+
+    Notes:
+      - DayWindowDataset.__getitem__ still returns per-day tensors with a leading day dim
+        (x shape (1, W, T, F), y_sig shape (1, W), ...). This collate squeezes that dim,
+        pads per-day along the window axis, then flattens first two dims to canonical
+        per-window shapes so downstream code (model, helpers, metrics) receives (N, T, F)
+        and (N,) expected shapes.
+      - lengths and ts_list are returned unchanged so training loop can reset state per-day.
     """
     # Unpack fixed 8-tuple structure
     x_list, ysig_list, ybin_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
 
-    # Remove leading batch dim from each day's tensors
+    # Remove leading day dim from each day's tensors -> each x_i: (W, T, F); y_i: (W,)
     xs      = [x.squeeze(0) for x in x_list]
     ysig    = [y.squeeze(0) for y in ysig_list]
     ybin    = [yc.squeeze(0) for yc in ybin_list]
     yrets   = [r.squeeze(0) for r in yret_list]
     yter    = [t.squeeze(0) for t in yter_list]
-    lengths = [seq.size(0) for seq in xs]
+    lengths = [seq.size(0) for seq in xs]  # per-day window counts W_i
 
-    # Pad along the time axis for each field
-    x_pad    = pad_sequence(xs,   batch_first=True)
-    ysig_pad = pad_sequence(ysig,   batch_first=True)
-    ybin_pad = pad_sequence(ybin, batch_first=True)
-    yret_pad = pad_sequence(yrets, batch_first=True)
-    yter_pad = pad_sequence(yter, batch_first=True)
-    rc_pad   = pad_sequence(rc_list, batch_first=True)
+    # Pad per-day along the window axis -> shapes (B, W_max, ...)
+    x_pad    = pad_sequence(xs,   batch_first=True)  # (B, W_max, T, F)
+    ysig_pad = pad_sequence(ysig,   batch_first=True) # (B, W_max)
+    ybin_pad = pad_sequence(ybin, batch_first=True)   # (B, W_max)
+    yret_pad = pad_sequence(yrets, batch_first=True)  # (B, W_max)
+    yter_pad = pad_sequence(yter, batch_first=True)   # (B, W_max)
+    rc_pad   = pad_sequence(rc_list, batch_first=True) # (B, W_max)
 
-    # Weekday tensor and ts_list 
-    wd_tensor = torch.tensor(wd_list, dtype=torch.long)
+    # Weekday tensor per-day (B,)
+    wd_tensor = torch.tensor(wd_list, dtype=torch.long)  # (B,)
 
-    # Return all padded tensors, timestamps, and sequence lengths
-    return x_pad, ysig_pad, ybin_pad, yret_pad, yter_pad, rc_pad, wd_tensor, list(ts_list), lengths
+    # Flatten first two dims to canonical per-window shapes (N = B * W_max)
+    B, W_max = ysig_pad.shape[0], ysig_pad.shape[1]
+    T = x_pad.shape[2]
+    F = x_pad.shape[3]
 
+    x_flat    = x_pad.contiguous().view(B * W_max, T, F)   # (N, T, F)
+    ysig_flat = ysig_pad.contiguous().view(B * W_max)      # (N,)
+    ybin_flat = ybin_pad.contiguous().view(B * W_max)      # (N,)
+    yret_flat = yret_pad.contiguous().view(B * W_max)      # (N,)
+    yter_flat = yter_pad.contiguous().view(B * W_max)      # (N,)
+    rc_flat   = rc_pad.contiguous().view(B * W_max)        # (N,)
+
+    # Expand weekday per-window so it aligns with flattened rows
+    wd_expanded = wd_tensor.unsqueeze(1).expand(-1, W_max).contiguous().view(B * W_max)  # (N,)
+
+    # Return flattened per-window tensors plus per-day metadata (ts_list, lengths) unchanged
+    return x_flat, ysig_flat, ybin_flat, yret_flat, yter_flat, rc_flat, wd_expanded, list(ts_list), lengths
 
     
 ###############
@@ -932,39 +998,41 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
         seq_len_full = x_batch.size(2) if x_batch.dim() >= 3 else (x_batch.size(1) if x_batch.dim() >= 2 else None)
         feat_dim = x_batch.size(-1)
         
-        # Build per-sample segments padded/truncated to seq_len_full
+        # Build per-day segments from flattened per-window x_batch and seq_lengths
         segments = []
         seg_lens = []
-        for i in range(B):
-            sl = int(seq_lengths[i].item()) if torch.is_tensor(seq_lengths[i]) else int(seq_lengths[i])
-            if sl <= 0:
+        start = 0
+        for i, L in enumerate(seq_lengths):
+            Li = int(L.item()) if torch.is_tensor(L) else int(L)
+            if Li <= 0:
+                # represent empty day as empty (0, T, F) tensor for bookkeeping
+                segments.append(x_batch.new_zeros((0, seq_len_full, feat_dim)))
+                seg_lens.append(0)
                 continue
-
-            sample_tensor = x_batch[i]
-            take = min(sl, seq_len_full)
-            try:
-                idx = torch.arange(take, device=sample_tensor.device)
-                seg = sample_tensor.index_select(1, idx)
-            except Exception:
-                seg = sample_tensor[:, :take, :] if sample_tensor.dim() >= 3 else sample_tensor[:take, :]
-
-            cur_len = seg.size(1) if seg.dim() >= 2 else seg.size(0)
+            end = start + Li
+            seg = x_batch[start:end]   # (Li, T, F)
+            # pad in time dim to seq_len_full if needed
+            cur_len = seg.size(1) if seg.dim() >= 2 else 0
             if cur_len < seq_len_full:
                 pad_rows = seq_len_full - cur_len
-                pad_tensor = torch.zeros((seg.size(0), pad_rows, feat_dim), device=seg.device, dtype=seg.dtype) if seg.dim() >= 2 else torch.zeros((pad_rows, feat_dim), device=seg.device, dtype=seg.dtype)
-                seg = torch.cat([seg, pad_tensor], dim=1) if seg.dim() >= 2 else torch.cat([seg, pad_tensor], dim=0)
-
+                pad_tensor = torch.zeros((seg.size(0), pad_rows, feat_dim), device=seg.device, dtype=seg.dtype)
+                seg = torch.cat([seg, pad_tensor], dim=1)
             segments.append(seg)
-            seg_lens.append(take)
+            seg_lens.append(min(Li, seq_len_full))
+            start = end
 
-        # Stack and reshape to [N_segments, seq_len, feat]
-        stacked = torch.stack(segments, dim=0)
-        if stacked.dim() == 4:
-            B_valid, G_actual, seq_len_target, feat_dim = stacked.size()
-            windows_tensor = stacked.view(-1, seq_len_target, feat_dim).to(device)
-        elif stacked.dim() == 3:
-            B_valid, seq_len_target, feat_dim = stacked.size()
-            windows_tensor = stacked.view(-1, seq_len_target, feat_dim).to(device)
+        # (flatten to 3D): concatenate non-empty per-day segments into a single windows tensor (N, T, F)
+        flat_segments = [s for s in segments if s.numel() != 0]
+        if not flat_segments:
+            # no windows in this batch
+            return None, None, prev_day
+
+        # Concatenate along window dimension to get (N, seq_len_full, feat_dim)
+        windows_tensor = torch.cat(flat_segments, dim=0).to(device)
+        B_valid = len(flat_segments)
+        seq_len_target = windows_tensor.size(1)
+        feat_dim = windows_tensor.size(2)
+
 
         num_segments = int(windows_tensor.size(0))
         mean_seg_len = float(sum(seg_lens) / len(seg_lens)) if seg_lens else float(seq_len_target)
@@ -1091,7 +1159,6 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
             env["device_name"] = torch.cuda.get_device_name(device)
         else:
             env["device_name"] = platform.node()  # lightweight fallback host id
-
 
         # prefer explicit optimizer arg
         opt = optimizer or getattr(model, "optimizer", None) or globals().get("optimizer", None)
@@ -1371,8 +1438,8 @@ def log_epoch_summary(
     base_tr_pers:     float,
     base_vl_mean:     float,
     base_vl_pers:     float,
-    avg_main_loss:    float,
-    avg_aux_loss:     float,
+    avg_base_loss:    float,
+    avg_delta_loss:     float,
     log_file:         Path,
     top_k:            int,
     hparams:          dict,
@@ -1491,9 +1558,9 @@ def log_epoch_summary(
 
     # prepare loss tokens if available
     loss_tokens = ""
-    loss_tokens = f"MAIN_LOSS={avg_main_loss:.4e}"
-    aux_ratio = avg_aux_loss / (avg_main_loss + 1e-12)
-    loss_tokens += f",AUX_LOSS={avg_aux_loss:.4e},AUX_RATIO={aux_ratio:.3e}"
+    loss_tokens = f"BASE_LOSS={avg_base_loss:.4e}"
+    delta_ratio = avg_delta_loss / (avg_base_loss + 1e-12)
+    loss_tokens += f",DELTA_LOSS={avg_delta_loss:.4e},DELTA_RATIO={delta_ratio:.3e}"
 
     # 8) # compact Top-K: dedupe by short name, show all non-zero, collapse tiny into one token
     def short_name(n):
@@ -1530,14 +1597,16 @@ def log_epoch_summary(
     # 10) Optional scheduler percent-complete token (read-only, best-effort)
     sched_pct_token = ""
     sched_obj = getattr(optimizer, "scheduler", None) or globals().get("scheduler", None)
-
-    if sched_obj is not None and hasattr(sched_obj, "_total_steps"):
-        total = int(getattr(sched_obj, "_total_steps"))
-        # prefer a step counter if available, otherwise use last_epoch
+    if sched_obj is not None:
+        total = getattr(sched_obj, "_total_steps", None) or getattr(sched_obj, "total_steps", None)
+        # prefer explicit step counters
         step_idx = getattr(sched_obj, "last_epoch", None)
         if step_idx is None:
             step_idx = getattr(sched_obj, "_step_count", None)
-        if step_idx is not None and total > 0:
+        if total is None:
+            # if total is missing but scheduler has been given expected_total elsewhere, try that attribute
+            total = getattr(sched_obj, "expected_total", None)
+        if total is not None and step_idx is not None and int(total) > 0:
             pct = min(100.0, max(0.0, 100.0 * float(step_idx) / float(total)))
             sched_pct_token = f"SCHED_PCT={pct:.1f}%"
 
@@ -1591,13 +1660,10 @@ def log_epoch_summary(
             baseline = getattr(model, "_first_layer_gn", {}).get(name)
         except Exception:
             baseline = None
-        # if no baseline stored yet, store this epoch's value as baseline
+        # when baseline not stored, store and also emit the baseline value
         if baseline is None:
-            try:
-                model._first_layer_gn[name] = float(curr_g)
-                ratio = 1.0
-            except Exception:
-                ratio = 1.0
+            model._first_layer_gn[name] = float(curr_g)
+            pairs.append(f"{name.split('.')[-2:][-1]}:{curr_g:.3e}/1.00")   # show baseline ratio 1.00
         else:
             ratio = curr_g / max(baseline, 1e-12)
             label = ".".join(name.split('.')[-2:])
