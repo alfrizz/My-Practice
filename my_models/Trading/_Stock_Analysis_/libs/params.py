@@ -28,7 +28,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 # model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.09330
+sel_val_rmse = 0.09274
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -122,7 +122,7 @@ hparams = {
     # only active if USE_SHORT_LSTM = True
     "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
     "SHORT_UNITS":          96,      # short-LSTM hidden dim; ↑capacity, ↓latency
-    "DROPOUT_SHORT":        0.0,     # dropout after short-LSTM; ↑regularization
+    "DROPOUT_SHORT":        0.05,     # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     # only active if USE_TRANSFORMER = True (requires use_short_lstm)
@@ -134,7 +134,7 @@ hparams = {
     # ── Projection + (optional) Long Bi-LSTM ──────────────
     # DROPOUT_LONG used either after projection or after long-LSTM
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
-    "DROPOUT_LONG":         0.0,     # dropout after projection (or long-LSTM)
+    "DROPOUT_LONG":         0.05,     # dropout after projection (or long-LSTM)
     "LONG_UNITS":           64,      # long-LSTM hidden dim; ↑feature width
 
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
@@ -142,8 +142,8 @@ hparams = {
     "PRED_HIDDEN":           96,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
     "ALPHA_SMOOTH":          0.0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
-    "USE_DELTA":             True,    # enable Delta baseline vs features predictions head
-    "LAMBDA_DELTA":          0.1,      # Delta residual loss weight
+    "USE_DELTA":             False,    # enable Delta baseline vs features predictions head
+    "LAMBDA_DELTA":          0.05,      # Delta residual loss weight
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs

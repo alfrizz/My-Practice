@@ -743,6 +743,25 @@ def model_training_loop(
         vl_metrics, vl_preds, vl_base_preds, vl_targs = eval_on_loader(val_loader, model)
         tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
         vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
+
+        # ###############
+        # # after eval_on_loader (you already have vl_preds, vl_base_preds, vl_targs, vl_metrics)
+        # print("val rmse reported:", vl_metrics["rmse"])
+        # rmse_np = float(np.sqrt(np.mean((vl_preds - vl_targs)**2)))
+        # rmse_base = float(np.sqrt(np.mean((vl_base_preds - vl_targs)**2)))
+        # rmse_mean = float(np.sqrt(np.mean((np.mean(vl_targs) - vl_targs)**2)))
+        # print("rmse_np:", rmse_np, "rmse_base:", rmse_base, "rmse_constant_mean:", rmse_mean)
+        # # show first 20 examples
+        # for a,b in zip(vl_preds[:20].tolist(), vl_targs[:20].tolist()):
+        #     print(f"pred={a:.6f}  targ={b:.6f}  err={a-b:.6f}")
+        # # from eval_on_loader you have arrays; compute delta preds if not returned
+        # val_delta_preds = vl_preds - vl_base_preds
+        # print("val_base mean/std", np.mean(vl_base_preds), np.std(vl_base_preds))
+        # print("val_delta mean/std", np.mean(val_delta_preds), np.std(val_delta_preds))
+        # print("val_total mean/std", np.mean(vl_preds), np.std(vl_preds))
+        # print("targs dtype/min/max/mean", vl_targs.dtype, vl_targs.min(), vl_targs.max(), vl_targs.mean())
+        # print("preds dtype/min/max/mean", vl_preds.dtype, vl_preds.min(), vl_preds.max(), vl_preds.mean())
+        # ###############
         
         avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
         avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
