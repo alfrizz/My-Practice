@@ -333,28 +333,6 @@ class ModelClass(nn.Module):
 ######################################################################################################
 
 
-class SmoothMSELoss(nn.Module):
-    """
-    Combined level + slope MSE: standard MSE mean + α*MSE of one‐step diffs.
-    """
-    def __init__(self, alpha: float = 0.0):
-        super().__init__()
-        self.alpha = alpha
-
-    def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
-        # final‐step head
-        assert preds.shape == targs.shape, "preds and targs must have identical shapes"
-        L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
-        if self.alpha <= 0:
-            return L1
-        dp = preds[1:] - preds[:-1]
-        dt =  targs[1:] - targs[:-1]
-        L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
-        return L1 + self.alpha * L2
-
-
-############################
-
 
 def compute_baselines(loader) -> tuple[float, float]:
     """
@@ -427,20 +405,48 @@ def _reset_states(
     Returns:
       the new day-of-week for next call
     """
-    day = int(wd_i.item())
+    if not hasattr(model, "_reset_log"): model._reset_log = []
+    day = int(wd_i)
 
     # daily reset if the day changed
     if prev_day is None or day != prev_day:
         model.reset_short()
+        model._reset_log.append(("short", day))
 
         # weekly reset if we've wrapped past the end of the week
         if prev_day is not None and day < prev_day:
             model.reset_long()
+            model._reset_log.append(("long", day))
+
 
     return day
 
-    
-###############
+
+############################ 
+
+
+class CustomMSELoss(nn.Module):
+    """
+    Combined level + slope MSE: standard MSE mean + α*MSE of one‐step diffs.
+    alpha: slope-penalty weight; ↑smoothness, ↓spike fidelity
+    """
+    def __init__(self, alpha: float = 0.0):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
+        # final‐step head
+        assert preds.shape == targs.shape, "preds and targs must have identical shapes"
+        L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
+        if self.alpha <= 0 or preds.numel() < 2:
+            return L1
+        dp = preds[1:] - preds[:-1]
+        dt =  targs[1:] - targs[:-1]
+        L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
+        return L1 + self.alpha * L2
+
+
+############################
 
 
 def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
@@ -492,12 +498,6 @@ def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
     """
     device = x_batch.device
 
-    # fixed window length (must exist in your global hparams)
-    try:
-        T = int(params.hparams["LOOK_BACK"])
-    except Exception:
-        raise RuntimeError("LOOK_BACK must be available in params.hparams for window assembly")
-
     # Quick sanity
     if not (isinstance(seq_lengths, (list, tuple)) and sum(seq_lengths) == x_batch.size(0)):
         raise RuntimeError(f"_prepare_windows_and_targets_batch expects seq_lengths summing to x_batch.size(0); got seq_lengths={seq_lengths} x_batch.shape={tuple(x_batch.shape)}")
@@ -507,11 +507,7 @@ def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
     start = 0
 
     for day_idx, L in enumerate(seq_lengths):
-        # call reset once per day
-        try:
-            prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)
-        except TypeError:
-            prev_day = reset_state_fn(model, day_idx, prev_day)
+        prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)  
 
         if L <= 0:
             start += L
@@ -533,7 +529,6 @@ def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
     return windows_tensor, targets_tensor, prev_day
 
 
-
 ########################
 
 
@@ -544,15 +539,15 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
     Returns: (metrics_dict, preds_array, base_preds_array, targets_array)
     - Moves model to current parameter device and runs in eval mode with no grad.
     - Preserves model LSTM state across windows using prev_day and _prepare_windows_and_targets_batch.
-    - Calls model(windows) -> (base, delta) and composes final = base + delta.
-    - Collects CPU numpy arrays: preds (final), base_preds, and targets for metrics.
-    - Stores last_val_preds, last_val_targs, last_val_base on the model for quick inspection.
+    - Calls model(windows) -> (base, delta) and composes total = base + delta.
+    - Collects CPU numpy arrays: tot_preds, base_preds, and targets for metrics.
+    - Stores last_val_tot_preds, last_val_targs, last_val_base_preds on the model for logging-
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
     model.h_short = model.h_long = None
     prev_day = None
-    all_preds, all_targs, all_base = [], [], []
+    all_basepreds, all_totpreds, all_targs = [], [], []
 
     with torch.no_grad():
         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
@@ -560,7 +555,6 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
 
             x_batch = x_batch.to(device, non_blocking=True)
             y_signal = y_signal.to(device, non_blocking=True)
-            wd = wd.to(device, non_blocking=True)
 
             # prepare windows and per-window scalar targets (single helper)
             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
@@ -570,26 +564,23 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
                 continue
    
             base_tensor, delta_tensor = model(windows_tensor)
-            final_tensor = base_tensor + delta_tensor
-            assert final_tensor.dim() == 2 and final_tensor.size(1) == 1
+            total_tensor = base_tensor + delta_tensor
+            assert total_tensor.dim() == 2 and total_tensor.size(1) == 1
             
-            # preds and base as CPU 1D lists
-            preds_batch = final_tensor.reshape(final_tensor.size(0), -1)[:, 0].detach().cpu()
-            base_batch  = base_tensor.reshape(base_tensor.size(0), -1)[:, 0].detach().cpu()
-            
-            all_preds.extend(preds_batch.tolist())
+            # total and base preds as CPU 1D lists
+            all_basepreds.extend(base_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
+            all_totpreds.extend(total_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
             all_targs.extend(targets_tensor.cpu().tolist())
-            all_base.extend(base_batch.tolist())
+            
+    val_base_preds = np.array(all_basepreds, dtype=float)
+    val_tot_preds = np.array(all_totpreds, dtype=float)
+    val_targs = np.array(all_targs, dtype=float)
 
-    preds = np.array(all_preds, dtype=float)
-    targs = np.array(all_targs, dtype=float)
-    base_preds = np.array(all_base, dtype=float)
-
-    model.last_val_preds = torch.from_numpy(preds).float()
-    model.last_val_targs = torch.from_numpy(targs).float()
-    model.last_val_base  = torch.from_numpy(base_preds).float()
-
-    return _compute_metrics(preds, targs), preds, base_preds, targs
+    # model.last_val_base_preds = torch.from_numpy(base_preds).float()
+    model.last_val_tot_preds  = torch.from_numpy(val_tot_preds).float()
+    model.last_val_targs = torch.from_numpy(val_targs).float()
+    
+    return _compute_metrics(val_tot_preds, val_targs), _compute_metrics(val_base_preds, val_targs), val_tot_preds, val_base_preds, val_targs
 
 
 ###################################################################################################### 
@@ -608,15 +599,14 @@ def model_training_loop(
     clipnorm:            float,
     alpha_smooth:        float,
     lambda_delta:        float,
-    top_k:               int
 ) -> float:
     """
     Train the model with a baseline head and a detached residual (delta) head using AMP.
     
     Behavior summary
     - model(windows) -> (base, delta); prediction total = base + delta.
-    - base is supervised by base_loss = SmoothMSELoss(base, targets).
-    - delta is trained to match detached residual delta_target = (targets - base).detach(); delta_loss = MSE(delta, delta_target).
+    - base is supervised by base_loss = CustomMSELoss(base, targets) smoothed.
+    - delta is trained to match detached residual delta_target = (targets - base).detach(); delta_loss = CustomMSELoss(delta, delta_target) not smoothed.
     - Combined objective: total_loss = base_loss + lambda_delta * delta_loss.
     - Uses torch.amp.autocast + GradScaler; unscale -> clip_grad_norm -> scaler.step/update; scheduler.step guarded to only run when optimizer.step executed.
     - Aggregates epoch metrics on total predictions and runs validation via eval_on_loader.
@@ -634,17 +624,19 @@ def model_training_loop(
     best_val, best_state, patience = float("inf"), None, 0
     models_dir = Path(params.models_folder)
 
-    smooth_loss = SmoothMSELoss(alpha_smooth) # instantiate SmoothMSELoss
+    MSE_base = CustomMSELoss(alpha=alpha_smooth) 
+    MSE_delta = CustomMSELoss(alpha=0) # alpha default 0.0
+
     # compute baselines for logging
-    base_tr_mean, base_tr_pers = compute_baselines(train_loader)
-    base_vl_mean, base_vl_pers = compute_baselines(val_loader)
+    bl_tr_mean, bl_tr_pers = compute_baselines(train_loader)
+    bl_val_mean, bl_val_pers = compute_baselines(val_loader)
 
     for epoch in range(1, max_epochs + 1):
 
         model.train()
         model.h_short = model.h_long = None
 
-        train_preds, train_targs = [], []
+        tr_base_preds, tr_tot_preds, tr_targs, tr_delta_preds, tr_delta_targs = [], [], [], [], []            
         prev_day = None
 
         epoch_total_loss_sum = 0.0
@@ -660,7 +652,6 @@ def model_training_loop(
 
             x_batch = x_batch.to(device, non_blocking=True)
             y_signal = y_signal.to(device, non_blocking=True)
-            wd = wd.to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
 
@@ -676,22 +667,33 @@ def model_training_loop(
                 # model now returns primitive outputs: base (B,1) and delta (B,1)
                 base_tensor, delta_tensor = model(windows_tensor)  # base, delta each (B,1)
                 total_tensor = base_tensor + delta_tensor 
-
-                # flatten to (B,) vectors, keep consistent names
-                total_tensor = total_tensor.reshape(total_tensor.size(0), -1)[:, 0]
-                delta_tensor = delta_tensor.reshape(delta_tensor.size(0), -1)[:, 0]
+                
                 base_tensor  = base_tensor.reshape(base_tensor.size(0), -1)[:, 0]
+                delta_tensor = delta_tensor.reshape(delta_tensor.size(0), -1)[:, 0]
+                total_tensor = total_tensor.reshape(total_tensor.size(0), -1)[:, 0]
                 assert total_tensor.shape[0] == targets_tensor.shape[0], "mismatch between model outputs and assembled targets"
 
                 # base loss: supervise the baseline head only
-                base_loss = smooth_loss(base_tensor, targets_tensor)
+                base_loss = MSE_base(base_tensor, targets_tensor)
+                
                 # teach delta to predict the detached residual
-                delta_target = (targets_tensor - base_tensor).detach()
-                delta_loss = (delta_tensor - delta_target).pow(2).mean()
+                if model.use_delta and lambda_delta > 0:
+                    delta_target = (targets_tensor - base_tensor).detach()
+                    delta_loss = MSE_delta(delta_tensor, delta_target)
+                    tr_delta_preds.extend(delta_tensor.detach().cpu().tolist())
+                    tr_delta_targs.extend(delta_target.cpu().tolist())
+                else:
+                    delta_loss = torch.tensor(0.0, device=base_tensor.device)
+
+                tr_base_preds.extend(base_tensor.detach().cpu().tolist())
+                tr_tot_preds.extend(total_tensor.detach().cpu().tolist())
+                tr_targs.extend(targets_tensor.cpu().tolist())
+                epoch_samples += int(targets_tensor.size(0))
+
                 # combined training objective (final scalar used for backward)
                 total_loss = base_loss + lambda_delta * delta_loss
 
-            # Backward (AMP) with event timing and a single host sync
+            # Backward (AMP) with event timing and a single host sync (for logging)
             if torch.cuda.is_available():
                 be0 = torch.cuda.Event(enable_timing=True); be1 = torch.cuda.Event(enable_timing=True)
                 be0.record()
@@ -716,7 +718,6 @@ def model_training_loop(
             _called = {"v": False}
             _real = optimizer.step
             optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
-
             try:
                 scaler.step(optimizer)
             finally:
@@ -731,38 +732,18 @@ def model_training_loop(
             epoch_delta_loss_sum += float(delta_loss.detach().cpu())
             epoch_loss_count += 1
 
-            train_preds.extend(total_tensor.detach().cpu().tolist())
-            train_targs.extend(targets_tensor.cpu().tolist())
-            epoch_samples += int(targets_tensor.size(0))
-
         # Metrics & validation
-        tr_metrics = _compute_metrics(
-            np.array(train_preds, dtype=float),
-            np.array(train_targs, dtype=float),
-        )
-        vl_metrics, vl_preds, vl_base_preds, vl_targs = eval_on_loader(val_loader, model)
-        tr_rmse, tr_mae, tr_r2 = tr_metrics["rmse"], tr_metrics["mae"], tr_metrics["r2"]
-        vl_rmse, vl_mae, vl_r2 = vl_metrics["rmse"], vl_metrics["mae"], vl_metrics["r2"]
-
-        # ###############
-        # # after eval_on_loader (you already have vl_preds, vl_base_preds, vl_targs, vl_metrics)
-        # print("val rmse reported:", vl_metrics["rmse"])
-        # rmse_np = float(np.sqrt(np.mean((vl_preds - vl_targs)**2)))
-        # rmse_base = float(np.sqrt(np.mean((vl_base_preds - vl_targs)**2)))
-        # rmse_mean = float(np.sqrt(np.mean((np.mean(vl_targs) - vl_targs)**2)))
-        # print("rmse_np:", rmse_np, "rmse_base:", rmse_base, "rmse_constant_mean:", rmse_mean)
-        # # show first 20 examples
-        # for a,b in zip(vl_preds[:20].tolist(), vl_targs[:20].tolist()):
-        #     print(f"pred={a:.6f}  targ={b:.6f}  err={a-b:.6f}")
-        # # from eval_on_loader you have arrays; compute delta preds if not returned
-        # val_delta_preds = vl_preds - vl_base_preds
-        # print("val_base mean/std", np.mean(vl_base_preds), np.std(vl_base_preds))
-        # print("val_delta mean/std", np.mean(val_delta_preds), np.std(val_delta_preds))
-        # print("val_total mean/std", np.mean(vl_preds), np.std(vl_preds))
-        # print("targs dtype/min/max/mean", vl_targs.dtype, vl_targs.min(), vl_targs.max(), vl_targs.mean())
-        # print("preds dtype/min/max/mean", vl_preds.dtype, vl_preds.min(), vl_preds.max(), vl_preds.mean())
-        # ###############
+        tr_tot_metrics = _compute_metrics(np.array(tr_tot_preds, dtype=float), np.array(tr_targs, dtype=float))
+        tr_base_metrics = _compute_metrics(np.array(tr_base_preds, dtype=float), np.array(tr_targs, dtype=float))  
+        if len(tr_delta_preds) > 0:
+            tr_delta_metrics = _compute_metrics(np.array(tr_delta_preds, dtype=float), np.array(tr_delta_targs, dtype=float))
+        else:
+            tr_delta_metrics = {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
+        tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
         
+        val_tot_metrics, val_base_metrics, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
+        val_tot_rmse, val_tot_r2 = val_tot_metrics["rmse"], val_tot_metrics["r2"]
+
         avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
         avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
         avg_delta_loss = epoch_delta_loss_sum / max(1, epoch_loss_count)
@@ -775,26 +756,28 @@ def model_training_loop(
             epoch,
             model,
             optimizer,
-            train_metrics=tr_metrics,
-            val_metrics=vl_metrics,
-            val_preds=vl_preds,
-            val_base_preds=vl_base_preds,
-            val_targets=vl_targs,
-            base_tr_mean=base_tr_mean,
-            base_tr_pers=base_tr_pers,
-            base_vl_mean=base_vl_mean,
-            base_vl_pers=base_vl_pers,
+            tr_tot_metrics=tr_tot_metrics,
+            tr_base_metrics=tr_base_metrics,
+            tr_delta_metrics=tr_delta_metrics,
+            val_tot_metrics=val_tot_metrics,
+            val_base_metrics=val_base_metrics,
+            val_tot_preds=val_tot_preds,
+            val_base_preds=val_base_preds,
+            val_targs=val_targs,
+            bl_tr_mean=bl_tr_mean,
+            bl_tr_pers=bl_tr_pers,
+            bl_val_mean=bl_val_mean,
+            bl_val_pers=bl_val_pers,
             avg_base_loss=avg_base_loss,
             avg_delta_loss=avg_delta_loss,
             log_file=params.log_file,
-            top_k=top_k,
             hparams=params.hparams,
         )
-        live_plot.update(tr_rmse, vl_rmse)
+        live_plot.update(tr_tot_rmse, val_tot_rmse)
 
         best_val, improved, *_ = models_core.maybe_save_chkpt(
-            models_dir, model, vl_rmse, best_val,
-            {"rmse": tr_rmse}, {"rmse": vl_rmse},
+            models_dir, model, val_tot_rmse, best_val,
+            {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse},
             live_plot, params
         )
 
@@ -803,8 +786,8 @@ def model_training_loop(
         current_lr = optimizer.param_groups[0]["lr"]
         print(
             f"Epoch {epoch:02d}  "
-            f"TRAIN→ RMSE={tr_rmse:.5f}, R²={tr_r2:.3f} |  "
-            f"VALID→ RMSE={vl_rmse:.5f}, R²={vl_r2:.3f} |  "
+            f"TRAIN→ RMSE={tr_tot_rmse:.5f}, R²={tr_tot_r2:.3f} |  "
+            f"VALID→ RMSE={val_tot_rmse:.5f}, R²={val_tot_r2:.3f} |  "
             f"lr={current_lr:.2e} |  "
             f"loss={avg_loss:.5e} |  "
             f"improved={bool(improved)}"
@@ -823,7 +806,7 @@ def model_training_loop(
         model.load_state_dict(best_state)
         models_core.save_final_chkpt(
             models_dir, best_state, best_val, params,
-            tr_metrics, vl_metrics, live_plot, suffix="_fin"
+            tr_tot_metrics, val_tot_metrics, live_plot, suffix="_fin"
         )
 
     for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):

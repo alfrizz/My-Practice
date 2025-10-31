@@ -121,48 +121,47 @@ hparams = {
     # ── Short Bi-LSTM toggle ──────────────────────────────
     # only active if USE_SHORT_LSTM = True
     "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
-    "SHORT_UNITS":          96,      # short-LSTM hidden dim; ↑capacity, ↓latency
-    "DROPOUT_SHORT":        0.05,     # dropout after short-LSTM; ↑regularization
+    "SHORT_UNITS":          128,      # short-LSTM hidden dim; ↑capacity, ↓latency
+    "DROPOUT_SHORT":        0.15,     # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     # only active if USE_TRANSFORMER = True (requires use_short_lstm)
     "USE_TRANSFORMER":      True,    # enable single-layer TransformerEncoder
-    "TRANSFORMER_LAYERS":   1,       # number of encoder layers
+    "TRANSFORMER_LAYERS":   2,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
 
     # ── Projection + (optional) Long Bi-LSTM ──────────────
     # DROPOUT_LONG used either after projection or after long-LSTM
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
-    "DROPOUT_LONG":         0.05,     # dropout after projection (or long-LSTM)
+    "DROPOUT_LONG":         0.15,     # dropout after projection (or long-LSTM)
     "LONG_UNITS":           64,      # long-LSTM hidden dim; ↑feature width
 
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
     "FLATTEN_MODE":          "last",   # format to be provided to regression head: "flatten" | "last" | "pool"
-    "PRED_HIDDEN":           96,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "PRED_HIDDEN":           128,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
     "ALPHA_SMOOTH":          0.0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
-    "USE_DELTA":             False,    # enable Delta baseline vs features predictions head
-    "LAMBDA_DELTA":          0.05,      # Delta residual loss weight
+    "USE_DELTA":             True,    # enable Delta baseline vs features predictions head
+    "LAMBDA_DELTA":          0.01,      # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
-    "MAX_EPOCHS":            90,     # max epochs
-    "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "MAX_EPOCHS":            70,     # max epochs
+    "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
+    "WEIGHT_DECAY":          5e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              3,     # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
-    "ONECYCLE_DIV_FACTOR":   5,     # start_lr = max_lr / div_factor
-    "ONECYCLE_FINAL_DIV":    50,     # end_lr   = max_lr / final_div_factor
-    "ONECYCLE_PCT_START":    0.2,    # fraction of total steps spent rising
+    "ONECYCLE_MAX_LR":       1.5e-3,   # peak LR in the cycle
+    "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
+    "ONECYCLE_FINAL_DIV":    100,     # end_lr   = max_lr / final_div_factor
+    "ONECYCLE_PCT_START":    0.15,    # fraction of total steps spent rising
     "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear'
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           32,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
+    "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "TOP_K":                 99,     # number of selected parameters for log diagnostic
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
 
