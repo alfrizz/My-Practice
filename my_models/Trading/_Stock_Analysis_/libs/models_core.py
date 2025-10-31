@@ -85,7 +85,7 @@ def build_tensors(
     payloads = []
     N_total = 0
 
-    for _, day_df in tqdm(day_groups, desc="Preparing days", leave=False):
+    for _, day_df in tqdm(day_groups, desc="Preparing days"):
         day_df = day_df.sort_index()
         T = len(day_df)
         if T <= look_back:
@@ -468,7 +468,7 @@ def split_to_day_datasets(
             X               = Xd,
             y_signal        = ys,
             y_return        = yr,
-            raw_close       = rc,   # now always a tensor
+            raw_close       = rc,  
             end_times       = et,
             sess_start_time = sess_start_time,
             signal_thresh   = signal_thresh,

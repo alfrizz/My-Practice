@@ -28,7 +28,7 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 # model_selected = simple_lstm # the correspondent .py model file must also be imported from libs.models
-sel_val_rmse = 0.09274
+sel_val_rmse = 0.09059
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -103,61 +103,61 @@ best_optuna_value, best_optuna_params = load_best_optuna_record()
 
 #########################################################################################################
 
+
 hparams = {
     "LOOK_BACK":            60,      # length of each input window
 
     # ── Input convolution toggle ──────────────────────────
-    # only active if USE_CONV = True
     "USE_CONV":              False,   # enable Conv1d + BatchNorm1d
     "CONV_K":                3,      # Conv1d kernel size; ↑local smoothing, ↓fine-detail
     "CONV_DILATION":         1,      # Conv1d dilation;   ↑receptive field, ↓granularity
+    "CONV_CHANNELS":         64,     # Conv1d output channels; ↑early-stage capacity, ↓compute
 
     # ── Temporal ConvNet (TCN) toggle ────────────────────
-    # only active if USE_TCN = True
-    "USE_TCN":              False,   # enable 2-layer dilated Conv1d stack
+    "USE_TCN":              False,   # enable dilated Conv1d stack
     "TCN_LAYERS":            2,      # number of dilated Conv1d layers
     "TCN_KERNEL":            3,      # kernel size for each TCN layer
+    "TCN_CHANNELS":          64,     # TCN output channels; independent from CONV_CHANNELS for flexibility
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
-    # only active if USE_SHORT_LSTM = True
     "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
-    "SHORT_UNITS":          128,      # short-LSTM hidden dim; ↑capacity, ↓latency
-    "DROPOUT_SHORT":        0.15,     # dropout after short-LSTM; ↑regularization
+    "SHORT_UNITS":          96,      # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
+    "DROPOUT_SHORT":        0.1,    # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
-    # only active if USE_TRANSFORMER = True (requires use_short_lstm)
-    "USE_TRANSFORMER":      True,    # enable single-layer TransformerEncoder
+    "USE_TRANSFORMER":      True,    # enable TransformerEncoder
+    "TRANSFORMER_D_MODEL":  96,      # transformer embedding width (d_model); adapter maps upstream features into this
     "TRANSFORMER_LAYERS":   2,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
-    "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
+    "TRANSFORMER_FF_MULT":  6,       # FFN expansion factor (d_model * MULT)
+    "DROPOUT_TRANS":        0.1,    # transformer dropout; ↑regularization
 
-    # ── Projection + (optional) Long Bi-LSTM ──────────────
-    # DROPOUT_LONG used either after projection or after long-LSTM
+    # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
-    "DROPOUT_LONG":         0.15,     # dropout after projection (or long-LSTM)
-    "LONG_UNITS":           64,      # long-LSTM hidden dim; ↑feature width
+    "DROPOUT_LONG":         0.1,     # dropout after projection (or long-LSTM)
+    "LONG_UNITS":           96,       # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
 
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
     "FLATTEN_MODE":          "last",   # format to be provided to regression head: "flatten" | "last" | "pool"
-    "PRED_HIDDEN":           128,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "PRED_HIDDEN":           96,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
     "ALPHA_SMOOTH":          0.0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
-    "USE_DELTA":             True,    # enable Delta baseline vs features predictions head
-    "LAMBDA_DELTA":          0.01,      # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
+    "USE_DELTA":             False,    # enable Delta baseline vs features predictions head
+    "LAMBDA_DELTA":          0.01,     # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            70,     # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          5e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              3,     # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       1.5e-3,   # peak LR in the cycle
+    "WEIGHT_DECAY":          3e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       3e-3,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
-    "ONECYCLE_FINAL_DIV":    100,     # end_lr   = max_lr / final_div_factor
-    "ONECYCLE_PCT_START":    0.15,    # fraction of total steps spent rising
+    "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
+    "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
     "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear'
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           64,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
+    "TRAIN_BATCH":           32,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
@@ -165,7 +165,9 @@ hparams = {
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
 
+
 #########################################################################################################
+
 
 def signal_parameters(ticker):
     '''

@@ -1,0 +1,136 @@
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2025-10-31T15:01:12.404453Z
+
+SINGLE RUN DIAGNOSTIC FORMAT (explanatory)
+    BATCH_SHAPE B=32 groups=451 seq_len_full=60 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)
+    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable
+      -> B: number of batch samples used to build windows (snapshot.B)
+      -> groups: number of logical groups used when flattening windows (snapshot.groups)
+      -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)
+      -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)
+      -> activation_mb: estimated activation footprint in MB computed from allocation delta (snapshot.activation_mb)
+      -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)
+      -> collector_ms: total wall-clock ms spent by the collector including sampling and CPU/GPU syncs (snapshot.collector_ms)
+      -> cpu_copy_bytes: bytes copied to host for predictions, shown human-readable in log (snapshot.cpu_copy_bytes)
+      -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)
+      -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)
+      -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)
+      -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)
+      -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)
+      -> pred_extra_ms: estimated CPU-side post-forward ms (collector_ms - full_forward_ms - per-seg-sum) (snapshot.pred_extra_ms)
+      -> gpu_allocated_bytes: raw GPU bytes allocated (snapshot.gpu_allocated_bytes)
+      -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)
+      -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)
+      -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)
+      -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)
+      -> mean_seg_len: average per-segment time-series length in timesteps (snapshot.mean_seg_len)
+      -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)
+      -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)
+      -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)
+      -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)
+      -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)
+      -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)
+      -> step_block_ms: placeholder for step-block timing if measured (snapshot.step_block_ms; reported 0.0 when not measured)
+      -> sum_seg_lens: sum of segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)
+      -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)
+
+PER-EPOCH LOG FORMAT (explanatory):
+  E{ep:02d}                : epoch number formatted with two digits
+  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts
+  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)
+  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum
+  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)
+  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation
+  TR[rmse,mae,r2]         : training metrics (RMSE, R^2, MAE) reported for the epoch (train_metrics)
+  VAL[rmse,mae,r2]         : validation metrics (RMSE, R^2, MAE) reported for the epoch (val_metrics)
+  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_tot_preds/model.last_val_targs (trend calibration)
+  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults to 0.00/0.000 when missing)
+  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB); in these logs FMB is high so validate baseline alignment
+  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec or windows/sec depending on implementation)
+  chk={val:.3f}           : checkpoint-score token printed as chk in the line (implementation-specific)
+  GPU={GiB:.2f}GiB         : optional high-water GPU memory in GiB when CUDA available (torch.cuda.max_memory_allocated)
+  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy
+  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio
+  G/U=name:grad_norm/update_ratio,... : parameter entries by gradient norm with their update ratios (short names use last one or two name segments)
+
+BASELINES:
+  TRAIN mean RMSE        = 0.09110
+  TRAIN persistence RMSE = 0.00940
+  VAL   mean RMSE        = 0.08234
+  VAL   persistence RMSE = 0.01207
+
+HYPERPARAMS:
+  LOOK_BACK = 60
+  USE_CONV = False
+  CONV_K = 3
+  CONV_DILATION = 1
+  CONV_CHANNELS = 64
+  USE_TCN = False
+  TCN_LAYERS = 2
+  TCN_KERNEL = 3
+  TCN_CHANNELS = 64
+  USE_SHORT_LSTM = True
+  SHORT_UNITS = 96
+  DROPOUT_SHORT = 0.1
+  USE_TRANSFORMER = True
+  TRANSFORMER_D_MODEL = 96
+  TRANSFORMER_LAYERS = 2
+  TRANSFORMER_HEADS = 4
+  TRANSFORMER_FF_MULT = 6
+  DROPOUT_TRANS = 0.1
+  USE_LONG_LSTM = False
+  DROPOUT_LONG = 0.1
+  LONG_UNITS = 96
+  FLATTEN_MODE = last
+  PRED_HIDDEN = 96
+  ALPHA_SMOOTH = 0.0
+  USE_DELTA = False
+  LAMBDA_DELTA = 0.01
+  MAX_EPOCHS = 70
+  EARLY_STOP_PATIENCE = 7
+  WEIGHT_DECAY = 3e-05
+  CLIPNORM = 3
+  ONECYCLE_MAX_LR = 0.003
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 100
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 32
+  VAL_BATCH = 1
+  TRAIN_WORKERS = 8
+  TRAIN_PREFETCH_FACTOR = 4
+  MICRO_SAMPLE_K = 16
+
+BATCH_SHAPE B=14432 groups=1 seq_len_full=20 feat=20
+MICRODETAIL ms: B=14432 activation_mb=32 backward_ms=164.57 collector_ms=333.90 cpu_copy_bytes=134B dataloader_ms=179.71 device_syncs_count=2 env={'python': '3.12.3', 'torch': '2.7.0a0+ecf3bae40a.nv25.02', 'cuda': '12.8', 'device_name': 'NVIDIA GeForce RTX 5080 Laptop GPU'} expected_segments=14432 feat_dim=20 full_forward_ms=12.69 gpu_allocated_bytes=251MB gpu_peak_mb=289 gpu_reserved_bytes=15550MB gpu_reserved_mb=15550 grads={'backbone': True, 'head': True} group_nonzero_counts=[44] groups=1 mean_seg_len=2.09 num_segments=67 out_bytes=134B out_dtype=torch.float16 out_numel=67 out_shape=(67, 1) param_bytes=1MB per_segment_p50_ms=4.20 per_segment_p90_ms=6.60 pred_extra_ms=243.08 raw_reg_shape=(67, 1) segments_per_sec=5279.17 seq_len_full=20 sum_seg_lens=67 windows_bytes=314KB
+
+E01 | OPTS[1:4.3e-04|cnts=[44]] | GN[head_flat=0.133,transformer=0.019,short_lstm=0.009,ln_flat=0.003,ln_proj=0.002,ln_short=0.001,TOT=0.134] | GD[2.2e-03,9.4e-03,9.9e-02] | UR[9.3e-07,1.0e-01] | LR_MAIN=4.3e-04 | lr=4.3e-04 | TR[0.123,0.086,-0.16,BASE_RMSE=0.123,DELTA_RMSE=nan] | VAL[0.104,0.072,0.09,BASE_RMSE=0.104] | BASE_LOSS=1.5033e-02,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.12261,DELTA_RMSE=nan | SCHED_PCT=1.4% | SR=0.011 | SL=0.00,HR=0.000 | FMB=0.0000 | T=40.8s,TP=42105.4seg/s | chk=0 | GPU=0.28GiB | LAYER_GN[weight_ih_l0:6.067e-03/1.00]
+G/U=head_flat.2.bias:0.029/1.0e-01, 1.linear2.weight:0.014/1.1e-06, head_flat.0.bias:0.009/7.0e-06, 0.linear2.weight:0.007/5.4e-07, self_attn.out_proj.weight:0.006/4.8e-07, short_lstm.weight_ih_l0:0.006/5.1e-07, 1.linear1.weight:0.005/1.5e-07, 1.self_attn.in_proj_weight:0.004/1.6e-07, 0.self_attn.in_proj_weight:0.003/1.2e-07, short_lstm.weight_ih_l0_reverse:0.003/2.8e-07, short_lstm.bias_ih_l0:0.003/1.0e-06, short_lstm.bias_hh_l0:0.003/1.1e-06, ln_flat.bias:0.002/5.9e-05, 0.linear1.weight:0.002/7.4e-08, ln_proj.bias:0.002/2.7e-05, 1.norm2.bias:0.002/2.7e-05, short_lstm.weight_hh_l0:0.002/1.2e-07, short_lstm.bias_ih_l0_reverse:0.002/6.0e-07, short_lstm.bias_hh_l0_reverse:0.002/5.9e-07, 1.linear2.bias:0.001/2.9e-06, 1.norm1.bias:0.001/1.8e-05, 0.norm2.bias:0.001/1.5e-05, self_attn.out_proj.bias:0.001/1.4e-05, ln_proj.weight:0.001/3.9e-08, 1.norm2.weight:0.001/3.9e-08, ln_flat.weight:0.001/3.9e-08, 0.norm1.bias:0.001/1.3e-05, 0.linear2.bias:0.001/1.6e-06, short_lstm.weight_hh_l0_reverse:0.001/3.9e-08, ln_short.bias:0.001/1.2e-05, 1.norm1.weight:0.001/2.8e-08, ln_short.weight:0.001/2.7e-08, 0.norm2.weight:0.001/2.6e-08, 1.self_attn.in_proj_bias:0.001/5.6e-06, 1.linear1.bias:0.001/1.6e-07, 0.norm1.weight:0.001/2.2e-08, 0.self_attn.in_proj_bias:0.000/3.7e-06, 0.linear1.bias:0.000/8.4e-08
+
+E02 | OPTS[1:8.1e-04|cnts=[44]] | GN[head_flat=0.135,short_lstm=0.023,transformer=0.018,ln_flat=0.002,ln_proj=0.002,ln_short=0.002,TOT=0.138] | GD[2.2e-03,1.2e-02,1.0e-01] | UR[2.6e-06,6.5e-02] | LR_MAIN=8.1e-04 | lr=8.1e-04 | TR[0.109,0.076,0.08,BASE_RMSE=0.109,DELTA_RMSE=nan] | VAL[0.101,0.076,0.15,BASE_RMSE=0.101] | BASE_LOSS=1.1929e-02,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.10922,DELTA_RMSE=nan | SCHED_PCT=2.9% | SR=0.012 | SL=0.00,HR=0.000 | FMB=0.0000 | T=38.8s,TP=44212.9seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:1.538e-02/2.54]
+G/U=head_flat.2.bias:0.032/6.5e-02, short_lstm.weight_ih_l0:0.015/2.4e-06, 1.linear2.weight:0.012/1.6e-06, head_flat.0.bias:0.010/1.3e-05, short_lstm.bias_ih_l0:0.009/6.1e-06, short_lstm.bias_hh_l0:0.009/6.5e-06, 0.linear2.weight:0.007/1.0e-06, short_lstm.weight_ih_l0_reverse:0.007/1.0e-06, self_attn.out_proj.weight:0.006/7.9e-07, short_lstm.weight_hh_l0:0.005/5.2e-07, 0.self_attn.in_proj_weight:0.005/3.4e-07, 1.self_attn.in_proj_weight:0.004/2.9e-07, 1.linear1.weight:0.004/2.3e-07, short_lstm.bias_ih_l0_reverse:0.004/2.6e-06, short_lstm.bias_hh_l0_reverse:0.004/2.6e-06, 0.linear1.weight:0.003/1.7e-07, ln_flat.bias:0.002/7.6e-05, ln_proj.bias:0.002/3.6e-05, 1.norm2.bias:0.002/3.6e-05, short_lstm.weight_hh_l0_reverse:0.001/1.4e-07, 1.norm1.bias:0.001/3.0e-05, 1.linear2.bias:0.001/4.8e-06, ln_short.bias:0.001/3.8e-05, 0.norm1.bias:0.001/3.8e-05, 0.norm2.bias:0.001/2.9e-05, self_attn.out_proj.bias:0.001/2.6e-05, ln_short.weight:0.001/7.7e-08, 0.linear2.bias:0.001/3.3e-06, ln_flat.weight:0.001/6.6e-08, 0.norm1.weight:0.001/5.3e-08, ln_proj.weight:0.001/4.6e-08, 1.norm2.weight:0.001/4.6e-08, 0.norm2.weight:0.001/4.6e-08, 0.self_attn.in_proj_bias:0.001/5.8e-06, 1.self_attn.in_proj_bias:0.001/9.4e-06, 1.norm1.weight:0.001/4.2e-08, 1.linear1.bias:0.000/2.5e-07, 0.linear1.bias:0.000/2.1e-07
+
+E03 | OPTS[1:1.4e-03|cnts=[44]] | GN[head_flat=0.008,short_lstm=0.002,transformer=0.001,ln_flat=0.000,ln_proj=0.000,ln_short=0.000,TOT=0.008] | GD[1.6e-04,7.1e-04,5.6e-03] | UR[2.7e-07,4.5e-03] | LR_MAIN=1.4e-03 | lr=1.4e-03 | TR[0.103,0.071,0.18,BASE_RMSE=0.103,DELTA_RMSE=nan] | VAL[0.095,0.066,0.24,BASE_RMSE=0.095] | BASE_LOSS=1.0612e-02,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.10302,DELTA_RMSE=nan | SCHED_PCT=4.3% | SR=0.015 | SL=0.00,HR=0.000 | FMB=0.0000 | T=40.3s,TP=42628.9seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:1.423e-03/0.23]
+G/U=head_flat.2.bias:0.002/4.5e-03, short_lstm.weight_ih_l0:0.001/3.6e-07, 1.linear2.weight:0.001/1.7e-07, short_lstm.weight_ih_l0_reverse:0.001/1.9e-07, 0.linear2.weight:0.001/1.2e-07, head_flat.0.bias:0.001/1.2e-06, self_attn.out_proj.weight:0.000/1.1e-07, 0.self_attn.in_proj_weight:0.000/4.9e-08, short_lstm.weight_hh_l0:0.000/6.5e-08, 1.self_attn.in_proj_weight:0.000/4.0e-08, 1.linear1.weight:0.000/3.2e-08, short_lstm.bias_ih_l0:0.000/3.5e-07, short_lstm.bias_hh_l0:0.000/3.7e-07, 0.linear1.weight:0.000/3.0e-08, short_lstm.bias_ih_l0_reverse:0.000/2.8e-07, short_lstm.bias_hh_l0_reverse:0.000/2.7e-07, short_lstm.weight_hh_l0_reverse:0.000/2.6e-08, ln_flat.bias:0.000/5.5e-06, ln_proj.bias:0.000/2.4e-06, 1.norm2.bias:0.000/2.4e-06, ln_short.weight:0.000/1.3e-08, ln_proj.weight:0.000/1.3e-08, 1.norm2.weight:0.000/1.3e-08, ln_flat.weight:0.000/1.2e-08, ln_short.bias:0.000/3.0e-06, 0.norm1.weight:0.000/1.1e-08, 1.norm1.weight:0.000/1.1e-08, 1.norm1.bias:0.000/2.2e-06, 1.linear2.bias:0.000/4.3e-07, 0.norm2.bias:0.000/2.3e-06, 0.norm2.weight:0.000/8.7e-09, 0.norm1.bias:0.000/2.9e-06, self_attn.out_proj.bias:0.000/2.0e-06, 0.linear2.bias:0.000/2.9e-07, 1.self_attn.in_proj_bias:0.000/8.8e-07, 0.self_attn.in_proj_bias:0.000/1.3e-07, 1.linear1.bias:0.000/3.1e-08, 0.linear1.bias:0.000/2.5e-08
+
+E04 | OPTS[1:2.0e-03|cnts=[44]] | GN[head_flat=0.064,short_lstm=0.012,transformer=0.007,ln_flat=0.001,ln_proj=0.001,ln_short=0.001,TOT=0.066] | GD[1.1e-03,5.4e-03,4.8e-02] | UR[2.9e-06,4.0e-02] | LR_MAIN=2.0e-03 | lr=2.0e-03 | TR[0.102,0.070,0.20,BASE_RMSE=0.102,DELTA_RMSE=nan] | VAL[0.095,0.063,0.25,BASE_RMSE=0.095] | BASE_LOSS=1.0331e-02,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.10164,DELTA_RMSE=nan | SCHED_PCT=5.7% | SR=0.017 | SL=0.00,HR=0.000 | FMB=0.0000 | T=39.4s,TP=43544.6seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:7.830e-03/1.29]
+G/U=head_flat.2.bias:0.018/4.0e-02, short_lstm.weight_ih_l0:0.008/2.9e-06, short_lstm.weight_ih_l0_reverse:0.005/2.0e-06, head_flat.0.bias:0.005/1.6e-05, short_lstm.bias_ih_l0:0.004/6.9e-06, short_lstm.bias_hh_l0:0.004/7.4e-06, 1.linear2.weight:0.004/1.4e-06, short_lstm.bias_ih_l0_reverse:0.003/4.9e-06, short_lstm.bias_hh_l0_reverse:0.003/4.8e-06, 0.linear2.weight:0.003/8.5e-07, 0.self_attn.in_proj_weight:0.002/3.9e-07, self_attn.out_proj.weight:0.002/7.2e-07, short_lstm.weight_hh_l0:0.002/4.4e-07, 1.self_attn.in_proj_weight:0.002/2.9e-07, 1.linear1.weight:0.001/1.7e-07, 0.linear1.weight:0.001/1.6e-07, short_lstm.weight_hh_l0_reverse:0.001/2.6e-07, ln_flat.bias:0.001/4.7e-05, ln_proj.bias:0.001/2.3e-05, 1.norm2.bias:0.001/2.2e-05, ln_short.bias:0.001/2.3e-05, 0.norm1.bias:0.001/3.2e-05, 1.norm1.bias:0.001/1.9e-05, 1.linear2.bias:0.000/4.2e-06, 0.norm2.bias:0.000/2.1e-05, self_attn.out_proj.bias:0.000/2.8e-05, ln_short.weight:0.000/7.3e-08, 0.linear2.bias:0.000/3.1e-06, ln_flat.weight:0.000/6.2e-08, 0.self_attn.in_proj_bias:0.000/4.5e-07, 1.self_attn.in_proj_bias:0.000/5.6e-06, 0.norm1.weight:0.000/4.4e-08, 0.norm2.weight:0.000/4.0e-08, 0.linear1.bias:0.000/2.1e-07, ln_proj.weight:0.000/2.8e-08, 1.norm1.weight:0.000/2.8e-08, 1.norm2.weight:0.000/2.8e-08, 1.linear1.bias:0.000/1.9e-07
+
+E05 | OPTS[1:2.5e-03|cnts=[44]] | GN[head_flat=0.031,short_lstm=0.006,transformer=0.003,ln_flat=0.001,ln_proj=0.000,ln_short=0.000,TOT=0.031] | GD[5.0e-04,2.7e-03,2.2e-02] | UR[1.7e-06,1.4e-02] | LR_MAIN=2.5e-03 | lr=2.5e-03 | TR[0.101,0.070,0.20,BASE_RMSE=0.101,DELTA_RMSE=nan] | VAL[0.094,0.065,0.26,BASE_RMSE=0.094] | BASE_LOSS=1.0295e-02,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.10146,DELTA_RMSE=nan | SCHED_PCT=7.1% | SR=0.018 | SL=0.00,HR=0.000 | FMB=0.0000 | T=39.1s,TP=43945.1seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:3.572e-03/0.59]
+G/U=head_flat.2.bias:0.011/1.4e-02, short_lstm.weight_ih_l0:0.004/1.7e-06, short_lstm.weight_ih_l0_reverse:0.003/1.3e-06, head_flat.0.bias:0.002/1.0e-05, short_lstm.bias_ih_l0:0.002/4.0e-06, short_lstm.bias_hh_l0:0.002/4.3e-06, 1.linear2.weight:0.002/6.7e-07, short_lstm.bias_ih_l0_reverse:0.002/3.1e-06, short_lstm.bias_hh_l0_reverse:0.002/3.0e-06, 0.self_attn.in_proj_weight:0.001/2.1e-07, 0.linear2.weight:0.001/4.1e-07, self_attn.out_proj.weight:0.001/4.0e-07, short_lstm.weight_hh_l0:0.001/2.3e-07, 1.self_attn.in_proj_weight:0.001/1.5e-07, short_lstm.weight_hh_l0_reverse:0.001/1.7e-07, 0.linear1.weight:0.001/9.5e-08, ln_flat.bias:0.001/1.5e-05, 1.linear1.weight:0.000/8.2e-08, ln_proj.bias:0.000/1.0e-05, 1.norm2.bias:0.000/9.6e-06, ln_short.bias:0.000/1.0e-05, 0.norm1.bias:0.000/1.6e-05, ln_flat.weight:0.000/6.5e-08, 1.norm1.bias:0.000/8.5e-06, 0.norm2.bias:0.000/9.9e-06, 1.linear2.bias:0.000/2.3e-06, self_attn.out_proj.bias:0.000/1.4e-05, ln_short.weight:0.000/4.1e-08, 0.linear2.bias:0.000/1.7e-06, 0.self_attn.in_proj_bias:0.000/1.2e-07, 0.norm1.weight:0.000/2.5e-08, 1.self_attn.in_proj_bias:0.000/2.1e-06, 0.norm2.weight:0.000/2.3e-08, ln_proj.weight:0.000/2.2e-08, 1.norm2.weight:0.000/2.1e-08, 1.norm1.weight:0.000/1.9e-08, 0.linear1.bias:0.000/1.2e-07, 1.linear1.bias:0.000/8.9e-08
+
+E06 | OPTS[1:2.9e-03|cnts=[44]] | GN[head_flat=0.023,short_lstm=0.005,transformer=0.002,ln_flat=0.000,ln_proj=0.000,ln_short=0.000,TOT=0.023] | GD[4.1e-04,1.9e-03,1.6e-02] | UR[1.5e-06,6.8e-03] | LR_MAIN=2.9e-03 | lr=2.9e-03 | TR[0.100,0.069,0.23,BASE_RMSE=0.100,DELTA_RMSE=nan] | VAL[0.093,0.064,0.27,BASE_RMSE=0.093] | BASE_LOSS=9.9891e-03,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.09995,DELTA_RMSE=nan | SCHED_PCT=8.6% | SR=0.019 | SL=0.00,HR=0.000 | FMB=0.0000 | T=40.7s,TP=42214.6seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:2.774e-03/0.46]
+G/U=head_flat.2.bias:0.009/6.8e-03, short_lstm.weight_ih_l0:0.003/1.5e-06, short_lstm.weight_ih_l0_reverse:0.002/1.3e-06, head_flat.0.bias:0.002/8.6e-06, short_lstm.bias_ih_l0:0.002/3.6e-06, short_lstm.bias_hh_l0:0.002/3.9e-06, short_lstm.bias_ih_l0_reverse:0.001/3.1e-06, short_lstm.bias_hh_l0_reverse:0.001/3.0e-06, 1.linear2.weight:0.001/5.4e-07, 0.self_attn.in_proj_weight:0.001/2.2e-07, 0.linear2.weight:0.001/3.4e-07, self_attn.out_proj.weight:0.001/3.7e-07, 1.self_attn.in_proj_weight:0.001/1.4e-07, short_lstm.weight_hh_l0:0.001/2.0e-07, 0.linear1.weight:0.000/9.5e-08, short_lstm.weight_hh_l0_reverse:0.000/1.6e-07, ln_flat.bias:0.000/9.3e-06, 1.linear1.weight:0.000/7.0e-08, ln_proj.bias:0.000/8.1e-06, 1.norm2.bias:0.000/7.5e-06, ln_short.bias:0.000/7.5e-06, ln_flat.weight:0.000/6.1e-08, 0.norm1.bias:0.000/1.2e-05, 1.norm1.bias:0.000/6.5e-06, self_attn.out_proj.bias:0.000/1.1e-05, 0.norm2.bias:0.000/8.1e-06, 1.linear2.bias:0.000/1.9e-06, ln_short.weight:0.000/3.7e-08, 0.linear2.bias:0.000/1.5e-06, 0.self_attn.in_proj_bias:0.000/8.2e-08, 0.norm1.weight:0.000/2.3e-08, 1.self_attn.in_proj_bias:0.000/1.8e-06, 0.norm2.weight:0.000/1.8e-08, 0.linear1.bias:0.000/1.2e-07, ln_proj.weight:0.000/1.8e-08, 1.norm2.weight:0.000/1.7e-08, 1.norm1.weight:0.000/1.4e-08, 1.linear1.bias:0.000/7.6e-08
+
+E07 | OPTS[1:3.0e-03|cnts=[44]] | GN[head_flat=0.018,short_lstm=0.004,transformer=0.002,ln_flat=0.000,ln_proj=0.000,ln_short=0.000,TOT=0.019] | GD[3.6e-04,1.5e-03,1.2e-02] | UR[1.3e-06,4.1e-03] | LR_MAIN=3.0e-03 | lr=3.0e-03 | TR[0.099,0.068,0.24,BASE_RMSE=0.099,DELTA_RMSE=nan] | VAL[0.093,0.063,0.28,BASE_RMSE=0.093] | BASE_LOSS=9.8674e-03,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.09933,DELTA_RMSE=nan | SCHED_PCT=10.0% | SR=0.019 | SL=0.00,HR=0.000 | FMB=0.0000 | T=39.4s,TP=43541.2seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:2.325e-03/0.38]
+G/U=head_flat.2.bias:0.009/4.1e-03, short_lstm.weight_ih_l0:0.002/1.3e-06, short_lstm.weight_ih_l0_reverse:0.002/1.1e-06, head_flat.0.bias:0.001/7.1e-06, short_lstm.bias_ih_l0:0.001/3.1e-06, short_lstm.bias_hh_l0:0.001/3.4e-06, short_lstm.bias_ih_l0_reverse:0.001/2.8e-06, short_lstm.bias_hh_l0_reverse:0.001/2.7e-06, 1.linear2.weight:0.001/4.4e-07, 0.self_attn.in_proj_weight:0.001/2.0e-07, self_attn.out_proj.weight:0.001/3.5e-07, 0.linear2.weight:0.001/2.7e-07, 1.self_attn.in_proj_weight:0.000/1.2e-07, short_lstm.weight_hh_l0:0.000/1.7e-07, 0.linear1.weight:0.000/8.4e-08, short_lstm.weight_hh_l0_reverse:0.000/1.4e-07, ln_flat.bias:0.000/6.8e-06, 1.linear1.weight:0.000/6.4e-08, ln_proj.bias:0.000/6.5e-06, ln_flat.weight:0.000/8.7e-08, 1.norm2.bias:0.000/5.9e-06, ln_short.bias:0.000/5.7e-06, 0.norm1.bias:0.000/9.4e-06, self_attn.out_proj.bias:0.000/8.5e-06, 1.norm1.bias:0.000/4.7e-06, 0.norm2.bias:0.000/6.2e-06, 1.linear2.bias:0.000/1.6e-06, ln_short.weight:0.000/3.6e-08, 0.self_attn.in_proj_bias:0.000/5.7e-08, 0.linear2.bias:0.000/1.3e-06, 0.norm1.weight:0.000/2.7e-08, 0.norm2.weight:0.000/2.2e-08, 1.self_attn.in_proj_bias:0.000/1.4e-06, ln_proj.weight:0.000/1.9e-08, 1.norm2.weight:0.000/1.8e-08, 0.linear1.bias:0.000/1.1e-07, 1.norm1.weight:0.000/1.6e-08, 1.linear1.bias:0.000/6.8e-08
+
+E08 | OPTS[1:3.0e-03|cnts=[44]] | GN[head_flat=0.007,short_lstm=0.002,transformer=0.001,ln_flat=0.000,ln_proj=0.000,ln_short=0.000,TOT=0.007] | GD[1.5e-04,5.4e-04,4.3e-03] | UR[4.1e-07,1.3e-03] | LR_MAIN=3.0e-03 | lr=3.0e-03 | TR[0.099,0.068,0.25,BASE_RMSE=0.099,DELTA_RMSE=nan] | VAL[0.092,0.064,0.28,BASE_RMSE=0.092] | BASE_LOSS=9.7486e-03,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.09873,DELTA_RMSE=nan | SCHED_PCT=11.4% | SR=0.020 | SL=0.00,HR=0.000 | FMB=0.0000 | T=39.0s,TP=43989.9seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:1.200e-03/0.20]
+G/U=head_flat.2.bias:0.004/1.3e-03, short_lstm.weight_ih_l0:0.001/6.4e-07, short_lstm.weight_ih_l0_reverse:0.001/4.7e-07, 0.self_attn.in_proj_weight:0.001/1.2e-07, head_flat.0.bias:0.001/2.6e-06, short_lstm.bias_ih_l0:0.001/1.2e-06, short_lstm.bias_hh_l0:0.001/1.3e-06, short_lstm.bias_ih_l0_reverse:0.000/1.1e-06, short_lstm.bias_hh_l0_reverse:0.000/1.1e-06, self_attn.out_proj.weight:0.000/2.4e-07, 1.linear2.weight:0.000/2.0e-07, 0.linear2.weight:0.000/1.4e-07, short_lstm.weight_hh_l0:0.000/1.0e-07, 0.linear1.weight:0.000/5.8e-08, 1.self_attn.in_proj_weight:0.000/6.4e-08, short_lstm.weight_hh_l0_reverse:0.000/8.3e-08, 1.linear1.weight:0.000/4.3e-08, ln_flat.bias:0.000/2.3e-06, ln_proj.bias:0.000/2.4e-06, 1.norm2.bias:0.000/2.2e-06, ln_flat.weight:0.000/3.2e-08, ln_proj.weight:0.000/2.9e-08, 1.norm2.weight:0.000/2.9e-08, ln_short.weight:0.000/2.7e-08, ln_short.bias:0.000/2.0e-06, 0.norm1.bias:0.000/3.5e-06, 0.norm1.weight:0.000/2.2e-08, 1.norm1.weight:0.000/2.1e-08, 0.norm2.weight:0.000/2.0e-08, self_attn.out_proj.bias:0.000/3.1e-06, 1.norm1.bias:0.000/1.4e-06, 1.linear2.bias:0.000/6.1e-07, 0.norm2.bias:0.000/2.0e-06, 0.self_attn.in_proj_bias:0.000/2.0e-08, 0.linear1.bias:0.000/7.2e-08, 0.linear2.bias:0.000/4.1e-07, 1.self_attn.in_proj_bias:0.000/4.2e-07, 1.linear1.bias:0.000/4.4e-08
+
+E09 | OPTS[1:3.0e-03|cnts=[44]] | GN[head_flat=0.030,short_lstm=0.008,transformer=0.003,ln_flat=0.001,ln_proj=0.001,ln_short=0.000,TOT=0.031] | GD[5.7e-04,2.9e-03,1.9e-02] | UR[1.8e-06,4.7e-03] | LR_MAIN=3.0e-03 | lr=3.0e-03 | TR[0.098,0.067,0.26,BASE_RMSE=0.098,DELTA_RMSE=nan] | VAL[0.092,0.063,0.29,BASE_RMSE=0.092] | BASE_LOSS=9.5469e-03,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.09771,DELTA_RMSE=nan | SCHED_PCT=12.9% | SR=0.021 | SL=0.00,HR=0.000 | FMB=0.0000 | T=40.9s,TP=42031.7seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:4.996e-03/0.82]
+G/U=head_flat.2.bias:0.017/4.7e-03, short_lstm.weight_ih_l0:0.005/2.6e-06, short_lstm.weight_ih_l0_reverse:0.004/1.8e-06, short_lstm.bias_ih_l0:0.003/7.0e-06, short_lstm.bias_hh_l0:0.003/7.4e-06, head_flat.0.bias:0.002/1.2e-05, short_lstm.bias_ih_l0_reverse:0.002/4.9e-06, short_lstm.bias_hh_l0_reverse:0.002/4.7e-06, 1.linear2.weight:0.002/6.9e-07, 0.self_attn.in_proj_weight:0.001/3.1e-07, 0.linear2.weight:0.001/3.8e-07, short_lstm.weight_hh_l0:0.001/2.9e-07, self_attn.out_proj.weight:0.001/4.3e-07, 1.self_attn.in_proj_weight:0.001/1.8e-07, ln_flat.bias:0.001/1.0e-05, ln_proj.bias:0.001/1.0e-05, 0.linear1.weight:0.001/1.2e-07, ln_flat.weight:0.001/1.6e-07, 1.norm2.bias:0.001/9.3e-06, short_lstm.weight_hh_l0_reverse:0.001/1.7e-07, 1.linear1.weight:0.000/9.2e-08, ln_short.bias:0.000/7.9e-06, 0.norm1.bias:0.000/1.3e-05, 1.norm1.bias:0.000/6.8e-06, self_attn.out_proj.bias:0.000/1.1e-05, 0.norm2.bias:0.000/9.7e-06, 1.linear2.bias:0.000/2.7e-06, ln_short.weight:0.000/5.6e-08, 0.self_attn.in_proj_bias:0.000/5.8e-08, 0.linear2.bias:0.000/2.2e-06, 0.norm1.weight:0.000/4.3e-08, 0.norm2.weight:0.000/3.8e-08, 1.norm2.weight:0.000/3.5e-08, ln_proj.weight:0.000/3.5e-08, 1.self_attn.in_proj_bias:0.000/1.6e-06, 1.norm1.weight:0.000/3.0e-08, 0.linear1.bias:0.000/1.7e-07, 1.linear1.bias:0.000/1.0e-07
+
+E10 | OPTS[1:3.0e-03|cnts=[44]] | GN[head_flat=0.028,short_lstm=0.008,transformer=0.003,ln_flat=0.001,ln_proj=0.001,ln_short=0.000,TOT=0.029] | GD[5.4e-04,2.8e-03,1.8e-02] | UR[1.8e-06,3.9e-03] | LR_MAIN=3.0e-03 | lr=3.0e-03 | TR[0.097,0.067,0.27,BASE_RMSE=0.097,DELTA_RMSE=nan] | VAL[0.092,0.063,0.29,BASE_RMSE=0.092] | BASE_LOSS=9.4478e-03,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.09720,DELTA_RMSE=nan | SCHED_PCT=14.3% | SR=0.021 | SL=0.00,HR=0.000 | FMB=0.0000 | T=39.5s,TP=43516.9seg/s | chk=1 | GPU=11.84GiB | LAYER_GN[short_lstm.weight_ih_l0:4.919e-03/0.81]
+G/U=head_flat.2.bias:0.017/3.9e-03, short_lstm.weight_ih_l0:0.005/2.6e-06, short_lstm.weight_ih_l0_reverse:0.004/1.8e-06, short_lstm.bias_ih_l0:0.003/6.8e-06, short_lstm.bias_hh_l0:0.003/7.2e-06, head_flat.0.bias:0.002/1.1e-05, short_lstm.bias_ih_l0_reverse:0.002/5.0e-06, short_lstm.bias_hh_l0_reverse:0.002/4.9e-06, 1.linear2.weight:0.002/6.3e-07, 0.self_attn.in_proj_weight:0.001/2.9e-07, 0.linear2.weight:0.001/3.5e-07, short_lstm.weight_hh_l0:0.001/2.6e-07, self_attn.out_proj.weight:0.001/4.0e-07, 1.self_attn.in_proj_weight:0.001/1.7e-07, ln_flat.bias:0.001/9.1e-06, ln_proj.bias:0.001/9.2e-06, 0.linear1.weight:0.001/1.1e-07, short_lstm.weight_hh_l0_reverse:0.001/1.8e-07, ln_flat.weight:0.001/1.6e-07, 1.norm2.bias:0.000/8.1e-06, 1.linear1.weight:0.000/8.6e-08, ln_short.bias:0.000/7.0e-06, 0.norm1.bias:0.000/1.1e-05, self_attn.out_proj.bias:0.000/9.5e-06, 1.norm1.bias:0.000/6.0e-06, 0.norm2.bias:0.000/8.7e-06, 1.linear2.bias:0.000/2.5e-06, ln_short.weight:0.000/5.3e-08, 0.self_attn.in_proj_bias:0.000/4.4e-08, 0.linear2.bias:0.000/2.1e-06, 0.norm1.weight:0.000/4.2e-08, 0.norm2.weight:0.000/3.5e-08, 1.self_attn.in_proj_bias:0.000/1.4e-06, 1.norm2.weight:0.000/2.9e-08, ln_proj.weight:0.000/2.8e-08, 1.norm1.weight:0.000/2.5e-08, 0.linear1.bias:0.000/1.6e-07, 1.linear1.bias:0.000/1.0e-07
