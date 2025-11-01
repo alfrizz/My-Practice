@@ -345,56 +345,42 @@ class ModelClass(nn.Module):
 ######################################################################################################
 
 
-
-def compute_baselines(loader) -> tuple[float, float]:
+def compute_baselines(flat_targets: np.ndarray, lengths: Sequence[int]) -> Tuple[float, float]:
     """
-    Compute mean_rmse and persistence_rmse assuming loader yields flattened batches.
+    Compute per-sample baselines from flattened targets and per-day lengths.
 
-    Expects each batch from loader to be:
-      (x_flat, ysig_flat, ybin_flat, yret_flat, yter_flat, rc_flat, wd_expanded, ts_list, lengths)
-    where:
-      - ysig_flat: Tensor (N,) and lengths is a list of per-day counts summing to N
-
-    For each day we extract the day's arr = ysig_flat[offset:offset+L] and compute:
-      mean error: (target - mean(arr))^2  where target = arr[-1]
-      persistence error: (target - arr[-2])^2 when L > 1
-
-    Returns:
-      (mean_rmse, persistence_rmse)
+    Parameters
+    - flat_targets: 1D array-like of scalar targets flattened in the same order
+      used for model predictions (shape (N,) or convertible to that).
+    - lengths: sequence of integers giving the number of windows per day in the
+      same order that produced flat_targets. The sum(lengths) must equal len(flat_targets).
+      Days with L <= 0 are ignored; days with L == 1 contribute to the mean baseline
+      but not to the persistence baseline.
     """
-    mean_errors = []
-    last_deltas = []
+    arr = np.asarray(flat_targets).ravel()
+    N = arr.size
+    if N == 0:
+        return float("nan"), float("nan")
 
-    for batch in loader:
-        # Unpack strictly according to the flattened-collate contract
-        x_flat, y_sig, _ybin, _yret, _yter, _rc, wd_expanded, ts_list, lengths = batch
+    ss_tot = float(((arr - arr.mean())**2).sum())
+    mean_rmse = float(np.sqrt(ss_tot / N))
 
-        # Sanity checks
-        if not (isinstance(y_sig, torch.Tensor) and y_sig.dim() == 1):
-            raise RuntimeError(f"compute_baselines expects flattened y_sig (N,), got shape {getattr(y_sig,'shape',None)}")
-        if not (isinstance(lengths, (list, tuple)) and sum(lengths) == y_sig.size(0)):
-            raise RuntimeError(f"compute_baselines expects lengths summing to y_sig.size(0); got lengths={lengths} y_sig.shape={tuple(y_sig.shape)}")
+    start = 0
+    sum_sq_persist = 0.0
+    count_persist = 0
+    for L in lengths:
+        if L <= 1:
+            start += max(0, L)
+            continue
+        end = start + L
+        day = arr[start:end]
+        err2 = (float(day[-1]) - float(day[-2])) ** 2
+        sum_sq_persist += err2 * (L - 1)
+        count_persist += (L - 1)
+        start = end
 
-        start = 0
-        for L in lengths:
-            if L <= 0:
-                start += L
-                continue
-            end = start + L
-            arr = y_sig[start:end].view(-1).cpu().numpy().astype(float)
-            if arr.size == 0:
-                start = end
-                continue
-            target = arr[-1]
-            mu = arr.mean()
-            mean_errors.append((target - mu) ** 2)
-            if arr.size > 1:
-                last_deltas.append((target - arr[-2]) ** 2)
-            start = end
-
-    mean_rmse = float(np.sqrt(np.mean(mean_errors))) if mean_errors else float("nan")
-    persistence_rmse = float(np.sqrt(np.mean(last_deltas))) if last_deltas else float("nan")
-    return mean_rmse, persistence_rmse
+    persist_rmse = float(np.sqrt(sum_sq_persist / count_persist)) if count_persist else float("nan")
+    return mean_rmse, persist_rmse
 
 
 ############### 
@@ -553,13 +539,13 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
     - Preserves model LSTM state across windows using prev_day and _prepare_windows_and_targets_batch.
     - Calls model(windows) -> (base, delta) and composes total = base + delta.
     - Collects CPU numpy arrays: tot_preds, base_preds, and targets for metrics.
-    - Stores last_val_tot_preds, last_val_targs, last_val_base_preds on the model for logging-
+    - Stores last_val_tot_preds, last_val_targs on the model for logging-
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
     model.h_short = model.h_long = None
     prev_day = None
-    all_basepreds, all_totpreds, all_targs = [], [], []
+    val_base_preds, val_tot_preds, val_targs, val_lengths = [], [], [], []
 
     with torch.no_grad():
         for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
@@ -580,18 +566,20 @@ def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[
             assert total_tensor.dim() == 2 and total_tensor.size(1) == 1
             
             # total and base preds as CPU 1D lists
-            all_basepreds.extend(base_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
-            all_totpreds.extend(total_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
-            all_targs.extend(targets_tensor.cpu().tolist())
+            val_base_preds.extend(base_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
+            val_tot_preds.extend(total_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
+            val_targs.extend(targets_tensor.cpu().tolist())
+            val_lengths.extend([L for L in seq_lengths if L > 0])
             
-    val_base_preds = np.array(all_basepreds, dtype=float)
-    val_tot_preds = np.array(all_totpreds, dtype=float)
-    val_targs = np.array(all_targs, dtype=float)
+    val_base_preds = np.array(val_base_preds, dtype=float)
+    val_tot_preds = np.array(val_tot_preds, dtype=float)
+    val_targs = np.array(val_targs, dtype=float)
 
-    # model.last_val_base_preds = torch.from_numpy(base_preds).float()
+    model.bl_val_mean, model.bl_val_pers = compute_baselines(np.asarray(val_targs), val_lengths)
+
     model.last_val_tot_preds  = torch.from_numpy(val_tot_preds).float()
     model.last_val_targs = torch.from_numpy(val_targs).float()
-    
+   
     return _compute_metrics(val_tot_preds, val_targs), _compute_metrics(val_base_preds, val_targs), val_tot_preds, val_base_preds, val_targs
 
 
@@ -639,16 +627,12 @@ def model_training_loop(
     MSE_base = CustomMSELoss(alpha=alpha_smooth) 
     MSE_delta = CustomMSELoss(alpha=0) # alpha default 0.0
 
-    # compute baselines for logging
-    bl_tr_mean, bl_tr_pers = compute_baselines(train_loader)
-    bl_val_mean, bl_val_pers = compute_baselines(val_loader)
-
     for epoch in range(1, max_epochs + 1):
 
         model.train()
         model.h_short = model.h_long = None
 
-        tr_base_preds, tr_tot_preds, tr_targs, tr_delta_preds, tr_delta_targs = [], [], [], [], []            
+        tr_base_preds, tr_tot_preds, tr_targs, tr_delta_preds, tr_delta_targs, tr_lengths  = [], [], [], [], [], []           
         prev_day = None
 
         epoch_total_loss_sum = 0.0
@@ -700,6 +684,7 @@ def model_training_loop(
                 tr_base_preds.extend(base_tensor.detach().cpu().tolist())
                 tr_tot_preds.extend(total_tensor.detach().cpu().tolist())
                 tr_targs.extend(targets_tensor.cpu().tolist())
+                tr_lengths.extend([L for L in seq_lengths if L > 0])
                 epoch_samples += int(targets_tensor.size(0))
 
                 # combined training objective (final scalar used for backward)
@@ -744,6 +729,9 @@ def model_training_loop(
             epoch_delta_loss_sum += float(delta_loss.detach().cpu())
             epoch_loss_count += 1
 
+        # compute baselines for logging
+        model.bl_tr_mean, model.bl_tr_pers = compute_baselines(np.asarray(tr_targs), tr_lengths)
+        
         # Metrics & validation
         tr_tot_metrics = _compute_metrics(np.array(tr_tot_preds, dtype=float), np.array(tr_targs, dtype=float))
         tr_base_metrics = _compute_metrics(np.array(tr_base_preds, dtype=float), np.array(tr_targs, dtype=float))  
@@ -776,10 +764,6 @@ def model_training_loop(
             val_tot_preds=val_tot_preds,
             val_base_preds=val_base_preds,
             val_targs=val_targs,
-            bl_tr_mean=bl_tr_mean,
-            bl_tr_pers=bl_tr_pers,
-            bl_val_mean=bl_val_mean,
-            bl_val_pers=bl_val_pers,
             avg_base_loss=avg_base_loss,
             avg_delta_loss=avg_delta_loss,
             log_file=params.log_file,
