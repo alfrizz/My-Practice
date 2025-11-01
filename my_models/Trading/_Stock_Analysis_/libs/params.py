@@ -108,7 +108,7 @@ hparams = {
     "LOOK_BACK":            60,      # length of each input window
 
     # ── Input convolution toggle ──────────────────────────
-    "USE_CONV":              False,   # enable Conv1d + BatchNorm1d
+    "USE_CONV":              True,   # enable Conv1d + BatchNorm1d
     "CONV_K":                3,      # Conv1d kernel size; ↑local smoothing, ↓fine-detail
     "CONV_DILATION":         1,      # Conv1d dilation;   ↑receptive field, ↓granularity
     "CONV_CHANNELS":         64,     # Conv1d output channels; ↑early-stage capacity, ↓compute
@@ -121,16 +121,16 @@ hparams = {
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
     "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
-    "SHORT_UNITS":          96,      # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
-    "DROPOUT_SHORT":        0.1,    # dropout after short-LSTM; ↑regularization
+    "SHORT_UNITS":          128,      # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
+    "DROPOUT_SHORT":        0.15,    # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  96,      # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_D_MODEL":  128,      # transformer embedding width (d_model); adapter maps upstream features into this
     "TRANSFORMER_LAYERS":   2,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
-    "TRANSFORMER_FF_MULT":  6,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.1,    # transformer dropout; ↑regularization
+    "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
+    "DROPOUT_TRANS":        0.05,    # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
@@ -139,7 +139,7 @@ hparams = {
 
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
     "FLATTEN_MODE":          "last",   # format to be provided to regression head: "flatten" | "last" | "pool"
-    "PRED_HIDDEN":           96,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "PRED_HIDDEN":           128,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
     "ALPHA_SMOOTH":          0.0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
     "USE_DELTA":             False,    # enable Delta baseline vs features predictions head
@@ -148,16 +148,16 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            70,     # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          3e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       3e-3,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
     "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear'
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           32,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
+    "TRAIN_BATCH":           16,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead

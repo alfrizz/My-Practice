@@ -831,6 +831,67 @@ def select_checkpoint(
 #########################################################################################################
 
 
+RUN_DIAGNOSTIC_EXPLANATION = (
+    "\nSINGLE RUN DIAGNOSTIC FORMAT (explanatory)\n"
+    "    BATCH_SHAPE B=7216 groups=1 seq_len_full=20 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)\n"
+    "    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable\n"
+    "    -> B: number of batch samples used to build windows (snapshot.B)\n"
+    "    -> groups: number of logical groups used when flattening windows (snapshot.groups)\n"
+    "    -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)\n"
+    "    -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)\n"
+    "    -> activation_mb: estimated activation footprint in MB computed from GPU allocation delta (snapshot.activation_mb)\n"
+    "    -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)\n"
+    "    -> collector_ms: total wall-clock ms spent by the collector including sampling, CPU work and device synchronizations (snapshot.collector_ms)\n"
+    "    -> cpu_copy_bytes: bytes copied to host for predictions shown human-readable in the log (snapshot.cpu_copy_bytes)\n"
+    "    -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)\n"
+    "    -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)\n"
+    "    -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)\n"
+    "    -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)\n"
+    "    -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)\n"
+    "    -> pred_extra_ms: estimated CPU-side post-forward ms = collector_ms - full_forward_ms - summed per-seg time (snapshot.pred_extra_ms)\n"
+    "    -> gpu_allocated_bytes: raw GPU bytes allocated after forward (snapshot.gpu_allocated_bytes)\n"
+    "    -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)\n"
+    "    -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)\n"
+    "    -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)\n"
+    "    -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)\n"
+    "    -> mean_seg_len: average per-segment time-series length in timesteps computed as sum_seg_lens / num_segments (snapshot.mean_seg_len)\n"
+    "    -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)\n"
+    "    -> sum_seg_lens: sum of non-empty segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)\n"
+    "    -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)\n"
+    "    -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)\n"
+    "    -> total_params / trainable_params: canonical parameter counts stamped by init_log (snapshot.total_params, snapshot.trainable_params)\n"
+    "    -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)\n"
+    "    -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)\n"
+    "    -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)\n"
+    "    -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)\n"
+    "\n"
+    "PER-EPOCH LOG FORMAT (explanatory):\n"
+    "  E{ep:02d}                : epoch number formatted with two digits\n"
+    "  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts\n"
+    "  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)\n"
+    "  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum\n"
+    "  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)\n"
+    "  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation\n"
+    "  TR[...metrics...]       : training metrics reported for the epoch (rmse, mae, r2, etc.; see TR composition in code)\n"
+    "  VAL[...metrics...]      : validation metrics reported for the epoch (rmse, mae, r2, etc.; see VAL composition in code)\n"
+    "  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_tot_preds/model.last_val_targs (trend calibration)\n"
+    "  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults 0.00/0.000 when missing)\n"
+    "  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB)\n"
+    "  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec inferred from sampled forward)\n"
+    "  chk={val}               : checkpoint marker token printed as chk in the line (implementation-specific; integerized when boolean)\n"
+    "  GPU={GiB:.2f}GiB        : optional GPU memory high-water printed in GiB when CUDA available (torch.cuda.max_memory_allocated / (1024**3))\n"
+    "  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy (separate visual marker outside numeric chk token)\n"
+    "  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio where ratio = curr / baseline_observed_on_first_epoch\n"
+    "  G/U=name:grad/update_ratio,... : parameter buckets printed sorted by descending gradient norm; every short-name bucket is emitted in compact form\n"
+    "      - format for each token is short_name:{g:.3e}/{u:.1e} where g is the gradient norm and u is the lr-scaled update ratio\n"
+    "      - short_name uses the last 1–3 name segments (see short_name logic); entries are deduped by short_name keeping the highest-g representative\n"
+    "      - the G/U list is printed every epoch (values change per epoch) and contains both large and very small gradients in scientific notation\n"
+)
+
+
+#############################################################
+
+
 def _append_log(text: str, log_file: Path):
     """Append a line to log_file, creating parent dirs if needed.
 
@@ -866,7 +927,6 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
       model._microdetail_emitted to make the collector the single authoritative source
       for init-time diagnostics.
     """
-
     t_entry = perf_counter()
     intentional_syncs = 0
 
@@ -905,271 +965,254 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
         return None
     model._micro_snapshot_in_progress = True
     model_was_training = model.training
-    try:
-        # Fetch one batch; measure dataloader_ms when possible
-        device = next(model.parameters()).device
-        it = iter(train_loader)
-        t0_dl = perf_counter()
-        selected = next(it)
-        t1_dl = perf_counter()
-        dataloader_ms = (t1_dl - t0_dl) * 1000.0
 
-        # Normalize batch
-        elems = list(selected) if hasattr(selected, "__iter__") and not isinstance(selected, (str, bytes, dict)) else [selected]
+    # Fetch one batch; measure dataloader_ms when possible
+    device = next(model.parameters()).device
+    it = iter(train_loader)
+    t0_dl = perf_counter()
+    selected = next(it)
+    t1_dl = perf_counter()
+    dataloader_ms = (t1_dl - t0_dl) * 1000.0
 
-        x_batch = elems[0]
-        seq_lengths = elems[6] if len(elems) > 6 else None
+    # Normalize batch
+    elems = list(selected) if hasattr(selected, "__iter__") and not isinstance(selected, (str, bytes, dict)) else [selected]
 
-        # Move inputs to device
-        x_batch = x_batch.to(device)
+    x_batch = elems[0]
+    seq_lengths = elems[6] if len(elems) > 6 else None
 
-        # Derive dims
-        B = x_batch.size(0) if x_batch.dim() >= 1 else 0
-        G = x_batch.size(1) if x_batch.dim() >= 4 else 1
-        seq_len_full = x_batch.size(2) if x_batch.dim() >= 3 else (x_batch.size(1) if x_batch.dim() >= 2 else None)
-        feat_dim = x_batch.size(-1)
-        
-        # Build per-day segments from flattened per-window x_batch and seq_lengths
-        segments = []
-        seg_lens = []
-        start = 0
-        for i, L in enumerate(seq_lengths):
-            Li = int(L.item()) if torch.is_tensor(L) else int(L)
-            if Li <= 0:
-                # represent empty day as empty (0, T, F) tensor for bookkeeping
-                segments.append(x_batch.new_zeros((0, seq_len_full, feat_dim)))
-                seg_lens.append(0)
-                continue
-            end = start + Li
-            seg = x_batch[start:end]   # (Li, T, F)
-            # pad in time dim to seq_len_full if needed
-            cur_len = seg.size(1) if seg.dim() >= 2 else 0
-            if cur_len < seq_len_full:
-                pad_rows = seq_len_full - cur_len
-                pad_tensor = torch.zeros((seg.size(0), pad_rows, feat_dim), device=seg.device, dtype=seg.dtype)
-                seg = torch.cat([seg, pad_tensor], dim=1)
-            segments.append(seg)
-            seg_lens.append(min(Li, seq_len_full))
-            start = end
+    # Move inputs to device
+    x_batch = x_batch.to(device)
 
-        # (flatten to 3D): concatenate non-empty per-day segments into a single windows tensor (N, T, F)
-        flat_segments = [s for s in segments if s.numel() != 0]
-        if not flat_segments:
-            # no windows in this batch
-            return None, None, prev_day
+    # Derive dims
+    B = x_batch.size(0) if x_batch.dim() >= 1 else 0
+    G = x_batch.size(1) if x_batch.dim() >= 4 else 1
+    seq_len_full = x_batch.size(2) if x_batch.dim() >= 3 else (x_batch.size(1) if x_batch.dim() >= 2 else None)
+    feat_dim = x_batch.size(-1)
 
-        # Concatenate along window dimension to get (N, seq_len_full, feat_dim)
-        windows_tensor = torch.cat(flat_segments, dim=0).to(device)
-        B_valid = len(flat_segments)
-        seq_len_target = windows_tensor.size(1)
-        feat_dim = windows_tensor.size(2)
+    # when building segments
+    segments = []
+    seg_lens = []
+    start = 0
+    for i, L in enumerate(seq_lengths):
+        Li = int(L.item()) if torch.is_tensor(L) else int(L)
+        if Li <= 0:
+            segments.append(x_batch.new_zeros((0, seq_len_full, feat_dim)))
+            seg_lens.append(0)
+            continue
+        end = start + Li
+        seg = x_batch[start:end]   # (Li, T, F)
+        # pad in time dim to seq_len_full if needed
+        cur_len = seg.size(1) if seg.dim() >= 2 else 0
+        if cur_len < seq_len_full:
+            pad_rows = seq_len_full - cur_len
+            pad_tensor = seg.new_zeros((seg.size(0), pad_rows, feat_dim))
+            seg = torch.cat([seg, pad_tensor], dim=1)
+        segments.append(seg)
+        seg_lens.append(min(Li, seq_len_full))
+        start = end
 
+    # Flatten to 3D: drop empty segments before concatenation
+    flat_segments = [s for s in segments if s.numel() != 0]
+    if not flat_segments:
+        # preserve previous contract: return similar shape to earlier behaviour
+        return None, None, prev_day
 
-        num_segments = int(windows_tensor.size(0))
-        mean_seg_len = float(sum(seg_lens) / len(seg_lens)) if seg_lens else float(seq_len_target)
+    windows_tensor = torch.cat(flat_segments, dim=0).to(device)
 
-        # GPU tracking: reset peak only when CUDA is available
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats(device)
-            torch.cuda.synchronize()
-            before_alloc = torch.cuda.memory_allocated(device)
-            before_reserved = torch.cuda.memory_reserved(device)
-        else:
-            before_alloc = before_reserved = 0
-
-        # Forward-only timing (AMP), use CUDA events when available; else use perf_counter
-        if torch.cuda.is_available():
-            e0 = torch.cuda.Event(enable_timing=True); e1 = torch.cuda.Event(enable_timing=True)
-            e0.record()
-            with torch.amp.autocast("cuda", enabled=True):
-                raw_out = model(windows_tensor)
-            e1.record()
-            # one explicit sync to ensure event completion and to read elapsed_time
-            torch.cuda.synchronize()
-            intentional_syncs += 1
-            full_forward_ms = e0.elapsed_time(e1)
-        else:
-            t0 = perf_counter()
-            with torch.amp.autocast("cuda", enabled=False):
-                raw_out = model(windows_tensor)
-            full_forward_ms = (perf_counter() - t0) * 1000.0
-
-        raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
-
-        # Activation and memory after forward
-        if torch.cuda.is_available():
-            after_alloc = torch.cuda.memory_allocated(device)
-            after_reserved = torch.cuda.memory_reserved(device)
-            activation_bytes = max(0, after_alloc - before_alloc)
-            activation_mb = int(math.ceil(activation_bytes / (1024 ** 2)))
-            peak = torch.cuda.max_memory_allocated(device)
-            gpu_peak_mb = int(peak // (1024 ** 2))
-            reserved = torch.cuda.max_memory_reserved(device)
-            gpu_reserved_mb = int(reserved // (1024 ** 2))
-            gpu_allocated_bytes = int(after_alloc)
-            gpu_reserved_bytes = int(reserved)
-        else:
-            activation_mb = gpu_peak_mb = gpu_reserved_mb = gpu_allocated_bytes = gpu_reserved_bytes = None
-
-        # CPU transfer timing and bytes; output metadata
-        out_shape = tuple(raw_reg.shape)
-        out_dtype = str(raw_reg.dtype)
-        out_numel = int(raw_reg.numel())
-
-        elem_w = getattr(windows_tensor, "element_size", None)
-        windows_bytes = int(windows_tensor.numel()) * int(elem_w()) if callable(elem_w) else None
-        
-        elem_o = getattr(raw_reg, "element_size", None)
-        out_bytes = int(out_numel) * int(elem_o()) if out_numel is not None and callable(elem_o) else None
-
-        preds = raw_reg.view(raw_reg.size(0), -1)[:, -1] if raw_reg.dim() >= 2 else raw_reg
-        cpu_copy_bytes = int(out_numel * (raw_reg.element_size() if callable(getattr(raw_reg, "element_size", None)) else 4))
-
-        # per-segment sampling controlled by params.hparams["MICRO_SAMPLE_K"]
-        per_segment_p50_ms = None
-        per_segment_p90_ms = None
-        sample_k = int(params.hparams.get("MICRO_SAMPLE_K", 0)) if params is not None and hasattr(params, "hparams") else 0
-        sample_k = max(0, min(256, sample_k))
-        
-        if sample_k > 0 and num_segments > 0:
-            k = min(num_segments, sample_k)
-            if num_segments <= k:
-                idxs = list(range(num_segments))
-            else:
-                stride = max(1, num_segments // k)
-                idxs = list(range(0, num_segments, stride))[:k]
-                
-        seg_times = []
-        seg_events = []  # store event pairs to read after single sync
-        for ii in idxs:
-            seg = windows_tensor[ii : ii + 1]
-            if torch.cuda.is_available():
-                seg_e0 = torch.cuda.Event(enable_timing=True); seg_e1 = torch.cuda.Event(enable_timing=True)
-                seg_e0.record()
-                with torch.amp.autocast("cuda", enabled=True):
-                    _ = model(seg)
-                seg_e1.record()
-                seg_events.append((seg_e0, seg_e1))
-            else:
-                t0s = perf_counter(); _ = model(seg); t1s = perf_counter()
-                seg_times.append((t1s - t0s) * 1000.0)
-        
-        # if we recorded CUDA events, do one synchronize and extract elapsed times
-        if torch.cuda.is_available() and seg_events:
-            torch.cuda.synchronize()
-            intentional_syncs += 1
-            for e0, e1 in seg_events:
-                seg_times.append(e0.elapsed_time(e1))
-  
-            if seg_times:
-                seg_times_sorted = sorted(seg_times)
-                def _pct(arr, p):
-                    n = len(arr)
-                    if n == 0:
-                        return None
-                    rank = int(math.floor(p / 100.0 * (n - 1)))
-                    return float(arr[rank])
-                per_segment_p50_ms = _pct(seg_times_sorted, 50.0)
-                per_segment_p90_ms = _pct(seg_times_sorted, 90.0)
-
-        t_exit = perf_counter()
-        collector_ms = (t_exit - t_entry) * 1000.0
-
-        # Estimate extra post-forward milliseconds (ms) consumed by CPU-side work
-        seg_times_sum = sum(seg_times) if 'seg_times' in locals() and seg_times else 0.0
-        pred_extra_ms = max(0.0, float(collector_ms) - float(full_forward_ms) - float(seg_times_sum))
-        
-        param_bytes = int(sum(int(p.numel()) * int(getattr(p, "element_size", lambda: 4)()) for p in model.parameters()))
-
-        # Environment metadata (cheap, helpful)
-        env = {}
-        env["python"] = platform.python_version()
-        env["torch"] = getattr(torch, "__version__", None)
-        env["cuda"] = getattr(torch.version, "cuda", None)
-        if torch.cuda.is_available():
-            env["device_name"] = torch.cuda.get_device_name(device)
-        else:
-            env["device_name"] = platform.node()  # lightweight fallback host id
-
-        # prefer explicit optimizer arg
-        opt = optimizer or getattr(model, "optimizer", None) or globals().get("optimizer", None)
-        optimizer_groups = getattr(opt, "param_groups", None) or []
-        group_nonzero_counts = [
-            sum(1 for p in (g.get("params") or []) if getattr(p, "grad", None) is not None)
-            for g in optimizer_groups
-        ]
+    # Compute consistent sum/num/mean for non-empty segments (num_segments equals windows_tensor.size(0))
+    nonzero_seg_lens = [L for L in seg_lens if L > 0]
+    sum_seg_lens = int(sum(nonzero_seg_lens)) if nonzero_seg_lens else 0
+    num_segments = int(windows_tensor.size(0))
     
-        # single-pass named_parameters scan for grad flags
-        backbone_has = False
-        head_has = False
-        for n, p in list(model.named_parameters()):
-            has_grad = getattr(p, "grad", None) is not None
-            ln = n.lower()
-            if "pred" in ln or "head" in ln:
-                head_has = head_has or has_grad
-            else:
-                backbone_has = backbone_has or has_grad
-        
-        snapshot = {
-            "B": int(B),
-            "groups": int(G),
-            "seq_len_full": int(seq_len_full),
-            "feat_dim": int(feat_dim),
-            "raw_reg_shape": out_shape,                 # mirrors historical raw_reg_shape
-            "group_nonzero_counts": group_nonzero_counts,
-            "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
-            "full_forward_ms": float(full_forward_ms),
-            "pred_extra_ms": pred_extra_ms,
-            "num_segments": int(num_segments),
-            "segments_per_sec": float(num_segments / (full_forward_ms / 1000.0)) if full_forward_ms and num_segments else None,
-            "expected_segments": int(B * G),
-            "sum_seg_lens": int(sum(seg_lens)) if seg_lens else 0,
-            "mean_seg_len": float(mean_seg_len),
-            "gpu_peak_mb": int(gpu_peak_mb) if gpu_peak_mb is not None else None,
-            "gpu_reserved_mb": int(gpu_reserved_mb) if gpu_reserved_mb is not None else None,
-            "gpu_allocated_bytes": int(gpu_allocated_bytes) if gpu_allocated_bytes is not None else None,
-            "gpu_reserved_bytes": int(gpu_reserved_bytes) if gpu_reserved_bytes is not None else None,
-            "cpu_copy_bytes": int(cpu_copy_bytes) if cpu_copy_bytes is not None else None,
-            "device_syncs_count": int(intentional_syncs),
-            "per_segment_p50_ms": float(per_segment_p50_ms) if per_segment_p50_ms is not None else None,
-            "per_segment_p90_ms": float(per_segment_p90_ms) if per_segment_p90_ms is not None else None,
-            "activation_mb": int(activation_mb) if activation_mb is not None else None,
-            "out_shape": out_shape,
-            "out_dtype": out_dtype,
-            "out_numel": int(out_numel) if out_numel is not None else None,
-            "out_bytes": int(out_bytes) if out_bytes is not None else None,
-            "windows_bytes": int(windows_bytes) if windows_bytes is not None else None,
-            "collector_ms": float(collector_ms),
-            "dataloader_ms": float(dataloader_ms) if dataloader_ms is not None else None,
-            "param_bytes": int(param_bytes) if param_bytes is not None else None,
-            "env": env,
-            "backward_ms": getattr(model, "_last_backward_ms", None),
-        }
+    mean_seg_len = float(sum_seg_lens) / num_segments if num_segments else float(seq_len_full)
 
-        # attach and mark done
-        model._micro_snapshot = snapshot
-        model._microdetail_emitted = True
-        
-        if hasattr(model, "_micro_snapshot_in_progress"):
-            delattr(model, "_micro_snapshot_in_progress")
-        
-        return snapshot if return_snapshot else None
 
-    finally:
-        # always cleanup and restore
-        if hasattr(model, "_micro_snapshot_in_progress"):
-            try:
-                delattr(model, "_micro_snapshot_in_progress")
-            except Exception:
-                pass
-        if model_was_training:
-            try:
-                model.train()
-            except Exception:
-                pass
+    # GPU tracking: reset peak only when CUDA is available
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats(device)
+        torch.cuda.synchronize()
+        before_alloc = torch.cuda.memory_allocated(device)
+        before_reserved = torch.cuda.memory_reserved(device)
+    else:
+        before_alloc = before_reserved = 0
+
+    # Forward-only timing (AMP), use CUDA events when available; else use perf_counter
+    if torch.cuda.is_available():
+        e0 = torch.cuda.Event(enable_timing=True); e1 = torch.cuda.Event(enable_timing=True)
+        e0.record()
+        with torch.amp.autocast("cuda", enabled=True):
+            raw_out = model(windows_tensor)
+        e1.record()
+        torch.cuda.synchronize()
+        intentional_syncs += 1
+        full_forward_ms = e0.elapsed_time(e1)
+    else:
+        t0 = perf_counter()
+        with torch.amp.autocast("cuda", enabled=False):
+            raw_out = model(windows_tensor)
+        full_forward_ms = (perf_counter() - t0) * 1000.0
+
+    raw_reg = raw_out[0] if isinstance(raw_out, (tuple, list)) else raw_out
+
+    # Activation and memory after forward
+    if torch.cuda.is_available():
+        after_alloc = torch.cuda.memory_allocated(device)
+        after_reserved = torch.cuda.memory_reserved(device)
+        activation_bytes = max(0, after_alloc - before_alloc)
+        activation_mb = int(math.ceil(activation_bytes / (1024 ** 2)))
+        peak = torch.cuda.max_memory_allocated(device)
+        gpu_peak_mb = int(peak // (1024 ** 2))
+        reserved = torch.cuda.max_memory_reserved(device)
+        gpu_reserved_mb = int(reserved // (1024 ** 2))
+        gpu_allocated_bytes = int(after_alloc)
+        gpu_reserved_bytes = int(reserved)
+    else:
+        activation_mb = gpu_peak_mb = gpu_reserved_mb = gpu_allocated_bytes = gpu_reserved_bytes = None
+
+    # CPU transfer timing and bytes; output metadata
+    out_shape = tuple(raw_reg.shape)
+    out_dtype = str(raw_reg.dtype)
+    out_numel = int(raw_reg.numel())
+
+    elem_w = getattr(windows_tensor, "element_size", None)
+    windows_bytes = int(windows_tensor.numel()) * int(elem_w()) if callable(elem_w) else None
+
+    elem_o = getattr(raw_reg, "element_size", None)
+    out_bytes = int(out_numel) * int(elem_o()) if out_numel is not None and callable(elem_o) else None
+
+    preds = raw_reg.view(raw_reg.size(0), -1)[:, -1] if raw_reg.dim() >= 2 else raw_reg
+    cpu_copy_bytes = int(out_numel * (raw_reg.element_size() if callable(getattr(raw_reg, "element_size", None)) else 4))
+
+    # per-segment sampling controlled by params.hparams["MICRO_SAMPLE_K"]
+    per_segment_p50_ms = None
+    per_segment_p90_ms = None
+    sample_k = int(params.hparams.get("MICRO_SAMPLE_K", 0)) if params is not None and hasattr(params, "hparams") else 0
+    sample_k = max(0, min(256, sample_k))
+
+    # ensure idxs is always defined
+    idxs = []
+    if sample_k > 0 and num_segments > 0:
+        k = min(num_segments, sample_k)
+        if num_segments <= k:
+            idxs = list(range(num_segments))
+        else:
+            stride = max(1, num_segments // k)
+            idxs = list(range(0, num_segments, stride))[:k]
+
+    seg_times = []
+    seg_events = []  # store event pairs to read after single sync
+    for ii in idxs:
+        seg = windows_tensor[ii : ii + 1]
+        if torch.cuda.is_available():
+            seg_e0 = torch.cuda.Event(enable_timing=True); seg_e1 = torch.cuda.Event(enable_timing=True)
+            seg_e0.record()
+            with torch.amp.autocast("cuda", enabled=True):
+                _ = model(seg)
+            seg_e1.record()
+            seg_events.append((seg_e0, seg_e1))
+        else:
+            t0s = perf_counter(); _ = model(seg); t1s = perf_counter()
+            seg_times.append((t1s - t0s) * 1000.0)
+
+    # if we recorded CUDA events, do one synchronize and extract elapsed times
+    if torch.cuda.is_available() and seg_events:
+        torch.cuda.synchronize()
+        intentional_syncs += 1
+        for e0, e1 in seg_events:
+            seg_times.append(e0.elapsed_time(e1))
+
+        if seg_times:
+            seg_times_sorted = sorted(seg_times)
+            def _pct(arr, p):
+                n = len(arr)
+                if n == 0:
+                    return None
+                rank = int(math.floor(p / 100.0 * (n - 1)))
+                return float(arr[rank])
+            per_segment_p50_ms = _pct(seg_times_sorted, 50.0)
+            per_segment_p90_ms = _pct(seg_times_sorted, 90.0)
+
+    t_exit = perf_counter()
+    collector_ms = (t_exit - t_entry) * 1000.0
+
+    # Estimate extra post-forward milliseconds (ms) consumed by CPU-side work
+    seg_times_sum = sum(seg_times) if seg_times else 0.0
+    pred_extra_ms = max(0.0, float(collector_ms) - float(full_forward_ms) - float(seg_times_sum))
+
+    # Environment metadata (cheap, helpful)
+    env = {}
+    env["python"] = platform.python_version()
+    env["torch"] = getattr(torch, "__version__", None)
+    env["cuda"] = getattr(torch.version, "cuda", None)
+    if torch.cuda.is_available():
+        env["device_name"] = torch.cuda.get_device_name(device)
+    else:
+        env["device_name"] = platform.node()  # lightweight fallback host id
+
+    # prefer explicit optimizer arg
+    opt = optimizer or getattr(model, "optimizer", None) or globals().get("optimizer", None)
+    optimizer_groups = getattr(opt, "param_groups", None) or []
+    group_nonzero_counts = [
+        sum(1 for p in (g.get("params") or []) if getattr(p, "grad", None) is not None)
+        for g in optimizer_groups
+    ]
+
+    backbone_has = False
+    head_has = False
+    for n, p in list(model.named_parameters()):
+        has_grad = getattr(p, "grad", None) is not None
+        ln = n.lower()
+        if "pred" in ln or "head" in ln:
+            head_has = head_has or has_grad
+        else:
+            backbone_has = backbone_has or has_grad
+
+    snapshot = {
+        "B": int(B),
+        "groups": int(G),
+        "seq_len_full": int(seq_len_full),
+        "feat_dim": int(feat_dim),
+        "raw_reg_shape": out_shape,                
+        "group_nonzero_counts": group_nonzero_counts,
+        "grads": {"backbone": bool(backbone_has), "head": bool(head_has)},
+        "full_forward_ms": float(full_forward_ms),
+        "pred_extra_ms": pred_extra_ms,
+        "num_segments": int(num_segments),
+        "segments_per_sec": float(num_segments / (full_forward_ms / 1000.0)) if full_forward_ms and num_segments else None,
+        "expected_segments": int(B * G),
+        "sum_seg_lens": int(sum_seg_lens),
+        "mean_seg_len": float(mean_seg_len),
+        "gpu_peak_mb": int(gpu_peak_mb),
+        "gpu_reserved_mb": int(gpu_reserved_mb) ,
+        "gpu_allocated_bytes": int(gpu_allocated_bytes),
+        "gpu_reserved_bytes": int(gpu_reserved_bytes) ,
+        "cpu_copy_bytes": int(cpu_copy_bytes),
+        "device_syncs_count": int(intentional_syncs),
+        "per_segment_p50_ms": float(per_segment_p50_ms),
+        "per_segment_p90_ms": float(per_segment_p90_ms),
+        "activation_mb": int(activation_mb),
+        "out_shape": out_shape,
+        "out_dtype": out_dtype,
+        "out_numel": int(out_numel),
+        "out_bytes": int(out_bytes),
+        "windows_bytes": int(windows_bytes),
+        "collector_ms": float(collector_ms),
+        "dataloader_ms": float(dataloader_ms),
+        "env": env,
+        "backward_ms": getattr(model, "_last_backward_ms", None)}
+
+    model._micro_snapshot = snapshot
+    model._microdetail_emitted = True
+
+    if hasattr(model, "_micro_snapshot_in_progress"):
+        delattr(model, "_micro_snapshot_in_progress")
+    if model_was_training:
+        model.train()
+
+    return snapshot if return_snapshot else None
+
 
 #########################################################################################################
-
 
 _RUN_STARTED = False
 _RUN_DEBUG_DONE = False
@@ -1185,72 +1228,51 @@ def init_log(
     """
     Emit run-start diagnostics and a single authoritative micro-snapshot to the log.
 
-    Purpose
-    - Emit a compact run header, baselines and hyperparameters once per process.
-    - Attempt a one-shot micro-snapshot collection (via collect_or_run_forward_micro_snapshot)
-      and print a single canonical BATCH_SHAPE + MICRODETAIL line derived from the snapshot.
-    - Provide a deterministic fallback to legacy first-batch snapshot data if the collector
-      is unavailable.
+    Responsibilities
+    - Emit run header, baselines and hyperparameters once.
+    - Run a one-shot micro-snapshot collector (collect_or_run_forward_micro_snapshot).
+    - Compute canonical parameter stats and produce a single authoritative
+      BATCH_SHAPE + MICRODETAIL line derived from the numeric snapshot.
+
+    Design notes
+    - The collector performs sampling, forward, timing and raw numeric measurement
+      and attaches a dict at model._micro_snapshot. init_log computes canonical
+      parameter counts/bytes and performs all human-facing formatting.
+    - Helpers are nested for single-file locality as requested.
     """
-    global _RUN_STARTED, _RUN_DEBUG_DONE
+    # small helpers (single source of truth for param counts/bytes and formatting)
+    def model_param_stats(model: torch.nn.Module):
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        def _elem_size_for(p):
+            es = getattr(p, "element_size", None)
+            if callable(es):
+                return int(es())
+            return 4
+
+        param_bytes = int(sum(p.numel() * _elem_size_for(p) for p in model.parameters()))
+        return int(total_params), int(trainable_params), int(param_bytes)
+
+    def human_bytes(n):
+        if n is None:
+            return "None"
+        n = int(n)
+        if n >= 1024**2:
+            return f"{n/1024**2:.2f}MB"
+        if n >= 1024:
+            return f"{n/1024:.1f}KB"
+        return f"{n}B"
+
+    global _RUN_STARTED, _RUN_DEBUG_DONE, _RUN_LOCK
 
     with _RUN_LOCK:
         if not _RUN_STARTED:
             sep = "-" * 150
             _append_log("\n" + sep, log_file)
             _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
-            
-            _append_log("\nSINGLE RUN DIAGNOSTIC FORMAT (explanatory)", log_file)
-            _append_log("    BATCH_SHAPE B=32 groups=451 seq_len_full=60 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)", log_file)
-            _append_log("    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable", log_file)
-            _append_log("      -> B: number of batch samples used to build windows (snapshot.B)", log_file)
-            _append_log("      -> groups: number of logical groups used when flattening windows (snapshot.groups)", log_file)
-            _append_log("      -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)", log_file)
-            _append_log("      -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)", log_file)
-            _append_log("      -> activation_mb: estimated activation footprint in MB computed from allocation delta (snapshot.activation_mb)", log_file)
-            _append_log("      -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)", log_file)
-            _append_log("      -> collector_ms: total wall-clock ms spent by the collector including sampling and CPU/GPU syncs (snapshot.collector_ms)", log_file)
-            _append_log("      -> cpu_copy_bytes: bytes copied to host for predictions, shown human-readable in log (snapshot.cpu_copy_bytes)", log_file)
-            _append_log("      -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)", log_file)
-            _append_log("      -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)", log_file)
-            _append_log("      -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)", log_file)
-            _append_log("      -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)", log_file)
-            _append_log("      -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)", log_file)
-            _append_log("      -> pred_extra_ms: estimated CPU-side post-forward ms (collector_ms - full_forward_ms - per-seg-sum) (snapshot.pred_extra_ms)", log_file)
-            _append_log("      -> gpu_allocated_bytes: raw GPU bytes allocated (snapshot.gpu_allocated_bytes)", log_file)
-            _append_log("      -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)", log_file)
-            _append_log("      -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)", log_file)
-            _append_log("      -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)", log_file)
-            _append_log("      -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)", log_file)
-            _append_log("      -> mean_seg_len: average per-segment time-series length in timesteps (snapshot.mean_seg_len)", log_file)
-            _append_log("      -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)", log_file)
-            _append_log("      -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)", log_file)
-            _append_log("      -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)", log_file)
-            _append_log("      -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)", log_file)
-            _append_log("      -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)", log_file)
-            _append_log("      -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)", log_file)
-            _append_log("      -> step_block_ms: placeholder for step-block timing if measured (snapshot.step_block_ms; reported 0.0 when not measured)", log_file)
-            _append_log("      -> sum_seg_lens: sum of segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)", log_file)
-            _append_log("      -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)", log_file)
-            
-            _append_log("\nPER-EPOCH LOG FORMAT (explanatory):", log_file)
-            _append_log("  E{ep:02d}                : epoch number formatted with two digits", log_file)
-            _append_log("  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts", log_file)
-            _append_log("  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)", log_file)
-            _append_log("  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum", log_file)
-            _append_log("  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)", log_file)
-            _append_log("  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation", log_file)
-            _append_log("  TR[rmse,mae,r2]         : training metrics (RMSE, R^2, MAE) reported for the epoch (train_metrics)", log_file)
-            _append_log("  VAL[rmse,mae,r2]         : validation metrics (RMSE, R^2, MAE) reported for the epoch (val_metrics)", log_file)
-            _append_log("  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_tot_preds/model.last_val_targs (trend calibration)", log_file)
-            _append_log("  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults to 0.00/0.000 when missing)", log_file)
-            _append_log("  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB); in these logs FMB is high so validate baseline alignment", log_file)
-            _append_log("  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec or windows/sec depending on implementation)", log_file)
-            _append_log("  chk={val:.3f}           : checkpoint-score token printed as chk in the line (implementation-specific)", log_file)
-            _append_log("  GPU={GiB:.2f}GiB         : optional high-water GPU memory in GiB when CUDA available (torch.cuda.max_memory_allocated)", log_file)
-            _append_log("  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy", log_file)
-            _append_log("  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio", log_file)
-            _append_log("  G/U=name:grad_norm/update_ratio,... : parameter entries by gradient norm with their update ratios (short names use last one or two name segments)", log_file)
+
+            _append_log(RUN_DIAGNOSTIC_EXPLANATION, log_file)
 
             if isinstance(baselines, dict) and baselines:
                 _append_log("\nBASELINES:", log_file)
@@ -1258,14 +1280,14 @@ def init_log(
                 _append_log(f"  TRAIN persistence RMSE = {baselines['bl_tr_pers']:.5f}", log_file)
                 _append_log(f"  VAL   mean RMSE        = {baselines['bl_val_mean']:.5f}", log_file)
                 _append_log(f"  VAL   persistence RMSE = {baselines['bl_val_pers']:.5f}", log_file)
-                
+
             if isinstance(hparams, dict) and hparams:
                 _append_log("\nHYPERPARAMS:", log_file)
                 for k, v in hparams.items():
                     _append_log(f"  {k} = {v}", log_file)
                 _append_log("", log_file)
 
-            # --- compact runtime summary (single-line appearance) ---
+            # Compact runtime summary pieces
             debug_opt_line = None
             if optimizer is not None:
                 opt_groups = len(optimizer.param_groups)
@@ -1273,85 +1295,84 @@ def init_log(
                 opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
                 debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
 
-            model_static_line = None
-            param_bytes_line = None
+            # Canonical model counts computed once here so variables exist later
             if model is not None:
-                total_params = sum(int(p.numel()) for p in model.parameters())
-                trainable_params = sum(int(p.numel()) for p in model.parameters() if p.requires_grad)
+                total_params, trainable_params, computed_param_bytes = model_param_stats(model)
                 frozen_params = total_params - trainable_params
                 model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
-
-                # prefer model._micro_snapshot param_bytes if available
-                param_bytes = None
-                micro_snap = getattr(model, "_micro_snapshot", None)
-                if isinstance(micro_snap, dict):
-                    param_bytes = micro_snap.get("param_bytes")
-                if param_bytes is not None:
-                    if param_bytes >= 1024 * 1024:
-                        param_bytes_line = f"param_bytes={param_bytes//(1024*1024)}MB"
-                    elif param_bytes >= 1024:
-                        param_bytes_line = f"param_bytes={param_bytes//1024}KB"
-                    else:
-                        param_bytes_line = f"param_bytes={param_bytes}B"
+                param_bytes_line = f"param_bytes={human_bytes(computed_param_bytes)}"
+            else:
+                total_params = trainable_params = computed_param_bytes = None
+                model_static_line = None
+                param_bytes_line = None
 
             compact_parts = []
-            if debug_opt_line: compact_parts.append(debug_opt_line)
-            if model_static_line: compact_parts.append(model_static_line)
-            if param_bytes_line: compact_parts.append(param_bytes_line)
+            if debug_opt_line:
+                compact_parts.append(debug_opt_line)
+            if model_static_line:
+                compact_parts.append(model_static_line)
+            if param_bytes_line:
+                compact_parts.append(param_bytes_line)
+
+            if compact_parts:
+                _append_log(" | ".join(compact_parts), log_file)
 
             _RUN_STARTED = True
 
-        # --- One-shot read-only runtime snapshot emitted at most once ---
+        # --- One-shot snapshot emission at most once ---
         if not _RUN_DEBUG_DONE:
-            
-            # Attempt to run the micro-snapshot collector if available
             tloader = locals().get("train_loader", None) or globals().get("train_loader", None)
             prms = locals().get("params", None) or globals().get("params", None)
-            
+            opt_local = locals().get("optimizer", None) or globals().get("optimizer", None)
+
+            # run collector (collector stays minimal: sampling/timing/forward)
             if callable(globals().get("collect_or_run_forward_micro_snapshot", None)):
                 collect_or_run_forward_micro_snapshot(
                     model=model,
                     train_loader=tloader,
                     params=prms,
-                    optimizer=locals().get("optimizer", None) or globals().get("optimizer", None),
+                    optimizer=opt_local,
                     log_file=log_file,
                 )
 
             micro_ms = getattr(model, "_micro_snapshot", None)
-            
-            emitted = False
-            
-            # Emit DEBUG_SHAPES, GROUP_NONZERO_COUNTS, DEBUG_GRADS from micro snapshot if present
+
+            # stamp canonical param stats into snapshot and emit MICRODETAIL
             if isinstance(micro_ms, dict):
-                ms = micro_ms
-                # single authoritative BATCH_SHAPE + MICRODETAIL from micro snapshot
-                _append_log(f"BATCH_SHAPE B={ms.get('B')} groups={ms.get('groups')} seq_len_full={ms.get('seq_len_full')} feat={ms.get('feat_dim')}", log_file)
-            
+                micro_ms["total_params"] = int(total_params) if total_params is not None else None
+                micro_ms["trainable_params"] = int(trainable_params) if trainable_params is not None else None
+                micro_ms["param_bytes"] = int(computed_param_bytes) if computed_param_bytes is not None else None
+
+                _append_log(
+                    f"BATCH_SHAPE B={micro_ms.get('B')} groups={micro_ms.get('groups')} seq_len_full={micro_ms.get('seq_len_full')} feat={micro_ms.get('feat_dim')}",
+                    log_file,
+                )
+
+                # format helpers used only for MICRODETAIL rendering
                 def _hb(v):
-                    try:
-                        v = int(v)
-                    except Exception:
-                        return str(v)
-                    if v >= 1024*1024: return f"{v//(1024*1024)}MB"
-                    if v >= 1024: return f"{v//1024}KB"
+                    if v is None: return "None"
+                    v = int(v)
+                    if v >= 1024**2: return f"{v/1024**2:.2f}MB"
+                    if v >= 1024: return f"{v/1024:.1f}KB"
                     return f"{v}B"
-            
+
                 def _fmt(k, v):
-                    if v is None: return f"{k}=None"
-                    if "bytes" in k or "param" in k or "cpu_copy" in k or "windows" in k:
+                    if v is None:
+                        return f"{k}=None"
+                    # treat only param_bytes (and keys explicitly with "bytes") as byte quantities
+                    if "bytes" in k or k == "param_bytes" or "cpu_copy" in k or "windows" in k:
                         return f"{k}={_hb(v)}"
                     if "shape" in k and not isinstance(v, str):
                         return f"{k}={tuple(v)}"
                     if isinstance(v, float):
                         return f"{k}={v:.2f}"
                     return f"{k}={v}"
-            
-                parts = [_fmt(k, ms.get(k)) for k in sorted(ms.keys())]
+
+                parts = [_fmt(k, micro_ms.get(k)) for k in sorted(micro_ms.keys())]
                 _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
-                emitted = True
-            
-            if emitted:
+
                 _RUN_DEBUG_DONE = True
+
 
 #################################################################################################################################
 
@@ -1407,6 +1428,8 @@ def log_epoch_summary(
     lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else 0.0
     
     for name, p in model.named_parameters():
+        if getattr(p, "numel", lambda: 1)() == 0:
+            continue
         if p.grad is None:
             g = 0.0
         else:
@@ -1498,7 +1521,7 @@ def log_epoch_summary(
     loss_tokens += f",DELTA_LOSS={avg_delta_loss:.4e},DELTA_RATIO={delta_ratio:.3e}"
     loss_tokens += f",BASE_RMSE={train_base_rmse:.5f},DELTA_RMSE={train_delta_rmse:.5f}"
 
-    # 8) # compact Top-K: dedupe by short name, show all non-zero, collapse tiny into one token
+    # 8) compact Top: dedupe by short name, show all buckets sorted by g (compact format)
     def short_name(n):
         if "parametrizations" in n:
             return n.split('.')[-1]
@@ -1509,16 +1532,13 @@ def log_epoch_summary(
         if "parametrizations" in name:
             continue
         s = short_name(name)
+        # keep the entry with the largest g for each short name
         if s not in seen or g > seen[s][0]:
             seen[s] = (g, u)
-            
+
+    # sort all buckets by descending gradient and produce compact s:g/u tokens
     items = sorted(seen.items(), key=lambda kv: kv[1][0], reverse=True)
-    zero_thresh = 1e-6
-    display = [f"{s}:{g:.3f}/{u:.1e}" for s, (g, u) in items if g > zero_thresh]
-    zero_count = sum(1 for _, (g, _u) in items if g <= zero_thresh)
-    if zero_count:
-        display.append(f"zero:{zero_count}/0.000")
-    G_U = ", ".join(display)
+    G_U = ",".join(f"{s}:{g:.1e}/{u:.1e}" for s, (g, u) in items)
 
     # 9) Assemble OPTS token (compact)
     try:
@@ -1590,11 +1610,7 @@ def log_epoch_summary(
         else:
             curr_g = float(p.grad.norm().cpu())
 
-        baseline = None
-        try:
-            baseline = getattr(model, "_first_layer_gn", {}).get(name)
-        except Exception:
-            baseline = None
+        baseline = getattr(model, "_first_layer_gn", None).get(name)
         # when baseline not stored, store and also emit the baseline value
         if baseline is None:
             model._first_layer_gn[name] = float(curr_g)
@@ -1608,7 +1624,6 @@ def log_epoch_summary(
             layer_token = "LAYER_GN[" + ",".join(pairs) + "]"
 
     # 16) Final line assembly (compact, per-epoch changing values only)
-    sched_field = f"{sched_pct_token}" if sched_pct_token else ""
     line = (
         f"\nE{epoch:02d} | "
         f"{opt_token} | "
@@ -1620,14 +1635,15 @@ def log_epoch_summary(
         f"TR[{tr_rmse:.3f},{tr_mae:.3f},{tr_r2:.2f},BASE_RMSE={train_base_rmse:.3f},DELTA_RMSE={train_delta_rmse:.3f}] | "
         f"VAL[{val_rmse:.3f},{val_mae:.3f},{val_r2:.2f},BASE_RMSE={val_base_rmse:.3f}] | "
         f"{loss_tokens} | "
-        f"{sched_field} | "
+        f"{sched_pct_token} | "
         f"SR={SR:.3f} | "
         f"SL={SL:.2f},HR={HR:.3f} | "
         f"FMB={fraction_model_better:.4f} | "
         f"T={elapsed:.1f}s,TP={tp:.1f}seg/s | "
         f"chk={int(bool(chk))} | "
         f"GPU={max_mem:.2f}GiB | "
-        f"{layer_token}"
-        f"\nG/U={G_U}"
+        f"{layer_token}\n"
+        f"G/U={G_U}"
+
     )
     _append_log(line, log_file)
