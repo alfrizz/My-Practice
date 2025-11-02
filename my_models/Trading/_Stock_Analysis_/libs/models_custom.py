@@ -34,20 +34,6 @@ torch.backends.cudnn.benchmark          = True
 
 ######################################################################################################
 
-def _allocate_lstm_states(batch_size: int,
-                          hidden_size: int,
-                          bidirectional: bool,
-                          device: torch.device):
-    """
-    Allocate hidden (h) and cell (c) buffers for an LSTM.
-    Returns two tensors shaped (num_directions, batch_size, hidden_size).
-    """
-    num_directions = 2 if bidirectional else 1
-    h = torch.zeros(num_directions, batch_size, hidden_size, device=device)
-    c = torch.zeros(num_directions, batch_size, hidden_size, device=device)
-    return h, c
-
-###############
 
 class PositionalEncoding(nn.Module):
     """
@@ -74,7 +60,21 @@ class PositionalEncoding(nn.Module):
 
 ############### 
 
+def _allocate_lstm_states(batch_size: int,
+                          hidden_size: int,
+                          bidirectional: bool,
+                          device: torch.device):
+    """
+    Allocate hidden (h) and cell (c) buffers for an LSTM.
+    Returns two tensors shaped (num_directions, batch_size, hidden_size).
+    """
+    num_directions = 2 if bidirectional else 1
+    h = torch.zeros(num_directions, batch_size, hidden_size, device=device)
+    c = torch.zeros(num_directions, batch_size, hidden_size, device=device)
+    return h, c
 
+###############
+    
 class ModelClass(nn.Module):
     """
     Multi-backbone sequence model with optional short/long LSTMs, transformer, and a baseline+delta head.
@@ -411,23 +411,60 @@ def _reset_states(
 ############################ 
 
 
+# class CustomMSELoss(nn.Module):
+#     """
+#     Combined level + slope MSE: standard MSE mean + α*MSE of one‐step diffs.
+#     alpha: slope-penalty weight; ↑smoothness, ↓spike fidelity
+#     """
+#     def __init__(self, alpha: float = 0.0):
+#         super().__init__()
+#         self.alpha = alpha
+
+#     def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
+#         # final‐step head
+#         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
+#         L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
+#         if self.alpha <= 0 or preds.numel() < 2:
+#             return L1
+#         dp = preds[1:] - preds[:-1]
+#         dt =  targs[1:] - targs[:-1]
+#         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
+#         return L1 + self.alpha * L2
+
 class CustomMSELoss(nn.Module):
     """
-    Combined level + slope MSE: standard MSE mean + α*MSE of one‐step diffs.
-    alpha: slope-penalty weight; ↑smoothness, ↓spike fidelity
+    Level + slope MSE: L1 = MSE(preds, targs) + alpha * MSE(one-step diffs).
+    forward(preds, targs, seq_lengths)
+    - seq_lengths: list of per-sequence window counts matching the flattened batch order.
+    - Computes L1 on the flattened batch.
+    - If alpha > 0, computes one-step diffs per sequence (avoids cross-sequence diffs)
+      and adds alpha * MSE(diffs_pred, diffs_targ).
     """
     def __init__(self, alpha: float = 0.0):
         super().__init__()
         self.alpha = alpha
 
-    def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
-        # final‐step head
+    def forward(self, preds: torch.Tensor, targs: torch.Tensor, seq_lengths: list) -> torch.Tensor:
         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
         L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
-        if self.alpha <= 0 or preds.numel() < 2:
+        if self.alpha <= 0:
             return L1
-        dp = preds[1:] - preds[:-1]
-        dt =  targs[1:] - targs[:-1]
+
+        parts_p, parts_t = [], []
+        s = 0
+        for L in seq_lengths:
+            if L > 1:
+                e = s + L
+                p = preds[s:e]; r = targs[s:e]
+                parts_p.append(p[1:] - p[:-1])
+                parts_t.append(r[1:] - r[:-1])
+            s += L
+
+        if not parts_p:
+            return L1
+
+        dp = torch.cat(parts_p, dim=0)
+        dt = torch.cat(parts_t, dim=0)
         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
         return L1 + self.alpha * L2
 
@@ -518,7 +555,7 @@ def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
 ########################
 
 
-def eval_on_loader(loader, model: nn.Module, clamp_preds: bool = True) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
+def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
     """
     Run model validation over a loader and return metrics and predictions.
     
@@ -658,12 +695,12 @@ def model_training_loop(
                 assert total_tensor.shape[0] == targets_tensor.shape[0], "mismatch between model outputs and assembled targets"
 
                 # base loss: supervise the baseline head only
-                base_loss = MSE_base(base_tensor, targets_tensor)
+                base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
                 
                 # teach delta to predict the detached residual
                 if model.use_delta and lambda_delta > 0:
                     delta_target = (targets_tensor - base_tensor).detach()
-                    delta_loss = MSE_delta(delta_tensor, delta_target)
+                    delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
                     tr_delta_preds.extend(delta_tensor.detach().cpu().tolist())
                     tr_delta_targs.extend(delta_target.cpu().tolist())
                 else:

@@ -140,17 +140,17 @@ hparams = {
     # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
     "FLATTEN_MODE":          "last",   # format to be provided to regression head: "flatten" | "last" | "pool"
     "PRED_HIDDEN":           128,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
-    "ALPHA_SMOOTH":          0.0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
+    "ALPHA_SMOOTH":          0.05,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
 
     "USE_DELTA":             False,    # enable Delta baseline vs features predictions head
-    "LAMBDA_DELTA":          0.01,     # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
+    "LAMBDA_DELTA":          0.1,     # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            70,     # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          3e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       9e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       6e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
