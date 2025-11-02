@@ -255,20 +255,6 @@ class ModelClass(nn.Module):
             nn.init.zeros_(_delta_lin.bias)
             self.delta_head = _delta_lin
 
-    def reset_short(self):
-        if self.h_short is not None:
-            bsz, dev = self.h_short.size(1), self.h_short.device
-            self.h_short, self.c_short = _allocate_lstm_states(
-                bsz, self.short_units // 2, True, dev
-            )
-
-    def reset_long(self):
-        if self.h_long is not None:
-            bsz, dev = self.h_long.size(1), self.h_long.device
-            self.h_long, self.c_long = _allocate_lstm_states(
-                bsz, self.long_units // 2, True, dev
-            )
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Collapse extra leading dims to (batch, time_steps, features)
         if x.dim() > 3:
@@ -408,14 +394,16 @@ def _reset_states(
 
     # daily reset if the day changed
     if prev_day is None or day != prev_day:
-        model.reset_short()
+        # clear short LSTM states so forward will allocate fresh states
+        model.h_short = None
+        model.c_short = None
         model._reset_log.append(("short", day))
 
         # weekly reset if we've wrapped past the end of the week
         if prev_day is not None and day < prev_day:
-            model.reset_long()
+            model.h_long = None
+            model.c_long = None
             model._reset_log.append(("long", day))
-
 
     return day
 

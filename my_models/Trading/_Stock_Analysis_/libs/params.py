@@ -122,7 +122,7 @@ hparams = {
     # ── Short Bi-LSTM toggle ──────────────────────────────
     "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
     "SHORT_UNITS":          128,      # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
-    "DROPOUT_SHORT":        0.2,    # dropout after short-LSTM; ↑regularization
+    "DROPOUT_SHORT":        0.1,    # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
@@ -130,7 +130,7 @@ hparams = {
     "TRANSFORMER_LAYERS":   2,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.1,    # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.05,    # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
@@ -148,9 +148,9 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            70,     # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          7e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1.7,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in the cycle
+    "WEIGHT_DECAY":          3e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       9e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
