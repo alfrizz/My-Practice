@@ -903,4 +903,53 @@ def cleanup_callback(study, trial):
         torch.cuda.empty_cache()
 
 
+####################################################################################################################
 
+
+
+def compute_psd(signal: np.ndarray, dt: float):
+    """Return freqs (1/min) and power spectral density for 1D signal."""
+    y = signal - np.nanmean(signal)
+    fft = np.fft.rfft(y)
+    psd = np.abs(fft) ** 2
+    freqs = np.fft.rfftfreq(len(y), d=dt)
+    return freqs, psd
+
+def analyze_signal_psd(
+    df,
+    day,
+    signal_col="signal",
+    pred_col="pred_signal",
+    dt: float = 1.0,
+    high_freq_thresh: float = 0.10,
+    tail_bins: int = 10
+):
+    """
+    Receive a random day, compute and plot PSDs for true vs predicted signals,
+    print the highest-frequency bins and return avg high-frequency power ratio.
+    """
+    day_mask = df.index.normalize() == day
+    df_day = df.loc[day_mask, [signal_col, pred_col]].dropna()
+    if df_day.empty:
+        raise ValueError("no data for selected day")
+
+    y_true = df_day[signal_col].to_numpy()
+    y_pred = df_day[pred_col].to_numpy()
+
+    f_t, psd_t = compute_psd(y_true, dt)
+    f_p, psd_p = compute_psd(y_pred, dt)
+
+    plt.figure(figsize=(6,4))
+    plt.loglog(f_t, psd_t, label="true")
+    plt.loglog(f_p, psd_p, label="pred")
+    plt.xlabel("Frequency (1/min)"); plt.ylabel("Power"); plt.legend()
+    plt.title(f"PSD on {pd.to_datetime(day).date()}"); plt.show()
+
+    print(f"\nTop {tail_bins} frequency bins:")
+    for ft, tt, tp in zip(f_t[-tail_bins:], psd_t[-tail_bins:], psd_p[-tail_bins:]):
+        print(f"{ft:8.4f}  {tt:12.3e}  {tp:12.3e}")
+
+    hf = f_t > high_freq_thresh
+    ratio = psd_p[hf].mean() / psd_t[hf].mean()
+    print(f"\nHigh-freq power ratio (pred/true) >{high_freq_thresh}: {ratio:.3f}")
+    return ratio

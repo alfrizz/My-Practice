@@ -411,26 +411,6 @@ def _reset_states(
 ############################ 
 
 
-# class CustomMSELoss(nn.Module):
-#     """
-#     Combined level + slope MSE: standard MSE mean + α*MSE of one‐step diffs.
-#     alpha: slope-penalty weight; ↑smoothness, ↓spike fidelity
-#     """
-#     def __init__(self, alpha: float = 0.0):
-#         super().__init__()
-#         self.alpha = alpha
-
-#     def forward(self, preds: torch.Tensor, targs: torch.Tensor) -> torch.Tensor:
-#         # final‐step head
-#         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
-#         L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
-#         if self.alpha <= 0 or preds.numel() < 2:
-#             return L1
-#         dp = preds[1:] - preds[:-1]
-#         dt =  targs[1:] - targs[:-1]
-#         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
-#         return L1 + self.alpha * L2
-
 class CustomMSELoss(nn.Module):
     """
     Level + slope MSE: L1 = MSE(preds, targs) + alpha * MSE(one-step diffs).
@@ -837,3 +817,57 @@ def model_training_loop(
             pass
 
     return best_val
+
+
+######################################################################################################
+
+
+def add_preds_and_split(
+    df: pd.DataFrame,
+    train_preds: np.ndarray,
+    val_preds:   np.ndarray,
+    test_preds:  np.ndarray,
+    end_times_tr:  np.ndarray,
+    end_times_val: np.ndarray,
+    end_times_te:  np.ndarray
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Stamp per-window predictions into a minute-bar DataFrame and return
+    (train+val, test) subsets where pred_signal is present.
+
+    Minimal version: assumes inputs are correctly shaped; keeps last value on
+    duplicate timestamps and aligns timestamp tz to df.index if needed.
+    """
+    df2 = df.copy()
+    df2["pred_signal"] = np.nan
+
+    tz_df = getattr(df.index, "tz", None)
+
+    def _series(preds, times):
+        arr = np.asarray(preds).ravel()
+        idx = pd.to_datetime(times)
+        if tz_df is not None and getattr(idx, "tz", None) is None:
+            idx = idx.tz_localize(tz_df)
+        elif tz_df is None and getattr(idx, "tz", None) is not None:
+            idx = idx.tz_convert(None)
+        s = pd.Series(arr, index=pd.DatetimeIndex(idx))
+        if s.index.has_duplicates:
+            s = s[~s.index.duplicated(keep="last")]
+        return s
+
+    s_tr  = _series(train_preds, end_times_tr)
+    s_val = _series(val_preds,   end_times_val)
+    s_te  = _series(test_preds,  end_times_te)
+
+    for s in (s_tr, s_val, s_te):
+        common = s.index.intersection(df2.index)
+        if not common.empty:
+            df2.loc[common, "pred_signal"] = s.loc[common].values
+
+    idx_trval = s_tr.index.union(s_val.index).intersection(df2.index)
+    idx_te    = s_te.index.intersection(df2.index)
+
+    df_trainval = df2.loc[idx_trval].dropna(subset=["pred_signal"])
+    df_test     = df2.loc[idx_te].dropna(subset=["pred_signal"])
+
+    return df_trainval, df_test

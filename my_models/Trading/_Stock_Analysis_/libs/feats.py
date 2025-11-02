@@ -700,10 +700,99 @@ def compare_raw_vs_scaled(
     return cmp_df
 
 
-
 #########################################################################################################
 
 
+# def ig_feature_importance(
+#     model: nn.Module,
+#     loader,
+#     feature_names,
+#     device: torch.device,
+#     n_samples: int = 100,
+#     n_steps: int = 50
+# ) -> pd.DataFrame:
+#     """
+#     Compute per‐feature Integrated Gradients attributions.
+
+#     - Disables cuDNN (RNN backward incompatibility in eval).
+#     - Puts model in eval(), clears state.
+#     - Defines a pure‐float32 forward that returns the final scalar signal.
+#     - Runs IG with float32 inputs and baselines.
+#     - Summarizes absolute attributions over time and averages across windows.
+#     - Returns DataFrame sorted by descending importance.
+#     """
+#     # 1) disable cuDNN for RNN backward
+#     cudnn_enabled = cudnn.enabled
+#     cudnn.enabled = False
+
+#     model.eval()
+#     model.h_short = model.h_long = None
+
+#     # 2) forward that emits the final scalar (sigmoid‐activated) in float32
+#     def forward_reg(x: torch.Tensor) -> torch.Tensor:
+#         # x: (B, W, F), float32
+#         with torch.cuda.amp.autocast(enabled=False):
+#             model.float()
+#             model.reset_short()
+#             out = model(x.float())
+#             pr  = out[0] if isinstance(out, (tuple, list)) else out
+#             # pr may be (B, W, 1), (B, W, D), or (B, W)
+#             if pr.dim() == 3 and pr.size(-1) == 1:
+#                 pr = pr.squeeze(-1)
+#             if pr.dim() == 3:
+#                 pr = pr[..., 0]
+#             if pr.dim() == 2:
+#                 # final timestep = last window step
+#                 pr = pr[:, -1]
+#             return torch.sigmoid(pr)
+
+#     ig = IntegratedGradients(forward_reg)
+
+#     total_attr = np.zeros(len(feature_names), dtype=float)
+#     count = 0
+
+#     # 3) iterate windows (with progress bar)
+#     for batch in tqdm(loader, desc="IG windows", total=n_samples):
+#         xb, y_sig, *_, lengths = batch
+#         W = int(lengths[0])
+#         if W == 0:
+#             continue
+
+#         x = xb[0, :W].unsqueeze(0).to(device).float()   # (1, W, F)
+#         baseline = torch.zeros_like(x)
+
+#         # 4) compute IG in float32
+#         atts, delta = ig.attribute(
+#             inputs=x,
+#             baselines=baseline,
+#             n_steps=n_steps,
+#             internal_batch_size=1,
+#             return_convergence_delta=True
+#         )
+
+#         # 5) collapse abs attributions over time
+#         attr_np = atts.detach().abs().cpu().numpy()      # (1, W, F)
+#         abs_sum = attr_np.reshape(-1, attr_np.shape[-1]).sum(axis=0)  # (F,)
+#         total_attr += abs_sum
+#         count += 1
+#         if count >= n_samples:
+#             break
+
+#         # 6) free GPU memory
+#         del atts, delta, x, baseline
+#         torch.cuda.empty_cache()
+
+#     # 7) restore cuDNN
+#     cudnn.enabled = cudnn_enabled
+
+#     # 8) average and package
+#     avg_attr = total_attr / max(1, count)
+#     imp_df   = pd.DataFrame({
+#         "feature":    feature_names,
+#         "importance": avg_attr
+#     }).sort_values("importance", ascending=False).reset_index(drop=True)
+
+#     return imp_df
 
 
 def ig_feature_importance(
@@ -715,37 +804,35 @@ def ig_feature_importance(
     n_steps: int = 50
 ) -> pd.DataFrame:
     """
-    Compute per‐feature Integrated Gradients attributions.
-
-    - Disables cuDNN (RNN backward incompatibility in eval).
-    - Puts model in eval(), clears state.
-    - Defines a pure‐float32 forward that returns the final scalar signal.
-    - Runs IG with float32 inputs and baselines.
-    - Summarizes absolute attributions over time and averages across windows.
-    - Returns DataFrame sorted by descending importance.
+    Minimal Integrated Gradients feature importances.
+    Assumes loader yields tuples (xb, y_sig, ..., seq_lengths) and that
+    xb has shape (B, W, F). Does not modify ModelClass source.
     """
-    # 1) disable cuDNN for RNN backward
+    # disable cuDNN during attribution (RNN backward can be fragile) and remember state
     cudnn_enabled = cudnn.enabled
     cudnn.enabled = False
 
+    model.to(device)
     model.eval()
-    model.h_short = model.h_long = None
 
-    # 2) forward that emits the final scalar (sigmoid‐activated) in float32
+    # simple state reset expected by your forward (no method calls, no monkey patch)
+    model.h_short = model.c_short = None
+    model.h_long  = model.c_long  = None
+
     def forward_reg(x: torch.Tensor) -> torch.Tensor:
-        # x: (B, W, F), float32
-        with torch.cuda.amp.autocast(enabled=False):
+        # x: (B, W, F) on device, float32
+        with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
             model.float()
-            model.reset_short()
+            # clear states so repeated forward calls are independent
+            model.h_short = model.c_short = None
+            model.h_long  = model.c_long  = None
             out = model(x.float())
-            pr  = out[0] if isinstance(out, (tuple, list)) else out
-            # pr may be (B, W, 1), (B, W, D), or (B, W)
+            pr = out[0] if isinstance(out, (tuple, list)) else out
             if pr.dim() == 3 and pr.size(-1) == 1:
                 pr = pr.squeeze(-1)
             if pr.dim() == 3:
                 pr = pr[..., 0]
             if pr.dim() == 2:
-                # final timestep = last window step
                 pr = pr[:, -1]
             return torch.sigmoid(pr)
 
@@ -754,18 +841,16 @@ def ig_feature_importance(
     total_attr = np.zeros(len(feature_names), dtype=float)
     count = 0
 
-    # 3) iterate windows (with progress bar)
     for batch in tqdm(loader, desc="IG windows", total=n_samples):
-        xb, y_sig, *_, lengths = batch
-        W = int(lengths[0])
+        xb, y_sig, *rest, seq_lengths = batch
+        W = int(seq_lengths[0])
         if W == 0:
             continue
 
         x = xb[0, :W].unsqueeze(0).to(device).float()   # (1, W, F)
         baseline = torch.zeros_like(x)
 
-        # 4) compute IG in float32
-        atts, delta = ig.attribute(
+        atts, _delta = ig.attribute(
             inputs=x,
             baselines=baseline,
             n_steps=n_steps,
@@ -773,27 +858,21 @@ def ig_feature_importance(
             return_convergence_delta=True
         )
 
-        # 5) collapse abs attributions over time
         attr_np = atts.detach().abs().cpu().numpy()      # (1, W, F)
         abs_sum = attr_np.reshape(-1, attr_np.shape[-1]).sum(axis=0)  # (F,)
         total_attr += abs_sum
         count += 1
         if count >= n_samples:
+            del atts, _delta, x, baseline
+            torch.cuda.empty_cache()
             break
 
-        # 6) free GPU memory
-        del atts, delta, x, baseline
+        del atts, _delta, x, baseline
         torch.cuda.empty_cache()
 
-    # 7) restore cuDNN
     cudnn.enabled = cudnn_enabled
 
-    # 8) average and package
     avg_attr = total_attr / max(1, count)
-    imp_df   = pd.DataFrame({
-        "feature":    feature_names,
-        "importance": avg_attr
-    }).sort_values("importance", ascending=False).reset_index(drop=True)
-
+    imp_df = pd.DataFrame({"feature": feature_names, "importance": avg_attr}) \
+             .sort_values("importance", ascending=False).reset_index(drop=True)
     return imp_df
-
