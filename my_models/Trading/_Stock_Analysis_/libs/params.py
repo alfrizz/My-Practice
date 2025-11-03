@@ -105,16 +105,14 @@ best_optuna_value, best_optuna_params = load_best_optuna_record()
 
 
 hparams = {
-    "LOOK_BACK":            60,      # length of each input window
-
     # ── Input convolution toggle ──────────────────────────
-    "USE_CONV":              True,   # enable Conv1d + BatchNorm1d
+    "USE_CONV":              False,   # enable Conv1d + BatchNorm1d
     "CONV_K":                3,      # Conv1d kernel size; ↑local smoothing, ↓fine-detail
     "CONV_DILATION":         1,      # Conv1d dilation;   ↑receptive field, ↓granularity
-    "CONV_CHANNELS":         128,     # Conv1d output channels; ↑early-stage capacity, ↓compute
+    "CONV_CHANNELS":         64,     # Conv1d output channels; ↑early-stage capacity, ↓compute
 
     # ── Temporal ConvNet (TCN) toggle ────────────────────
-    "USE_TCN":              False,   # enable dilated Conv1d stack
+    "USE_TCN":               False,   # enable dilated Conv1d stack
     "TCN_LAYERS":            2,      # number of dilated Conv1d layers
     "TCN_KERNEL":            3,      # kernel size for each TCN layer
     "TCN_CHANNELS":          64,     # TCN output channels; independent from CONV_CHANNELS for flexibility
@@ -122,35 +120,40 @@ hparams = {
     # ── Short Bi-LSTM toggle ──────────────────────────────
     "USE_SHORT_LSTM":       False,    # enable bidirectional “short” LSTM
     "SHORT_UNITS":          128,      # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
-    "DROPOUT_SHORT":        0.1,    # dropout after short-LSTM; ↑regularization
+    "DROPOUT_SHORT":        0.1,     # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
     "TRANSFORMER_D_MODEL":  128,      # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":   2,       # number of encoder layers
+    "TRANSFORMER_LAYERS":   3,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.10,    # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.1,    # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
     "DROPOUT_LONG":         0.1,     # dropout after projection (or long-LSTM)
-    "LONG_UNITS":           96,       # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
+    "LONG_UNITS":           128,       # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
 
-    # ── Regression head & smoothing + Skip-Gate  ───────────────────────────────────────
-    "FLATTEN_MODE":          "last",   # format to be provided to regression head: "flatten" | "last" | "pool"
+    # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
+    "FLATTEN_MODE":          "last",    # format to be provided to regression head: "flatten" | "last" | "pool"
     "PRED_HIDDEN":           128,       # head MLP hidden dim; ↑capacity, ↓over-parameterization
-    "ALPHA_SMOOTH":          0.0,      # slope-penalty weight; ↑smoothness, ↓spike fidelity
-
-    "USE_DELTA":             False,    # enable Delta baseline vs features predictions head
-    "LAMBDA_DELTA":          0.1,     # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
+    
+    "ALPHA_SMOOTH":          0.05,       # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
+    "WARMUP_STEPS":          5,         # linear warmup for slope penalty (0 = no warmup)
+    
+    "USE_HUBER":             True,     # if True use Huber for level term instead of MSE
+    "HUBER_DELTA":           0.1,       # Huber delta (transition threshold); scale to your typical error
+    
+    "USE_DELTA":             False,     # enable Delta baseline vs features predictions head
+    "LAMBDA_DELTA":          0.1,       # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            70,     # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
     "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       8e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       5e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
@@ -162,6 +165,8 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
+    "LOOK_BACK":             60,      # length of each input window
+    
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
 

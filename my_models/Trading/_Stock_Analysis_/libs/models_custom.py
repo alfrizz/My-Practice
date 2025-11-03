@@ -141,7 +141,7 @@ class ModelClass(nn.Module):
                                   kernel_size=conv_k,
                                   dilation=conv_dilation,
                                   padding=padding)
-            self.bn   = nn.BatchNorm1d(CONV_CHANNELS)
+            self.bn   = nn.GroupNorm(8, CONV_CHANNELS) # nn.BatchNorm1d(CONV_CHANNELS)
         else:
             self.conv = nn.Identity()
             self.bn   = nn.Identity()
@@ -159,7 +159,7 @@ class ModelClass(nn.Module):
                 blocks += [
                     nn.Conv1d(in_ch, TCN_CHANNELS, tcn_kernel,
                               dilation=dilation, padding=padding),
-                    nn.BatchNorm1d(TCN_CHANNELS),
+                    nn.GroupNorm(8, TCN_CHANNELS), # nn.BatchNorm1d(TCN_CHANNELS)
                     nn.ReLU()
                 ]
                 in_ch = TCN_CHANNELS
@@ -411,31 +411,116 @@ def _reset_states(
 ############################ 
 
 
+# class CustomMSELoss(nn.Module):
+#     """
+#     Level + slope MSE: L1 = MSE(preds, targs) + alpha * MSE(one-step diffs).
+#     forward(preds, targs, seq_lengths)
+#     - seq_lengths: list of per-sequence window counts matching the flattened batch order.
+#     - Computes L1 on the flattened batch.
+#     - If alpha > 0, computes one-step diffs per sequence (avoids cross-sequence diffs)
+#       and adds alpha * MSE(diffs_pred, diffs_targ).
+#     """
+#     def __init__(self, alpha: float = 0.0):
+#         super().__init__()
+#         self.alpha = alpha
+
+#     def forward(self, preds: torch.Tensor, targs: torch.Tensor, seq_lengths: list) -> torch.Tensor:
+#         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
+#         L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean") # MSE(preds, targs)
+#         if self.alpha <= 0:
+#             return L1
+
+#         parts_p, parts_t = [], []
+#         s = 0
+#         for L in seq_lengths:
+#             if L > 1:
+#                 e = s + L
+#                 p = preds[s:e]; r = targs[s:e]
+#                 parts_p.append(p[1:] - p[:-1])
+#                 parts_t.append(r[1:] - r[:-1])
+#             s += L
+
+#         if not parts_p:
+#             return L1
+
+#         dp = torch.cat(parts_p, dim=0)
+#         dt = torch.cat(parts_t, dim=0)
+#         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean") # MSE(one-step diffs of preds, one-step diffs of targs)
+#         return L1 + self.alpha * L2
+
+
+
 class CustomMSELoss(nn.Module):
     """
-    Level + slope MSE: L1 = MSE(preds, targs) + alpha * MSE(one-step diffs).
-    forward(preds, targs, seq_lengths)
-    - seq_lengths: list of per-sequence window counts matching the flattened batch order.
-    - Computes L1 on the flattened batch.
-    - If alpha > 0, computes one-step diffs per sequence (avoids cross-sequence diffs)
-      and adds alpha * MSE(diffs_pred, diffs_targ).
-    """
-    def __init__(self, alpha: float = 0.0):
-        super().__init__()
-        self.alpha = alpha
+    Level + slope loss.
 
-    def forward(self, preds: torch.Tensor, targs: torch.Tensor, seq_lengths: list) -> torch.Tensor:
+    Total loss = level_loss + effective_alpha * slope_loss
+
+    - alpha: base weight for slope (derivative) MSE (same as before).
+    - warmup_steps: integer number of steps/epochs to linearly ramp slope weight from 0 -> alpha.
+                    If 0, no warmup (effective_alpha == alpha).
+    - use_huber: if True use Huber (smooth L1) for the level term; otherwise use MSE exactly.
+    - huber_delta: delta for Huber (transition threshold). Note: Huber in PyTorch uses 0.5 * e^2
+                   in the quadratic region (not identical to MSE), so keep use_huber=False to
+                   preserve exact previous MSE behavior.
+    forward signature:
+      forward(preds, targs, seq_lengths, step=None)
+      - step: optional integer used for warmup (epoch or global step depending on caller).
+    """
+    def __init__(
+        self,
+        alpha: float = 0.0,
+        warmup_steps: int = 0,
+        use_huber: bool = False,
+        huber_delta: float = 1.0,
+    ):
+        super().__init__()
+        self.alpha = float(alpha)
+        self.warmup_steps = int(warmup_steps)
+        self.use_huber = bool(use_huber)
+        self.huber_delta = float(huber_delta)
+
+    def _effective_alpha(self, step: Optional[int]) -> float:
+        if self.alpha <= 0.0:
+            return 0.0
+        if self.warmup_steps <= 0 or step is None:
+            return self.alpha
+        t = min(1.0, float(step) / float(self.warmup_steps))
+        return self.alpha * t
+
+    def forward(
+        self,
+        preds: torch.Tensor,
+        targs: torch.Tensor,
+        seq_lengths: List[int],
+        step: Optional[int] = None,
+    ) -> torch.Tensor:
         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
-        L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
-        if self.alpha <= 0:
+
+        # Level term: MSE or Huber depending on flag
+        if self.use_huber:
+            # PyTorch's huber_loss uses delta and returns per-element losses; set reduction="mean"
+            L1 = torch.nn.functional.huber_loss(preds, targs, reduction="mean", delta=self.huber_delta)
+        else:
+            L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
+
+        # If no slope penalty requested, return level loss
+        if self.alpha <= 0.0:
             return L1
 
-        parts_p, parts_t = [], []
+        eff_alpha = self._effective_alpha(step)
+        if eff_alpha <= 0.0:
+            return L1
+
+        # Build per-sequence one-step diffs, avoid crossing sequence boundaries
+        parts_p = []
+        parts_t = []
         s = 0
         for L in seq_lengths:
             if L > 1:
                 e = s + L
-                p = preds[s:e]; r = targs[s:e]
+                p = preds[s:e]
+                r = targs[s:e]
                 parts_p.append(p[1:] - p[:-1])
                 parts_t.append(r[1:] - r[:-1])
             s += L
@@ -446,8 +531,8 @@ class CustomMSELoss(nn.Module):
         dp = torch.cat(parts_p, dim=0)
         dt = torch.cat(parts_t, dim=0)
         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
-        return L1 + self.alpha * L2
 
+        return L1 + eff_alpha * L2
 
 ############################
 
@@ -629,8 +714,15 @@ def model_training_loop(
     best_val, best_state, patience = float("inf"), None, 0
     models_dir = Path(params.models_folder)
 
-    MSE_base = CustomMSELoss(alpha=alpha_smooth) 
-    MSE_delta = CustomMSELoss(alpha=0) # alpha default 0.0
+    MSE_base = CustomMSELoss(
+        alpha=float(params.hparams["ALPHA_SMOOTH"]),
+        warmup_steps=int(params.hparams["WARMUP_STEPS"]),
+        use_huber=bool(params.hparams["USE_HUBER"]),
+        huber_delta=float(params.hparams["HUBER_DELTA"]),
+    )
+    
+    # delta head is trained to match detached residual; keep no slope penalty there
+    MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
 
     for epoch in range(1, max_epochs + 1):
 
