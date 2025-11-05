@@ -9,10 +9,14 @@ import tempfile
 import atexit
 import copy
 import re
+import math
+import time
 
 import pandas as pd
 import numpy  as np
-import math
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import clear_output, display
 
 from captum.attr import IntegratedGradients
 from tqdm.auto import tqdm
@@ -702,6 +706,175 @@ def compare_raw_vs_scaled(
 
 #########################################################################################################
 
+
+def prune_features_by_variance_and_correlation(
+    X_all: pd.DataFrame,
+    y: pd.Series,
+    min_std: float = 1e-6,
+    max_corr: float = 0.9
+) -> Tuple[List[str], List[str], pd.DataFrame, pd.DataFrame]:
+    """
+    1) Remove features with std < min_std
+    2) From the remaining features, drop members of high-correlation groups
+       (absolute correlation > max_corr). For each correlated group keep the
+       feature that has the highest absolute correlation with the target y.
+
+    Returns:
+      kept_after_std      : list of feature names kept after the std filter
+      kept_after_correlation : list of feature names kept after correlation pruning
+      corr_full           : correlation matrix of features after std filter (DataFrame)
+      corr_pruned         : correlation matrix of features after correlation pruning (DataFrame)
+    """
+    # 1) Filter by standard deviation
+    feature_stds = X_all.std(axis=0, ddof=0)
+    kept_after_std = feature_stds[feature_stds >= min_std].index.tolist()
+    dropped_low_variance = feature_stds[feature_stds < min_std].index.tolist()
+
+    X_var = X_all.loc[:, kept_after_std].copy()
+
+    # 2) Correlation matrix (absolute) for the features kept after std filter
+    corr_before = X_var.corr().abs()
+
+    # 3) Upper triangle mask (exclude diagonal)
+    mask_upper = np.triu(np.ones(corr_before.shape), k=1).astype(bool)
+    upper_tri = corr_before.where(mask_upper)
+
+    # 4) Prune highly correlated features
+    to_drop: Set[str] = set()
+    for col in upper_tri.columns:
+        # find features (rows) correlated above threshold with this column
+        high_corr = upper_tri.index[upper_tri[col] > max_corr].tolist()
+        if high_corr:
+            group = [col] + high_corr
+            # choose best feature in this group by absolute correlation with target y
+            # align indices to be safe
+            corr_with_target = X_var.loc[:, group].corrwith(y).abs()
+            best_feat = corr_with_target.idxmax()
+            to_drop.update(set(group) - {best_feat})
+
+    kept_after_corr = [f for f in kept_after_std if f not in to_drop]
+
+    # 5) Correlation matrix after pruning (absolute)
+    corr_after = X_var.loc[:, kept_after_corr].corr().abs()
+
+    # Logging summary
+    print("Dropped low-variance features:", dropped_low_variance)
+    print("Dropped high-correlation features:", sorted(list(to_drop)))
+    print("Kept after std filter (count):", len(kept_after_std))
+    print("Kept after correlation pruning (count):", len(kept_after_corr))
+
+    return kept_after_std, kept_after_corr, corr_before, corr_after
+
+##########################
+
+def plot_correlation_before_after(
+    corr_full: pd.DataFrame,
+    corr_pruned: pd.DataFrame,
+    figsize: Tuple[int, int] = (18, 8),
+    vmin: float = 0.0,
+    vmax: float = 1.0,
+    cmap: str = "coolwarm"
+) -> None:
+    """
+    Plot two side-by-side heatmaps:
+      - corr_full  : correlation matrix before pruning
+      - corr_pruned: correlation matrix after pruning
+
+    Both inputs are absolute-valued correlation DataFrames (0..1).
+    """
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    sns.heatmap(
+        corr_full,
+        ax=axes[0],
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        cbar_kws={"shrink": 0.7}
+    )
+    axes[0].set_title("Correlation Before Pruning")
+
+    sns.heatmap(
+        corr_pruned,
+        ax=axes[1],
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        cbar_kws={"shrink": 0.7}
+    )
+    axes[1].set_title("Correlation After Pruning")
+
+    plt.tight_layout()
+    plt.show()
+
+
+#########################################################################################################
+
+
+def update_feature_importances(fi_dict, importance_type, values: pd.Series):
+    """
+    fi_dict: master dict
+    importance_type: one of "corr","mi","perm","shap","lasso"
+    values: pd.Series indexed by feature name
+    """
+    for feat, val in values.items():
+        if feat in fi_dict:
+            fi_dict[feat][importance_type] = val
+
+
+#######################
+
+
+def live_feature_importance(
+    df: pd.DataFrame,
+    features: list[str],
+    label: str,
+    method: str,               # "corr", "mi", "perm", "shap", "lasso"
+    compute_fn,                # function(feature_name) → importance_value
+    threshold: float = None
+):
+    """
+    Generic live plotter for a sequence of feature importances.
+    
+    - df        : full dataframe
+    - features  : list of column names to score
+    - label     : target column name (for context in title)
+    - method    : text legend ("Corr", "Mutual Info", etc.)
+    - compute_fn: a callable f → score[f]
+    - threshold : optional vertical line in the bar chart
+    """
+    # accumulator
+    scores = {}
+
+    # loop with progress bar
+    for f in tqdm(features, desc=f"{method}"):
+        # compute
+        val = compute_fn(f)
+        scores[f] = val
+
+        # update on‐screen plot
+        clear_output(wait=True)
+        series = pd.Series(scores).sort_values()
+        plt.figure(figsize=(6, max(3, len(series)*0.25)))
+        sns.barplot(x=series.values, y=series.index, palette="vlag")
+        if threshold is not None:
+            plt.axvline(threshold, color="gray", linestyle="--")
+            if method=="Corr":
+                plt.axvline(-threshold, color="gray", linestyle="--")
+        plt.title(f"{method} Importance (partial) for {label}")
+        plt.xlabel("Importance")
+        plt.tight_layout()
+        display(plt.gcf())
+        plt.close()
+
+        # tiny pause so the UI can breathe (optional)
+        time.sleep(0.02)
+
+    # final return
+    return pd.Series(scores).sort_values()
+
+    
+#########################################################################################################
 
 
 def ig_feature_importance(

@@ -103,6 +103,8 @@ class ModelClass(nn.Module):
         n_feats: int,
         short_units: int,
         long_units: int,
+        transformer_d_model: int,
+        transformer_layers: int,
         dropout_short: float,
         dropout_long: float,
         dropout_trans: float,
@@ -188,9 +190,9 @@ class ModelClass(nn.Module):
         # 3) Transformer w/ PositionalEncoding + adapter via layer_projection
         upstream_dim = short_units if use_short_lstm else short_in
         if use_transformer:
-            d_model = params.hparams["TRANSFORMER_D_MODEL"]
+            d_model = transformer_d_model
+            layers  = transformer_layers
             heads   = params.hparams["TRANSFORMER_HEADS"]
-            layers  = params.hparams["TRANSFORMER_LAYERS"]
             ff_mult = params.hparams["TRANSFORMER_FF_MULT"]
             ff_dim  = d_model * ff_mult
         
@@ -211,7 +213,7 @@ class ModelClass(nn.Module):
             self.transformer  = nn.Identity()
         
         # 4) Projection → LayerNorm → Dropout
-        proj_in = params.hparams["TRANSFORMER_D_MODEL"] if use_transformer else upstream_dim
+        proj_in = transformer_d_model if use_transformer else upstream_dim
         
         self.short2long = self.layer_projection(proj_in, long_units)
         self.ln_proj    = nn.LayerNorm(long_units)
@@ -234,8 +236,8 @@ class ModelClass(nn.Module):
         self.h_long = None
         self.c_long = None
 
-        # 6) Flatten/Last/Pool + plain MLP head
-        assert flatten_mode in ("flatten", "last", "pool")
+        # 6) Flatten/Last/Pool/Attention + plain MLP head
+        assert flatten_mode in ("flatten", "last", "pool", "attn")
         self.flatten_mode = flatten_mode
         flat_dim = (window_len * long_units if flatten_mode == "flatten" else long_units)
 
@@ -247,6 +249,9 @@ class ModelClass(nn.Module):
         )
         with torch.no_grad():
             self.head_flat[-1].bias.zero_()
+
+        self.attn_pool = nn.Linear(long_units, 1)
+        nn.init.zeros_(self.attn_pool.bias)   # optional: start uniform
 
         # 7) Delta baseline vs features predictions head
         if self.use_delta:
@@ -311,6 +316,10 @@ class ModelClass(nn.Module):
             flat = out_l.reshape(batch_size, -1)
         elif self.flatten_mode == "last":
             flat = out_l[:, -1, :]
+        elif self.flatten_mode == "attn": # out_l: (B, T, C)
+            scores = self.attn_pool(out_l).squeeze(-1)     # (B, T)
+            weights = torch.softmax(scores, dim=1)         # (B, T)
+            flat = (out_l * weights.unsqueeze(-1)).sum(dim=1)  # (B, C)
         else:  # "pool"
             flat = out_l.mean(dim=1)
 
@@ -409,45 +418,6 @@ def _reset_states(
 
 
 ############################ 
-
-
-# class CustomMSELoss(nn.Module):
-#     """
-#     Level + slope MSE: L1 = MSE(preds, targs) + alpha * MSE(one-step diffs).
-#     forward(preds, targs, seq_lengths)
-#     - seq_lengths: list of per-sequence window counts matching the flattened batch order.
-#     - Computes L1 on the flattened batch.
-#     - If alpha > 0, computes one-step diffs per sequence (avoids cross-sequence diffs)
-#       and adds alpha * MSE(diffs_pred, diffs_targ).
-#     """
-#     def __init__(self, alpha: float = 0.0):
-#         super().__init__()
-#         self.alpha = alpha
-
-#     def forward(self, preds: torch.Tensor, targs: torch.Tensor, seq_lengths: list) -> torch.Tensor:
-#         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
-#         L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean") # MSE(preds, targs)
-#         if self.alpha <= 0:
-#             return L1
-
-#         parts_p, parts_t = [], []
-#         s = 0
-#         for L in seq_lengths:
-#             if L > 1:
-#                 e = s + L
-#                 p = preds[s:e]; r = targs[s:e]
-#                 parts_p.append(p[1:] - p[:-1])
-#                 parts_t.append(r[1:] - r[:-1])
-#             s += L
-
-#         if not parts_p:
-#             return L1
-
-#         dp = torch.cat(parts_p, dim=0)
-#         dt = torch.cat(parts_t, dim=0)
-#         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean") # MSE(one-step diffs of preds, one-step diffs of targs)
-#         return L1 + self.alpha * L2
-
 
 
 class CustomMSELoss(nn.Module):
@@ -683,12 +653,6 @@ def model_training_loop(
     scaler:               torch.amp.GradScaler,
     train_loader,
     val_loader,
-    *,
-    max_epochs:          int,
-    early_stop_patience: int,
-    clipnorm:            float,
-    alpha_smooth:        float,
-    lambda_delta:        float,
 ) -> float:
     """
     Train the model with a baseline head and a detached residual (delta) head using AMP.
@@ -724,7 +688,7 @@ def model_training_loop(
     # delta head is trained to match detached residual; keep no slope penalty there
     MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
 
-    for epoch in range(1, max_epochs + 1):
+    for epoch in range(1, params.hparams["MAX_EPOCHS"] + 1):
 
         model.train()
         model.h_short = model.h_long = None
@@ -770,7 +734,7 @@ def model_training_loop(
                 base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
                 
                 # teach delta to predict the detached residual
-                if model.use_delta and lambda_delta > 0:
+                if model.use_delta and params.hparams["LAMBDA_DELTA"] > 0:
                     delta_target = (targets_tensor - base_tensor).detach()
                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
                     tr_delta_preds.extend(delta_tensor.detach().cpu().tolist())
@@ -785,7 +749,7 @@ def model_training_loop(
                 epoch_samples += int(targets_tensor.size(0))
 
                 # combined training objective (final scalar used for backward)
-                total_loss = base_loss + lambda_delta * delta_loss
+                total_loss = base_loss + params.hparams["LAMBDA_DELTA"] * delta_loss
 
             # Backward (AMP) with event timing and a single host sync (for logging)
             if torch.cuda.is_available():
@@ -806,7 +770,7 @@ def model_training_loop(
             # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
             if params_with_grad:
-                torch.nn.utils.clip_grad_norm_(params_with_grad, clipnorm)
+                torch.nn.utils.clip_grad_norm_(params_with_grad, params.hparams["CLIPNORM"])
 
             # Guard scheduler so it only advances when optimizer.step actually ran (prevents LR drift if GradScaler skipped the update)
             _called = {"v": False}
@@ -892,7 +856,7 @@ def model_training_loop(
             }, 0
         else:
             patience += 1
-            if patience >= early_stop_patience:
+            if patience >= params.hparams["EARLY_STOP_PATIENCE"]:
                 break
 
     if best_state is not None:
@@ -930,6 +894,14 @@ def add_preds_and_split(
     Minimal version: assumes inputs are correctly shaped; keeps last value on
     duplicate timestamps and aligns timestamp tz to df.index if needed.
     """
+    for name, preds, times in (
+          ("train", train_preds, end_times_tr),
+          ("val",   val_preds,   end_times_val),
+          ("test",  test_preds,  end_times_te),
+    ):
+        if len(np.asarray(preds).ravel()) != len(np.asarray(times)):
+            raise ValueError(f"{name} preds length != times length: {len(preds)} != {len(times)}")
+
     df2 = df.copy()
     df2["pred_signal"] = np.nan
 
