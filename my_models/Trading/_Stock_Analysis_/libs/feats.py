@@ -767,6 +767,7 @@ def prune_features_by_variance_and_correlation(
 
 ##########################
 
+
 def plot_correlation_before_after(
     corr_full: pd.DataFrame,
     corr_pruned: pd.DataFrame,
@@ -811,6 +812,71 @@ def plot_correlation_before_after(
 #########################################################################################################
 
 
+def predict_windows(model, X_np, batch_size=1024, device=params.device):
+    """
+    Run the trained model on a numpy array of windows and return 1D predictions.
+
+    Parameters
+    - model: trained torch.nn.Module already moved to device and in eval mode
+    - X_np: numpy array of shape (N, L, F) with dtype convertible to float32
+    - batch_size: inference batch size
+
+    Returns
+    - preds: numpy array shape (N,) with model predictions
+    """
+    model.eval()
+    preds = []
+    with torch.no_grad():
+        for i in range(0, len(X_np), batch_size):
+            xb = torch.from_numpy(X_np[i:i + batch_size].astype("float32")).to(device)
+            out = model(xb)
+            p = out[0].detach().cpu().numpy().reshape(-1)
+            preds.append(p)
+    return np.concatenate(preds, axis=0)
+
+
+###################################### 
+
+
+def live_display_importances(imp_series, features, label, method,
+                             batch=1, pause=0.02, threshold=None):
+    """
+    Incrementally display importances from a completed pd.Series.
+
+    - imp_series: pd.Series indexed by feature name (values = importance)
+    - features: ordered list of features to reveal (must match index names)
+    - label: target name for title
+    - method: text for title/legend
+    - batch: how many features to reveal per UI update
+    - pause: sleep between updates (UI breathing)
+    - threshold: optional vertical line value
+    """
+    imp_series = pd.Series(imp_series).reindex(features).fillna(0.0)
+    revealed = {}
+    for i in range(0, len(features), batch):
+        for f in features[i:i+batch]:
+            revealed[f] = float(imp_series[f])
+        clear_output(wait=True)
+        s = pd.Series(revealed).sort_values()
+        plt.figure(figsize=(6, max(3, len(s)*0.18)))
+        colors = sns.color_palette("vlag", len(s))
+        plt.barh(s.index, s.values, color=colors)
+        if threshold is not None:
+            plt.axvline(threshold, color="gray", linestyle="--")
+            if method.lower().startswith("corr"):
+                plt.axvline(-threshold, color="gray", linestyle="--")
+        plt.title(f"{method} Importance (partial) for {label}")
+        plt.xlabel("Importance")
+        plt.tight_layout()
+        display(plt.gcf())
+        plt.close()
+        time.sleep(pause)
+    return imp_series.sort_values(ascending=False)
+
+
+##################################
+
+
 def update_feature_importances(fi_dict, importance_type, values: pd.Series):
     """
     fi_dict: master dict
@@ -822,139 +888,3 @@ def update_feature_importances(fi_dict, importance_type, values: pd.Series):
             fi_dict[feat][importance_type] = val
 
 
-#######################
-
-
-def live_feature_importance(
-    df: pd.DataFrame,
-    features: list[str],
-    label: str,
-    method: str,               # "corr", "mi", "perm", "shap", "lasso"
-    compute_fn,                # function(feature_name) → importance_value
-    threshold: float = None
-):
-    """
-    Generic live plotter for a sequence of feature importances.
-    
-    - df        : full dataframe
-    - features  : list of column names to score
-    - label     : target column name (for context in title)
-    - method    : text legend ("Corr", "Mutual Info", etc.)
-    - compute_fn: a callable f → score[f]
-    - threshold : optional vertical line in the bar chart
-    """
-    # accumulator
-    scores = {}
-
-    # loop with progress bar
-    for f in tqdm(features, desc=f"{method}"):
-        # compute
-        val = compute_fn(f)
-        scores[f] = val
-
-        # update on‐screen plot
-        clear_output(wait=True)
-        series = pd.Series(scores).sort_values()
-        plt.figure(figsize=(6, max(3, len(series)*0.25)))
-        sns.barplot(x=series.values, y=series.index, palette="vlag")
-        if threshold is not None:
-            plt.axvline(threshold, color="gray", linestyle="--")
-            if method=="Corr":
-                plt.axvline(-threshold, color="gray", linestyle="--")
-        plt.title(f"{method} Importance (partial) for {label}")
-        plt.xlabel("Importance")
-        plt.tight_layout()
-        display(plt.gcf())
-        plt.close()
-
-        # tiny pause so the UI can breathe (optional)
-        time.sleep(0.02)
-
-    # final return
-    return pd.Series(scores).sort_values()
-
-    
-#########################################################################################################
-
-
-def ig_feature_importance(
-    model: nn.Module,
-    loader,
-    feature_names,
-    device: torch.device,
-    n_samples: int = 100,
-    n_steps: int = 50
-) -> pd.DataFrame:
-    """
-    Minimal Integrated Gradients feature importances.
-    Assumes loader yields tuples (xb, y_sig, ..., seq_lengths) and that
-    xb has shape (B, W, F). Does not modify ModelClass source.
-    """
-    # disable cuDNN during attribution (RNN backward can be fragile) and remember state
-    cudnn_enabled = cudnn.enabled
-    cudnn.enabled = False
-
-    model.to(device)
-    model.eval()
-
-    # simple state reset expected by your forward (no method calls, no monkey patch)
-    model.h_short = model.c_short = None
-    model.h_long  = model.c_long  = None
-
-    def forward_reg(x: torch.Tensor) -> torch.Tensor:
-        # x: (B, W, F) on device, float32
-        with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
-            model.float()
-            # clear states so repeated forward calls are independent
-            model.h_short = model.c_short = None
-            model.h_long  = model.c_long  = None
-            out = model(x.float())
-            pr = out[0] if isinstance(out, (tuple, list)) else out
-            if pr.dim() == 3 and pr.size(-1) == 1:
-                pr = pr.squeeze(-1)
-            if pr.dim() == 3:
-                pr = pr[..., 0]
-            if pr.dim() == 2:
-                pr = pr[:, -1]
-            return torch.sigmoid(pr)
-
-    ig = IntegratedGradients(forward_reg)
-
-    total_attr = np.zeros(len(feature_names), dtype=float)
-    count = 0
-
-    for batch in tqdm(loader, desc="IG windows", total=n_samples):
-        xb, y_sig, *rest, seq_lengths = batch
-        W = int(seq_lengths[0])
-        if W == 0:
-            continue
-
-        x = xb[0, :W].unsqueeze(0).to(device).float()   # (1, W, F)
-        baseline = torch.zeros_like(x)
-
-        atts, _delta = ig.attribute(
-            inputs=x,
-            baselines=baseline,
-            n_steps=n_steps,
-            internal_batch_size=1,
-            return_convergence_delta=True
-        )
-
-        attr_np = atts.detach().abs().cpu().numpy()      # (1, W, F)
-        abs_sum = attr_np.reshape(-1, attr_np.shape[-1]).sum(axis=0)  # (F,)
-        total_attr += abs_sum
-        count += 1
-        if count >= n_samples:
-            del atts, _delta, x, baseline
-            torch.cuda.empty_cache()
-            break
-
-        del atts, _delta, x, baseline
-        torch.cuda.empty_cache()
-
-    cudnn.enabled = cudnn_enabled
-
-    avg_attr = total_attr / max(1, count)
-    imp_df = pd.DataFrame({"feature": feature_names, "importance": avg_attr}) \
-             .sort_values("importance", ascending=False).reset_index(drop=True)
-    return imp_df

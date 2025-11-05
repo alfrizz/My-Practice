@@ -25,8 +25,8 @@ createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
-feats_min_std = 0.05
-feats_max_corr = 0.9
+feats_min_std = 0.01
+feats_max_corr = 0.99
 
 sel_val_rmse = 0.08990
 
@@ -124,11 +124,11 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  128,     # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":   3,       # number of encoder layers
+    "TRANSFORMER_D_MODEL":  64,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_LAYERS":   2,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.1,     # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.05,     # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,   # enable bidirectional “long” LSTM
@@ -181,26 +181,7 @@ def signal_parameters(ticker):
     if ticker == 'AAPL':
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - hparams["LOOK_BACK"], 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*hparams["LOOK_BACK"], 60))
-        features_cols = ['sma_pct_14',
-                         'atr_pct_14',
-                         'rsi_14',
-                         'bb_w_20',
-                         'plus_di_14',
-                         'range_pct',
-                         'eng_ma',
-                         'minus_di_14',
-                         'eng_macd',
-                         'macd_diff_12_26_9',
-                         'body_pct',
-                         'macd_line_12_26_9',
-                         'volume',
-                         'obv_diff_14',
-                         'eng_rsi',
-                         'eng_atr_div',
-                         'eng_adx',
-                         'adx_14',
-                         'hour',
-                         'body']
+        features_cols = ['rsi_14', 'sma_pct_14', 'bb_w_20', 'obv_diff_14', 'sma_pct_28', 'eng_bb', 'atr_pct_14', 'range_pct', 'obv_sma_14', 'roc_14', 'ret', 'eng_sma_long', 'atr_14', 'obv', 'macd_diff_12_26_9']
         trailing_stop_pred = 0.2
         pred_threshold = 0.1
         return_threshold = 0.01
