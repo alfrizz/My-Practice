@@ -113,7 +113,7 @@ hparams = {
 
     # ── Temporal ConvNet (TCN) toggle ────────────────────
     "USE_TCN":               False,  # enable dilated Conv1d stack
-    "TCN_LAYERS":            2,      # number of dilated Conv1d layers
+    "TCN_LAYERS":            3,      # number of dilated Conv1d layers
     "TCN_KERNEL":            3,      # kernel size for each TCN layer
     "TCN_CHANNELS":          64,     # TCN output channels; independent from CONV_CHANNELS for flexibility
 
@@ -124,11 +124,11 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  64,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_D_MODEL":  128,     # transformer embedding width (d_model); adapter maps upstream features into this
     "TRANSFORMER_LAYERS":   2,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.05,     # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.1,     # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,   # enable bidirectional “long” LSTM
@@ -136,7 +136,7 @@ hparams = {
     "LONG_UNITS":           128,     # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
 
     # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
-    "FLATTEN_MODE":          "pool", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
+    "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
     "PRED_HIDDEN":           128,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
     
     "ALPHA_SMOOTH":          0.0,    # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
@@ -151,9 +151,9 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            70,     # max epochs
     "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "WEIGHT_DECAY":          3e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       5e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
@@ -165,7 +165,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             60,     # length of each input window
+    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
@@ -175,13 +175,21 @@ hparams = {
 
 
 def signal_parameters(ticker):
-    '''
-    look_back ==> length of historical window (how many minutes of history each training example contains): number of past time‐steps fed into the LSTM to predict next value
-    '''
+
     if ticker == 'AAPL':
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - hparams["LOOK_BACK"], 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*hparams["LOOK_BACK"], 60))
-        features_cols = ['rsi_14', 'sma_pct_14', 'bb_w_20', 'obv_diff_14', 'sma_pct_28', 'eng_bb', 'atr_pct_14', 'range_pct', 'obv_sma_14', 'roc_14', 'ret', 'eng_sma_long', 'atr_14', 'obv', 'macd_diff_12_26_9']
+        
+        features_cols = ['bb_w_20', 'sma_pct_14', 'atr_14', 'hour', 'eng_bb', 'rsi_14',
+       'obv_diff_14', 'range_pct', 'ret', 'sma_pct_28', 'plus_di_14',
+       'lower_shad', 'adx_14', 'month', 'atr_pct_14', 'vol_spike_14',
+       'obv_pct_14', 'body_pct', 'obv_sma_14', 'minus_di_14', 'volume',
+       'eng_rsi', 'eng_atr_div', 'day_of_week', 'obv']
+       #  ['sma_pct_14', 'rsi_14', 'sma_pct_28', 'hour', 'bb_w_20', 'range_pct',
+       # 'macd_signal_12_26_9', 'atr_14', 'lower_shad', 'obv_diff_14', 'eng_bb',
+       # 'macd_line_12_26_9', 'atr_pct_14', 'eng_atr_div', 'plus_di_14',
+       # 'eng_macd', 'obv_sma_14', 'eng_sma_long', 'day_of_week', 'body', 'ret']
+        
         trailing_stop_pred = 0.2
         pred_threshold = 0.1
         return_threshold = 0.01

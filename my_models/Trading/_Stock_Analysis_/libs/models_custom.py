@@ -672,6 +672,8 @@ def model_training_loop(
         torch.nn.init.zeros_(model.delta_head.bias)
         
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model_feats = params.features_cols_tick
+    model_hparams = params.hparams
     model.to(device)
 
     live_plot = plots.LiveRMSEPlot()
@@ -679,16 +681,16 @@ def model_training_loop(
     models_dir = Path(params.models_folder)
 
     MSE_base = CustomMSELoss(
-        alpha=float(params.hparams["ALPHA_SMOOTH"]),
-        warmup_steps=int(params.hparams["WARMUP_STEPS"]),
-        use_huber=bool(params.hparams["USE_HUBER"]),
-        huber_delta=float(params.hparams["HUBER_DELTA"]),
+        alpha=float(model_hparams["ALPHA_SMOOTH"]),
+        warmup_steps=int(model_hparams["WARMUP_STEPS"]),
+        use_huber=bool(model_hparams["USE_HUBER"]),
+        huber_delta=float(model_hparams["HUBER_DELTA"]),
     )
     
     # delta head is trained to match detached residual; keep no slope penalty there
     MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
 
-    for epoch in range(1, params.hparams["MAX_EPOCHS"] + 1):
+    for epoch in range(1, model_hparams["MAX_EPOCHS"] + 1):
 
         model.train()
         model.h_short = model.h_long = None
@@ -734,7 +736,7 @@ def model_training_loop(
                 base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
                 
                 # teach delta to predict the detached residual
-                if model.use_delta and params.hparams["LAMBDA_DELTA"] > 0:
+                if model.use_delta and model_hparams["LAMBDA_DELTA"] > 0:
                     delta_target = (targets_tensor - base_tensor).detach()
                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
                     tr_delta_preds.extend(delta_tensor.detach().cpu().tolist())
@@ -749,7 +751,7 @@ def model_training_loop(
                 epoch_samples += int(targets_tensor.size(0))
 
                 # combined training objective (final scalar used for backward)
-                total_loss = base_loss + params.hparams["LAMBDA_DELTA"] * delta_loss
+                total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
 
             # Backward (AMP) with event timing and a single host sync (for logging)
             if torch.cuda.is_available():
@@ -770,7 +772,7 @@ def model_training_loop(
             # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
             if params_with_grad:
-                torch.nn.utils.clip_grad_norm_(params_with_grad, params.hparams["CLIPNORM"])
+                torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
 
             # Guard scheduler so it only advances when optimizer.step actually ran (prevents LR drift if GradScaler skipped the update)
             _called = {"v": False}
@@ -828,14 +830,13 @@ def model_training_loop(
             avg_base_loss=avg_base_loss,
             avg_delta_loss=avg_delta_loss,
             log_file=params.log_file,
-            hparams=params.hparams,
+            hparams=model_hparams,
         )
         live_plot.update(tr_tot_rmse, val_tot_rmse)
 
         best_val, improved, *_ = models_core.maybe_save_chkpt(
-            models_dir, model, val_tot_rmse, best_val,
-            {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse},
-            live_plot, params
+            models_dir, model, val_tot_rmse, best_val, model_feats, model_hparams,
+            {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse}, live_plot
         )
 
         model._last_epoch_checkpoint = bool(improved)
@@ -856,13 +857,13 @@ def model_training_loop(
             }, 0
         else:
             patience += 1
-            if patience >= params.hparams["EARLY_STOP_PATIENCE"]:
+            if patience >= model_hparams["EARLY_STOP_PATIENCE"]:
                 break
 
     if best_state is not None:
         model.load_state_dict(best_state)
         models_core.save_final_chkpt(
-            models_dir, best_state, best_val, params,
+            models_dir, best_state, best_val, model_feats, model_hparams,
             tr_tot_metrics, val_tot_metrics, live_plot, suffix="_fin"
         )
 

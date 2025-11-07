@@ -1,6 +1,6 @@
 from libs import plots, params
 
-from typing import Sequence, List, Tuple, Optional, Union
+from typing import Sequence, List, Tuple, Optional, Union, Dict, Any
 import gc 
 import os
 import io
@@ -32,6 +32,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from numba import njit
 from tqdm.auto import tqdm
+import matplotlib.pyplot as plt
 
 
 #########################################################################################################
@@ -598,29 +599,49 @@ def model_core_pipeline(
 
     return train_loader, val_loader, test_loader, end_times_tr, end_times_val, end_times_te
 
+    
+#################################################
 
-#########################################################################################################
+
+def mean_baseline_rmse(dl):
+    '''
+    The function returns two things:
+    - The global mean of all targets (the baseline prediction).
+    - The RMSE of using that mean as predictor (error of the mean baseline).
+        '''
+    # dl yields (x,y) or y
+    s = n = 0
+    for b in dl:
+        y = b[1] if isinstance(b, (list,tuple)) and len(b)>1 else b
+        y = torch.as_tensor(y).float()
+        s += y.sum().item(); n += y.numel()
+    m = s / n
+    mse = sum(((torch.as_tensor(b[1] if isinstance(b, (list,tuple)) and len(b)>1 else b).float()-m)**2).sum().item() for b in dl)
+    return m, math.sqrt(mse / n)
+
+
+################################################
 
 
 def summarize_split(name, loader, times):
     """
-    Summary of loaders content and times
+    Summary of loaders content, times, baseline
     """
-    ds      = loader.dataset
-    X       = ds.X                      # (N_windows, look_back, n_features)
-    L, F    = X.shape[1], X.shape[2]
-    Nw      = X.shape[0]                # total windows
-    # normalize to days and count windows/day
-    daysD, counts = np.unique(times.astype("datetime64[D]"), return_counts=True)
-    Nd      = len(daysD)
-    dmin, dmax = daysD.min(), daysD.max()
+    ds = loader.dataset
+    X = ds.X
+    L, F = X.shape[1], X.shape[2]
+    Nw = X.shape[0]
+    days, counts = np.unique(times.astype("datetime64[D]"), return_counts=True)
 
     print(f"--- {name.upper()} ---")
-    print(f" calendar days : {Nd:3d}  ({dmin} → {dmax})")
+    print(f" calendar days : {len(days):3d}  ({days.min()} → {days.max()})")
     print(f" windows       : {Nw:4d}  (per-day min={counts.min():3d}, max={counts.max():3d}, mean={counts.mean():.1f})")
     print(f" window shape  : look_back={L}, n_features={F}")
     print(f" dataloader    : batches={len(loader):3d}, batch_size={loader.batch_size}, workers={loader.num_workers}, pin_memory={loader.pin_memory}")
-    print()
+
+    mean_val, rmse = mean_baseline_rmse(loader)
+    print(f" baselines     : baseline prediction={mean_val:.6g}, baseline RMSE = {rmse:.6g}\n")
+
 
     
 #########################################################################################################
@@ -631,10 +652,11 @@ def maybe_save_chkpt(
     model: torch.nn.Module,
     val_rmse: float,
     cur_best: float,
+    model_feats, 
+    model_hparams,
     tr: dict,
     val: dict,
-    live_plot,
-    params
+    live_plot
 ) -> tuple[float, bool, dict, dict, dict | None]:
     """
     Compare `val_rmse` (current validation RMSE) against the best RMSE so far
@@ -693,7 +715,8 @@ def maybe_save_chkpt(
             fname = f"{params.ticker}_{updated_best:.5f}_chp.pth"
             ckpt = {
                 "model_state_dict": best_state,
-                "hparams":          params.hparams,
+                "hparams":          model_hparams,
+                "features":         model_feats,
                 "train_metrics":    best_tr,
                 "val_metrics":      best_val,
                 "train_plot_png":   plot_bytes,
@@ -725,7 +748,8 @@ def save_final_chkpt(
     models_dir: Path,
     best_state: dict,
     best_val_rmse: float,
-    params,
+    model_feats, 
+    model_hparams,
     best_tr: dict,
     best_val: dict,
     live_plot,
@@ -747,7 +771,8 @@ def save_final_chkpt(
     # Assemble the checkpoint dict
     ckpt = {
         "model_state_dict": best_state,
-        "hparams":          params.hparams,
+        "hparams":          model_hparams,
+        "features":         model_feats,
         "train_metrics":    best_tr,
         "val_metrics":      best_val,
         "train_plot_png":   final_plot,
@@ -1377,6 +1402,177 @@ def init_log(
 #################################################################################################################################
 
 
+# def log_epoch_feature_importance(model,
+#                                  feature_names: Optional[List[str]] = None,
+#                                  df = None,
+#                                  params = None,
+#                                  alpha: float = 0.9,
+#                                  mode: str = "combo",   # "combo" | "weights" | "grads"
+#                                  beta: Optional[float] = None,  # if set, update EWMA stored on model
+#                                  eps: float = 1e-12) -> Dict[str, Any]:
+#     """
+#     Compute per-feature scores from model.feature_proj.weight and its grad.
+#     - Prefer passing feature_names (ordered list). If None, will try df.columns, then no-op.
+#     - mode controls which normalized components to use:
+#       - "weights": use normalized column weight norms only
+#       - "grads": use normalized column grad norms only
+#       - "combo": alpha*w_norm + (1-alpha)*g_norm
+#     Returns dict: top_token, items (list of tuples), score (np.array), w_norm, g_norm, layer_token.
+#     """
+#     # --- 1) resolve feature_names (simple checks only) ---
+#     if isinstance(feature_names, (list, tuple)):
+#         feature_names = list(feature_names)
+#     elif feature_names is None and df is not None and hasattr(df, "columns"):
+#         label_col = getattr(params, "label_col", "y") if params is not None else "y"
+#         feature_names = [c for c in df.columns if c not in (label_col, "close_raw")]
+#     else:
+#         feature_names = feature_names or []
+
+#     # --- 2) get projection parameter once ---
+#     named = dict(model.named_parameters())
+#     p = named.get("feature_proj.weight")
+#     if p is None or len(feature_names) == 0:
+#         return {"top_token": None, "items": None, "score": None, "w_norm": None, "g_norm": None, "layer_token": layer_token}
+
+#     # --- 3) read weights and grads on CPU and align names ---
+#     W = p.detach().cpu().numpy()                 # (out_dim, in_dim)
+#     in_dim = int(W.shape[1])
+#     if len(feature_names) != in_dim:
+#         feature_names = list(feature_names[:in_dim]) + [f"feat_{i}" for i in range(len(feature_names), in_dim)]
+
+#     w_norm = np.linalg.norm(W, axis=0)           # shape (in_dim,)
+#     if p.grad is None:
+#         g_norm = np.zeros_like(w_norm)
+#     else:
+#         G = p.grad.detach().cpu().numpy()
+#         g_norm = np.linalg.norm(G, axis=0)
+
+#     # --- 4) normalization helper  ---
+#     def _norm_minmax(arr):
+#         if arr.size == 0:
+#             return arr
+#         lo, hi = arr.min(), arr.max()
+#         return (arr - lo) / (hi - lo + eps)
+
+
+#     w_s = _norm_minmax(w_norm)
+#     g_s = _norm_minmax(g_norm) if g_norm.size else g_norm
+
+#     # --- 5) build score according to mode ---
+#     if mode == "weights":
+#         score = w_s
+#     elif mode == "grads":
+#         score = g_s
+#     else:
+#         score = alpha * w_s + (1.0 - alpha) * g_s
+
+#     # --- 6) prepare items, top token and persist simple history ---
+#     items = list(zip(feature_names, score, w_norm, g_norm))
+#     items.sort(key=lambda x: x[1], reverse=True)
+#     top_token = ",".join(f"{n}:{s:.2e}" for n, s, _, _ in items)
+
+#     if not hasattr(model, "_feat_imp_history"):
+#         model._feat_imp_history = []
+#     model._feat_imp_history.append(score.copy())
+
+#     return {"top_token": top_token, "items": items, "score": score, "w_norm": w_norm, "g_norm": g_norm}
+
+
+def log_epoch_feature_importance(model,
+                                 feature_names: Optional[List[str]] = None,
+                                 df = None,
+                                 params = None,
+                                 layer_token: Optional[str] = None,
+                                 alpha: float = 0.9,
+                                 mode: str = "combo",   # "combo" | "weights" | "grads"
+                                 beta: Optional[float] = None,  # if set, update EWMA stored on model
+                                 eps: float = 1e-12) -> Dict[str, Any]:
+    """
+    Compute per-feature scores from model.feature_proj.weight and its grad.
+
+    - Prefer passing feature_names (ordered list). If None, will try df.columns, then no-op.
+    - mode controls which normalized components to use:
+      - "weights": normalized column weight norms only
+      - "grads": normalized column grad norms only
+      - "combo": alpha*w_norm + (1-alpha)*g_norm
+    - Normalization: use log1p followed by min-max scaling for better visual spread.
+    - Returns dict: top_token, items (list of tuples), score (np.array), w_norm, g_norm, layer_token.
+    """
+    # --- 1) resolve feature_names (simple checks only) ---
+    if isinstance(feature_names, (list, tuple)):
+        feature_names = list(feature_names)
+    elif feature_names is None and df is not None and hasattr(df, "columns"):
+        label_col = getattr(params, "label_col", "y") if params is not None else "y"
+        feature_names = [c for c in df.columns if c not in (label_col, "close_raw")]
+    else:
+        feature_names = feature_names or []
+
+    # --- 2) get projection parameter once ---
+    named = dict(model.named_parameters())
+    p = named.get("feature_proj.weight")
+    if p is None or len(feature_names) == 0:
+        return {"top_token": None, "items": None, "score": None, "w_norm": None, "g_norm": None, "layer_token": layer_token}
+
+    # --- 3) read weights and grads on CPU and align names ---
+    W = p.detach().cpu().numpy()                 # (out_dim, in_dim)
+    in_dim = int(W.shape[1])
+
+    # safer alignment: truncate or extend to exactly in_dim
+    if len(feature_names) < in_dim:
+        feature_names = list(feature_names) + [f"feat_{i}" for i in range(len(feature_names), in_dim)]
+    else:
+        feature_names = list(feature_names[:in_dim])
+
+    w_norm = np.linalg.norm(W, axis=0)           # shape (in_dim,)
+    if p.grad is None:
+        g_norm = np.zeros_like(w_norm)
+    else:
+        G = p.grad.detach().cpu().numpy()
+        g_norm = np.linalg.norm(G, axis=0)
+
+    # --- 4) normalization helper (log1p + min-max) ---
+    def _norm_vis(arr):
+        if arr.size == 0:
+            return arr
+        a = np.log1p(arr)            # compress heavy tails
+        lo, hi = a.min(), a.max()
+        return (a - lo) / (hi - lo + eps)
+
+    w_s = _norm_vis(w_norm)
+    g_s = _norm_vis(g_norm) if g_norm.size else g_norm
+
+    # --- 5) build score according to mode ---
+    if mode == "weights":
+        score = w_s
+    elif mode == "grads":
+        score = g_s
+    else:
+        score = alpha * w_s + (1.0 - alpha) * g_s
+
+    # --- 6) prepare items, top token and persist simple history ---
+    items = list(zip(feature_names, score, w_norm, g_norm))
+    items.sort(key=lambda x: x[1], reverse=True)
+    top_token = ",".join(f"{n}:{s:.2e}" for n, s, _, _ in items)
+
+    if not hasattr(model, "_feat_imp_history"):
+        model._feat_imp_history = []
+    model._feat_imp_history.append(score.copy())
+
+    # preserve layer_token behavior if provided
+    if top_token and layer_token is not None:
+        layer_token = (layer_token if layer_token is not None else "") + f",FEAT_TOP[{top_token}]"
+
+    return {"top_token": top_token, "items": items, "score": score, "w_norm": w_norm, "g_norm": g_norm, "layer_token": layer_token}
+
+
+###################################################################################### 
+
+
+_feat_history = []    
+_param_history = []    
+_epochs = []
+_live_bars = plots.LiveFeatGuBars(top_feats=999, top_params=999)
+
 def log_epoch_summary(
     epoch:            int,
     model:            torch.nn.Module,
@@ -1569,64 +1765,20 @@ def log_epoch_summary(
     # 12) Optional checkpoint marker (if training loop marked it on the model)
     chk = getattr(model, "_last_epoch_checkpoint", False)
 
-    # # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
+    # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
     max_mem = (torch.cuda.max_memory_allocated() / (1024 ** 3)) if torch.cuda.is_available() else 0.0
 
-    # 14) Primary LR scalar token (explicit, high-ROI and low-noise)
-    try:
-        primary_lr = optimizer.param_groups[0].get("lr", lr) if optimizer.param_groups else lr
-        lr_token = f"LR_MAIN={primary_lr:.1e}"
-    except Exception:
-        lr_token = f"LR_MAIN={lr:.1e}"
+    # 14) append FEAT_TOP after layer_token finalized
+    feat_res = log_epoch_feature_importance(model, feature_names=getattr(params, "features_cols_tick", None),
+                                           params=params, alpha=0.9, mode="combo") # some sensitivity to recent learning: score = 0.9norm_w + 0.1norm_g.
 
-    # 15) Layer-wise GN ratio diagnostics (small set of representative layers)
-    layer_token = ""
-    default_monitor = ["short_lstm.weight_ih_l0", "short2long.weight", "feature_proj.weight"]
-    monitor_list = []
-    if isinstance(hparams, dict) and hparams.get("MONITOR_LAYERS"):
-        monitor_list = list(hparams.get("MONITOR_LAYERS"))
-    else:
-        monitor_list = default_monitor
-
-    # Ensure a dict exists to store baseline GN observed first time
-    if not hasattr(model, "_first_layer_gn"):
-        setattr(model, "_first_layer_gn", {})
-
-    pairs = []
-    for name in monitor_list:
-        # best-effort: find exact match; if not found, skip silently
-        p = dict(model.named_parameters()).get(name)
-        if p is None:
-            continue
-        if p.grad is None:
-            curr_g = 0.0
-        elif getattr(p.grad, "is_sparse", False):
-            vals = p.grad.data.coalesce().values()
-            curr_g = float(vals.norm().cpu()) if vals.numel() else 0.0
-        else:
-            curr_g = float(p.grad.norm().cpu())
-
-        baseline = getattr(model, "_first_layer_gn", None).get(name)
-        # when baseline not stored, store and also emit the baseline value
-        if baseline is None:
-            model._first_layer_gn[name] = float(curr_g)
-            pairs.append(f"{name.split('.')[-2:][-1]}:{curr_g:.3e}/1.00")   # show baseline ratio 1.00
-        else:
-            ratio = curr_g / max(baseline, 1e-12)
-            label = ".".join(name.split('.')[-2:])
-            pairs.append(f"{label}:{curr_g:.3e}/{ratio:.2f}")
-
-    if pairs:
-            layer_token = "LAYER_GN[" + ",".join(pairs) + "]"
-
-    # 16) Final line assembly (compact, per-epoch changing values only)
+    # Final line assembly (compact, per-epoch changing values only)
     line = (
         f"\nE{epoch:02d} | "
         f"{opt_token} | "
         f"GN[{gn_items},TOT={GN_tot:.3f}] | "
         f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
         f"UR[{UR_med:.1e},{UR_max:.1e}] | "
-        f"{lr_token} | "
         f"lr={lr:.1e} | "
         f"TR[{tr_rmse:.4f},{tr_mae:.4f},{tr_r2:.4f},BASE_RMSE={train_base_rmse:.4f},DELTA_RMSE={train_delta_rmse:.4f}] | "
         f"VAL[{val_rmse:.4f},{val_mae:.4f},{val_r2:.4f},BASE_RMSE={val_base_rmse:.4f}] | "
@@ -1638,8 +1790,16 @@ def log_epoch_summary(
         f"T={elapsed:.1f}s,TP={tp:.1f}seg/s | "
         f"chk={int(bool(chk))} | "
         f"GPU={max_mem:.2f}GiB | "
-        f"{layer_token}\n"
-        f"G/U={G_U}"
-
+        f"\nG/U={G_U} | "
+        f"\nFEAT_TOP={feat_res['top_token']}"
     )
     _append_log(line, log_file)
+
+    # plotting
+    # build numeric dicts (no string parsing)
+    gdict = {s: float(g) for s, (g, u) in items}
+    # feat_res['top_token'] format "name:score,name:score,..."
+    featdict = {k: float(v) for k, v in (p.split(':',1) for p in feat_res['top_token'].split(','))}
+    
+    _live_bars.update(featdict, gdict, epoch)
+
