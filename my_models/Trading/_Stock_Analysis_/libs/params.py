@@ -18,7 +18,7 @@ label_col  = "signal"
 month_to_check = '2024-06'
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
-mult_feats_win = 1 # use 1 to generate features indicators with their standard windows size
+mult_feats_win = [0.5, 1, 2, 4]
 
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
@@ -124,11 +124,11 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  128,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_D_MODEL":  64,     # transformer embedding width (d_model); adapter maps upstream features into this
     "TRANSFORMER_LAYERS":   2,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.1,     # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.15,     # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,   # enable bidirectional “long” LSTM
@@ -136,8 +136,8 @@ hparams = {
     "LONG_UNITS":           128,     # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
 
     # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
-    "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
-    "PRED_HIDDEN":           128,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "FLATTEN_MODE":          "pool", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
+    "PRED_HIDDEN":           64,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
     
     "ALPHA_SMOOTH":          0.0,    # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
     "WARMUP_STEPS":          5,      # linear warmup for slope penalty (0 = no warmup)
@@ -149,11 +149,11 @@ hparams = {
     "LAMBDA_DELTA":          0.1,    # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
-    "MAX_EPOCHS":            70,     # max epochs
-    "EARLY_STOP_PATIENCE":   7,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          3e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
+    "MAX_EPOCHS":            80,     # max epochs
+    "EARLY_STOP_PATIENCE":   8,      # no-improve epochs; ↑robustness to noise, ↓max training time 
+    "WEIGHT_DECAY":          8e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       8e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
@@ -181,14 +181,9 @@ def signal_parameters(ticker):
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*hparams["LOOK_BACK"], 60))
         
         features_cols = ['bb_w_20', 'sma_pct_14', 'atr_14', 'hour', 'eng_bb', 'rsi_14',
-       'obv_diff_14', 'range_pct', 'ret', 'sma_pct_28', 'plus_di_14',
-       'lower_shad', 'adx_14', 'month', 'atr_pct_14', 'vol_spike_14',
-       'obv_pct_14', 'body_pct', 'obv_sma_14', 'minus_di_14', 'volume',
-       'eng_rsi', 'eng_atr_div', 'day_of_week', 'obv']
-       #  ['sma_pct_14', 'rsi_14', 'sma_pct_28', 'hour', 'bb_w_20', 'range_pct',
-       # 'macd_signal_12_26_9', 'atr_14', 'lower_shad', 'obv_diff_14', 'eng_bb',
-       # 'macd_line_12_26_9', 'atr_pct_14', 'eng_atr_div', 'plus_di_14',
-       # 'eng_macd', 'obv_sma_14', 'eng_sma_long', 'day_of_week', 'body', 'ret']
+       'obv_diff_14', 'range_pct', 'ret', 'sma_pct_28', 'plus_di_14', 'eng_rsi',
+       'lower_shad', 'adx_14', 'atr_pct_14', 'body_pct', 'minus_di_14', 'eng_atr_div', 'eng_macd',
+       'upper_shad']
         
         trailing_stop_pred = 0.2
         pred_threshold = 0.1
