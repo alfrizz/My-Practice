@@ -18,7 +18,7 @@ label_col  = "signal"
 month_to_check = '2024-06'
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
-mult_feats_win = [0.5, 1, 2, 4]
+mult_inds_win = [0.5, 1, 2, 4]
 
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv

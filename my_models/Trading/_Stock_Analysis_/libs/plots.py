@@ -325,15 +325,16 @@ def plot_trades(
         ))
 
     # 6) optional features
-    if features:
-        for feat in features:
-            if feat in df:
-                fig.add_trace(go.Scatter(
-                    x=df.index, y=df[feat],
-                    mode='lines', line=dict(width=1),
-                    name=feat, yaxis='y2', visible='legendonly',
-                    hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
-                ))
+    if features == None:
+        features = [c for c in df.columns if c not in {col_action, col_signal1, col_signal2, col_close}]
+    for feat in features:
+        if feat in df:
+            fig.add_trace(go.Scatter(
+                x=df.index, y=df[feat],
+                mode='lines', line=dict(width=1),
+                name=feat, yaxis='y2', visible='legendonly',
+                hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
+            ))
 
     # 7) overlay individual trade legs (green) if trades list given
     if trades:

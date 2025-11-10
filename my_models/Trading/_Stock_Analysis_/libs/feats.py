@@ -21,6 +21,7 @@ from IPython.display import clear_output, display
 from captum.attr import IntegratedGradients
 from tqdm.auto import tqdm
 import ta
+from ta.volume import OnBalanceVolumeIndicator
 
 import torch
 import torch.nn as nn
@@ -31,7 +32,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, PowerTransformer, RobustScaler, MinMaxScaler, MaxAbsScaler, StandardScaler, QuantileTransformer, OrdinalEncoder
 from sklearn.decomposition import PCA
 
-from scipy.stats import spearmanr, skew, kurtosis
+from scipy.stats import spearmanr, skew, kurtosis, ks_2samp
 
 
 ##########################################################################################################
@@ -178,9 +179,10 @@ from scipy.stats import spearmanr, skew, kurtosis
 #     first_valid = out.apply(lambda series: series.first_valid_index()).max()
 #     return out.loc[first_valid:].copy()
 
-def create_features(
+
+def standard_indicators(
     df: pd.DataFrame,
-    mult_feats_win = None,   # float or list[float]; if None default [0.5,1.0,2.0]
+    mult_inds_win = None,   # float or list[float]; if None default [0.5,1.0,2.0]
     sma_short:        int   = 14,
     sma_long:         int   = 28,
     rsi_window:       int   = 14,
@@ -191,37 +193,21 @@ def create_features(
     bb_window:        int   = 20,
     obv_sma:          int   = 14,
     vwap_window:      int   = 14,
-    vol_spike_window: int   = 14
+    vol_spike_window: int   = 14,
+    label_col:        str   = "signal"
 ) -> pd.DataFrame:
-    """
-    Compute causal OHLCV indicators and multi-scale variants. Returns a DataFrame
-    containing original OHLCV + label (params.label_col) plus many generated
-    columns named with integer windows (e.g. sma_14, ema_28, macd_diff_12_26_9).
-
-    Key behavior (preserved):
-      - mult_feats_win: float or list; default [0.5,1.0,2.0] if None.
-      - canonical windows always included; multi-scale versions produced per multiplier.
-      - deterministic rounding: W(base,m) = max(1, int(round(base*m))).
-      - MACD safety: enforce fast < slow after scaling.
-      - All features are computed causally (no lookahead).
-    Implementation note (minimal change): to avoid dataframe fragmentation we
-    collect computed Series into a dict and concat once; this function returns
-    the full per-call series (no internal warmup trimming). Caller should
-    perform any global warmup trimming if desired.
-    """
     df = df.copy()
     df.index = pd.to_datetime(df.index)
-    eps = 1e-8
+    eps = 1e-9
 
-    # multipliers list
-    if mult_feats_win is None:
+    # multipliers
+    if mult_inds_win is None:
         mults = [0.5, 1.0, 2.0]
-    elif isinstance(mult_feats_win, (int, float)):
-        mults = [float(mult_feats_win)]
+    elif isinstance(mult_inds_win, (int, float)):
+        mults = [float(mult_inds_win)]
     else:
-        mults = list(mult_feats_win)
+        mults = list(mult_inds_win)
 
-    # canonical bases
     bases = {
         "sma_short": sma_short,
         "sma_long":  sma_long,
@@ -236,11 +222,9 @@ def create_features(
         "vol_spike": vol_spike_window
     }
 
-    # deterministic rounding helper
-    def W(base: int, m: float) -> int:
-        return max(1, int(round(base * m)))
+    def W(base, m): return max(1, int(round(base * m)))
 
-    # windows to compute (always include canonical)
+    # collect window set for each indicator type
     windows = set()
     for m in mults:
         for k, b in bases.items():
@@ -248,152 +232,155 @@ def create_features(
     for k, b in bases.items():
         windows.add((k, W(b, 1.0)))
 
-    def name(pref: str, w: int) -> str:
-        return f"{pref}_{w}"
-
-    # base input columns
-    cols_in = ["open", "high", "low", "close", "volume", params.label_col]
+    # inputs and basic safe casts
+    cols_in = ["open", "high", "low", "close", "volume"]
+    if label_col in df.columns:
+        cols_in.append(label_col)
     base = df[cols_in].copy()
-    c = base["close"]; o = base["open"]; h = base["high"]; l = base["low"]
+    o, h, l, c = base["open"], base["high"], base["low"], base["close"]
 
-    # collect computed Series here (single concat at end)
-    new_cols = {}
+    new = {}
 
-    # simple returns
-    new_cols["ret"]     = c.pct_change()
-    new_cols["log_ret"] = np.log(c + eps).diff()
+    # returns
+    new["ret"] = c.pct_change()
+    new["log_ret"] = np.log(c + eps).diff()
 
     # multi-horizon returns & lags
-    horizons = sorted({1, 5, 15, 60} | {W(bases["sma_short"], m) for m in mults})
+    horizons = sorted({1,5,15,60} | {W(bases["sma_short"], m) for m in mults})
     for H in horizons:
-        new_cols[f"ret_{H}"] = c.pct_change(H)
-    new_cols["lag1_ret"] = new_cols["ret"].shift(1)
-    new_cols["lag2_ret"] = new_cols["ret"].shift(2)
-    new_cols["lag3_ret"] = new_cols["ret"].shift(3)
+        new[f"ret_{H}"] = c.pct_change(H)
+    new["lag1_ret"] = new["ret"].shift(1)
+    new["lag2_ret"] = new["ret"].shift(2)
+    new["lag3_ret"] = new["ret"].shift(3)
 
-    # ROC
+    # ROC (using sma windows as representative price windows)
     sma_windows = sorted({w for (k, w) in windows if k.startswith("sma")})
     for w in sma_windows:
-        new_cols[f"roc_{w}"] = c.diff(w) / (c.shift(w) + eps)
+        new[f"roc_{w}"] = c.diff(w) / (c.shift(w) + eps)
 
     # candlestick geometry
-    new_cols["body"] = c - o
-    new_cols["body_pct"] = (c - o) / (o + eps)
-    new_cols["upper_shad"] = h - np.maximum(base["open"], base["close"])
-    new_cols["lower_shad"] = np.minimum(base["open"], base["close"]) - l
-    new_cols["range_pct"] = (h - l) / (c + eps)
+    new["body"] = c - o
+    new["body_pct"] = (c - o) / (o + eps)
+    new["upper_shad"] = h - np.maximum(o, c)
+    new["lower_shad"] = np.minimum(o, c) - l
+    new["range_pct"] = (h - l) / (c + eps)
 
-    # SMA / EMA (min_periods=1 for early values)
-    sma_set = sorted({w for (k, w) in windows if k in ("sma_short","sma_long")})
+    # SMA / EMA levels + percent deviations + ema_dev
+    sma_set = sorted({w for (k, w) in windows if k.startswith("sma")})
     for w in sma_set:
         s = c.rolling(w, min_periods=1).mean()
-        new_cols[name("sma", w)] = s
-        new_cols[name("sma_pct", w)] = (c - s) / (s + eps)
+        new[f"sma_{w}"] = s
+        new[f"sma_pct_{w}"] = (c - s) / (s + eps)
         e = c.ewm(span=w, adjust=False).mean()
-        new_cols[name("ema", w)] = e
-        new_cols[name("ema_dev", w)] = (c - e) / (e + eps)
+        new[f"ema_{w}"] = e
+        new[f"ema_dev_{w}"] = (c - e) / (e + eps)
 
     # RSI
     rsi_windows = sorted({w for (k, w) in windows if k == "rsi"})
     for w in rsi_windows:
-        new_cols[name("rsi", w)] = ta.momentum.RSIIndicator(close=c, window=w).rsi()
+        new[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=c, window=w).rsi()
 
     # MACD variants (ensure fast < slow)
-    macd_windows = sorted({(W(bases["macd_f"], m), W(bases["macd_s"], m), W(bases["macd_sig"], m))
-                           for m in mults} | {(bases["macd_f"], bases["macd_s"], bases["macd_sig"])})
-    for f_w, s_w, sig_w in macd_windows:
+    macd_specs = sorted({(W(bases["macd_f"], m), W(bases["macd_s"], m), W(bases["macd_sig"], m)) for m in mults} |
+                        {(bases["macd_f"], bases["macd_s"], bases["macd_sig"])})
+    for f_w, s_w, sig_w in macd_specs:
         if f_w >= s_w:
             s_w = f_w + 1
         macd = ta.trend.MACD(close=c, window_fast=f_w, window_slow=s_w, window_sign=sig_w)
-        suffix = f"{f_w}_{s_w}_{sig_w}"
-        new_cols[f"macd_line_{suffix}"] = macd.macd()
-        new_cols[f"macd_signal_{suffix}"] = macd.macd_signal()
-        new_cols[f"macd_diff_{suffix}"] = macd.macd_diff()
+        suf = f"{f_w}_{s_w}_{sig_w}"
+        new[f"macd_line_{suf}"] = macd.macd()
+        new[f"macd_signal_{suf}"] = macd.macd_signal()
+        new[f"macd_diff_{suf}"] = macd.macd_diff()
 
-    # ATR
+    # ATR and ATR percent
     atr_windows = sorted({w for (k, w) in windows if k == "atr"})
     for w in atr_windows:
         atr = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=w)
-        new_cols[name("atr", w)] = atr.average_true_range()
-        new_cols[name("atr_pct", w)] = atr.average_true_range() / (c + eps)
+        new[f"atr_{w}"] = atr.average_true_range()
+        new[f"atr_pct_{w}"] = atr.average_true_range() / (c + eps)
 
-    # Bollinger Bands
+    # Bollinger bands + width
     bb_windows = sorted({w for (k, w) in windows if k == "bb"})
     for w in bb_windows:
         bb = ta.volatility.BollingerBands(close=c, window=w, window_dev=2)
         lband = bb.bollinger_lband()
         hband = bb.bollinger_hband()
         mavg = bb.bollinger_mavg()
-        new_cols[name("bb_lband", w)] = lband
-        new_cols[name("bb_hband", w)] = hband
-        new_cols[name("bb_w", w)] = (hband - lband) / (mavg + eps)
+        new[f"bb_lband_{w}"] = lband
+        new[f"bb_hband_{w}"] = hband
+        new[f"bb_w_{w}"] = (hband - lband) / (mavg + eps)
 
-    # DI / ADX
+    # DI / ADX (use ATR windows set)
     di_windows = sorted({w for (k, w) in windows if k == "atr"})
     for w in di_windows:
         adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w)
-        new_cols[name("plus_di", w)] = adx.adx_pos()
-        new_cols[name("minus_di", w)] = adx.adx_neg()
-        new_cols[name("adx", w)] = adx.adx()
+        new[f"plus_di_{w}"] = adx.adx_pos()
+        new[f"minus_di_{w}"] = adx.adx_neg()
+        new[f"adx_{w}"] = adx.adx()
 
-    # OBV and stats
-    new_cols["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=base["volume"]).on_balance_volume()
+    # cumulative OBV (classic)
+    new["obv"] = OnBalanceVolumeIndicator(close=c, volume=base["volume"]).on_balance_volume()
+    
+    # windows for obv-derived features (use diff for windowed change; keep sma and z)
     obv_windows = sorted({w for (k, w) in windows if k == "obv"})
     for w in obv_windows:
-        new_cols[name("obv_diff", w)] = new_cols["obv"].diff()
-        new_cols[name("obv_pct", w)] = new_cols["obv"].diff(w) / (new_cols["obv"].rolling(w, min_periods=1).mean() + eps)
-        new_cols[name("obv_sma", w)] = new_cols["obv"].rolling(w, min_periods=1).mean()
-        new_cols[name("obv_z", w)] = (new_cols["obv"] - new_cols[name("obv_sma", w)]) / (new_cols[name("obv_sma", w)].rolling(w, min_periods=1).std() + eps)
+        # windowed change: diff over w steps (classic)
+        new[f"obv_diff_{w}"] = new["obv"].diff(w)
+        # normalize change by recent price level for comparability
+        price_roll_mean = c.rolling(w, min_periods=1).mean().abs()
+        new[f"obv_pct_{w}"] = new[f"obv_diff_{w}"] / (price_roll_mean + eps)
+        # rolling simple moving average of cumulative OBV (classic) and a z-like dev
+        new[f"obv_sma_{w}"] = new["obv"].rolling(w, min_periods=1).mean()
+        new[f"obv_z_{w}"] = (new["obv"] - new[f"obv_sma_{w}"]) / (new[f"obv_sma_{w}"].rolling(w, min_periods=1).std().fillna(0.0) + eps)
 
-    # VWAP and dev
+    # VWAP and percent dev + rolling zscore on percent
     vwap_w = W(bases["vwap"], 1.0)
     vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=base["volume"], window=vwap_w)
-    new_cols[f"vwap_{vwap_w}"] = vwap.volume_weighted_average_price()
-    new_cols[f"vwap_dev_{vwap_w}"] = (c - new_cols[f"vwap_{vwap_w}"]) / (new_cols[f"vwap_{vwap_w}"] + eps)
+    new[f"vwap_{vwap_w}"] = vwap.volume_weighted_average_price()
+    # percent deviation (×100) and local z on the percent series
+    new[f"vwap_dev_pct_{vwap_w}"] = 100.0 * (c - new[f"vwap_{vwap_w}"]) / (new[f"vwap_{vwap_w}"] + eps)
+    x_pct = new[f"vwap_dev_pct_{vwap_w}"]
+    new[f"z_vwap_dev_{vwap_w}"] = (x_pct - x_pct.rolling(obv_sma, min_periods=1).mean()) / (x_pct.rolling(obv_sma, min_periods=1).std() + eps)
 
-    # vol_spike
+    # volume spike and z
     vol_w = W(bases["vol_spike"], 1.0)
     vol_roll = base["volume"].rolling(vol_w, min_periods=1).mean()
-    new_cols[f"vol_spike_{vol_w}"] = base["volume"] / (vol_roll + eps)
+    new[f"vol_spike_{vol_w}"] = base["volume"] / (vol_roll + eps)
+    v_mu = base["volume"].rolling(vol_w, min_periods=1).mean()
+    v_sigma = base["volume"].rolling(vol_w, min_periods=1).std()
+    new[f"vol_z_{vol_w}"] = (base["volume"] - v_mu) / (v_sigma + eps)
 
-    # rolling realized volatility (use min_periods=1)
+    # rolling realized volatility
     vol_windows = sorted({W(bases["sma_short"], m) for m in mults} | {W(bases["sma_long"], 1.0)})
     for w in vol_windows:
-        new_cols[f"ret_std_{w}"] = new_cols["ret"].rolling(w, min_periods=1).std()
+        new[f"ret_std_{w}"] = new["ret"].rolling(w, min_periods=1).std()
 
-    # extrema distances
+    # rolling extrema and normalized distances
     ext_windows = sorted({W(bases["sma_long"], m) for m in mults})
     for w in ext_windows:
-        new_cols[f"rolling_max_close_{w}"] = base["close"].rolling(w, min_periods=1).max()
-        new_cols[f"rolling_min_close_{w}"] = base["close"].rolling(w, min_periods=1).min()
-        new_cols[f"dist_high_{w}"] = (new_cols[f"rolling_max_close_{w}"] - c) / (c + eps)
-        new_cols[f"dist_low_{w}"] = (c - new_cols[f"rolling_min_close_{w}"]) / (c + eps)
+        new[f"rolling_max_close_{w}"] = base["close"].rolling(w, min_periods=1).max()
+        new[f"rolling_min_close_{w}"] = base["close"].rolling(w, min_periods=1).min()
+        new[f"dist_high_{w}"] = (new[f"rolling_max_close_{w}"] - c) / (c + eps)
+        new[f"dist_low_{w}"] = (c - new[f"rolling_min_close_{w}"]) / (c + eps)
 
-    # volume z-score
-    v_mu = base["volume"].rolling(vwap_w, min_periods=1).mean()
-    v_sigma = base["volume"].rolling(vwap_w, min_periods=1).std()
-    new_cols[f"vol_z_{vwap_w}"] = (base["volume"] - v_mu) / (v_sigma + eps)
-
-    # roll z-scores for ATR and BB width (min_periods=1)
+    # z-scores for ATR and BB width
     for w in atr_windows:
-        x = new_cols[name("atr_pct", w)]
-        new_cols[f"z_atr_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (x.rolling(w, min_periods=1).std() + eps)
+        x = new[f"atr_pct_{w}"]
+        new[f"z_atr_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (x.rolling(w, min_periods=1).std() + eps)
     for w in bb_windows:
-        x = new_cols[name("bb_w", w)]
-        new_cols[f"z_bbw_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (x.rolling(w, min_periods=1).std() + eps)
+        x = new[f"bb_w_{w}"]
+        new[f"z_bbw_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (x.rolling(w, min_periods=1).std() + eps)
 
-    # calendar / cyclical
-    new_cols["hour"] = df.index.hour
-    new_cols["hour_sin"] = np.sin(2 * np.pi * new_cols["hour"] / 24.0)
-    new_cols["hour_cos"] = np.cos(2 * np.pi * new_cols["hour"] / 24.0)
-    new_cols["day_of_week"] = df.index.dayofweek
-    new_cols["month"] = df.index.month
+    # calendar/cyclical
+    new["hour"] = df.index.hour
+    new["hour_sin"] = np.sin(2 * np.pi * new["hour"] / 24.0)
+    new["hour_cos"] = np.cos(2 * np.pi * new["hour"] / 24.0)
+    new["day_of_week"] = df.index.dayofweek
+    new["month"] = df.index.month
 
-    # final concat and defragment
-    out = pd.concat([base, pd.DataFrame(new_cols, index=base.index)], axis=1)
-    out = out.copy()
-
+    out = pd.concat([base, pd.DataFrame(new, index=base.index)], axis=1)
     return out.copy()
+
 
 
 
@@ -488,66 +475,82 @@ def create_features(
 
 #     return out.dropna()
 
-import re
-import numpy as np
-import pandas as pd
-from typing import List
 
-def features_engineering(
+def engineered_indicators(
     df: pd.DataFrame,
     rsi_low: float = 30.0,
     rsi_high: float = 70.0,
     adx_thr: float = 20.0,
     mult_w: int = 14,
-    eps: float = 1e-8
+    eps: float = 1e-9
 ) -> pd.DataFrame:
     """
-    Build engineered, stationary signals from an indicator DataFrame.
+    Build engineered, stationary signals from a base-indicators DataFrame.
 
-    - Dynamically discovers available base indicator columns (sma_, rsi_, macd_diff_, bb_*, adx_*, obv_*, vwap_*, atr_pct_, ret_*, etc.).
-    - Computes each engineered column only when its bases exist.
-    - Returns only the engineered columns that were actually produced, with NaNs filled as 0.0 and dtype=float64.
+    Behavior
+    - Dynamically discovers available base columns (sma_, ema_, rsi_, macd_diff_, bb_*, adx_, plus_di_, minus_di_,
+      obv_*, vwap_dev_, atr_pct_, ret_*, etc.).
+    - Produces only engineered columns that can be computed from available bases.
+    - Returns a DataFrame with only engineered features, dtype=float64, NaNs filled with 0.0.
+    - Designed to be called after basic_indicators and before pruning/scaling.
+
+    Engineered features produced (when bases exist)
+    - eng_ma, eng_macd
+    - eng_bb, eng_bb_mid
+    - eng_rsi
+    - eng_adx
+    - eng_obv
+    - eng_atr_div, z_eng_atr
+    - eng_sma_short, eng_sma_long
+    - eng_vwap, z_vwap_dev
+    - z_bb_w, z_obv_diff
+    - mom_sum_H, mom_std_H for H in [1,5,15,60] if ret_H present
+    - eng_ema_cross_up, eng_ema_cross_down
     """
     out = pd.DataFrame(index=df.index)
     produced: List[str] = []
 
-    # safe helpers
-    def find(prefix: str):
+    # helpers
+    def find_prefix(prefix: str):
         return next((c for c in df.columns if c.startswith(prefix)), None)
 
-    def find_sma_pairs():
-        sma_cols = [c for c in df.columns if c.startswith("sma_") and "_pct" not in c]
-        def keyfn(c):
+    def collect_sma_pair():
+        sma_cols = [c for c in df.columns if re.match(r"^sma_\d+$", c)]
+        if not sma_cols:
+            return None, None
+        # sort by window size
+        def w(c):
             m = re.search(r"_(\d+)$", c)
             return int(m.group(1)) if m else 10**9
-        sma_cols = sorted(sma_cols, key=keyfn)
+        sma_cols = sorted(sma_cols, key=w)
         if len(sma_cols) >= 2:
             return sma_cols[0], sma_cols[1]
-        if len(sma_cols) == 1:
-            return sma_cols[0], sma_cols[0]
-        return None, None
+        return sma_cols[0], sma_cols[0]
 
     close = df.get("close", pd.Series(index=df.index, dtype=float)).astype(float)
 
     # discover bases
-    sma_s, sma_l = find_sma_pairs()
-    macd_diff = find("macd_diff_")
-    bb_l = find("bb_lband_"); bb_h = find("bb_hband_"); bb_w = find("bb_w_")
-    rsi_col = find("rsi_")
-    plus_di = find("plus_di_"); minus_di = find("minus_di_"); adx_col = find("adx_")
-    obv_diff = find("obv_diff_"); obv_sma = find("obv_sma_")
-    vwap_dev = find("vwap_dev_") or find("vwap_")
-    atr_pct = find("atr_pct_")
+    sma_s, sma_l = collect_sma_pair()
+    # macd_diff: prefer any macd_diff_*
+    macd_diff = find_prefix("macd_diff_")
+    bb_l = find_prefix("bb_lband_"); bb_h = find_prefix("bb_hband_"); bb_w = find_prefix("bb_w_")
+    rsi_col = find_prefix("rsi_")
+    plus_di = find_prefix("plus_di_"); minus_di = find_prefix("minus_di_"); adx_col = find_prefix("adx_")
+    obv_diff = find_prefix("obv_diff_"); obv_sma = find_prefix("obv_sma_")
+    vwap_dev = find_prefix("vwap_dev_") or find_prefix("vwap_")
+    atr_pct = find_prefix("atr_pct_")
 
-    # compute engineered features (append name to produced each time)
+    # MA ratio (short vs long)
     if sma_s and sma_l:
         out["eng_ma"] = (df[sma_s].astype(float) - df[sma_l].astype(float)) / (df[sma_l].astype(float) + eps)
         produced.append("eng_ma")
 
+    # MACD normalized by long SMA (if available)
     if macd_diff and sma_l:
         out["eng_macd"] = df[macd_diff].astype(float) / (df[sma_l].astype(float) + eps)
         produced.append("eng_macd")
 
+    # Bollinger deviation signals
     if bb_l and bb_h and bb_w:
         lo = df[bb_l].astype(float); hi = df[bb_h].astype(float); bw = df[bb_w].astype(float)
         dev = np.where(close < lo, lo - close, np.where(close > hi, close - hi, 0.0))
@@ -555,6 +558,7 @@ def features_engineering(
         out["eng_bb_mid"] = ((lo + hi) / 2 - close) / (close + eps)
         produced.extend(["eng_bb", "eng_bb_mid"])
 
+    # RSI signals (distance beyond thresholds)
     if rsi_col:
         rv = df[rsi_col].astype(float)
         low_d = np.clip((rsi_low - rv), 0, None) / 100.0
@@ -562,6 +566,7 @@ def features_engineering(
         out["eng_rsi"] = np.where(rv < rsi_low, low_d, np.where(rv > rsi_high, high_d, 0.0))
         produced.append("eng_rsi")
 
+    # ADX directional signal (signed strength)
     if plus_di and minus_di and adx_col:
         di_diff = df[plus_di].astype(float) - df[minus_di].astype(float)
         diff_abs = di_diff.abs() / 100.0
@@ -569,10 +574,12 @@ def features_engineering(
         out["eng_adx"] = np.sign(di_diff) * diff_abs * ex
         produced.append("eng_adx")
 
+    # OBV per-volume normalized
     if obv_diff and obv_sma:
         out["eng_obv"] = df[obv_diff].astype(float) / (df[obv_sma].astype(float) + eps)
         produced.append("eng_obv")
 
+    # ATR-derived signals
     if atr_pct:
         ratio = df[atr_pct].astype(float)
         rm = ratio.rolling(mult_w, min_periods=1).mean()
@@ -580,6 +587,7 @@ def features_engineering(
         out["z_eng_atr"] = (ratio - rm) / (ratio.rolling(mult_w, min_periods=1).std() + eps)
         produced.extend(["eng_atr_div", "z_eng_atr"])
 
+    # simple percent-distance to moving averages
     if sma_s:
         out["eng_sma_short"] = (df[sma_s].astype(float) - close) / (close + eps)
         produced.append("eng_sma_short")
@@ -587,45 +595,51 @@ def features_engineering(
         out["eng_sma_long"] = (df[sma_l].astype(float) - close) / (close + eps)
         produced.append("eng_sma_long")
 
+    # VWAP percent deviation and local zscore 
     if vwap_dev:
-        out["eng_vwap"] = (df[vwap_dev].astype(float) - close) / (close + eps)
-        x = df[vwap_dev].astype(float)
-        out["z_vwap_dev"] = (x - x.rolling(mult_w, min_periods=1).mean()) / (x.rolling(mult_w, min_periods=1).std() + eps)
+        vwap_base = df[vwap_dev].astype(float)
+        eng_vwap_pct = 100.0 * (vwap_base - close) / (close + eps)   # percent dev
+        out["eng_vwap"] = eng_vwap_pct
+        out["z_vwap_dev"] = (eng_vwap_pct - eng_vwap_pct.rolling(mult_w, min_periods=1).mean()) / (
+                             eng_vwap_pct.rolling(mult_w, min_periods=1).std().fillna(0.0) + eps)
         produced.extend(["eng_vwap", "z_vwap_dev"])
 
+    # BB width z-score
     if bb_w:
         x = df[bb_w].astype(float)
         out["z_bb_w"] = (x - x.rolling(mult_w, min_periods=1).mean()) / (x.rolling(mult_w, min_periods=1).std() + eps)
         produced.append("z_bb_w")
 
+    # OBV diff z-score vs its SMA
     if obv_diff and obv_sma:
         x = df[obv_diff].astype(float)
-        out["z_obv_diff"] = (x - df[obv_sma].astype(float)) / (df[obv_sma].astype(float).rolling(mult_w, min_periods=1).std() + eps)
+        base_sma = df[obv_sma].astype(float)
+        out["z_obv_diff"] = (x - base_sma) / (base_sma.rolling(mult_w, min_periods=1).std() + eps)
         produced.append("z_obv_diff")
 
-    # momentum aggregates (only if ret_* exist)
+    # momentum aggregates (sum and std) for available horizons
     for H in [1, 5, 15, 60]:
         ret_col = f"ret_{H}"
-        if ret_col in df:
+        if ret_col in df.columns:
             out[f"mom_sum_{H}"] = df[ret_col].rolling(H, min_periods=1).sum()
             out[f"mom_std_{H}"] = df[ret_col].rolling(H, min_periods=1).std()
             produced.extend([f"mom_sum_{H}", f"mom_std_{H}"])
 
-    # ema crossover flags
+    # EMA crossover binary flags (use corresponding ema_N columns if present)
     try:
-        s_w = int(sma_s.split("_")[1]) if sma_s else None
-        l_w = int(sma_l.split("_")[1]) if sma_l else None
+        s_w = int(re.search(r"_(\d+)$", sma_s).group(1)) if sma_s else None
+        l_w = int(re.search(r"_(\d+)$", sma_l).group(1)) if sma_l else None
     except Exception:
         s_w = l_w = None
     s_ema_col = f"ema_{s_w}" if s_w else None
     l_ema_col = f"ema_{l_w}" if l_w else None
-    if s_ema_col in df and l_ema_col in df:
-        out["eng_ema_cross_up"] = (df[s_ema_col] > df[l_ema_col]).astype(float)
-        out["eng_ema_cross_down"] = (df[s_ema_col] < df[l_ema_col]).astype(float)
+    if s_ema_col in df.columns and l_ema_col in df.columns:
+        out["eng_ema_cross_up"] = (df[s_ema_col].astype(float) > df[l_ema_col].astype(float)).astype(float)
+        out["eng_ema_cross_down"] = (df[s_ema_col].astype(float) < df[l_ema_col].astype(float)).astype(float)
         produced.extend(["eng_ema_cross_up", "eng_ema_cross_down"])
 
-    # finalize: ensure produced ordering, numeric dtype, no NaNs
-    produced = [p for p in produced if p in out.columns]  # dedupe/filter
+    # finalize: keep only produced features, ensure numeric dtype and fill NaNs
+    produced = [p for p in produced if p in out.columns]
     for col in produced:
         out[col] = out[col].astype(float).fillna(0.0)
 
@@ -636,135 +650,366 @@ def features_engineering(
 
 
 
-def scale_minmax_all(
+def prune_and_percentiles(
+    df_unsc: pd.DataFrame,
+    train_prop: float = 0.7,
+    pct_shift_thresh: float = 0.20,
+    abs_shift_thresh: float = 1e-4,
+    frac_outside_thresh: float = 0.05,
+    ks_pval_thresh: float = 0.001,
+    min_train_samples: int = 30,
+    fail_count_to_drop: int = 2
+) -> Tuple[pd.DataFrame, List[str], pd.DataFrame]:
+    """
+    Prune unstable numeric features and compute per-feature winsorize percentiles (pct_pair)
+    derived only from bulk_ratio = IQR / (q99 - q01).
+
+    Behavior and outputs (keeps the same names/logic as the previous version):
+    - Splits df_unsc into contiguous TRAIN/VAL/TEST using train_prop (VAL and TEST share the remainder).
+    - For each numeric feature computes TRAIN percentiles q01,q25,q75,q99, IQR, full_span and bulk_ratio.
+    - Runs stability checks (median shifts, frac outside, KS, constant-on-train) and assigns status OK or DROP.
+    - Adds a tail-count guard: if q01/q99 are supported by fewer than 3 TRAIN samples, they are replaced with q05/q95
+      before computing full_span (prevents single extreme points from dominating full_span).
+    - Maps bulk_ratio -> pct_pair with a simple clipped linear rule. Mapping constants are chosen to be slightly
+      more forgiving than before: br_max=0.15 and wide endpoint = (0.1, 99.9).
+    - Returns (df_pruned, to_drop, diag) where diag contains q01,q25,q75,q99,full_span,iqr,bulk_ratio,
+      frac_val_out, frac_te_out, status, reason and pct_pair=(pct_low,pct_high).
+
+    Notes:
+    - All existing variable names and the overall structure are preserved for minimal, clear change.
+    - The function uses tqdm for progress over features.
+    """
+    N = len(df_unsc)
+    if N == 0:
+        return df_unsc.copy(), [], pd.DataFrame()
+
+    # contiguous TRAIN/VAL/TEST splits
+    n_tr = int(N * train_prop)
+    n_rem = N - n_tr
+    n_val = n_rem // 2
+    tr_slice = slice(0, n_tr)
+    val_slice = slice(n_tr, n_tr + n_val)
+    te_slice = slice(n_tr + n_val, N)
+
+    raw_tr = df_unsc.iloc[tr_slice].replace([np.inf, -np.inf], np.nan)
+    raw_val = df_unsc.iloc[val_slice].replace([np.inf, -np.inf], np.nan)
+    raw_te = df_unsc.iloc[te_slice].replace([np.inf, -np.inf], np.nan)
+
+    numeric_cols = [c for c in df_unsc.columns if pd.api.types.is_numeric_dtype(df_unsc[c])]
+    rows = []
+
+    def is_calendar(col: str) -> bool:
+        return bool(re.search(r"^(hour|day_of_week|month)$", col))
+    def is_binary_like(col: str, tr_series: pd.Series) -> bool:
+        vals = tr_series.dropna().unique()
+        if len(vals) > 0 and set(np.unique(vals)).issubset({0, 1}):
+            return True
+        if col.startswith("eng_") and (col.endswith("_up") or col.endswith("_down")):
+            return True
+        return False
+    def is_zscore_like(col: str) -> bool:
+        return bool(re.search(r"^(z_|z_.*|z_bbw_|z_atr_|z_obv_|z_eng_)", col)) or col.startswith("ema_dev_") or col.endswith("_pct")
+    def safe_denominator(tr_arr: np.ndarray) -> float:
+        if len(tr_arr) == 0:
+            return 1e-6
+        med = float(np.nanmedian(tr_arr))
+        mad = float(np.nanmedian(np.abs(tr_arr - med)))
+        std = float(np.nanstd(tr_arr))
+        return max(abs(med), mad, std, 1e-6)
+
+    for feat in tqdm(numeric_cols, desc="prune_and_percentiles", unit="feat"):
+        tr = raw_tr[feat].dropna()
+        vl = raw_val[feat].dropna()
+        te = raw_te[feat].dropna()
+
+        med_tr = float(np.nanmedian(tr)) if len(tr) else np.nan
+        med_val = float(np.nanmedian(vl)) if len(vl) else np.nan
+        med_te = float(np.nanmedian(te)) if len(te) else np.nan
+
+        denom = safe_denominator(tr.to_numpy()) if len(tr) else 1e-6
+        pct_shift_val = abs(med_val - med_tr) / denom if not np.isnan(med_tr) else 0.0
+        pct_shift_te  = abs(med_te - med_tr) / denom if not np.isnan(med_tr) else 0.0
+        abs_shift_val = abs(med_val - med_tr)
+        abs_shift_te  = abs(med_te - med_tr)
+
+        skip_pct = is_calendar(feat) or is_binary_like(feat, tr) or is_zscore_like(feat)
+        if not skip_pct:
+            pct_shift_flag = (pct_shift_val > pct_shift_thresh) or (pct_shift_te > pct_shift_thresh)
+        else:
+            pct_shift_flag = (abs_shift_val > abs_shift_thresh) or (abs_shift_te > abs_shift_thresh)
+
+        # TRAIN percentiles (standard)
+        q01 = np.nanpercentile(tr, 1) if len(tr) else np.nan
+        q25 = np.nanpercentile(tr, 25) if len(tr) else np.nan
+        q75 = np.nanpercentile(tr, 75) if len(tr) else np.nan
+        q99 = np.nanpercentile(tr, 99) if len(tr) else np.nan
+
+        # --- Minimal robustification: tail-count guard
+        # If q01/q99 are supported by very few TRAIN points, use q05/q95 instead
+        min_tail_count = 3
+        if len(tr):
+            try:
+                if (tr <= q01).sum() < min_tail_count:
+                    q01 = np.nanpercentile(tr, 5)
+                if (tr >= q99).sum() < min_tail_count:
+                    q99 = np.nanpercentile(tr, 95)
+            except Exception:
+                # keep original q01/q99 if unusual error occurs
+                pass
+
+        full_span = q99 - q01 if not (np.isnan(q99) or np.isnan(q01)) else np.nan
+        iqr = q75 - q25 if not (np.isnan(q75) or np.isnan(q25)) else np.nan
+        bulk_ratio = (iqr / (full_span + 1e-12)) if not np.isnan(iqr) and not np.isnan(full_span) else np.nan
+
+        def frac_outside(series: pd.Series) -> float:
+            if len(series) == 0 or np.isnan(q01) or np.isnan(q99):
+                return 0.0
+            s = series.dropna()
+            if len(s) == 0:
+                return 0.0
+            return float(((s < q01).sum() + (s > q99).sum()) / len(s))
+        frac_val_out = frac_outside(vl)
+        frac_te_out = frac_outside(te)
+        frac_out_flag = (frac_val_out > frac_outside_thresh) or (frac_te_out > frac_outside_thresh)
+
+        ks_p = np.nan
+        ks_flag = False
+        try:
+            if len(tr) >= min_train_samples and len(te) >= min_train_samples:
+                _, ks_p = ks_2samp(tr, te)
+                ks_flag = (ks_p < ks_pval_thresh)
+        except Exception:
+            ks_p = np.nan
+            ks_flag = False
+
+        const_on_train = False
+        if len(tr) and np.isfinite(tr.min()) and np.isfinite(tr.max()):
+            const_on_train = (abs(tr.max() - tr.min()) < 1e-12)
+        const_flag = const_on_train
+
+        fail_reasons = []
+        fail_count = 0
+        if pct_shift_flag:
+            fail_count += 1
+            fail_reasons.append(f"pct_shift_val={pct_shift_val:.3f};te={pct_shift_te:.3f}")
+        if frac_out_flag:
+            fail_count += 1
+            fail_reasons.append(f"frac_out_val={frac_val_out:.3f};te={frac_te_out:.3f}")
+        if ks_flag:
+            fail_count += 1
+            fail_reasons.append(f"ks_p={ks_p:.4g}")
+        if const_flag:
+            fail_count += 10
+            fail_reasons.append("constant_on_train")
+
+        status = "OK" if fail_count < fail_count_to_drop else "DROP"
+
+        rows.append({
+            "feature": feat,
+            "q01": q01, "q25": q25, "q75": q75, "q99": q99,
+            "full_span": full_span, "iqr": iqr, "bulk_ratio": bulk_ratio,
+            "med_tr": med_tr, "med_val": med_val, "med_te": med_te,
+            "pct_shift_val": pct_shift_val, "pct_shift_te": pct_shift_te,
+            "abs_shift_val": abs_shift_val, "abs_shift_te": abs_shift_te,
+            "frac_val_out": frac_val_out, "frac_te_out": frac_te_out,
+            "ks_p": ks_p,
+            "nan_mask_train": raw_tr[feat].isna().any(),
+            "const_on_train": const_on_train,
+            "fail_count": fail_count,
+            "status": status,
+            "reason": "; ".join(fail_reasons) if fail_reasons else ""
+        })
+
+    diag = pd.DataFrame(rows).set_index("feature").sort_values(["status", "fail_count"], ascending=[True, False])
+
+    to_drop = diag[diag["status"] == "DROP"].index.tolist()
+    df_pruned = df_unsc.drop(columns=to_drop, errors="ignore")
+
+    # SIMPLE mapping from bulk_ratio only -> pct_pair (minimal, friendlier constants)
+    br_min = 0.0
+    br_max = 0.15               # slightly larger threshold: treat bulk_ratio >= 0.15 as "wide"
+    pct_low_narrow, pct_high_narrow = 20.0, 80.0   # narrow endpoint (strong clipping)
+    pct_low_wide, pct_high_wide = 0.1, 99.9        # wide endpoint (very loose clipping)
+
+    def map_bulk_to_pcts_from_bulkratio(br, span):
+        # safe fallback when span invalid
+        if span is None or np.isnan(span) or span == 0:
+            return (0.5, 99.5)
+        br_val = float(br) if not np.isnan(br) else br_max
+        br_clip = float(np.clip(br_val, br_min, br_max))
+        t = (br_clip - br_min) / (br_max - br_min) if (br_max - br_min) > 0 else 1.0
+        pct_low = pct_low_narrow + (pct_low_wide - pct_low_narrow) * t
+        pct_high = pct_high_narrow + (pct_high_wide - pct_high_narrow) * t
+        pct_low = float(np.clip(pct_low, 0.0, 49.9))
+        pct_high = float(np.clip(pct_high, 50.1, 100.0))
+        if pct_low >= pct_high:
+            return (0.5, 99.5)
+        return (round(pct_low, 3), round(pct_high, 3))
+
+    pct_pairs = []
+    for feat in diag.index:
+        br = diag.at[feat, "bulk_ratio"] if "bulk_ratio" in diag.columns else np.nan
+        span = diag.at[feat, "full_span"] if "full_span" in diag.columns else np.nan
+        pct_pairs.append(map_bulk_to_pcts_from_bulkratio(br, span))
+
+    diag = diag.copy()
+    diag["pct_pair"] = pct_pairs
+
+    return df_pruned, to_drop, diag
+
+
+
+#########################################################################################################
+
+
+
+def scaling_with_percentiles(
     df: pd.DataFrame,
     label_col: str,
+    diag: pd.DataFrame,
     train_prop: float = 0.7,
     val_prop: float = 0.15,
-    winsorize: bool = True,
-    pct_low: float = 1.0,
-    pct_high: float = 99.0
+    winsorize: bool = True
 ) -> pd.DataFrame:
     """
-    Fit TRAIN-based per-feature winsorization (optional) and MinMax [0,1] scaling,
-    then transform TRAIN / VAL / TEST day-by-day preserving NaNs and index.
+    Scale numeric features to [0,1] using TRAIN-based winsorize + MinMax with per-feature pct pairs.
 
-    Key points
-      - Fits percentiles and min/max on the contiguous TRAIN slice only.
-      - Optional winsorize (pct_low, pct_high) clips extreme spikes before min/max.
-      - All numeric columns except label_col are mapped to [0,1]; non-numeric columns
-        are left unchanged and label_col is preserved.
-      - Transformation is applied per-day (groupby index.normalize()) to keep
-        intra-day NaN structure and avoid cross-day leakage.
-      - Constant features on TRAIN are mapped to 0.0; features all-NaN on TRAIN
-        remain NaN after transform.
+    Inputs
+      - df: full DataFrame (indexed by timestamp), numeric features + label_col
+      - label_col: name of the label column to exclude from scaling
+      - diag: diagnostics DataFrame produced by prune_and_percentiles; must contain a column
+              "pct_pair" with (pct_low, pct_high) per feature (indexed by feature name).
+      - train_prop, val_prop: contiguous TRAIN/VAL/TEST split fractions (train_prop + val_prop < 1)
+      - winsorize: whether to apply TRAIN-based clipping before MinMax
+
+    Behavior
+      - For each numeric feature (excluding label_col) reads per-feature (pct_low,pct_high) from diag["pct_pair"].
+      - If pct_pair missing or invalid, falls back to (0.5, 99.5).
+      - Computes TRAIN percentiles per feature, clips TRAIN/VAL/TEST values to those cutpoints,
+        computes TRAIN clipped min/max and then applies MinMax scaling (day-by-day).
+      - Preserves NaNs and non-numeric columns unchanged.
     """
-
     df = df.copy()
     df.index = pd.to_datetime(df.index)
     df = df.replace([np.inf, -np.inf], np.nan)
 
-    # cast numeric to float64 early
+    # numeric feature columns (cast once) and exclude label
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    if len(numeric_cols) > 0:
-        df[numeric_cols] = df[numeric_cols].astype(np.float64)
+    feat_cols = [c for c in numeric_cols if c != label_col]
+    df[numeric_cols] = df[numeric_cols].astype(np.float64)
 
-    # contiguous splits
+    if not feat_cols:
+        return df
+
+    # splits
     N = len(df)
     n_tr = int(N * train_prop)
     n_val = int(N * val_prop)
     if n_tr + n_val >= N:
         raise ValueError("train_prop + val_prop must sum < 1.0")
-    df_tr = df.iloc[:n_tr].copy()
-    df_v  = df.iloc[n_tr:n_tr + n_val].copy()
-    df_te = df.iloc[n_tr + n_val:].copy()
+    tr_slice = slice(0, n_tr)
+    val_slice = slice(n_tr, n_tr + n_val)
+    te_slice = slice(n_tr + n_val, N)
+    df_tr = df.iloc[tr_slice].copy()
 
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    feat_cols = [c for c in numeric_cols if c != label_col]
-    if len(feat_cols) == 0:
-        return df
+    # build per-feature pct_low/pct_high from diag["pct_pair"] (with fallback)
+    pct_low_map: Dict[str, float] = {}
+    pct_high_map: Dict[str, float] = {}
+    for c in feat_cols:
+        try:
+            pair = diag.at[c, "pct_pair"]
+            if isinstance(pair, (tuple, list)) and len(pair) >= 2:
+                lo, hi = float(pair[0]), float(pair[1])
+            else:
+                lo, hi = 0.5, 99.5
+        except Exception:
+            lo, hi = 0.5, 99.5
+        # sanitize
+        lo = float(np.clip(lo, 0.0, 49.9))
+        hi = float(np.clip(hi, 50.1, 100.0))
+        if lo >= hi:
+            lo, hi = 0.5, 99.5
+        pct_low_map[c] = lo
+        pct_high_map[c] = hi
 
-    # ---------- SHOW progress for percentile computation ----------
+    # compute TRAIN percentiles per-feature for winsorize (with progress)
+    clip_low: Dict[str, float] = {}
+    clip_high: Dict[str, float] = {}
     if winsorize:
-        # show a short progress bar to indicate percentiles are being computed
-        # we compute per-column percentiles; wrap in tqdm for visibility
-        cols = feat_cols
-        clip_low = np.empty(len(cols), dtype=float)
-        clip_high = np.empty(len(cols), dtype=float)
-        for i, c in enumerate(tqdm(cols, desc="compute pct for cols", unit="col")):
-            col_vals = df_tr[c].to_numpy(dtype=float)
-            clip_low[i] = np.nanpercentile(col_vals, pct_low)
-            clip_high[i] = np.nanpercentile(col_vals, pct_high)
-    else:
-        clip_low = None
-        clip_high = None
+        for c in tqdm(feat_cols, desc="compute TRAIN percentiles", unit="col"):
+            arr = df_tr[c].to_numpy(dtype=float)
+            clip_low[c] = np.nanpercentile(arr, pct_low_map[c]) if arr.size else np.nan
+            clip_high[c] = np.nanpercentile(arr, pct_high_map[c]) if arr.size else np.nan
 
-    # prepare training matrix after winsorize for min/max calculation (show progress)
-    tr_mat = df_tr[feat_cols].to_numpy(dtype=float)
-    if winsorize:
-        mask_tr = np.isnan(tr_mat)
-        tr_clip = np.clip(tr_mat, clip_low, clip_high)
-        tr_clip[mask_tr] = np.nan
-    else:
-        tr_clip = tr_mat
+    # helper to apply clipping on numpy array
+    def apply_clip_array(arr: np.ndarray, c: str) -> np.ndarray:
+        if not winsorize:
+            return arr
+        low = clip_low[c]; high = clip_high[c]
+        a = np.copy(arr)
+        mask = np.isnan(a)
+        a = np.clip(a, low, high)
+        a[mask] = np.nan
+        return a
 
-    # compute min / max ignoring NaNs. show per-column progress if many columns
-    col_min = np.empty(len(feat_cols), dtype=float)
-    col_max = np.empty(len(feat_cols), dtype=float)
-    for i, c in enumerate(tqdm(feat_cols, desc="train min/max per-col", unit="col")):
-        col = tr_clip[:, i]
-        col_min[i] = np.nanmin(col)
-        col_max[i] = np.nanmax(col)
+    # compute clipped TRAIN min/max and spans (with progress)
+    col_min: Dict[str, float] = {}
+    col_max: Dict[str, float] = {}
+    span: Dict[str, float] = {}
+    for c in tqdm(feat_cols, desc="compute TRAIN min/max", unit="col"):
+        col = df_tr[c].to_numpy(dtype=float)
+        colc = apply_clip_array(col, c) if winsorize else col
+        col_min[c] = np.nanmin(colc) if np.any(~np.isnan(colc)) else np.nan
+        col_max[c] = np.nanmax(colc) if np.any(~np.isnan(colc)) else np.nan
+        if np.isnan(col_min[c]) or np.isnan(col_max[c]) or (col_max[c] - col_min[c]) == 0.0:
+            span[c] = 1.0
+        else:
+            span[c] = col_max[c] - col_min[c]
 
-    span = col_max - col_min
-    const_mask = (np.isnan(span) | (span == 0.0))
-    span[const_mask] = 1.0
-
+    # transform helper for a block (preserves NaNs)
     def transform_block(block: pd.DataFrame) -> pd.DataFrame:
-        A = block[feat_cols].to_numpy(dtype=float)
-        if winsorize:
-            A = np.clip(A, clip_low, clip_high)
-        mask = np.isnan(A)
-        out = (A - col_min) / span
-        out = np.clip(out, 0.0, 1.0)
-        out[mask] = np.nan
-        return pd.DataFrame(out, index=block.index, columns=feat_cols, dtype=np.float64)
+        out = block.copy()
+        for c in feat_cols:
+            arr = out[c].to_numpy(dtype=float)
+            if winsorize:
+                low = clip_low[c]; high = clip_high[c]
+                mask = np.isnan(arr)
+                arr = np.clip(arr, low, high)
+                arr[mask] = np.nan
+            mn = col_min[c]; sp = span[c]
+            res = (arr - mn) / sp
+            res = np.where(np.isnan(arr), np.nan, np.clip(res, 0.0, 1.0))
+            out[c] = res
+        return out[feat_cols].astype(np.float64)
 
+    # apply transforms day-by-day for each split (with progress over days)
     def transform_split(split_df: pd.DataFrame, desc: str) -> pd.DataFrame:
         parts = []
         days = split_df.index.normalize().unique()
-        total_days = len(days)
-        for day, block in tqdm(split_df.groupby(split_df.index.normalize()),
-                               desc=desc, unit="day", total=total_days):
+        for _, block in tqdm(split_df.groupby(split_df.index.normalize()),
+                              desc=desc, unit="day", total=len(days)):
             parts.append(transform_block(block))
-        if len(parts) == 0:
+        if not parts:
             return pd.DataFrame(columns=feat_cols, index=split_df.index)
         return pd.concat(parts).reindex(split_df.index)
 
-    # ---------- per-day transforms (existing progress bars) ----------
-    tr_scaled = transform_split(df_tr, desc="transform train days")
-    v_scaled  = transform_split(df_v,  desc="transform val days")
-    te_scaled = transform_split(df_te, desc="transform test days")
+    tr_scaled = transform_split(df.iloc[tr_slice], "scale train days")
+    v_scaled = transform_split(df.iloc[val_slice], "scale val days")
+    te_scaled = transform_split(df.iloc[te_slice], "scale test days")
 
-    # ---------- show progress for reassembling / final concat ----------
-    # assign scaled columns back into splits with a small progress indicator
-    def reassemble(orig_split, scaled_feat_df, desc: str):
-        out = orig_split.copy()
-        # assign per-column to make progress visible when many columns
-        for c in tqdm(feat_cols, desc=desc, unit="col"):
-            if c in out.columns:
-                out.loc[:, c] = scaled_feat_df[c].astype(np.float64)
-        return out
+    # reassemble final DataFrame
+    df_tr.loc[:, feat_cols] = tr_scaled
+    df_v = df.iloc[n_tr:n_tr + n_val].copy()
+    df_te = df.iloc[n_tr + n_val:].copy()
+    df_v.loc[:, feat_cols] = v_scaled
+    df_te.loc[:, feat_cols] = te_scaled
 
-    df_tr_s = reassemble(df_tr, tr_scaled, desc="reassemble train cols")
-    df_v_s  = reassemble(df_v,  v_scaled,  desc="reassemble val cols")
-    df_te_s = reassemble(df_te, te_scaled, desc="reassemble test cols")
-
-    # final concat with a tiny status update
-    for _ in tqdm([0], desc="final concat", unit="step"):
-        df_all = pd.concat([df_tr_s, df_v_s, df_te_s]).sort_index()
+    df_all = pd.concat([df_tr, df_v, df_te]).sort_index()
 
     return df_all
+
+
+
 
 
 
@@ -1199,169 +1444,116 @@ def scale_minmax_all(
 
 
 
-
-def compare_raw_vs_scaled(
-    df_raw: pd.DataFrame,
+def scaling_diagnostics(
+    df_unscaled: pd.DataFrame,
     df_scaled: pd.DataFrame,
-    feat_cols: Optional[List[str]] = None,
     train_prop: float = 0.7,
-    tol_range: float = 1e-6,
-    return_failures: bool = True,
     clip_thresh: float = 0.01
-) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+) -> pd.DataFrame:
     """
-    TRAIN-only validation of [0,1] MinMax scaling plus simple VAL/TEST clip checks.
+    Compact per-feature scaling diagnostics (run after scaling).
+    Returns a DataFrame indexed by feature with medians, IQRs (unscaled),
+    clip rates on VAL/TEST (scaled), NaN-mask preservation check, and a suggested action.
+    """
+    df_u = df_unscaled.copy()
+    df_s = df_scaled.copy()
+    common = [c for c in df_u.columns if c in df_s.columns and pd.api.types.is_numeric_dtype(df_u[c])]
+    if not common:
+        return pd.DataFrame()
 
-    Behavior:
-      - Uses contiguous TRAIN slice (first train_prop fraction) to run invariants:
-         * nan_mask_ok: missing-data mask unchanged on TRAIN
-         * range_ok: scaled values on TRAIN lie in [0,1] +/- tol_range
-         * const_ok: if raw is constant on TRAIN, scaled is constant
-      - If feat_cols is not given, automatically selects numeric features but
-        excludes known raw-level drifting columns (open/high/low/close and patterns).
-      - Adds simple clip-rate checks on VAL and TEST: fraction of values == 0 or == 1;
-        flags features where clip rate in VAL or TEST exceeds clip_thresh.
-      - Returns (cmp_df, failures_df) where failures_df = rows with status FAIL.
-    """
-    # splits
-    N = len(df_raw)
+    N = len(df_u)
     n_tr = int(N * train_prop)
-    raw_tr = df_raw.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
-    sca_tr = df_scaled.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
-    sca_v  = df_scaled.iloc[n_tr:int(n_tr + N * (1 - train_prop) * 0.0) + 0]  # placeholder, not used
-    # define val/test splits explicitly
-    n_val = int(N * (1 - train_prop) / 2)  # best-effort equal split of remainder
-    df_val = df_scaled.iloc[n_tr:n_tr + n_val] if n_val > 0 else df_scaled.iloc[0:0]
-    df_test = df_scaled.iloc[n_tr + n_val:] if (n_tr + n_val) < N else df_scaled.iloc[0:0]
+    n_rem = N - n_tr
+    n_val = n_rem // 2
+    tr_slice = slice(0, n_tr)
+    val_slice = slice(n_tr, n_tr + n_val)
+    te_slice = slice(n_tr + n_val, N)
 
-    # 2) determine features to test
-    common = set(raw_tr.columns) & set(sca_tr.columns)
-    if feat_cols is not None:
-        common &= set(feat_cols)
+    tr_u = df_u.iloc[tr_slice]; val_u = df_u.iloc[val_slice]; te_u = df_u.iloc[te_slice]
+    tr_s = df_s.iloc[tr_slice]; val_s = df_s.iloc[val_slice]; te_s = df_s.iloc[te_slice]
 
-    # exclude raw-level drifting patterns by default
-    raw_patterns = [
-        r"^open$", r"^high$", r"^low$", r"^close$",
-        r"^bb_lband_", r"^bb_hband_", r"^sma_\d+$", r"^vwap_(?!.*_dev)",
-        r"^rolling_max_close_", r"^rolling_min_close_"
-    ]
-    def is_raw_level(col: str) -> bool:
-        for p in raw_patterns:
-            if re.match(p, col):
-                return True
-        return False
+    def clip_rate(series):
+        if series is None or len(series) == 0:
+            return 0.0
+        s = series.dropna()
+        if len(s) == 0:
+            return 0.0
+        return float(((s == 0.0).sum() + (s == 1.0).sum()) / len(s))
 
-    numeric = [c for c in sorted(common)
-               if pd.api.types.is_numeric_dtype(raw_tr[c]) and pd.api.types.is_numeric_dtype(sca_tr[c]) and not is_raw_level(c)]
-    features = numeric
+    rows = []
+    for feat in common:
+        trx = tr_u[feat].dropna()
+        vx  = val_u[feat].dropna()
+        tex = te_u[feat].dropna()
 
-    if len(features) == 0:
-        empty = pd.DataFrame(columns=[
-            "raw_min","raw_1%","raw_5%","raw_50%","raw_95%","raw_99%","raw_max",
-            "scaled_min","scaled_1%","scaled_5%","scaled_50%","scaled_95%","scaled_99%","scaled_max",
-            "nan_mask_ok","range_ok","const_ok",
-            "val_clip_rate","test_clip_rate","clip_ok","status","reason"
-        ])
-        return (empty, empty) if return_failures else (empty, None)
+        # basic raw stats (unscaled)
+        med_tr = float(trx.median()) if len(trx) else np.nan
+        med_val = float(vx.median()) if len(vx) else np.nan
+        med_te = float(tex.median()) if len(tex) else np.nan
+        iqr_tr = float(trx.quantile(0.75) - trx.quantile(0.25)) if len(trx) else np.nan
+        iqr_val = float(vx.quantile(0.75) - vx.quantile(0.25)) if len(vx) else np.nan
+        iqr_te = float(tex.quantile(0.75) - tex.quantile(0.25)) if len(tex) else np.nan
 
-    # percentiles on TRAIN
-    qs = [0.01, 0.05, 0.50, 0.95, 0.99]
-    for _ in tqdm([0], desc="precomputing TRAIN percentiles", unit="step"):
-        raw_desc = raw_tr[features].describe(percentiles=qs).T
-        sca_desc = sca_tr[features].describe(percentiles=qs).T
+        # scaled clip rates (exact 0 or 1) on VAL/TEST
+        clip_val = clip_rate(val_s.get(feat))
+        clip_te  = clip_rate(te_s.get(feat))
 
-    # per-feature checks
-    nan_ok = {}
-    range_ok = {}
-    const_ok = {}
-    val_clip_rate = {}
-    test_clip_rate = {}
-    reasons = {}
+        # NaN-mask preservation on TRAIN
+        nan_mask_ok = True
+        if feat in tr_s.columns:
+            raw_mask = tr_u[feat].isna()
+            scaled_mask = tr_s[feat].isna()
+            nan_mask_ok = raw_mask.equals(scaled_mask)
 
-    for feat in tqdm(features, desc="Validating train-split", unit="feat"):
-        # a) NaN-mask unchanged
-        nan_ok[feat] = (raw_tr[feat].isna() == sca_tr[feat].isna()).all()
+        # scaled-train constant check
+        const_on_train_scaled = False
+        s_tr = tr_s[feat].dropna()
+        if len(s_tr) > 0:
+            const_on_train_scaled = np.isclose(s_tr.max(), s_tr.min())
 
-        # align non-NaN pairs on TRAIN
-        x = raw_tr[feat].dropna()
-        y = sca_tr[feat].dropna()
-        x, y = x.align(y, join='inner')
+        # suggested action (simple ordered rules)
+        action = "ok"
+        reasons = []
 
-        # b) Range containment [0,1] on TRAIN
-        if len(y):
-            ymin, ymax = float(y.min()), float(y.max())
-            range_ok[feat] = (ymin >= -tol_range) and (ymax <= 1.0 + tol_range)
-        else:
-            range_ok[feat] = True
+        if not nan_mask_ok:
+            action = "inspect_feature"
+            reasons.append("nan_mask_changed")
 
-        # c) Constant feature behavior on TRAIN
-        rmin = raw_desc.at[feat, "min"]
-        rmax = raw_desc.at[feat, "max"]
-        if np.isfinite(rmin) and np.isfinite(rmax) and abs(rmax - rmin) < tol_range:
-            const_ok[feat] = (y.nunique() <= 1)
-        else:
-            const_ok[feat] = True
+        if (clip_val > clip_thresh) or (clip_te > clip_thresh):
+            if action == "ok":
+                action = "tune_winsorize"
+            reasons.append(f"clip_val={clip_val:.3f};clip_te={clip_te:.3f}")
 
-        # d) simple VAL/TEST clip rates (fraction exactly 0 or 1)
-        def clip_rate(series: pd.Series) -> float:
-            if series is None or len(series) == 0:
-                return 0.0
-            s = series.dropna()
-            if len(s) == 0:
-                return 0.0
-            return float(((s == 0).sum() + (s == 1).sum()) / len(s))
+        if (not np.isnan(iqr_tr) and iqr_tr == 0.0) and ((not np.isnan(iqr_val) and iqr_val > 0.0) or (not np.isnan(iqr_te) and iqr_te > 0.0)):
+            if action == "ok":
+                action = "try_robust_scaler"
+            reasons.append("iqr_tr_zero")
 
-        val_clip_rate[feat] = clip_rate(df_val[feat] if feat in df_val.columns else pd.Series(dtype=float))
-        test_clip_rate[feat] = clip_rate(df_test[feat] if feat in df_test.columns else pd.Series(dtype=float))
+        # IQR inflation: VAL or TEST >> TRAIN
+        if (not np.isnan(iqr_tr) and iqr_tr > 0.0):
+            if (not np.isnan(iqr_val) and (iqr_val / (iqr_tr + 1e-12) > 5.0)) or (not np.isnan(iqr_te) and (iqr_te / (iqr_tr + 1e-12) > 5.0)):
+                if action == "ok":
+                    action = "try_robust_scaler"
+                reasons.append("iqr_inflation")
 
-        # build reason list and final reason
-        err = []
-        if not nan_ok[feat]:
-            err.append("nan_mask_changed")
-        if not range_ok[feat]:
-            mn, mx = sca_desc.at[feat, "min"], sca_desc.at[feat, "max"]
-            err.append(f"range[{mn:.6g},{mx:.6g}]")
-        if not const_ok[feat]:
-            err.append("constant_not_const")
-        if val_clip_rate[feat] > clip_thresh:
-            err.append(f"val_clip={val_clip_rate[feat]:.3f}")
-        if test_clip_rate[feat] > clip_thresh:
-            err.append(f"test_clip={test_clip_rate[feat]:.3f}")
+        if const_on_train_scaled and (not (len(trx) and np.nanstd(trx) == 0.0)):
+            if action == "ok":
+                action = "inspect_feature"
+            reasons.append("scaled_train_constant")
 
-        reasons[feat] = "all checks passed" if not err else "; ".join(err)
+        rows.append({
+            "feature": feat,
+            "med_tr": med_tr, "med_val": med_val, "med_te": med_te,
+            "iqr_tr": iqr_tr, "iqr_val": iqr_val, "iqr_te": iqr_te,
+            "clip_val": clip_val, "clip_te": clip_te,
+            "nan_mask_ok": nan_mask_ok,
+            "const_on_train_scaled": const_on_train_scaled,
+            "suggested_action": action,
+            "reason": "; ".join(reasons)
+        })
 
-    # assemble result rows
-    rows = {}
-    for feat in features:
-        rows[feat] = {
-            "raw_min": raw_desc.at[feat, "min"],
-            "raw_1%": raw_desc.at[feat, "1%"],
-            "raw_5%": raw_desc.at[feat, "5%"],
-            "raw_50%": raw_desc.at[feat, "50%"],
-            "raw_95%": raw_desc.at[feat, "95%"],
-            "raw_99%": raw_desc.at[feat, "99%"],
-            "raw_max": raw_desc.at[feat, "max"],
-            "scaled_min": sca_desc.at[feat, "min"],
-            "scaled_1%": sca_desc.at[feat, "1%"],
-            "scaled_5%": sca_desc.at[feat, "5%"],
-            "scaled_50%": sca_desc.at[feat, "50%"],
-            "scaled_95%": sca_desc.at[feat, "95%"],
-            "scaled_99%": sca_desc.at[feat, "99%"],
-            "scaled_max": sca_desc.at[feat, "max"],
-            "nan_mask_ok": nan_ok[feat],
-            "range_ok": range_ok[feat],
-            "const_ok": const_ok[feat],
-            "val_clip_rate": val_clip_rate[feat],
-            "test_clip_rate": test_clip_rate[feat],
-            "clip_ok": (val_clip_rate[feat] <= clip_thresh and test_clip_rate[feat] <= clip_thresh),
-            "status": ("OK" if (nan_ok[feat] and range_ok[feat] and const_ok[feat] and (val_clip_rate[feat] <= clip_thresh) and (test_clip_rate[feat] <= clip_thresh)) else "FAIL"),
-            "reason": reasons[feat],
-        }
+    return pd.DataFrame(rows).set_index("feature")
 
-    cmp_df = pd.DataFrame.from_dict(rows, orient="index")
-
-    failures_df = cmp_df[cmp_df["status"] == "FAIL"].copy() if return_failures else None
-    return cmp_df, failures_df
 
 
 
