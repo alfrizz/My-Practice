@@ -43,9 +43,9 @@ def build_tensors(
     look_back    = None,
     sess_start   = None,
     *,
-    tmpdir:      str                  = None,              # kept for signature compatibility (unused)
-    device:      torch.device         = torch.device("cpu"),
-    in_memory:   bool                 = True                # kept for signature compatibility (unused)
+    device       = torch.device("cpu"),
+    tmp_dir      = "/tmp/X_buf.dat",
+    thresh_gb    = 15,
 ) -> tuple[
     torch.Tensor,  # X         shape=(N, look_back, F)
     torch.Tensor,  # y_sig     shape=(N,)
@@ -74,7 +74,6 @@ def build_tensors(
     # 1) Prepare DataFrame & feature list
     df = df.copy()
     feature_cols = [c for c in df.columns if c not in (params.label_col, "close_raw")]
-    print("Inside build_tensors, features:", feature_cols)
     F = len(feature_cols)
 
     # session start -> seconds
@@ -120,14 +119,23 @@ def build_tensors(
         payloads.append((feats_np, sig_end, ret_end, close_end, ends_np, mask, N_total))
         N_total += m
 
-    # sanity
+    # sanity and prints
     assert N_total == sum(int(p[5].sum()) for p in payloads), "N_total mismatch after payload accumulation"
+    print("N_total:", N_total, "look_back:", look_back, "F:", F)
+    est_bytes = int(N_total) * int(look_back) * int(F) * 4
+    est_gb = est_bytes / (1024**3)
+    print(f"Estimated X_buf size: {est_bytes/1e9:.2f} GB — {'using memmap' if est_gb > thresh_gb else 'using RAM (in-memory)'} (thresh {thresh_gb} GiB)")
 
-    # 3) Allocate RAM buffers and initialize to NaN/NaT
-    X_buf = np.full((N_total, look_back, F), np.nan, dtype=np.float32)
-    y_buf = np.full((N_total,),              np.nan, dtype=np.float32)
-    r_buf = np.full((N_total,),              np.nan, dtype=np.float32)
-    c_buf = np.full((N_total,),              np.nan, dtype=np.float32)
+    # 3) Allocate RAM buffers or memmap and initialize to NaN/NaT
+    if est_gb > thresh_gb:
+        print('initializing mmap...')
+        X_buf = np.memmap(tmp_dir, dtype=np.float32, mode="w+", shape=(N_total, look_back, F)); X_buf[:] = np.nan; X_buf.flush()
+    else:
+        X_buf = np.full((N_total, look_back, F), np.nan, dtype=np.float32)
+
+    y_buf = np.full((N_total,), np.nan, dtype=np.float32)
+    r_buf = np.full((N_total,), np.nan, dtype=np.float32)
+    c_buf = np.full((N_total,), np.nan, dtype=np.float32)
     t_buf = np.full((N_total,), np.datetime64("NaT"), dtype="datetime64[ns]")
 
     # 4) Second pass: build windows and write
@@ -1008,11 +1016,11 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
     # Move inputs to device
     x_batch = x_batch.to(device)
 
-    # Derive dims
-    B = x_batch.size(0) if x_batch.dim() >= 1 else 0
-    G = x_batch.size(1) if x_batch.dim() >= 4 else 1
-    seq_len_full = x_batch.size(2) if x_batch.dim() >= 3 else (x_batch.size(1) if x_batch.dim() >= 2 else None)
-    feat_dim = x_batch.size(-1)
+    # Derive dims — assume layout (N, T, F)
+    if x_batch.dim() != 3:
+        raise RuntimeError(f"Expected x_batch.dim() == 3 (N, T, F), got {x_batch.dim()}")
+    B, seq_len_full, feat_dim = x_batch.size()
+    G = 1
 
     # when building segments
     segments = []
@@ -1769,7 +1777,7 @@ def log_epoch_summary(
     max_mem = (torch.cuda.max_memory_allocated() / (1024 ** 3)) if torch.cuda.is_available() else 0.0
 
     # 14) append FEAT_TOP after layer_token finalized
-    feat_res = log_epoch_feature_importance(model, feature_names=getattr(params, "features_cols_tick", None),
+    feat_res = log_epoch_feature_importance(model, feature_names=model.feature_names,
                                            params=params, alpha=0.9, mode="combo") # some sensitivity to recent learning: score = 0.9norm_w + 0.1norm_g.
 
     # Final line assembly (compact, per-epoch changing values only)

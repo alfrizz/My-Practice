@@ -1,8 +1,13 @@
 from libs import params, trades
 
+from typing import Sequence, List, Tuple, Optional, Union, Dict
+
 import pandas as pd
 import numpy  as np
+
 import gc
+import re
+import textwrap
 
 import math
 import os
@@ -139,87 +144,231 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
+# class LiveFeatGuBars:
+#     """Live side-by-side horizontal bar charts for FEAT_TOP (left) and G (grad norms, right).
+#     Instantiate once; call update(feat_dict, g_dict, epoch) each epoch. Figure and display are
+#     created lazily on first update to avoid duplicate static outputs on import/reload.
+#     """
+#     def __init__(self, top_feats, top_params, figsize=(20,5), dpi=110):
+#         self.top_feats = top_feats
+#         self.top_params = top_params
+#         # placeholders; real Figure/axes created lazily in _init_fig()
+#         self.fig = None
+#         self.ax_feat = None
+#         self.ax_param = None
+#         self.eps = []           # stored epoch numbers (optional)
+#         self.disp_id = None     # lazy display handle
+
+#     def _init_fig(self, dpi=110):
+#         """
+#         Create figure sized for a readable number of horizontal bars without going huge.
+#         - Uses a smaller per-bar height and an upper cap for total height.
+#         - Keeps width fixed for two side-by-side plots.
+#         """
+#         # sizing heuristics
+#         per_bar = 0.16            # inches per bar (reduced from 0.30)
+#         n_rows = max(1, max(self.top_feats, self.top_params))
+#         extra = 1.0               # inches for title / margins
+#         max_height = 8.0          # cap height to avoid huge figures
+    
+#         # compute height and clamp
+#         height = min(max(4.0, n_rows * per_bar + extra), max_height)
+#         width = 14.0              # keep width roomy for long labels
+    
+#         # create figure and axes
+#         self.fig, (self.ax_feat, self.ax_param) = plt.subplots(1, 2, figsize=(width, height), dpi=dpi)
+    
+#         # minimal axes init
+#         self.ax_feat.cla(); self.ax_param.cla()
+#         self.ax_feat.set_xlabel("score"); self.ax_param.set_xlabel("g norm")
+#         self.ax_feat.set_yticks([]); self.ax_param.set_yticks([])
+#         self.fig.tight_layout()
+
+
+#     def update(self, feat_dict: dict, g_dict: dict, epoch: int):
+#         """Update bars using numeric dicts: feat_dict {name:score}, g_dict {name:g}."""
+#         # lazy init on first update
+#         if self.fig is None:
+#             self._init_fig()
+
+#         # record epoch
+#         self.eps.append(epoch)
+
+#         # series for current epoch
+#         s_feat = pd.Series(feat_dict).fillna(0.0)
+#         s_g = pd.Series(g_dict).fillna(0.0)
+
+#         # pick top columns by current epoch values
+#         feat_cols = s_feat.sort_values(ascending=False).index[:self.top_feats].tolist()
+#         g_cols = s_g.sort_values(ascending=False).index[:self.top_params].tolist()
+
+#         # draw FEAT_TOP (left)
+#         self.ax_feat.cla()
+#         if feat_cols:
+#             vals = s_feat[feat_cols].values
+#             y = np.arange(len(feat_cols))[::-1]
+#             self.ax_feat.barh(y, vals, color='C0')
+#             self.ax_feat.set_yticks(y); self.ax_feat.set_yticklabels(feat_cols)
+#         else:
+#             self.ax_feat.set_yticks([])
+#         self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})")
+
+#         # draw G norms (right)
+#         self.ax_param.cla()
+#         if g_cols:
+#             vals_p = s_g[g_cols].values
+#             y = np.arange(len(g_cols))[::-1]
+#             self.ax_param.barh(y, vals_p, color='C1')
+#             self.ax_param.set_yticks(y); self.ax_param.set_yticklabels(g_cols)
+#         else:
+#             self.ax_param.set_yticks([])
+#         self.ax_param.set_title(f"G (grad norm) (epoch {epoch})")
+
+#         self.fig.tight_layout()
+
+#         # display created once; update thereafter
+#         if self.disp_id is None:
+#             self.disp_id = display(self.fig, display_id=True)
+#         else:
+#             try:
+#                 self.disp_id.update(self.fig)
+#             except Exception:
+#                 # fallback for non-notebook backends
+#                 self.fig.canvas.draw()
+#                 self.fig.canvas.flush_events()
+
+
 class LiveFeatGuBars:
-    """Live side-by-side horizontal bar charts for FEAT_TOP (left) and G (grad norms, right).
-    Instantiate once; call update(feat_dict, g_dict, epoch) each epoch. Figure and display are
-    created lazily on first update to avoid duplicate static outputs on import/reload.
-    """
-    def __init__(self, top_feats, top_params, figsize=(20,5), dpi=110):
+    """Live horizontal bars for FEAT_TOP (left) and G (right) with automatic sizing."""
+    def __init__(self, top_feats=30, top_params=30, figsize=(14, 4), dpi=110, max_display=80):
+        # top_feats/top_params are nominal maximums used when selecting columns;
+        # max_display limits the number of bars actually drawn per side to keep output readable.
         self.top_feats = top_feats
         self.top_params = top_params
-        # placeholders; real Figure/axes created lazily in _init_fig()
+        self.dpi = dpi
+        self.base_figsize = figsize
+        self.max_display = max_display
+
         self.fig = None
         self.ax_feat = None
         self.ax_param = None
-        self.eps = []           # stored epoch numbers (optional)
-        self.disp_id = None     # lazy display handle
+        self.eps = []
+        self.disp_id = None
 
-    def _init_fig(self, dpi=110):
-        """
-        Create figure sized for a readable number of horizontal bars without going huge.
-        - Uses a smaller per-bar height and an upper cap for total height.
-        - Keeps width fixed for two side-by-side plots.
-        """
-        # sizing heuristics
-        per_bar = 0.16            # inches per bar (reduced from 0.30)
-        n_rows = max(1, max(self.top_feats, self.top_params))
-        extra = 1.0               # inches for title / margins
-        max_height = 8.0          # cap height to avoid huge figures
-    
-        # compute height and clamp
-        height = min(max(4.0, n_rows * per_bar + extra), max_height)
-        width = 14.0              # keep width roomy for long labels
-    
-        # create figure and axes
-        self.fig, (self.ax_feat, self.ax_param) = plt.subplots(1, 2, figsize=(width, height), dpi=dpi)
-    
-        # minimal axes init
-        self.ax_feat.cla(); self.ax_param.cla()
-        self.ax_feat.set_xlabel("score"); self.ax_param.set_xlabel("g norm")
-        self.ax_feat.set_yticks([]); self.ax_param.set_yticks([])
-        self.fig.tight_layout()
+    def _wrap_label(self, label, width=20):
+        # simple word-wrap for long labels
+        if len(label) <= width:
+            return label
+        parts = []
+        for i in range(0, len(label), width):
+            parts.append(label[i:i+width])
+        return "\n".join(parts)
 
+    def _init_fig(self, n_feat_rows, n_param_rows, avg_label_len):
+        # heuristics: per-bar height (inches), extra margins, and width scaling by label length
+        per_bar = 0.18  # inches per bar; balanced for density
+        extra = 1.2     # inches for titles/margins
+        max_height = 20.0
+        height = min(max(3.5, max(n_feat_rows, n_param_rows) * per_bar + extra), max_height)
+
+        # width base + extra if labels are long; clamp width to avoid huge images
+        base_width = max(self.base_figsize[0], 10.0)
+        width = min(base_width + max(0.0, (avg_label_len - 10) * 0.12), 36.0)
+
+        # create figure with constrained layout for better spacing
+        self.fig, (self.ax_feat, self.ax_param) = plt.subplots(1, 2, figsize=(width, height), dpi=self.dpi, constrained_layout=True)
+
+        # shared minimal init
+        for ax in (self.ax_feat, self.ax_param):
+            ax.cla()
+            ax.set_yticks([])
+            ax.grid(axis="x", linestyle=":", linewidth=0.6, alpha=0.6)
+        self.ax_feat.set_xlabel("score")
+        self.ax_param.set_xlabel("g norm")
 
     def update(self, feat_dict: dict, g_dict: dict, epoch: int):
         """Update bars using numeric dicts: feat_dict {name:score}, g_dict {name:g}."""
-        # lazy init on first update
+        # pick top columns by current epoch values (cap selection to avoid huge sorts)
+        s_feat = pd.Series(feat_dict).fillna(0.0)
+        s_g = pd.Series(g_dict).fillna(0.0)
+
+        # choose top nominal candidates then clamp to max_display for plotting
+        feat_cols = s_feat.sort_values(ascending=False).index[:self.top_feats].tolist()
+        g_cols = s_g.sort_values(ascending=False).index[:self.top_params].tolist()
+
+        # clamp to a maximum displayable count to preserve readability
+        feat_cols = feat_cols[:self.max_display]
+        g_cols = g_cols[:self.max_display]
+
+        # measure label lengths to size figure
+        all_labels = [str(x) for x in feat_cols + g_cols]
+        avg_label_len = int(np.mean([len(l) for l in all_labels]) if all_labels else 0)
+        n_feat_rows = max(1, len(feat_cols))
+        n_param_rows = max(1, len(g_cols))
+
+        # lazy init or re-create figure if size needs to change significantly
         if self.fig is None:
-            self._init_fig()
+            self._init_fig(n_feat_rows, n_param_rows, avg_label_len)
 
         # record epoch
         self.eps.append(epoch)
 
-        # series for current epoch
-        s_feat = pd.Series(feat_dict).fillna(0.0)
-        s_g = pd.Series(g_dict).fillna(0.0)
+        # prepare label wrapping and font sizing
+        wrap_width = 22 if avg_label_len > 20 else 30
+        feat_labels_wrapped = [self._wrap_label(str(l), width=wrap_width) for l in feat_cols]
+        param_labels_wrapped = [self._wrap_label(str(l), width=wrap_width) for l in g_cols]
 
-        # pick top columns by current epoch values
-        feat_cols = s_feat.sort_values(ascending=False).index[:self.top_feats].tolist()
-        g_cols = s_g.sort_values(ascending=False).index[:self.top_params].tolist()
+        # dynamic font sizing: shrink when many rows
+        def font_for_rows(n_rows):
+            if n_rows <= 10:
+                return 10
+            elif n_rows <= 30:
+                return 9
+            elif n_rows <= 60:
+                return 8
+            else:
+                return 7
 
-        # draw FEAT_TOP (left)
+        feat_fontsize = font_for_rows(len(feat_cols))
+        param_fontsize = font_for_rows(len(g_cols))
+
+        # redraw FEAT_TOP (left)
         self.ax_feat.cla()
         if feat_cols:
             vals = s_feat[feat_cols].values
             y = np.arange(len(feat_cols))[::-1]
-            self.ax_feat.barh(y, vals, color='C0')
-            self.ax_feat.set_yticks(y); self.ax_feat.set_yticklabels(feat_cols)
+            self.ax_feat.barh(y, vals, color='C0', align='center', height=0.7)
+            self.ax_feat.set_yticks(y)
+            self.ax_feat.set_yticklabels(feat_labels_wrapped, fontsize=feat_fontsize)
+            self.ax_feat.set_xlim(left=0)  # for nicer baseline
         else:
             self.ax_feat.set_yticks([])
-        self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})")
 
-        # draw G norms (right)
+        self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})", fontsize=10)
+
+        # redraw G norms (right)
         self.ax_param.cla()
         if g_cols:
             vals_p = s_g[g_cols].values
             y = np.arange(len(g_cols))[::-1]
-            self.ax_param.barh(y, vals_p, color='C1')
-            self.ax_param.set_yticks(y); self.ax_param.set_yticklabels(g_cols)
+            self.ax_param.barh(y, vals_p, color='C1', align='center', height=0.7)
+            self.ax_param.set_yticks(y)
+            self.ax_param.set_yticklabels(param_labels_wrapped, fontsize=param_fontsize)
+            self.ax_param.set_xlim(left=0)
         else:
             self.ax_param.set_yticks([])
-        self.ax_param.set_title(f"G (grad norm) (epoch {epoch})")
 
-        self.fig.tight_layout()
+        self.ax_param.set_title(f"G (grad norm) (epoch {epoch})", fontsize=10)
+
+        # tidy layout and draw
+        try:
+            self.fig.canvas.draw_idle()
+        except Exception:
+            try:
+                self.fig.canvas.draw()
+                self.fig.canvas.flush_events()
+            except Exception:
+                pass
 
         # display created once; update thereafter
         if self.disp_id is None:
@@ -229,8 +378,11 @@ class LiveFeatGuBars:
                 self.disp_id.update(self.fig)
             except Exception:
                 # fallback for non-notebook backends
-                self.fig.canvas.draw()
-                self.fig.canvas.flush_events()
+                try:
+                    self.fig.canvas.draw()
+                    self.fig.canvas.flush_events()
+                except Exception:
+                    pass
 
 
 #########################################################################################################
@@ -544,133 +696,6 @@ def aggregate_performance(
 
     
 #########################################################################################################
-
-
-# def plot_dual_histograms(
-#     df_before: pd.DataFrame,
-#     df_after: pd.DataFrame,
-#     sample: int | None = 50000,
-#     bins: int = 40,
-#     clip_pct: tuple[float, float] = (0.02, 0.98),
-# ):
-#     """
-#     For each feature column, plot how its
-#     distribution changes before vs. after scaling/transformation.
-
-#     Functionality:
-#       1) Auto-discover common feat_… columns in df_before & df_after.
-#       2) Optionally sample up to `sample` rows for speed.
-#       3) For numeric, high-cardinality features:
-#          - Compute clipped [pct lower, pct upper] ranges.
-#          - Overlay “before” histogram in blue (bottom x / left y).
-#          - Overlay “after” histogram in orange (top x / right y).
-#       4) For categorical or low-card features:
-#          - Draw side-by-side bar charts of value frequencies.
-#       5) Arrange subplots in a grid and clean up unused axes.
-#     """
-#     # 1) identify all feat_… columns present in both DataFrames
-#     feat_cols = [
-#         col for col in df_before.columns
-#         if col in df_after.columns
-#     ]
-#     if not feat_cols:
-#         raise ValueError("No overlapping features columns found in the two DataFrames.")
-
-#     # 2) optional random sampling to limit plotting cost
-#     if sample:
-#         n = min(len(df_before), len(df_after), sample)
-#         dfb = df_before.sample(n, random_state=0)
-#         dfa = df_after.sample(n, random_state=0)
-#     else:
-#         dfb, dfa = df_before, df_after
-
-#     # 3) prepare a grid of subplots
-#     cols = 2
-#     rows = math.ceil(len(feat_cols) / cols)
-#     fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 4))
-#     axes = axes.flatten()
-
-#     # 4) loop over each feature and draw its before/after visualization
-#     for ax, feat in zip(axes, feat_cols):
-#         before = dfb[feat].dropna()
-#         after  = dfa[feat].dropna()
-
-#         # numeric & high-cardinality: dual overlaid histograms
-#         if pd.api.types.is_numeric_dtype(before) and before.nunique() > 10:
-#             # compute clipping bounds for each
-#             lo_b, hi_b = np.quantile(before, clip_pct)
-#             lo_a, hi_a = np.quantile(after,  clip_pct)
-
-#             edges_b = np.linspace(lo_b, hi_b, bins + 1)
-#             edges_a = np.linspace(lo_a, hi_a, bins + 1)
-
-#             # blue histogram on bottom x / left y
-#             ax.hist(before, bins=edges_b, color="C0", alpha=0.6, edgecolor="C0")
-#             ax.set_xlim(lo_b, hi_b)
-#             ax.margins(x=0)
-#             ax.spines["top"].set_visible(False)
-#             ax.spines["right"].set_visible(False)
-#             ax.spines["bottom"].set_color("C0")
-#             ax.spines["left"].set_color("C0")
-#             ax.tick_params(axis="x", colors="C0", rotation=45)
-#             ax.tick_params(axis="y", colors="C0")
-
-#             # orange histogram on top x / right y
-#             ax_top    = ax.twiny()
-#             ax_orange = ax_top.twinx()
-
-#             ax_orange.hist(after, bins=edges_a, color="C1", alpha=0.6, edgecolor="C1")
-#             ax_top.set_xlim(lo_a, hi_a)
-#             ax_top.margins(x=0)
-
-#             # style top x-axis
-#             ax_top.spines["bottom"].set_visible(False)
-#             ax_top.spines["left"].set_visible(False)
-#             ax_top.spines["right"].set_visible(False)
-#             ax_top.spines["top"].set_color("C1")
-#             ax_top.xaxis.set_ticks_position("top")
-#             ax_top.xaxis.set_label_position("top")
-#             ax_top.tick_params(axis="x", colors="C1", rotation=45)
-
-#             # style right y-axis
-#             ax_orange.spines["bottom"].set_visible(False)
-#             ax_orange.spines["left"].set_visible(False)
-#             ax_orange.spines["top"].set_visible(False)
-#             ax_orange.spines["right"].set_color("C1")
-#             ax_orange.yaxis.set_ticks_position("right")
-#             ax_orange.yaxis.set_label_position("right")
-#             ax_orange.tick_params(axis="y", colors="C1", labelright=True)
-
-#         else:
-#             # categorical or low-cardinality: side-by-side frequency bars
-#             bd = before.value_counts(normalize=True).sort_index()
-#             ad = after .value_counts(normalize=True).sort_index()
-#             cats = sorted(set(bd.index) | set(ad.index))
-#             x = np.arange(len(cats))
-#             w = 0.4
-
-#             ax.bar(x - w/2, [bd.get(c, 0) for c in cats], w,
-#                    color="C0", alpha=0.6)
-#             ax.bar(x + w/2, [ad.get(c, 0) for c in cats], w,
-#                    color="C1", alpha=0.6)
-
-#             ax.spines["top"].set_visible(False)
-#             ax.spines["right"].set_visible(False)
-#             ax.spines["bottom"].set_color("black")
-#             ax.spines["left"].set_color("C0")
-#             ax.set_xticks(x)
-#             ax.set_xticklabels(cats, rotation=45)
-#             ax.tick_params(axis="y", colors="C0")
-
-#         ax.set_title(feat, color="black")
-
-#     # 5) hide any unused subplots
-#     for extra_ax in axes[len(feat_cols):]:
-#         extra_ax.axis("off")
-
-#     plt.tight_layout()
-#     plt.show()
-
 
 
 def plot_dual_histograms(
@@ -1003,6 +1028,47 @@ def cleanup_callback(study, trial):
 
 ####################################################################################################################
 
+
+def plot_correlation_before_after(
+    corr_full: pd.DataFrame,
+    corr_pruned: pd.DataFrame,
+    figsize: Tuple[int, int] = (18, 8),
+    vmin: float = 0.0,
+    vmax: float = 1.0,
+    cmap: str = "coolwarm"
+) -> None:
+    """
+    Plot two side-by-side heatmaps:
+      - corr_full  : correlation matrix before pruning
+      - corr_pruned: correlation matrix after pruning
+
+    Both inputs are absolute-valued correlation DataFrames (0..1).
+    Uses a short tqdm progress bar while rendering each heatmap.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    panels = [
+        (corr_full, axes[0], "Correlation Before Pruning"),
+        (corr_pruned, axes[1], "Correlation After Pruning"),
+    ]
+
+    for corr_df, ax, title in panels:
+        sns.heatmap(
+            corr_df,
+            ax=ax,
+            vmin=vmin,
+            vmax=vmax,
+            cmap=cmap,
+            cbar_kws={"shrink": 0.7}
+        )
+        ax.set_title(title)
+
+    plt.tight_layout()
+    plt.show()
+
+
+    
+####################################################################################################################
 
 
 def compute_psd(signal: np.ndarray, dt: float):

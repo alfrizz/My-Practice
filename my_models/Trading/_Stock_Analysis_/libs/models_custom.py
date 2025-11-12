@@ -197,8 +197,8 @@ class ModelClass(nn.Module):
             ff_dim  = d_model * ff_mult
         
             self.feature_proj = self.layer_projection(upstream_dim, d_model) # adapt upstream_dim -> d_model
-        
-            self.pos_enc    = PositionalEncoding(d_model, dropout_trans, window_len)
+            self.pos_enc = PositionalEncoding(d_model=d_model, dropout=dropout_trans, max_len=window_len)
+
             encoder_layer   = nn.TransformerEncoderLayer(
                 d_model         = d_model,
                 nhead           = heads,

@@ -25,8 +25,8 @@ createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
-feats_min_std = 0.01
-feats_max_corr = 0.99
+feats_min_std = 0.03
+feats_max_corr = 0.997
 
 sel_val_rmse = 0.08990
 
@@ -125,10 +125,10 @@ hparams = {
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
     "TRANSFORMER_D_MODEL":  64,     # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":   2,       # number of encoder layers
+    "TRANSFORMER_LAYERS":   1,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.15,     # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.05,     # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,   # enable bidirectional “long” LSTM
@@ -149,11 +149,11 @@ hparams = {
     "LAMBDA_DELTA":          0.1,    # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
-    "MAX_EPOCHS":            80,     # max epochs
-    "EARLY_STOP_PATIENCE":   8,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          8e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       8e-4,   # peak LR in the cycle
+    "MAX_EPOCHS":            90,     # max epochs
+    "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
+    "WEIGHT_DECAY":          1e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
