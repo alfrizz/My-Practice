@@ -27,6 +27,7 @@ bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for co
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
+thresh_gb = 30 # max gb to use ram instead of memmap
 
 sel_val_rmse = 0.08990
 
@@ -115,7 +116,7 @@ hparams = {
     "USE_TCN":               False,  # enable dilated Conv1d stack
     "TCN_LAYERS":            3,      # number of dilated Conv1d layers
     "TCN_KERNEL":            3,      # kernel size for each TCN layer
-    "TCN_CHANNELS":          64,     # TCN output channels; independent from CONV_CHANNELS for flexibility
+    "TCN_CHANNELS":          128,     # TCN output channels; independent from CONV_CHANNELS for flexibility
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
     "USE_SHORT_LSTM":       False,   # enable bidirectional “short” LSTM
@@ -124,8 +125,8 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  64,     # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":   1,       # number of encoder layers
+    "TRANSFORMER_D_MODEL":  128,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_LAYERS":   3,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
     "DROPOUT_TRANS":        0.05,     # transformer dropout; ↑regularization
@@ -137,7 +138,7 @@ hparams = {
 
     # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
     "FLATTEN_MODE":          "pool", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
-    "PRED_HIDDEN":           64,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "PRED_HIDDEN":           128,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
     
     "ALPHA_SMOOTH":          0.0,    # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
     "WARMUP_STEPS":          5,      # linear warmup for slope penalty (0 = no warmup)
@@ -151,9 +152,9 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          1e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
+    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              5,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
@@ -165,7 +166,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             30,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }

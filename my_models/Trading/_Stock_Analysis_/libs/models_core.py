@@ -45,7 +45,7 @@ def build_tensors(
     *,
     device       = torch.device("cpu"),
     tmp_dir      = "/tmp/X_buf.dat",
-    thresh_gb    = 15,
+    thresh_gb    = params.thresh_gb,
 ) -> tuple[
     torch.Tensor,  # X         shape=(N, look_back, F)
     torch.Tensor,  # y_sig     shape=(N,)
