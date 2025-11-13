@@ -27,7 +27,7 @@ bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for co
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
-thresh_gb = 30 # max gb to use ram instead of memmap
+thresh_gb = 35 # max gb to use ram instead of memmap
 
 sel_val_rmse = 0.09054
 
@@ -121,7 +121,7 @@ hparams = {
     # ── Short Bi-LSTM toggle ──────────────────────────────
     "USE_SHORT_LSTM":       False,   # enable bidirectional “short” LSTM
     "SHORT_UNITS":          128,     # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
-    "DROPOUT_SHORT":        0.1,     # dropout after short-LSTM; ↑regularization
+    "DROPOUT_SHORT":        0.15,     # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
@@ -129,7 +129,7 @@ hparams = {
     "TRANSFORMER_LAYERS":   3,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.1,     # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.15,     # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,   # enable bidirectional “long” LSTM
@@ -166,7 +166,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             30,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
