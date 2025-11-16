@@ -32,9 +32,3 @@ services:
       - --allow-root
       - --NotebookApp.token=
 
-
-
-##### after changes #####
-# docker-compose down
-# docker-compose up -d
-# docker-compose logs -f jupyter

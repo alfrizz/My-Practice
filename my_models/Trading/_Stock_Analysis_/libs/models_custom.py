@@ -109,7 +109,7 @@ class ModelClass(nn.Module):
         dropout_long: float,
         dropout_trans: float,
         pred_hidden: int,
-        window_len: int,
+        look_back: int,
         use_conv: bool,
         use_tcn: bool,
         use_short_lstm: bool,
@@ -119,7 +119,7 @@ class ModelClass(nn.Module):
         flatten_mode: str,
     ):
         super().__init__()
-        self.window_len      = window_len
+        self.look_back       = look_back
         self.short_units     = short_units
         self.long_units      = long_units
         self.use_conv        = use_conv
@@ -197,7 +197,7 @@ class ModelClass(nn.Module):
             ff_dim  = d_model * ff_mult
         
             self.feature_proj = self.layer_projection(upstream_dim, d_model) # adapt upstream_dim -> d_model
-            self.pos_enc = PositionalEncoding(d_model=d_model, dropout=dropout_trans, max_len=window_len)
+            self.pos_enc = PositionalEncoding(d_model=d_model, dropout=dropout_trans, max_len=look_back)
 
             encoder_layer   = nn.TransformerEncoderLayer(
                 d_model         = d_model,
@@ -239,7 +239,7 @@ class ModelClass(nn.Module):
         # 6) Flatten/Last/Pool/Attention + plain MLP head
         assert flatten_mode in ("flatten", "last", "pool", "attn")
         self.flatten_mode = flatten_mode
-        flat_dim = (window_len * long_units if flatten_mode == "flatten" else long_units)
+        flat_dim = (look_back * long_units if flatten_mode == "flatten" else long_units)
 
         self.ln_flat   = nn.LayerNorm(flat_dim)
         self.head_flat = nn.Sequential(
@@ -261,21 +261,21 @@ class ModelClass(nn.Module):
             self.delta_head = _delta_lin
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Collapse extra leading dims to (batch, time_steps, features)
+        # Collapse extra leading dims to (B:batch, T:time_steps==look_back, F:features)
         if x.dim() > 3:
             *lead, T, F = x.shape
             x = x.view(-1, T, F)
         if x.dim() == 2:
             x = x.unsqueeze(0)
-        batch_size, time_steps, _ = x.shape
+        batch_size, time_steps, _ = x.shape  # B, T, F
 
         # 0) Conv + BN + ReLU
-        xc = x.transpose(1, 2)
-        xc = self.conv(xc); xc = self.bn(xc); xc = self.relu(xc)
-        x  = xc.transpose(1, 2)
+        xc = x.transpose(1, 2) # (B, F, T)
+        xc = self.conv(xc); xc = self.bn(xc); xc = self.relu(xc)  # (B, C, T) where C is CONV_CHANNELS
+        x  = xc.transpose(1, 2) #  (B, T, C)
 
         # 1) TCN
-        tcn_out = self.tcn(x.transpose(1, 2)).transpose(1, 2)
+        tcn_out = self.tcn(x.transpose(1, 2)).transpose(1, 2) # (B, T, C_tcn)
 
         # 2) Short LSTM
         if self.use_short_lstm:
@@ -290,13 +290,13 @@ class ModelClass(nn.Module):
             out_s = tcn_out
 
         # 3) Transformer
-        tr_in  = self.feature_proj(out_s)
+        tr_in  = self.feature_proj(out_s) # (B, T, d_model)
         tr_in  = self.pos_enc(tr_in)
         tr_out = self.transformer(tr_in.transpose(0, 1).contiguous())
         out_t  = tr_out.transpose(0, 1).contiguous()
 
         # 4) Projection
-        out_p = self.short2long(out_t)
+        out_p = self.short2long(out_t) # (B, T, long_units)
         out_p = self.ln_proj(out_p); out_p = self.do_proj(out_p)
 
         # 5) Long LSTM

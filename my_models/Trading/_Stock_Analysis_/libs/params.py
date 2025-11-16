@@ -23,13 +23,13 @@ mult_inds_win = [0.5, 1, 2, 4]
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidask_spread_pct = 0.05 # conservative 5 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
+bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
 thresh_gb = 35 # max gb to use ram instead of memmap
 
-sel_val_rmse = 0.09054
+sel_val_rmse = 0.09019
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -125,7 +125,7 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  128,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_D_MODEL":  96,     # transformer embedding width (d_model); adapter maps upstream features into this
     "TRANSFORMER_LAYERS":   3,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
@@ -152,9 +152,9 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          3e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "WEIGHT_DECAY":          1e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       8e-4,   # peak LR in the cycle
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
@@ -166,7 +166,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             30,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
@@ -181,7 +181,7 @@ def signal_parameters(ticker):
         sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - hparams["LOOK_BACK"], 60))
         sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*hparams["LOOK_BACK"], 60))
         
-        features_cols = ['hour_sin', 'dist_low_14', 'atr_pct_56', 'atr_pct_28', 'eng_ema_cross_down', 'atr_pct_14', 'atr_pct_7', 'ret_std_56', 'ret_std_28', 'ret_std_14', 'dist_low_28', 'bb_w_10', 'dist_low_56', 'bb_w_20', 'ret_std_7', 'bb_w_40', 'dist_low_112', 'mom_std_5', 'bb_w_80', 'mom_std_15', 'range_pct', 'mom_std_60', 'rsi_7', 'rsi_14', 'eng_vwap', 'rsi_28', 'obv_diff_14', 'obv_diff_7', 'ema_dev_14', 'ema_dev_28', 'plus_di_7', 'eng_bb_mid', 'vwap_dev_pct_14', 'sma_pct_14', 'sma_pct_28', 'adx_28', 'adx_56', 'z_bbw_80', 'plus_di_14']
+        features_cols = ['in_sess_time', 'dist_low_14', 'atr_pct_56', 'atr_pct_28', 'atr_pct_7', 'ret_std_56', 'dist_low_56', 'ret_std_28', 'ret_std_14', 'dist_low_28', 'bb_w_10', 'bb_w_20', 'ret_std_7', 'dist_low_112', 'eng_ema_cross_down', 'mom_std_5', 'bb_w_80', 'range_pct', 'mom_std_15', 'hour_time', 'minute_time', 'mom_std_60', 'rsi_7', 'eng_vwap', 'rsi_14', 'rsi_28', 'plus_di_7', 'ema_dev_14', 'plus_di_14', 'ema_dev_7', 'eng_bb_mid', 'adx_56', 'eng_rsi', 'plus_di_28', 'obv_diff_7', 'sma_pct_7', 'roc_7', 'vwap_dev_pct_14', 'dist_high_112', 'adx_14', 'z_bbw_80', 'dist_high_56']
         
         trailing_stop_pred = 0.2
         pred_threshold = 0.1

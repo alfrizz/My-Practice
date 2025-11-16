@@ -33,3 +33,17 @@ done
 
 # finally, re-sort/uniquify the file (also as root)
 sudo sort -u "$REQS" -o "$REQS"
+
+# rebuild the jupyter service image
+cd /home/alfrizz/scripts
+docker-compose -f docker-compose.yml build --no-cache jupyter
+
+# avoid name conflicts: stop and remove any existing container named gpu-jl
+docker stop gpu-jl 2>/dev/null || true
+docker rm gpu-jl 2>/dev/null || true
+
+# start the service from the freshly built image
+docker-compose -f docker-compose.yml up -d --no-deps jupyter
+
+
+

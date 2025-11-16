@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-# 0) Install any new or updated packages from requirements.txt
-pip install --upgrade \
-    --upgrade-strategy only-if-needed \
-    -r /workspace/scripts/requirements.txt
-
 # 1) Force all temp‐dirs into /tmp
 export TMPDIR=/tmp
 export TEMP=/tmp
