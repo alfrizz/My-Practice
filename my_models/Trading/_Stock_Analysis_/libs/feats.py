@@ -1,6 +1,6 @@
 from libs import plots, params
 
-from typing import Sequence, List, Tuple, Optional, Union, Dict
+from typing import Sequence, List, Tuple, Optional, Union, Dict, Iterable
 import gc 
 import os
 import io
@@ -92,9 +92,236 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
 ###########################################
 
 
+# def standard_indicators(
+#     df: pd.DataFrame,
+#     mult_inds_win = None,
+#     sma_short: int = 14,
+#     sma_long: int = 28,
+#     rsi_window: int = 14,
+#     macd_fast: int = 12,
+#     macd_slow: int = 26,
+#     macd_sig: int = 9,
+#     atr_window: int = 14,
+#     bb_window: int = 20,
+#     obv_sma: int = 1,
+#     vwap_window: int = 14,
+#     vol_spike_window: int = 14,
+#     label_col: str = "signal",
+#     eps: float = 1e-9,
+#     small_factor: float = 1e-3,
+#     z_std_floor_factor: float = 1e-3
+# ) -> pd.DataFrame:
+#     """
+#     Compute base technical indicators (returns a DataFrame with original price/volume
+#     columns plus indicators). Minimal, causal, and numerically safe:
+#     - All rolling ops use past + present by default; if you need purely past-only windows
+#       use .shift(1).rolling(...) upstream before calling this function.
+#     - Denominators and rolling stds are floored to avoid divide-by-zero or extreme ratios.
+#     - No hidden fallback percentiles or silent rewrites of diagnostics here.
+#     """
+#     df = df.copy()
+#     df.index = pd.to_datetime(df.index)
+
+#     if mult_inds_win is None:
+#         mults = [0.5, 1.0, 2.0]
+#     elif isinstance(mult_inds_win, (int, float)):
+#         mults = [float(mult_inds_win)]
+#     else:
+#         mults = list(mult_inds_win)
+
+#     bases = {
+#         "sma_short": sma_short, "sma_long": sma_long, "rsi": rsi_window,
+#         "macd_f": macd_fast, "macd_s": macd_slow, "macd_sig": macd_sig,
+#         "atr": atr_window, "bb": bb_window, "obv": obv_sma,
+#         "vwap": vwap_window, "vol_spike": vol_spike_window
+#     }
+
+#     def W(base, m): return max(1, int(round(base * m)))
+
+#     windows = set()
+#     for m in mults:
+#         for k, b in bases.items():
+#             windows.add((k, W(b, m)))
+#     for k, b in bases.items():
+#         windows.add((k, W(b, 1.0)))
+
+#     cols_in = ["open", "high", "low", "close", "volume"]
+#     if label_col in df.columns:
+#         cols_in.append(label_col)
+#     base = df[cols_in].copy()
+#     o, h, l, c = base["open"], base["high"], base["low"], base["close"]
+
+#     # stable helpers
+#     def _safe_denom_series(divisor: pd.Series, window: Optional[int] = None) -> np.ndarray:
+#         s = divisor.astype(float)
+#         s_arr = s.to_numpy(dtype=float)
+#         if window:
+#             med = s.rolling(window, min_periods=1).median().abs().ffill().fillna(0.0).to_numpy(dtype=float)
+#             floor_arr = np.maximum(med * small_factor, eps)
+#         else:
+#             floor_val = max(eps, abs(np.nanmedian(s_arr)) * small_factor)
+#             floor_arr = np.full_like(s_arr, floor_val, dtype=float)
+#         finite_nonzero = np.isfinite(s_arr) & (np.abs(s_arr) > 0.0)
+#         denom_safe = np.where(finite_nonzero, np.sign(s_arr) * np.maximum(np.abs(s_arr), floor_arr), floor_arr)
+#         return denom_safe
+
+#     def _std_floor(series: pd.Series, window: int) -> pd.Series:
+#         rstd = series.rolling(window, min_periods=1).std()
+#         global_std = np.nanstd(series.to_numpy(dtype=float))
+#         floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         return rstd.fillna(floor).replace(0.0, floor)
+
+#     new = {}
+
+#     # returns
+#     new["ret"] = c.pct_change()
+#     new["log_ret"] = np.log(c + eps).diff()
+
+#     # multi-horizon returns & lags
+#     horizons = sorted({1, 5, 15, 60} | {W(bases["sma_short"], m) for m in mults})
+#     for H in horizons:
+#         new[f"ret_{H}"] = c.pct_change(H)
+#     new["lag1_ret"] = new["ret"].shift(1)
+#     new["lag2_ret"] = new["ret"].shift(2)
+#     new["lag3_ret"] = new["ret"].shift(3)
+
+#     # SMA / EMA
+#     sma_set = sorted({w for (k, w) in windows if k.startswith("sma")})
+#     for w in sma_set:
+#         s = c.rolling(w, min_periods=1).mean()
+#         new[f"sma_{w}"] = s
+#         new[f"sma_pct_{w}"] = (c - s) / (s + eps)
+#         e = c.ewm(span=w, adjust=False).mean()
+#         new[f"ema_{w}"] = e
+#         new[f"ema_dev_{w}"] = (c - e) / (e + eps)
+
+#     # ROC as percent-change (skip w==1 because new["ret"] already holds the 1-period pct change)
+#     sma_windows = sorted({w for (k, w) in windows if k.startswith("sma")})
+#     for w in sma_windows:
+#         if w == 1:
+#             continue
+#         new[f"roc_{w}"] = c.pct_change(w)
+
+#     # candlestick geometry
+#     new["body"] = c - o
+#     new["body_pct"] = (c - o) / (o + eps)
+#     new["upper_shad"] = h - np.maximum(o, c)
+#     new["lower_shad"] = np.minimum(o, c) - l
+#     new["range_pct"] = (h - l) / (c + eps)
+
+#     # RSI
+#     rsi_windows = sorted({w for (k, w) in windows if k == "rsi"})
+#     for w in rsi_windows:
+#         new[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=c, window=w).rsi()
+
+#     # MACD
+#     macd_specs = sorted({(W(bases["macd_f"], m), W(bases["macd_s"], m), W(bases["macd_sig"], m)) for m in mults} |
+#                         {(bases["macd_f"], bases["macd_s"], bases["macd_sig"])})
+#     for f_w, s_w, sig_w in macd_specs:
+#         if f_w >= s_w:
+#             s_w = f_w + 1
+#         macd = ta.trend.MACD(close=c, window_fast=f_w, window_slow=s_w, window_sign=sig_w)
+#         suf = f"{f_w}_{s_w}_{sig_w}"
+#         new[f"macd_line_{suf}"] = macd.macd()
+#         new[f"macd_signal_{suf}"] = macd.macd_signal()
+#         new[f"macd_diff_{suf}"] = macd.macd_diff()
+
+#     # ATR
+#     atr_windows = sorted({w for (k, w) in windows if k == "atr"})
+#     for w in atr_windows:
+#         atr = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=w)
+#         new[f"atr_{w}"] = atr.average_true_range()
+#         new[f"atr_pct_{w}"] = atr.average_true_range() / (c + eps)
+
+#     # Bollinger bands
+#     bb_windows = sorted({w for (k, w) in windows if k == "bb"})
+#     for w in bb_windows:
+#         bb = ta.volatility.BollingerBands(close=c, window=w, window_dev=2)
+#         lband = bb.bollinger_lband()
+#         hband = bb.bollinger_hband()
+#         mavg = bb.bollinger_mavg()
+#         new[f"bb_lband_{w}"] = lband
+#         new[f"bb_hband_{w}"] = hband
+#         new[f"bb_w_{w}"] = (hband - lband) / (mavg + eps)
+
+#     # DI / ADX
+#     di_windows = sorted({w for (k, w) in windows if k == "atr"})
+#     for w in di_windows:
+#         adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w)
+#         new[f"plus_di_{w}"] = adx.adx_pos()
+#         new[f"minus_di_{w}"] = adx.adx_neg()
+#         new[f"adx_{w}"] = adx.adx()
+
+#     # OBV and derived features
+#     new["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=base["volume"]).on_balance_volume()
+#     obv_windows = sorted({w for (k, w) in windows if k == "obv"})
+#     for w in obv_windows:
+#         new[f"obv_diff_{w}"] = new["obv"].diff(w)
+#         price_roll_mean = c.rolling(w, min_periods=1).mean().abs()
+#         denom_arr = _safe_denom_series(price_roll_mean, window=w)
+#         # elementwise division safe (denom_arr length equals index length)
+#         num = new[f"obv_diff_{w}"].to_numpy(dtype=float)
+#         with np.errstate(divide='ignore', invalid='ignore'):
+#             pct = num / denom_arr
+#         new[f"obv_pct_{w}"] = pd.Series(np.where(np.isnan(num), np.nan, pct), index=base.index)
+#         new[f"obv_sma_{w}"] = new["obv"].rolling(w, min_periods=1).mean()
+#         base_sma = new[f"obv_sma_{w}"]
+#         std_eff = _std_floor(base_sma, w)
+#         new[f"obv_z_{w}"] = (new["obv"] - base_sma) / (std_eff + eps)
+
+#     # VWAP
+#     vwap_w = W(bases["vwap"], 1.0)
+#     vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=base["volume"], window=vwap_w)
+#     new[f"vwap_{vwap_w}"] = vwap.volume_weighted_average_price()
+#     new[f"vwap_dev_pct_{vwap_w}"] = 100.0 * (c - new[f"vwap_{vwap_w}"]) / (new[f"vwap_{vwap_w}"] + eps)
+#     x_pct = new[f"vwap_dev_pct_{vwap_w}"]
+#     new[f"z_vwap_dev_{vwap_w}"] = (x_pct - x_pct.rolling(obv_sma, min_periods=1).mean()) / (x_pct.rolling(obv_sma, min_periods=1).std().fillna(eps) + eps)
+
+#     # volume spike
+#     vol_w = W(bases["vol_spike"], 1.0)
+#     vol_roll = base["volume"].rolling(vol_w, min_periods=1).mean()
+#     new[f"vol_spike_{vol_w}"] = base["volume"] / (vol_roll + eps)
+#     v_mu = base["volume"].rolling(vol_w, min_periods=1).mean()
+#     v_sigma = base["volume"].rolling(vol_w, min_periods=1).std().fillna(eps).replace(0.0, eps)
+#     new[f"vol_z_{vol_w}"] = (base["volume"] - v_mu) / (v_sigma + eps)
+
+#     # rolling volatility
+#     vol_windows = sorted({W(bases["sma_short"], m) for m in mults} | {W(bases["sma_long"], 1.0)})
+#     for w in vol_windows:
+#         new[f"ret_std_{w}"] = new["ret"].rolling(w, min_periods=1).std()
+
+#     # rolling extrema and distances
+#     ext_windows = sorted({W(bases["sma_long"], m) for m in mults})
+#     for w in ext_windows:
+#         new[f"rolling_max_close_{w}"] = base["close"].rolling(w, min_periods=1).max()
+#         new[f"rolling_min_close_{w}"] = base["close"].rolling(w, min_periods=1).min()
+#         new[f"dist_high_{w}"] = (new[f"rolling_max_close_{w}"] - c) / (c + eps)
+#         new[f"dist_low_{w}"] = (c - new[f"rolling_min_close_{w}"]) / (c + eps)
+
+#     # z-scores for ATR and BB width
+#     for w in atr_windows:
+#         x = new[f"atr_{w}"]
+#         std_eff = _std_floor(x, w)
+#         new[f"z_atr_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (std_eff + eps)
+#     for w in bb_windows:
+#         x = new[f"bb_w_{w}"]
+#         std_eff = _std_floor(x, w)
+#         new[f"z_bbw_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (std_eff + eps)
+
+#     # time features
+#     # append session-centered time features (single scalar per cycle in [0,1])
+#     time_feats = add_session_centered_time_features(base)
+#     # merge into our 'new' dict so they flow through the same out concat
+#     new.update(time_feats.to_dict(orient="series"))
+
+#     out = pd.concat([base, pd.DataFrame(new, index=base.index)], axis=1)
+#     return out.copy()
+
+
 def standard_indicators(
     df: pd.DataFrame,
-    mult_inds_win = None,
+    extra_windows: Optional[Iterable[int]] = None,
+    label_col: str = params.label_col,
     sma_short: int = 14,
     sma_long: int = 28,
     rsi_window: int = 14,
@@ -103,222 +330,398 @@ def standard_indicators(
     macd_sig: int = 9,
     atr_window: int = 14,
     bb_window: int = 20,
-    obv_sma: int = 14,
     vwap_window: int = 14,
     vol_spike_window: int = 14,
-    label_col: str = "signal",
     eps: float = 1e-9,
-    small_factor: float = 1e-3,
-    z_std_floor_factor: float = 1e-3
 ) -> pd.DataFrame:
     """
-    Compute base technical indicators (returns a DataFrame with original price/volume
-    columns plus indicators). Minimal, causal, and numerically safe:
-    - All rolling ops use past + present by default; if you need purely past-only windows
-      use .shift(1).rolling(...) upstream before calling this function.
-    - Denominators and rolling stds are floored to avoid divide-by-zero or extreme ratios.
-    - No hidden fallback percentiles or silent rewrites of diagnostics here.
+    Compute standard 1m indicators (canonical defaults) and optional smoothed copies.
+
+    Behavior (concise)
+    - Compute canonical indicators once using conventional defaults used in 1m strategies:
+      sma_short=14, sma_long=28, rsi=14, macd_fast=12, macd_slow=26, macd_sig=9,
+      atr=14, bb=20, vwap=14, vol_spike=14.
+    - If extra_windows provided (iterable of ints > 1), produce additional smoothed/rolling
+      copies of selected indicators for each window w in sorted(unique(extra_windows)).
+      Windowed columns are suffixed with _{w} (e.g., rsi_30, sma_60, macd_line_30).
+    - Indicators replicated for extra windows:
+      SMA/EMA/ROC, RSI, ATR, Bollinger Bands (bands + width), DI/ADX, OBV-derived,
+      VWAP dev + z, vol_spike + vol_z, rolling volatility (ret_std), rolling extrema/distances,
+      and smoothed MACD outputs (rolling mean of macd_line/macd_signal/macd_diff).
+    - Keep raw returns/log_ret and session time features single-scale.
+    - Naming: canonical outputs keep simple names (e.g., rsi, macd_line); windowed copies use suffix _{w}.
+    - Returns DataFrame with original OHLCV columns plus all indicators.
     """
+    # copy + ensure datetime index
     df = df.copy()
     df.index = pd.to_datetime(df.index)
 
-    if mult_inds_win is None:
-        mults = [0.5, 1.0, 2.0]
-    elif isinstance(mult_inds_win, (int, float)):
-        mults = [float(mult_inds_win)]
+    # prepare extra windows set (no window==1 duplicates)
+    if extra_windows is None:
+        W = []
     else:
-        mults = list(mult_inds_win)
+        W = sorted({int(w) for w in extra_windows if (isinstance(w, (int, np.integer)) and int(w) > 1)})
 
-    bases = {
-        "sma_short": sma_short, "sma_long": sma_long, "rsi": rsi_window,
-        "macd_f": macd_fast, "macd_s": macd_slow, "macd_sig": macd_sig,
-        "atr": atr_window, "bb": bb_window, "obv": obv_sma,
-        "vwap": vwap_window, "vol_spike": vol_spike_window
-    }
-
-    def W(base, m): return max(1, int(round(base * m)))
-
-    windows = set()
-    for m in mults:
-        for k, b in bases.items():
-            windows.add((k, W(b, m)))
-    for k, b in bases.items():
-        windows.add((k, W(b, 1.0)))
-
+    # required input columns
     cols_in = ["open", "high", "low", "close", "volume"]
     if label_col in df.columns:
         cols_in.append(label_col)
     base = df[cols_in].copy()
-    o, h, l, c = base["open"], base["high"], base["low"], base["close"]
+    o, h, l, c, v = base["open"], base["high"], base["low"], base["close"], base["volume"]
 
-    # stable helpers
-    def _safe_denom_series(divisor: pd.Series, window: Optional[int] = None) -> np.ndarray:
-        s = divisor.astype(float)
-        s_arr = s.to_numpy(dtype=float)
-        if window:
-            med = s.rolling(window, min_periods=1).median().abs().ffill().fillna(0.0).to_numpy(dtype=float)
-            floor_arr = np.maximum(med * small_factor, eps)
-        else:
-            floor_val = max(eps, abs(np.nanmedian(s_arr)) * small_factor)
-            floor_arr = np.full_like(s_arr, floor_val, dtype=float)
-        finite_nonzero = np.isfinite(s_arr) & (np.abs(s_arr) > 0.0)
-        denom_safe = np.where(finite_nonzero, np.sign(s_arr) * np.maximum(np.abs(s_arr), floor_arr), floor_arr)
-        return denom_safe
-
-    def _std_floor(series: pd.Series, window: int) -> pd.Series:
-        rstd = series.rolling(window, min_periods=1).std()
-        global_std = np.nanstd(series.to_numpy(dtype=float))
-        floor = max(eps, abs(global_std) * z_std_floor_factor)
-        return rstd.fillna(floor).replace(0.0, floor)
+    def safe_div(num, den):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out = num / (den + eps)
+        return out
 
     new = {}
 
-    # returns
+    # base returns
     new["ret"] = c.pct_change()
     new["log_ret"] = np.log(c + eps).diff()
 
-    # multi-horizon returns & lags
-    horizons = sorted({1, 5, 15, 60} | {W(bases["sma_short"], m) for m in mults})
-    for H in horizons:
-        new[f"ret_{H}"] = c.pct_change(H)
-    new["lag1_ret"] = new["ret"].shift(1)
-    new["lag2_ret"] = new["ret"].shift(2)
-    new["lag3_ret"] = new["ret"].shift(3)
+    # canonical SMA/EMA
+    s14 = c.rolling(sma_short, min_periods=1).mean()
+    s28 = c.rolling(sma_long, min_periods=1).mean()
+    new[f"sma_{sma_short}"] = s14
+    new[f"sma_{sma_long}"] = s28
+    new[f"sma_pct_{sma_short}"] = safe_div(c - s14, s14)
+    new[f"sma_pct_{sma_long}"] = safe_div(c - s28, s28)
+    new[f"ema_{sma_short}"] = c.ewm(span=sma_short, adjust=False).mean()
+    new[f"ema_{sma_long}"] = c.ewm(span=sma_long, adjust=False).mean()
 
-    # SMA / EMA
-    sma_set = sorted({w for (k, w) in windows if k.startswith("sma")})
-    for w in sma_set:
-        s = c.rolling(w, min_periods=1).mean()
-        new[f"sma_{w}"] = s
-        new[f"sma_pct_{w}"] = (c - s) / (s + eps)
-        e = c.ewm(span=w, adjust=False).mean()
-        new[f"ema_{w}"] = e
-        new[f"ema_dev_{w}"] = (c - e) / (e + eps)
-
-    # ROC as percent-change (skip w==1 because new["ret"] already holds the 1-period pct change)
-    sma_windows = sorted({w for (k, w) in windows if k.startswith("sma")})
-    for w in sma_windows:
-        if w == 1:
-            continue
-        new[f"roc_{w}"] = c.pct_change(w)
+    # canonical ROC (skip w==1)
+    new[f"roc_{sma_short}"] = c.pct_change(sma_short)
+    new[f"roc_{sma_long}"] = c.pct_change(sma_long)
 
     # candlestick geometry
     new["body"] = c - o
-    new["body_pct"] = (c - o) / (o + eps)
+    new["body_pct"] = safe_div(c - o, o)
     new["upper_shad"] = h - np.maximum(o, c)
     new["lower_shad"] = np.minimum(o, c) - l
-    new["range_pct"] = (h - l) / (c + eps)
+    new["range_pct"] = safe_div(h - l, c)
 
-    # RSI
-    rsi_windows = sorted({w for (k, w) in windows if k == "rsi"})
-    for w in rsi_windows:
+    # canonical RSI, MACD, ATR, BB, DI/ADX, OBV, VWAP, vol spike
+    new["rsi"] = ta.momentum.RSIIndicator(close=c, window=rsi_window).rsi()
+    macd = ta.trend.MACD(close=c, window_fast=macd_fast, window_slow=macd_slow, window_sign=macd_sig)
+    new["macd_line"] = macd.macd()
+    new["macd_signal"] = macd.macd_signal()
+    new["macd_diff"] = macd.macd_diff()
+    atr = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=atr_window)
+    new["atr"] = atr.average_true_range()
+    new["atr_pct"] = safe_div(new["atr"], c)
+    bb = ta.volatility.BollingerBands(close=c, window=bb_window, window_dev=2)
+    new["bb_lband"] = bb.bollinger_lband()
+    new["bb_hband"] = bb.bollinger_hband()
+    new["bb_w"] = safe_div(new["bb_hband"] - new["bb_lband"], bb.bollinger_mavg())
+    adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=atr_window)
+    new["plus_di"] = adx.adx_pos()
+    new["minus_di"] = adx.adx_neg()
+    new["adx"] = adx.adx()
+    new["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=v).on_balance_volume()
+    vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window)
+    new["vwap"] = vwap.volume_weighted_average_price()
+    new["vwap_dev_pct"] = 100.0 * safe_div(c - new["vwap"], new["vwap"])
+    vol_roll = v.rolling(vol_spike_window, min_periods=1).mean()
+    new["vol_spike"] = safe_div(v, vol_roll)
+    v_mu = v.rolling(vol_spike_window, min_periods=1).mean()
+    v_sigma = v.rolling(vol_spike_window, min_periods=1).std().fillna(eps).replace(0.0, eps)
+    new[f"vol_z_{vol_spike_window}"] = safe_div(v - v_mu, v_sigma)
+
+    # rolling extrema (canonical sma_long)
+    new[f"rolling_max_close_{sma_long}"] = c.rolling(sma_long, min_periods=1).max()
+    new[f"rolling_min_close_{sma_long}"] = c.rolling(sma_long, min_periods=1).min()
+    new[f"dist_high_{sma_long}"] = safe_div(new[f"rolling_max_close_{sma_long}"] - c, c)
+    new[f"dist_low_{sma_long}"] = safe_div(c - new[f"rolling_min_close_{sma_long}"], c)
+
+    # OBV base and derived
+    new["obv_sma"] = new["obv"].rolling(1, min_periods=1).mean()
+    # keep obv diff and pct for canonical vol window
+    new[f"obv_diff_{vol_spike_window}"] = new["obv"].diff(vol_spike_window)
+    denom_arr = (c.rolling(vol_spike_window, min_periods=1).mean().abs()).fillna(eps).to_numpy(dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pct = new[f"obv_diff_{vol_spike_window}"].to_numpy(dtype=float) / denom_arr
+    new[f"obv_pct_{vol_spike_window}"] = pd.Series(np.where(np.isnan(pct), np.nan, pct), index=base.index)
+    new[f"obv_sma_{vol_spike_window}"] = new["obv"].rolling(vol_spike_window, min_periods=1).mean()
+    obv_sigma = new[f"obv_sma_{vol_spike_window}"].rolling(vol_spike_window, min_periods=1).std().fillna(eps).replace(0.0, eps)
+    new[f"obv_z_{vol_spike_window}"] = safe_div(new["obv"] - new[f"obv_sma_{vol_spike_window}"], obv_sigma)
+
+    # multi-horizon returns and windowed indicators (use same W)
+    for w in W:
+        # returns
+        new[f"ret_{w}"] = c.pct_change(w)
+
+        # SMA/EMA/ROC
+        new[f"sma_{w}"] = c.rolling(w, min_periods=1).mean()
+        new[f"sma_pct_{w}"] = safe_div(c - new[f"sma_{w}"], new[f"sma_{w}"])
+        new[f"ema_{w}"] = c.ewm(span=w, adjust=False).mean()
+        if w != 1:
+            new[f"roc_{w}"] = c.pct_change(w)
+
+        # RSI / ATR / BB / DI/ADX
         new[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=c, window=w).rsi()
+        new[f"atr_{w}"] = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=w).average_true_range()
+        new[f"atr_pct_{w}"] = safe_div(new[f"atr_{w}"], c)
+        bb_w = ta.volatility.BollingerBands(close=c, window=w, window_dev=2)
+        new[f"bb_lband_{w}"] = bb_w.bollinger_lband()
+        new[f"bb_hband_{w}"] = bb_w.bollinger_hband()
+        new[f"bb_w_{w}"] = safe_div(new[f"bb_hband_{w}"] - new[f"bb_lband_{w}"], bb_w.bollinger_mavg())
+        adx_w = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w)
+        new[f"plus_di_{w}"] = adx_w.adx_pos()
+        new[f"minus_di_{w}"] = adx_w.adx_neg()
+        new[f"adx_{w}"] = adx_w.adx()
 
-    # MACD
-    macd_specs = sorted({(W(bases["macd_f"], m), W(bases["macd_s"], m), W(bases["macd_sig"], m)) for m in mults} |
-                        {(bases["macd_f"], bases["macd_s"], bases["macd_sig"])})
-    for f_w, s_w, sig_w in macd_specs:
-        if f_w >= s_w:
-            s_w = f_w + 1
-        macd = ta.trend.MACD(close=c, window_fast=f_w, window_slow=s_w, window_sign=sig_w)
-        suf = f"{f_w}_{s_w}_{sig_w}"
-        new[f"macd_line_{suf}"] = macd.macd()
-        new[f"macd_signal_{suf}"] = macd.macd_signal()
-        new[f"macd_diff_{suf}"] = macd.macd_diff()
-
-    # ATR
-    atr_windows = sorted({w for (k, w) in windows if k == "atr"})
-    for w in atr_windows:
-        atr = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=w)
-        new[f"atr_{w}"] = atr.average_true_range()
-        new[f"atr_pct_{w}"] = atr.average_true_range() / (c + eps)
-
-    # Bollinger bands
-    bb_windows = sorted({w for (k, w) in windows if k == "bb"})
-    for w in bb_windows:
-        bb = ta.volatility.BollingerBands(close=c, window=w, window_dev=2)
-        lband = bb.bollinger_lband()
-        hband = bb.bollinger_hband()
-        mavg = bb.bollinger_mavg()
-        new[f"bb_lband_{w}"] = lband
-        new[f"bb_hband_{w}"] = hband
-        new[f"bb_w_{w}"] = (hband - lband) / (mavg + eps)
-
-    # DI / ADX
-    di_windows = sorted({w for (k, w) in windows if k == "atr"})
-    for w in di_windows:
-        adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w)
-        new[f"plus_di_{w}"] = adx.adx_pos()
-        new[f"minus_di_{w}"] = adx.adx_neg()
-        new[f"adx_{w}"] = adx.adx()
-
-    # OBV and derived features
-    new["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=base["volume"]).on_balance_volume()
-    obv_windows = sorted({w for (k, w) in windows if k == "obv"})
-    for w in obv_windows:
+        # OBV-derived
         new[f"obv_diff_{w}"] = new["obv"].diff(w)
-        price_roll_mean = c.rolling(w, min_periods=1).mean().abs()
-        denom_arr = _safe_denom_series(price_roll_mean, window=w)
-        # elementwise division safe (denom_arr length equals index length)
+        price_roll_mean = c.rolling(w, min_periods=1).mean().abs().fillna(eps)
+        denom_arr = price_roll_mean.to_numpy(dtype=float)
         num = new[f"obv_diff_{w}"].to_numpy(dtype=float)
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             pct = num / denom_arr
         new[f"obv_pct_{w}"] = pd.Series(np.where(np.isnan(num), np.nan, pct), index=base.index)
         new[f"obv_sma_{w}"] = new["obv"].rolling(w, min_periods=1).mean()
-        base_sma = new[f"obv_sma_{w}"]
-        std_eff = _std_floor(base_sma, w)
-        new[f"obv_z_{w}"] = (new["obv"] - base_sma) / (std_eff + eps)
+        obv_std_eff = new[f"obv_sma_{w}"].rolling(w, min_periods=1).std().fillna(eps).replace(0.0, eps)
+        new[f"obv_z_{w}"] = safe_div(new["obv"] - new[f"obv_sma_{w}"], obv_std_eff)
 
-    # VWAP
-    vwap_w = W(bases["vwap"], 1.0)
-    vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=base["volume"], window=vwap_w)
-    new[f"vwap_{vwap_w}"] = vwap.volume_weighted_average_price()
-    new[f"vwap_dev_pct_{vwap_w}"] = 100.0 * (c - new[f"vwap_{vwap_w}"]) / (new[f"vwap_{vwap_w}"] + eps)
-    x_pct = new[f"vwap_dev_pct_{vwap_w}"]
-    new[f"z_vwap_dev_{vwap_w}"] = (x_pct - x_pct.rolling(obv_sma, min_periods=1).mean()) / (x_pct.rolling(obv_sma, min_periods=1).std().fillna(eps) + eps)
+        # VWAP dev + z
+        vwap_w = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=w)
+        new[f"vwap_{w}"] = vwap_w.volume_weighted_average_price()
+        new[f"vwap_dev_pct_{w}"] = 100.0 * safe_div(c - new[f"vwap_{w}"], new[f"vwap_{w}"])
+        x_pct = new[f"vwap_dev_pct_{w}"]
+        new[f"z_vwap_dev_{w}"] = safe_div(x_pct - x_pct.rolling(w, min_periods=1).mean(), x_pct.rolling(w, min_periods=1).std().fillna(eps))
 
-    # volume spike
-    vol_w = W(bases["vol_spike"], 1.0)
-    vol_roll = base["volume"].rolling(vol_w, min_periods=1).mean()
-    new[f"vol_spike_{vol_w}"] = base["volume"] / (vol_roll + eps)
-    v_mu = base["volume"].rolling(vol_w, min_periods=1).mean()
-    v_sigma = base["volume"].rolling(vol_w, min_periods=1).std().fillna(eps).replace(0.0, eps)
-    new[f"vol_z_{vol_w}"] = (base["volume"] - v_mu) / (v_sigma + eps)
+        # vol spike + vol_z
+        vol_roll_w = v.rolling(w, min_periods=1).mean().fillna(eps)
+        new[f"vol_spike_{w}"] = safe_div(v, vol_roll_w)
+        v_mu = v.rolling(w, min_periods=1).mean()
+        v_sigma = v.rolling(w, min_periods=1).std().fillna(eps).replace(0.0, eps)
+        new[f"vol_z_{w}"] = safe_div(v - v_mu, v_sigma)
 
-    # rolling volatility
-    vol_windows = sorted({W(bases["sma_short"], m) for m in mults} | {W(bases["sma_long"], 1.0)})
-    for w in vol_windows:
+        # rolling volatility
         new[f"ret_std_{w}"] = new["ret"].rolling(w, min_periods=1).std()
 
-    # rolling extrema and distances
-    ext_windows = sorted({W(bases["sma_long"], m) for m in mults})
-    for w in ext_windows:
-        new[f"rolling_max_close_{w}"] = base["close"].rolling(w, min_periods=1).max()
-        new[f"rolling_min_close_{w}"] = base["close"].rolling(w, min_periods=1).min()
-        new[f"dist_high_{w}"] = (new[f"rolling_max_close_{w}"] - c) / (c + eps)
-        new[f"dist_low_{w}"] = (c - new[f"rolling_min_close_{w}"]) / (c + eps)
+        # rolling extrema and distances
+        new[f"rolling_max_close_{w}"] = c.rolling(w, min_periods=1).max()
+        new[f"rolling_min_close_{w}"] = c.rolling(w, min_periods=1).min()
+        new[f"dist_high_{w}"] = safe_div(new[f"rolling_max_close_{w}"] - c, c)
+        new[f"dist_low_{w}"] = safe_div(c - new[f"rolling_min_close_{w}"], c)
 
-    # z-scores for ATR and BB width
-    for w in atr_windows:
-        x = new[f"atr_{w}"]
-        std_eff = _std_floor(x, w)
-        new[f"z_atr_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (std_eff + eps)
-    for w in bb_windows:
-        x = new[f"bb_w_{w}"]
-        std_eff = _std_floor(x, w)
-        new[f"z_bbw_{w}"] = (x - x.rolling(w, min_periods=1).mean()) / (std_eff + eps)
+        # MACD smoothing: rolling mean of canonical outputs
+        new[f"macd_line_{w}"] = new["macd_line"].rolling(w, min_periods=1).mean()
+        new[f"macd_signal_{w}"] = new["macd_signal"].rolling(w, min_periods=1).mean()
+        new[f"macd_diff_{w}"] = new["macd_diff"].rolling(w, min_periods=1).mean()
 
-    # time features
-    # append session-centered time features (single scalar per cycle in [0,1])
-    time_feats = add_session_centered_time_features(base)
-    # merge into our 'new' dict so they flow through the same out concat
-    new.update(time_feats.to_dict(orient="series"))
+    # time/session features (single-scale helper)
+    # keep external function name as before: add_session_centered_time_features(base)
+    try:
+        time_feats = add_session_centered_time_features(base)
+        # merge time features into new
+        new.update(time_feats.to_dict(orient="series"))
+    except Exception:
+        # if helper not available, skip gracefully
+        pass
 
     out = pd.concat([base, pd.DataFrame(new, index=base.index)], axis=1)
-    return out.copy()
-
+    return out
 
 ##########################################################################################################
+
+
+# def engineered_indicators(
+#     df: pd.DataFrame,
+#     rsi_low: float = 30.0,
+#     rsi_high: float = 70.0,
+#     adx_thr: float = 20.0,
+#     mult_w: int = 14,
+#     eps: float = 1e-9,
+#     fillna_zero: bool = True,
+#     small_factor: float = 1e-3,
+#     ratio_clip_abs: float = 1e6,
+#     z_std_floor_factor: float = 1e-3
+# ) -> pd.DataFrame:
+#     """
+#     Build engineered signals from base indicators.
+#     - Uses only past/present values (no negative shifts, no bfill).
+#     - Safe denominators and z-score floors guarantee finite outputs.
+#     - Keeps original names and minimal changes to logic.
+#     """
+#     out = pd.DataFrame(index=df.index)
+#     produced: List[str] = []
+
+#     def _find(pref: str) -> Optional[str]:
+#         return next((c for c in df.columns if c.startswith(pref)), None)
+
+#     def _std_floor(series: pd.Series, window: int):
+#         rstd = series.rolling(window, min_periods=1).std()
+#         global_std = np.nanstd(series.to_numpy(dtype=float))
+#         floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         return rstd.fillna(floor).replace(0.0, floor)
+
+#     # helpers and base series
+#     close = df.get("close", pd.Series(index=df.index, dtype=float)).astype(float)
+#     sma_s = _find("sma_"); sma_s, sma_l = None, None
+#     # collect sma pair robustly
+#     sma_cols = [c for c in df.columns if re.match(r"^sma_\d+$", c)]
+#     if sma_cols:
+#         def _w(c): m = re.search(r"_(\d+)$", c); return int(m.group(1)) if m else 10**9
+#         sma_cols = sorted(sma_cols, key=_w)
+#         sma_s = sma_cols[0]
+#         sma_l = sma_cols[1] if len(sma_cols) > 1 else sma_cols[0]
+
+#     macd_diff = _find("macd_diff_")
+#     bb_l = _find("bb_lband_"); bb_h = _find("bb_hband_"); bb_w = _find("bb_w_")
+#     rsi_col = _find("rsi_")
+#     plus_di = _find("plus_di_"); minus_di = _find("minus_di_"); adx_col = _find("adx_")
+#     obv_diff = _find("obv_diff_"); obv_sma = _find("obv_sma_")
+#     vwap_dev = _find("vwap_dev_") or _find("vwap_")
+#     atr_pct = _find("atr_pct_")
+
+#     # eng_ma
+#     if sma_s and sma_l:
+#         out["eng_ma"] = (df[sma_s].astype(float) - df[sma_l].astype(float)) / (df[sma_l].astype(float) + eps)
+#         produced.append("eng_ma")
+
+#     # eng_macd
+#     if macd_diff and sma_l:
+#         out["eng_macd"] = df[macd_diff].astype(float) / (df[sma_l].astype(float) + eps)
+#         produced.append("eng_macd")
+
+#     # eng_bb / mid
+#     if bb_l and bb_h and bb_w:
+#         lo = df[bb_l].astype(float); hi = df[bb_h].astype(float); bw = df[bb_w].astype(float)
+#         dev = np.where(close < lo, lo - close, np.where(close > hi, close - hi, 0.0))
+#         out["eng_bb"] = pd.Series(dev, index=df.index) / (bw + eps)
+#         out["eng_bb_mid"] = ((lo + hi) / 2 - close) / (close + eps)
+#         produced.extend(["eng_bb", "eng_bb_mid"])
+
+#     # eng_rsi
+#     if rsi_col:
+#         rv = df[rsi_col].astype(float)
+#         low_d = np.clip((rsi_low - rv), 0, None) / 100.0
+#         high_d = np.clip((rv - rsi_high), 0, None) / 100.0
+#         out["eng_rsi"] = np.where(rv < rsi_low, low_d, np.where(rv > rsi_high, high_d, 0.0))
+#         produced.append("eng_rsi")
+
+#     # eng_adx
+#     if plus_di and minus_di and adx_col:
+#         di_diff = df[plus_di].astype(float) - df[minus_di].astype(float)
+#         diff_abs = di_diff.abs() / 100.0
+#         ex = np.clip((df[adx_col].astype(float) - adx_thr) / 100.0, 0, None)
+#         out["eng_adx"] = np.sign(di_diff) * diff_abs * ex
+#         produced.append("eng_adx")
+
+#     # eng_obv (safe denom + winsorized numerator)
+#     if obv_diff and obv_sma:
+#         num = df[obv_diff].astype(float).to_numpy(dtype=float)
+#         # winsorize numerator
+#         try:
+#             lo_cut = np.nanpercentile(num, 0.5) if num.size else np.nan
+#             hi_cut = np.nanpercentile(num, 99.5) if num.size else np.nan
+#             num_clipped = np.copy(num)
+#             mask_num = np.isnan(num_clipped)
+#             num_clipped = np.clip(num_clipped, lo_cut, hi_cut)
+#             num_clipped[mask_num] = np.nan
+#         except Exception:
+#             num_clipped = num
+
+#         den_s = df[obv_sma].astype(float).rolling(window=mult_w, min_periods=1).median().ffill().fillna(0.0)
+#         den_arr = den_s.to_numpy(dtype=float)
+#         den_floor = np.maximum(np.abs(den_arr) * small_factor, eps)
+#         finite_nonzero = np.isfinite(den_arr) & (np.abs(den_arr) > 0.0)
+#         den_safe = np.where(finite_nonzero, np.sign(den_arr) * np.maximum(np.abs(den_arr), den_floor), den_floor)
+
+#         with np.errstate(divide='ignore', invalid='ignore'):
+#             ratio = num_clipped / den_safe
+#         ratio = np.where(np.isnan(num_clipped), np.nan, np.clip(ratio, -ratio_clip_abs, ratio_clip_abs))
+#         out["eng_obv"] = pd.Series(ratio, index=df.index).astype(float)
+#         produced.append("eng_obv")
+
+#     # eng_atr_div, z_eng_atr
+#     if atr_pct:
+#         ratio = df[atr_pct].astype(float)
+#         rm = ratio.rolling(mult_w, min_periods=1).mean()
+#         out["eng_atr_div"] = (ratio - rm) * 10_000
+#         std_r = ratio.rolling(mult_w, min_periods=1).std()
+#         global_std = np.nanstd(ratio.to_numpy(dtype=float))
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         std_eff = std_r.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_eng_atr"] = (ratio - rm) / (std_eff + eps)
+#         produced.extend(["eng_atr_div", "z_eng_atr"])
+
+#     # eng_sma distances
+#     if sma_s:
+#         out["eng_sma_short"] = (df[sma_s].astype(float) - close) / (close + eps)
+#         produced.append("eng_sma_short")
+#     if sma_l:
+#         out["eng_sma_long"] = (df[sma_l].astype(float) - close) / (close + eps)
+#         produced.append("eng_sma_long")
+
+#     # eng_vwap and z
+#     if vwap_dev:
+#         vwap_base = df[vwap_dev].astype(float)
+#         eng_vwap_pct = 100.0 * (vwap_base - close) / (close + eps)
+#         out["eng_vwap"] = eng_vwap_pct
+#         znum = eng_vwap_pct
+#         zm = znum.rolling(mult_w, min_periods=1).mean()
+#         zs = znum.rolling(mult_w, min_periods=1).std()
+#         global_std = np.nanstd(znum.to_numpy(dtype=float))
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         zs_eff = zs.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_vwap_dev"] = (znum - zm) / (zs_eff + eps)
+#         produced.extend(["eng_vwap", "z_vwap_dev"])
+
+#     # z_bb_w
+#     if bb_w:
+#         x = df[bb_w].astype(float)
+#         xm = x.rolling(mult_w, min_periods=1).mean()
+#         xs = x.rolling(mult_w, min_periods=1).std()
+#         global_std = np.nanstd(x.to_numpy(dtype=float))
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_bb_w"] = (x - xm) / (xs_eff + eps)
+#         produced.append("z_bb_w")
+
+#     # z_obv_diff
+#     if obv_diff and obv_sma:
+#         x = df[obv_diff].astype(float)
+#         base_sma = df[obv_sma].astype(float)
+#         bs_std = base_sma.rolling(mult_w, min_periods=1).std()
+#         global_std = np.nanstd(base_sma.to_numpy(dtype=float))
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         bs_eff = bs_std.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_obv_diff"] = (x - base_sma) / (bs_eff + eps)
+#         produced.append("z_obv_diff")
+
+#     # momentum aggregates
+#     for H in [1, 5, 15, 60]:
+#         ret_col = f"ret_{H}"
+#         if ret_col in df.columns:
+#             out[f"mom_sum_{H}"] = df[ret_col].rolling(H, min_periods=1).sum()
+#             out[f"mom_std_{H}"] = df[ret_col].rolling(H, min_periods=1).std()
+#             produced.extend([f"mom_sum_{H}", f"mom_std_{H}"])
+
+#     # ema cross flags
+#     try:
+#         s_w = int(re.search(r"_(\d+)$", sma_s).group(1)) if sma_s else None
+#         l_w = int(re.search(r"_(\d+)$", sma_l).group(1)) if sma_l else None
+#     except Exception:
+#         s_w = l_w = None
+#     s_ema_col = f"ema_{s_w}" if s_w else None
+#     l_ema_col = f"ema_{l_w}" if l_w else None
+#     if s_ema_col in df.columns and l_ema_col in df.columns:
+#         out["eng_ema_cross_up"] = (df[s_ema_col].astype(float) > df[l_ema_col].astype(float)).astype(float)
+#         out["eng_ema_cross_down"] = (df[s_ema_col].astype(float) < df[l_ema_col].astype(float)).astype(float)
+#         produced.extend(["eng_ema_cross_up", "eng_ema_cross_down"])
+
+#     # finalize
+#     produced = [p for p in produced if p in out.columns]
+#     for col in produced:
+#         out[col] = out[col].astype(float)
+#         if fillna_zero:
+#             out[col] = out[col].fillna(0.0)
+
+#     return out[produced].copy()
+
 
 
 def engineered_indicators(
@@ -334,16 +737,23 @@ def engineered_indicators(
     z_std_floor_factor: float = 1e-3
 ) -> pd.DataFrame:
     """
-    Build engineered signals from base indicators.
-    - Uses only past/present values (no negative shifts, no bfill).
-    - Safe denominators and z-score floors guarantee finite outputs.
-    - Keeps original names and minimal changes to logic.
+    Build engineered signals from base indicators (uses only past/present values).
+    - Works with canonical columns from standard_indicators and their windowed copies.
+    - Detects relevant columns robustly (e.g. 'sma_14', 'sma_60', 'macd_diff', 'macd_diff_30').
+    - Uses safe denominators and std floors to ensure finite outputs.
+    Returns DataFrame of engineered columns (float, NaNs filled per fillna_zero).
     """
     out = pd.DataFrame(index=df.index)
     produced: List[str] = []
 
-    def _find(pref: str) -> Optional[str]:
-        return next((c for c in df.columns if c.startswith(pref)), None)
+    def _find(prefix: str) -> Optional[str]:
+        # find first column that startswith prefix (prefer exact canonical name before windowed)
+        if prefix in df.columns:
+            return prefix
+        for c in df.columns:
+            if c.startswith(prefix):
+                return c
+        return None
 
     def _std_floor(series: pd.Series, window: int):
         rstd = series.rolling(window, min_periods=1).std()
@@ -351,37 +761,41 @@ def engineered_indicators(
         floor = max(eps, abs(global_std) * z_std_floor_factor)
         return rstd.fillna(floor).replace(0.0, floor)
 
-    # helpers and base series
+    # helpers for column detection
     close = df.get("close", pd.Series(index=df.index, dtype=float)).astype(float)
-    sma_s = _find("sma_"); sma_s, sma_l = None, None
-    # collect sma pair robustly
-    sma_cols = [c for c in df.columns if re.match(r"^sma_\d+$", c)]
-    if sma_cols:
-        def _w(c): m = re.search(r"_(\d+)$", c); return int(m.group(1)) if m else 10**9
-        sma_cols = sorted(sma_cols, key=_w)
-        sma_s = sma_cols[0]
-        sma_l = sma_cols[1] if len(sma_cols) > 1 else sma_cols[0]
 
-    macd_diff = _find("macd_diff_")
-    bb_l = _find("bb_lband_"); bb_h = _find("bb_hband_"); bb_w = _find("bb_w_")
-    rsi_col = _find("rsi_")
-    plus_di = _find("plus_di_"); minus_di = _find("minus_di_"); adx_col = _find("adx_")
-    obv_diff = _find("obv_diff_"); obv_sma = _find("obv_sma_")
-    vwap_dev = _find("vwap_dev_") or _find("vwap_")
-    atr_pct = _find("atr_pct_")
+    # robust SMA detection: pick two smallest numeric windows if available
+    sma_cols = sorted([c for c in df.columns if re.match(r"^sma_\d+$", c)],
+                      key=lambda c: int(re.search(r"_(\d+)$", c).group(1)) if re.search(r"_(\d+)$", c) else 10**9)
+    sma_s = sma_cols[0] if sma_cols else None
+    sma_l = sma_cols[1] if len(sma_cols) > 1 else (sma_cols[0] if sma_cols else None)
+
+    # find other columns (prefer canonical names, fallback to first matching windowed)
+    macd_diff = _find("macd_diff")
+    bb_l = _find("bb_lband")
+    bb_h = _find("bb_hband")
+    bb_w = _find("bb_w")
+    rsi_col = _find("rsi")
+    plus_di = _find("plus_di")
+    minus_di = _find("minus_di")
+    adx_col = _find("adx")
+    obv_diff = _find("obv_diff")
+    obv_sma = _find("obv_sma")
+    vwap_dev = _find("vwap_dev") or _find("vwap")
+    atr_pct = _find("atr_pct")
 
     # eng_ma
-    if sma_s and sma_l:
+    if sma_s and sma_l and sma_s in df.columns and sma_l in df.columns:
         out["eng_ma"] = (df[sma_s].astype(float) - df[sma_l].astype(float)) / (df[sma_l].astype(float) + eps)
         produced.append("eng_ma")
 
     # eng_macd
-    if macd_diff and sma_l:
+    if macd_diff and sma_l and macd_diff in df.columns and sma_l in df.columns:
         out["eng_macd"] = df[macd_diff].astype(float) / (df[sma_l].astype(float) + eps)
         produced.append("eng_macd")
 
     # eng_bb / mid
-    if bb_l and bb_h and bb_w:
+    if bb_l and bb_h and bb_w and bb_l in df.columns and bb_h in df.columns and bb_w in df.columns:
         lo = df[bb_l].astype(float); hi = df[bb_h].astype(float); bw = df[bb_w].astype(float)
         dev = np.where(close < lo, lo - close, np.where(close > hi, close - hi, 0.0))
         out["eng_bb"] = pd.Series(dev, index=df.index) / (bw + eps)
@@ -389,7 +803,7 @@ def engineered_indicators(
         produced.extend(["eng_bb", "eng_bb_mid"])
 
     # eng_rsi
-    if rsi_col:
+    if rsi_col and rsi_col in df.columns:
         rv = df[rsi_col].astype(float)
         low_d = np.clip((rsi_low - rv), 0, None) / 100.0
         high_d = np.clip((rv - rsi_high), 0, None) / 100.0
@@ -397,7 +811,7 @@ def engineered_indicators(
         produced.append("eng_rsi")
 
     # eng_adx
-    if plus_di and minus_di and adx_col:
+    if plus_di and minus_di and adx_col and plus_di in df.columns and minus_di in df.columns and adx_col in df.columns:
         di_diff = df[plus_di].astype(float) - df[minus_di].astype(float)
         diff_abs = di_diff.abs() / 100.0
         ex = np.clip((df[adx_col].astype(float) - adx_thr) / 100.0, 0, None)
@@ -405,9 +819,8 @@ def engineered_indicators(
         produced.append("eng_adx")
 
     # eng_obv (safe denom + winsorized numerator)
-    if obv_diff and obv_sma:
+    if obv_diff and obv_sma and obv_diff in df.columns and obv_sma in df.columns:
         num = df[obv_diff].astype(float).to_numpy(dtype=float)
-        # winsorize numerator
         try:
             lo_cut = np.nanpercentile(num, 0.5) if num.size else np.nan
             hi_cut = np.nanpercentile(num, 99.5) if num.size else np.nan
@@ -431,7 +844,7 @@ def engineered_indicators(
         produced.append("eng_obv")
 
     # eng_atr_div, z_eng_atr
-    if atr_pct:
+    if atr_pct and atr_pct in df.columns:
         ratio = df[atr_pct].astype(float)
         rm = ratio.rolling(mult_w, min_periods=1).mean()
         out["eng_atr_div"] = (ratio - rm) * 10_000
@@ -443,15 +856,15 @@ def engineered_indicators(
         produced.extend(["eng_atr_div", "z_eng_atr"])
 
     # eng_sma distances
-    if sma_s:
+    if sma_s and sma_s in df.columns:
         out["eng_sma_short"] = (df[sma_s].astype(float) - close) / (close + eps)
         produced.append("eng_sma_short")
-    if sma_l:
+    if sma_l and sma_l in df.columns:
         out["eng_sma_long"] = (df[sma_l].astype(float) - close) / (close + eps)
         produced.append("eng_sma_long")
 
     # eng_vwap and z
-    if vwap_dev:
+    if vwap_dev and vwap_dev in df.columns:
         vwap_base = df[vwap_dev].astype(float)
         eng_vwap_pct = 100.0 * (vwap_base - close) / (close + eps)
         out["eng_vwap"] = eng_vwap_pct
@@ -465,7 +878,7 @@ def engineered_indicators(
         produced.extend(["eng_vwap", "z_vwap_dev"])
 
     # z_bb_w
-    if bb_w:
+    if bb_w and bb_w in df.columns:
         x = df[bb_w].astype(float)
         xm = x.rolling(mult_w, min_periods=1).mean()
         xs = x.rolling(mult_w, min_periods=1).std()
@@ -476,7 +889,7 @@ def engineered_indicators(
         produced.append("z_bb_w")
 
     # z_obv_diff
-    if obv_diff and obv_sma:
+    if obv_diff and obv_sma and obv_diff in df.columns and obv_sma in df.columns:
         x = df[obv_diff].astype(float)
         base_sma = df[obv_sma].astype(float)
         bs_std = base_sma.rolling(mult_w, min_periods=1).std()
@@ -486,15 +899,17 @@ def engineered_indicators(
         out["z_obv_diff"] = (x - base_sma) / (bs_eff + eps)
         produced.append("z_obv_diff")
 
-    # momentum aggregates
-    for H in [1, 5, 15, 60]:
+    # momentum aggregates: detect available ret_{H} columns (use any found in df)
+    ret_cols = [c for c in df.columns if re.match(r"^ret_(\d+)$", c)]
+    horizons = sorted({int(re.search(r"^ret_(\d+)$", c).group(1)) for c in ret_cols}) if ret_cols else [1, 5, 15, 60]
+    for H in horizons:
         ret_col = f"ret_{H}"
         if ret_col in df.columns:
             out[f"mom_sum_{H}"] = df[ret_col].rolling(H, min_periods=1).sum()
             out[f"mom_std_{H}"] = df[ret_col].rolling(H, min_periods=1).std()
             produced.extend([f"mom_sum_{H}", f"mom_std_{H}"])
 
-    # ema cross flags
+    # ema cross flags: find sma numeric windows used for ema names
     try:
         s_w = int(re.search(r"_(\d+)$", sma_s).group(1)) if sma_s else None
         l_w = int(re.search(r"_(\d+)$", sma_l).group(1)) if sma_l else None
@@ -507,7 +922,7 @@ def engineered_indicators(
         out["eng_ema_cross_down"] = (df[s_ema_col].astype(float) < df[l_ema_col].astype(float)).astype(float)
         produced.extend(["eng_ema_cross_up", "eng_ema_cross_down"])
 
-    # finalize
+    # finalize: ensure order, types and optional fillna
     produced = [p for p in produced if p in out.columns]
     for col in produced:
         out[col] = out[col].astype(float)
@@ -516,72 +931,238 @@ def engineered_indicators(
 
     return out[produced].copy()
 
-
 ##########################################################################################################
+
+
+# def prune_and_diag(
+#     df_unsc: pd.DataFrame,
+#     train_prop: float = 0.7,
+#     pct_shift_thresh: float = 0.16,
+#     frac_outside_thresh: float = 0.06,
+#     ks_pval_thresh: float = 1e-6,
+#     min_train_samples: int = 50,
+#     conc_bins: int = 80,
+# ) -> Tuple[pd.DataFrame, List[str], pd.DataFrame]:
+#     """
+#     Prune numeric features and return diagnostics.
+
+#     - Split rows contiguously into TRAIN / VAL / TEST by train_prop.
+#     - For each numeric feature compute TRAIN percentiles (q01,q25,q75,q99),
+#       median shifts, fraction outside TRAIN tails, KS p-value, and a histogram over [q01,q99].
+#     - Drop rule: DROP if pct_shift_fail OR frac_out_fail OR const_fail OR
+#       (ks_fail AND (pct_shift_fail OR frac_out_fail)).
+#     - score: continuous spreadness in [0,1] computed as normalized histogram entropy
+#       (0 = all values concentrated in one bin, 1 = maximally spread).
+#     Returns (df_pruned, to_drop, diag).
+#     """
+#     # small constants used
+#     zero_tol = 1e-8
+#     denom_eps = 1e-6
+#     const_eps = 1e-12
+#     tail_min_count = 3
+
+#     if len(df_unsc) == 0:
+#         return df_unsc.copy(), [], pd.DataFrame()
+
+#     # contiguous TRAIN / VAL / TEST split
+#     n_tr = int(len(df_unsc) * train_prop)
+#     n_val = (len(df_unsc) - n_tr) // 2
+#     tr = df_unsc.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
+#     vl = df_unsc.iloc[n_tr:n_tr + n_val].replace([np.inf, -np.inf], np.nan)
+#     te = df_unsc.iloc[n_tr + n_val:].replace([np.inf, -np.inf], np.nan)
+
+#     numeric_cols = [c for c in df_unsc.columns if pd.api.types.is_numeric_dtype(df_unsc[c])]
+#     rows = []
+
+#     def safe_denominator(arr: np.ndarray) -> float:
+#         if len(arr) == 0:
+#             return denom_eps
+#         med = float(np.nanmedian(arr))
+#         mad = float(np.nanmedian(np.abs(arr - med)))
+#         std = float(np.nanstd(arr))
+#         return max(abs(med), mad, std, denom_eps)
+
+#     def frac_outside(s: pd.Series, q01, q99) -> float:
+#         if len(s) == 0 or np.isnan(q01) or np.isnan(q99):
+#             return 0.0
+#         s2 = s.dropna()
+#         if len(s2) == 0:
+#             return 0.0
+#         return float(((s2 < q01).sum() + (s2 > q99).sum()) / len(s2))
+
+#     for feat in tqdm(numeric_cols, desc="prune_and_diag", unit="feat"):
+#         tr_s = tr[feat].dropna()
+#         vl_s = vl[feat].dropna()
+#         te_s = te[feat].dropna()
+
+#         # medians and robust denominator for relative shift
+#         med_tr = float(np.nanmedian(tr_s)) if len(tr_s) else np.nan
+#         med_val = float(np.nanmedian(vl_s)) if len(vl_s) else np.nan
+#         med_te = float(np.nanmedian(te_s)) if len(te_s) else np.nan
+#         denom = safe_denominator(tr_s.to_numpy()) if len(tr_s) else denom_eps
+#         pct_shift_val = abs(med_val - med_tr) / denom if not np.isnan(med_tr) else 0.0
+#         pct_shift_te = abs(med_te - med_tr) / denom if not np.isnan(med_tr) else 0.0
+#         abs_shift_val = abs(med_val - med_tr)
+#         abs_shift_te = abs(med_te - med_tr)
+
+#         # TRAIN percentiles with tiny-tail fallback
+#         q01 = np.nanpercentile(tr_s, 1) if len(tr_s) else np.nan
+#         q25 = np.nanpercentile(tr_s, 25) if len(tr_s) else np.nan
+#         q75 = np.nanpercentile(tr_s, 75) if len(tr_s) else np.nan
+#         q99 = np.nanpercentile(tr_s, 99) if len(tr_s) else np.nan
+#         if len(tr_s):
+#             if (tr_s <= q01).sum() < tail_min_count:
+#                 q01 = np.nanpercentile(tr_s, 5)
+#             if (tr_s >= q99).sum() < tail_min_count:
+#                 q99 = np.nanpercentile(tr_s, 95)
+
+#         full_span = q99 - q01 if not (np.isnan(q99) or np.isnan(q01)) else np.nan
+#         iqr = q75 - q25 if not (np.isnan(q75) or np.isnan(q25)) else np.nan
+
+#         # simple diagnostics
+#         mode_frac = 0.0
+#         zero_frac = 0.0
+#         top_bin_share = 0.0
+#         spread_score = 0.0  # continuous 0..1 (0 concentrated, 1 widespread)
+
+#         if len(tr_s) > 0:
+#             mode_frac = float(tr_s.value_counts(normalize=True).iloc[0])
+#             zero_frac = float(((tr_s.abs() <= zero_tol)).sum()) / len(tr_s)
+
+#             # histogram over [q01,q99]
+#             if not (np.isnan(q01) or np.isnan(q99) or q99 <= q01):
+#                 edges = np.linspace(q01, q99, conc_bins + 1)
+#                 h, _ = np.histogram(tr_s, bins=edges)
+#                 total = h.sum()
+#                 p = h / total if total > 0 else np.zeros_like(h)
+
+#                 top_bin_share = float(p.max()) if p.size else 0.0
+
+#                 # normalized entropy as continuous spread score
+#                 p_nonzero = p[p > 0]
+#                 if p_nonzero.size:
+#                     entropy = -float((p_nonzero * np.log(p_nonzero)).sum())
+#                     max_entropy = np.log(len(p)) if len(p) > 0 else 1.0
+#                     spread_score = float(np.clip(entropy / max_entropy, 0.0, 1.0))
+#                 else:
+#                     spread_score = 0.0
+#             else:
+#                 top_bin_share = 1.0 if tr_s.nunique() == 1 else 0.0
+#                 spread_score = 0.0 if top_bin_share == 1.0 else 1.0
+
+#         # failure tests (unchanged logic)
+#         pct_shift_fail = (pct_shift_val > pct_shift_thresh) or (pct_shift_te > pct_shift_thresh)
+#         frac_val_out = frac_outside(vl_s, q01, q99)
+#         frac_te_out = frac_outside(te_s, q01, q99)
+#         frac_out_fail = (frac_val_out > frac_outside_thresh) or (frac_te_out > frac_outside_thresh)
+
+#         ks_p = np.nan
+#         ks_fail = False
+#         try:
+#             if len(tr_s) >= min_train_samples and len(te_s) >= min_train_samples:
+#                 _, ks_p = ks_2samp(tr_s, te_s)
+#                 ks_fail = (ks_p < ks_pval_thresh)
+#         except Exception:
+#             ks_p = np.nan
+#             ks_fail = False
+
+#         const_on_train = False
+#         if len(tr_s) and np.isfinite(tr_s.min()) and np.isfinite(tr_s.max()):
+#             const_tol = max(const_eps, denom * 1e-12)
+#             const_on_train = (abs(tr_s.max() - tr_s.min()) < const_tol)
+#         const_fail = const_on_train
+
+#         ks_effective = ks_fail and (pct_shift_fail or frac_out_fail)
+
+#         drop_reasons: List[str] = []
+#         if pct_shift_fail:
+#             drop_reasons.append(f"pct_shift_val={pct_shift_val:.3f};te={pct_shift_te:.3f}")
+#         if frac_out_fail:
+#             drop_reasons.append(f"frac_out_val={frac_val_out:.3f};te={frac_te_out:.3f}")
+#         if ks_effective:
+#             drop_reasons.append(f"ks_p={ks_p:.4g}")
+#         if const_fail:
+#             drop_reasons.append("constant_on_train")
+
+#         status = "DROP" if drop_reasons else "OK"
+#         reason = "; ".join(drop_reasons)
+
+#         rows.append({
+#             "feature": feat,
+#             "q01": q01, "q25": q25, "q75": q75, "q99": q99,
+#             "full_span": full_span, "iqr": iqr,
+#             "med_tr": med_tr, "med_val": med_val, "med_te": med_te,
+#             "pct_shift_val": pct_shift_val, "pct_shift_te": pct_shift_te,
+#             "abs_shift_val": abs_shift_val, "abs_shift_te": abs_shift_te,
+#             "frac_val_out": frac_val_out, "frac_te_out": frac_te_out,
+#             "ks_p": ks_p,
+#             "nan_mask_train": tr[feat].isna().any(),
+#             "const_on_train": const_on_train,
+#             "status": status,
+#             "reason": reason,
+#             "score": spread_score,            # continuous spreadness 0..1
+#             "mode_frac": float(mode_frac),
+#             "zero_frac": float(zero_frac),
+#             "top_bin_share": float(top_bin_share),
+#         })
+
+#     diag = pd.DataFrame(rows).set_index("feature").sort_values(["status"], ascending=[True])
+#     to_drop = diag[diag["status"] == "DROP"].index.tolist()
+#     df_pruned = df_unsc.drop(columns=to_drop, errors="ignore")
+#     return df_pruned, to_drop, diag
+
 
 
 def prune_and_diag(
     df_unsc: pd.DataFrame,
     train_prop: float = 0.7,
-    # per-test thresholds (conservative, data-driven defaults)
-    pct_shift_thresh: float = 0.16,       # relative median shift threshold (recommended data-driven)
-    frac_outside_thresh: float = 0.06,    # fraction outside TRAIN q01-q99 (recommended data-driven)
-    ks_pval_thresh: float = 1e-6,         # KS p-value threshold (KS flagged but only effective with other tests)
-    min_train_samples: int = 50,          # min samples to run KS test
-    mad_mul: float = 1.5,
-    rel_width_scale: float = 0.10,
-    gamma: float = 1.0,
+    pct_shift_thresh: float = 0.16,
+    frac_outside_thresh: float = 0.06,
+    ks_pval_thresh: float = 1e-6,
+    min_train_samples: int = 50,
     conc_bins: int = 80,
-    mode_frac_thresh: float = 0.75,
-    zero_frac_thresh: float = 0.90,
-    frac_in_min: float = 0.02,
+    max_failures = 1,
 ) -> Tuple[pd.DataFrame, List[str], pd.DataFrame]:
     """
-    Prune features and compute diagnostics used for percentile assignment.
+    Prune numeric features and return diagnostics.
 
-    Behavior and intent
-    - Tests (each produces a boolean flag):
-        * median shift: VAL or TEST median vs TRAIN median (relative to a robust denominator)
-        * fraction outside TRAIN tails: share of VAL/TEST outside TRAIN [q01,q99]
-        * KS two-sample: TRAIN vs TEST (p < ks_pval_thresh) — recorded but only counts when
-          coincident with shift or frac-out to avoid KS alone dropping many features
-        * constant-on-train: near-constant TRAIN values
-    - Drop rule (keeps "no fail-count" policy): DROP if ANY of
-        pct_shift_fail OR frac_out_fail OR const_fail OR (ks_fail AND (pct_shift_fail OR frac_out_fail))
-      This keeps the simple OR logic while preventing KS alone from removing most features.
-    - Diagnostics: returns per-feature stats required later (percentiles, medians, frac_out, ks_p,
-      score, mode_frac, zero_frac, frac_in, top_bin_share) for auditing and tuning.
-    - Returns: (df_pruned, to_drop, diag) where diag is indexed by feature.
+    Summary
+    - Split rows contiguously into TRAIN / VAL / TEST by `train_prop`.
+    - For each numeric column (except the supervised label column if `params.label_col`
+      exists in the calling scope) compute TRAIN percentiles (q01,q25,q75,q99 with
+      tiny-tail fallback), medians, relative median shifts, fraction of VAL/TEST
+      outside TRAIN tails, optional KS p-value (TRAIN vs TEST), and a simple spread
+      score derived from a histogram over [q01,q99].
+    - Drop rule: mark feature DROP when any of:
+        * relative median shift in VAL or TEST > pct_shift_thresh
+        * fraction of VAL or TEST outside TRAIN tails > frac_outside_thresh
+        * TRAIN is effectively constant
+        * KS p-value < ks_pval_thresh AND (pct_shift_fail OR frac_out_fail)
+    - Returns (df_pruned, to_drop, diag). `diag` contains per-feature diagnostics.
+    - Minimal safety: skip pruning for features with too few TRAIN non-null samples.
     """
-    # stability constants
+    # small constants
     zero_tol = 1e-8
     denom_eps = 1e-6
-    hw_eps = 1e-12
     const_eps = 1e-12
     tail_min_count = 3
 
-    N = len(df_unsc)
-    if N == 0:
+    if len(df_unsc) == 0:
         return df_unsc.copy(), [], pd.DataFrame()
 
-    # contiguous split: TRAIN / VAL / TEST
-    n_tr = int(N * train_prop)
-    n_rem = N - n_tr
-    n_val = n_rem // 2
+    # split
+    n_tr = int(len(df_unsc) * train_prop)
+    n_val = (len(df_unsc) - n_tr) // 2
     tr = df_unsc.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
     vl = df_unsc.iloc[n_tr:n_tr + n_val].replace([np.inf, -np.inf], np.nan)
     te = df_unsc.iloc[n_tr + n_val:].replace([np.inf, -np.inf], np.nan)
 
-    numeric_cols = [c for c in df_unsc.columns if pd.api.types.is_numeric_dtype(df_unsc[c])]
+    numeric_cols = [c for c in df_unsc.columns
+                    if pd.api.types.is_numeric_dtype(df_unsc[c]) and c not in params.label_col]
+
     rows = []
 
-    def _mad(arr: np.ndarray) -> float:
-        if len(arr) == 0:
-            return 0.0
-        med = float(np.nanmedian(arr))
-        return float(np.nanmedian(np.abs(arr - med)))
-
-    def safe_denominator(arr: np.ndarray) -> float:
+    def safe_denom(arr: np.ndarray) -> float:
         if len(arr) == 0:
             return denom_eps
         med = float(np.nanmedian(arr))
@@ -597,27 +1178,42 @@ def prune_and_diag(
             return 0.0
         return float(((s2 < q01).sum() + (s2 > q99).sum()) / len(s2))
 
+    # skip-prune threshold for tiny TRAIN samples
+    min_non_na_train = max(5, int(0.01 * max(1, len(tr))))
+
     for feat in tqdm(numeric_cols, desc="prune_and_diag", unit="feat"):
         tr_s = tr[feat].dropna()
         vl_s = vl[feat].dropna()
         te_s = te[feat].dropna()
 
+        if tr_s.shape[0] < min_non_na_train:
+            rows.append({
+                "feature": feat, "q01": np.nan, "q25": np.nan, "q75": np.nan, "q99": np.nan,
+                "full_span": np.nan, "iqr": np.nan, "med_tr": np.nan, "med_val": np.nan, "med_te": np.nan,
+                "pct_shift_val": np.nan, "pct_shift_te": np.nan, "abs_shift_val": np.nan, "abs_shift_te": np.nan,
+                "frac_val_out": np.nan, "frac_te_out": np.nan, "ks_p": np.nan,
+                "nan_mask_train": tr[feat].isna().any(), "const_on_train": False,
+                "status": "OK", "reason": "too_few_train", "score": 0.0,
+                "mode_frac": 0.0, "zero_frac": 0.0, "top_bin_share": 0.0,
+            })
+            continue
+
+        # medians and denom
         med_tr = float(np.nanmedian(tr_s)) if len(tr_s) else np.nan
         med_val = float(np.nanmedian(vl_s)) if len(vl_s) else np.nan
         med_te = float(np.nanmedian(te_s)) if len(te_s) else np.nan
+        denom = safe_denom(tr_s.to_numpy()) if len(tr_s) else denom_eps
 
-        denom = safe_denominator(tr_s.to_numpy()) if len(tr_s) else denom_eps
         pct_shift_val = abs(med_val - med_tr) / denom if not np.isnan(med_tr) else 0.0
         pct_shift_te = abs(med_te - med_tr) / denom if not np.isnan(med_tr) else 0.0
         abs_shift_val = abs(med_val - med_tr)
         abs_shift_te = abs(med_te - med_tr)
 
-        # TRAIN percentiles with tiny-tail fallback
+        # percentiles with tiny-tail fallback
         q01 = np.nanpercentile(tr_s, 1) if len(tr_s) else np.nan
         q25 = np.nanpercentile(tr_s, 25) if len(tr_s) else np.nan
         q75 = np.nanpercentile(tr_s, 75) if len(tr_s) else np.nan
         q99 = np.nanpercentile(tr_s, 99) if len(tr_s) else np.nan
-
         if len(tr_s):
             if (tr_s <= q01).sum() < tail_min_count:
                 q01 = np.nanpercentile(tr_s, 5)
@@ -626,54 +1222,35 @@ def prune_and_diag(
 
         full_span = q99 - q01 if not (np.isnan(q99) or np.isnan(q01)) else np.nan
         iqr = q75 - q25 if not (np.isnan(q75) or np.isnan(q25)) else np.nan
-        bulk_ratio = (iqr / (full_span + const_eps)) if not np.isnan(iqr) and not np.isnan(full_span) else np.nan
 
-        # scoring components (kept for diagnostics only)
-        score = 0.0
+        # simple diagnostics
         mode_frac = 0.0
         zero_frac = 0.0
-        frac_in = 0.0
         top_bin_share = 0.0
+        spread_score = 0.0
+
         if len(tr_s) > 0:
             mode_frac = float(tr_s.value_counts(normalize=True).iloc[0])
             zero_frac = float(((tr_s.abs() <= zero_tol)).sum()) / len(tr_s)
-            if (tr_s.nunique() <= 5 and mode_frac >= 0.90) or (zero_frac >= 0.90):
-                score = 0.0
-            else:
-                if np.isnan(full_span) or full_span == 0 or np.isnan(bulk_ratio):
-                    score = 0.0
+
+            if not (np.isnan(q01) or np.isnan(q99) or q99 <= q01):
+                edges = np.linspace(q01, q99, conc_bins + 1)
+                h, _ = np.histogram(tr_s, bins=edges)
+                total = h.sum()
+                p = h / total if total > 0 else np.zeros_like(h)
+                top_bin_share = float(p.max()) if p.size else 0.0
+                p_nz = p[p > 0]
+                if p_nz.size:
+                    entropy = -float((p_nz * np.log(p_nz)).sum())
+                    max_entropy = np.log(len(p)) if len(p) > 0 else 1.0
+                    spread_score = float(np.clip(entropy / max_entropy, 0.0, 1.0))
                 else:
-                    if len(tr_s) >= min_train_samples:
-                        m = _mad(tr_s.to_numpy())
-                        hw = float(max(hw_eps, mad_mul * m))
-                        inside = tr_s[(tr_s >= (med_tr - hw)) & (tr_s <= (med_tr + hw))]
-                        frac_in = float(len(inside)) / len(tr_s) if len(tr_s) > 0 else 0.0
+                    spread_score = 0.0
+            else:
+                top_bin_share = 1.0 if tr_s.nunique() == 1 else 0.0
+                spread_score = 0.0 if top_bin_share == 1.0 else 1.0
 
-                        rel_width = 1.0 if (np.isnan(full_span) or full_span <= 0) else min(1.0, (2.0 * hw) / float(full_span))
-                        rel_factor = 1.0 - min(1.0, rel_width / float(rel_width_scale))
-                        base_score = float(np.clip(frac_in * rel_factor, 0.0, 1.0))
-
-                        if not (np.isnan(q01) or np.isnan(q99) or q99 <= q01):
-                            edges = np.linspace(q01, q99, conc_bins + 1)
-                            h, _ = np.histogram(tr_s, bins=edges)
-                            hist_max = int(h.max()) if h.size else 0
-                            p = h / h.sum() if h.sum() > 0 else np.zeros_like(h)
-                            top_bin_share = float(p.max()) if p.size else 0.0
-                            conc = float(hist_max) / len(tr_s) if len(tr_s) else 0.0
-                        else:
-                            top_bin_share = 1.0 if tr_s.nunique() == 1 else 0.0
-                            conc = 1.0 if tr_s.nunique() == 1 else 0.0
-
-                        allow_conc = (
-                            (mode_frac < mode_frac_thresh)
-                            and (zero_frac < zero_frac_thresh)
-                            and (rel_factor > 0.0)
-                            and (frac_in > frac_in_min)
-                        )
-                        conc_term = float(gamma * conc * (1.0 - mode_frac)) if allow_conc else 0.0
-                        score = float(np.clip(base_score + conc_term, 0.0, 1.0))
-
-        # failure tests (each controlled by a threshold)
+        # failure tests
         pct_shift_fail = (pct_shift_val > pct_shift_thresh) or (pct_shift_te > pct_shift_thresh)
         frac_val_out = frac_outside(vl_s, q01, q99)
         frac_te_out = frac_outside(te_s, q01, q99)
@@ -686,7 +1263,8 @@ def prune_and_diag(
                 _, ks_p = ks_2samp(tr_s, te_s)
                 ks_fail = (ks_p < ks_pval_thresh)
         except Exception:
-            ks_p = np.nan; ks_fail = False
+            ks_p = np.nan
+            ks_fail = False
 
         const_on_train = False
         if len(tr_s) and np.isfinite(tr_s.min()) and np.isfinite(tr_s.max()):
@@ -694,27 +1272,29 @@ def prune_and_diag(
             const_on_train = (abs(tr_s.max() - tr_s.min()) < const_tol)
         const_fail = const_on_train
 
-        # KS only counts when coincident with shift or frac-out to avoid KS-alone drops
-        ks_effective = ks_fail and (pct_shift_fail or frac_out_fail)
-
-        # DROP if ANY of the core tests is true (OR), but KS must be coincident
+        ks_support = ks_fail and (pct_shift_fail or frac_out_fail)
+        
+        # voting: require at least two failing signals to drop
+        vote = int(pct_shift_fail) + int(frac_out_fail) + int(const_fail) + int(ks_support)
+        drop_flag = (vote >= max_failures)
+        
         drop_reasons: List[str] = []
         if pct_shift_fail:
             drop_reasons.append(f"pct_shift_val={pct_shift_val:.3f};te={pct_shift_te:.3f}")
         if frac_out_fail:
             drop_reasons.append(f"frac_out_val={frac_val_out:.3f};te={frac_te_out:.3f}")
-        if ks_effective:
+        if ks_support:
             drop_reasons.append(f"ks_p={ks_p:.4g}")
         if const_fail:
             drop_reasons.append("constant_on_train")
-
-        status = "DROP" if drop_reasons else "OK"
+        
+        status = "DROP" if drop_flag else "OK"
         reason = "; ".join(drop_reasons)
 
         rows.append({
             "feature": feat,
             "q01": q01, "q25": q25, "q75": q75, "q99": q99,
-            "full_span": full_span, "iqr": iqr, "bulk_ratio": bulk_ratio,
+            "full_span": full_span, "iqr": iqr,
             "med_tr": med_tr, "med_val": med_val, "med_te": med_te,
             "pct_shift_val": pct_shift_val, "pct_shift_te": pct_shift_te,
             "abs_shift_val": abs_shift_val, "abs_shift_te": abs_shift_te,
@@ -724,11 +1304,10 @@ def prune_and_diag(
             "const_on_train": const_on_train,
             "status": status,
             "reason": reason,
-            "score": float(score),
+            "score": spread_score,
             "mode_frac": float(mode_frac),
             "zero_frac": float(zero_frac),
-            "frac_in": float(frac_in),
-            "top_bin_share": float(top_bin_share)
+            "top_bin_share": float(top_bin_share),
         })
 
     diag = pd.DataFrame(rows).set_index("feature").sort_values(["status"], ascending=[True])
@@ -736,7 +1315,7 @@ def prune_and_diag(
     df_pruned = df_unsc.drop(columns=to_drop, errors="ignore")
     return df_pruned, to_drop, diag
 
-
+    
 ############################################################################ 
 
 
@@ -744,7 +1323,8 @@ def assign_percentiles_from_diag(
     diag: pd.DataFrame,
     custom_range: Tuple[float, float],
     standard_range: Tuple[float, float],
-    time_range: Tuple[float, float],
+    base_range: Tuple[float, float],
+    score_thresh: float
 ) -> pd.DataFrame:
     """
     Assign final percentile pairs from diagnostics.
@@ -754,7 +1334,7 @@ def assign_percentiles_from_diag(
           score, zero_frac, mode_frac, frac_in, top_bin_share
       - custom_range: percentile pair assigned to "kept_narrow" features (e.g. (30,70))
       - standard_range: percentile pair assigned to all other features by default
-      - time_range: percentile pair assigned to features with names ending in '_time'
+      - base_range: percentile pair assigned to features with names ending in '_time' and to the target signal
 
     Behavior
       - zero_mass := (zero_frac >= 0.05) and (mode_frac >= 0.05)
@@ -762,7 +1342,7 @@ def assign_percentiles_from_diag(
       - excluded_local := zero_mass OR center_dom  -> assigned "excluded"
       - kept_narrow := not excluded_local AND score > 0 -> assigned custom_range
       - otherwise -> assigned standard_range
-      - features ending with '_time' get time_range regardless of other rules
+      - features ending with '_time' and target signal get base_range regardless of other rules
     Output
       - copy of diag with added columns: low_pct, high_pct, assigned_reason
     """
@@ -779,7 +1359,7 @@ def assign_percentiles_from_diag(
 
     custom_lo, custom_hi = _norm_range(custom_range)
     standard_lo, standard_hi = _norm_range(standard_range)
-    time_lo, time_hi = _norm_range(time_range)
+    base_lo, base_hi = _norm_range(base_range)
 
     low_list, high_list, reason_list = [], [], []
 
@@ -793,8 +1373,11 @@ def assign_percentiles_from_diag(
 
         # time features override everything
         if str(feat).endswith("_time"):
-            lo, hi = time_lo, time_hi
+            lo, hi = base_lo, base_hi
             assigned = "time_feature"
+        elif str(feat) == str(params.label_col):
+            lo, hi = base_lo, base_hi
+            assigned = "target_signal"
         else:
             zero_mass_flag = (zero_frac >= 0.05) and (mode_frac >= 0.05)
             center_dom_flag = (frac_in >= 0.60) and (top_bin >= 0.35)
@@ -803,7 +1386,7 @@ def assign_percentiles_from_diag(
             if excluded_local:
                 lo, hi = standard_lo, standard_hi
                 assigned = "excluded"
-            elif score > 0.0:
+            elif score < score_thresh:
                 lo, hi = custom_lo, custom_hi
                 assigned = "kept_narrow"
             else:
