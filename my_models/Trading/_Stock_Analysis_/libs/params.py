@@ -18,8 +18,7 @@ label_col  = "signal"
 month_to_check = '2024-06'
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
-extra_windows = [2, 5, 10, 30, 60] #  to produce additional smoothed/rolling copies of selected indicators for each window 
-score_thresh = 0.7  # threshold under which the feature is considered narrow
+extra_windows = [30, 60, 90] #  to produce additional smoothed/rolling copies of selected indicators for each window 
 
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
@@ -32,7 +31,7 @@ feats_min_std = 0.03
 feats_max_corr = 0.997
 thresh_gb = 36 # use ram instead of memmap, if X_buf below this value
 
-sel_val_rmse = 0.09318
+sel_val_rmse = 0.09384
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -169,7 +168,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             90,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             30,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }

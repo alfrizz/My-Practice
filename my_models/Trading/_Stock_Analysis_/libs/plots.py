@@ -144,100 +144,6 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
-# class LiveFeatGuBars:
-#     """Live side-by-side horizontal bar charts for FEAT_TOP (left) and G (grad norms, right).
-#     Instantiate once; call update(feat_dict, g_dict, epoch) each epoch. Figure and display are
-#     created lazily on first update to avoid duplicate static outputs on import/reload.
-#     """
-#     def __init__(self, top_feats, top_params, figsize=(20,5), dpi=110):
-#         self.top_feats = top_feats
-#         self.top_params = top_params
-#         # placeholders; real Figure/axes created lazily in _init_fig()
-#         self.fig = None
-#         self.ax_feat = None
-#         self.ax_param = None
-#         self.eps = []           # stored epoch numbers (optional)
-#         self.disp_id = None     # lazy display handle
-
-#     def _init_fig(self, dpi=110):
-#         """
-#         Create figure sized for a readable number of horizontal bars without going huge.
-#         - Uses a smaller per-bar height and an upper cap for total height.
-#         - Keeps width fixed for two side-by-side plots.
-#         """
-#         # sizing heuristics
-#         per_bar = 0.16            # inches per bar (reduced from 0.30)
-#         n_rows = max(1, max(self.top_feats, self.top_params))
-#         extra = 1.0               # inches for title / margins
-#         max_height = 8.0          # cap height to avoid huge figures
-    
-#         # compute height and clamp
-#         height = min(max(4.0, n_rows * per_bar + extra), max_height)
-#         width = 14.0              # keep width roomy for long labels
-    
-#         # create figure and axes
-#         self.fig, (self.ax_feat, self.ax_param) = plt.subplots(1, 2, figsize=(width, height), dpi=dpi)
-    
-#         # minimal axes init
-#         self.ax_feat.cla(); self.ax_param.cla()
-#         self.ax_feat.set_xlabel("score"); self.ax_param.set_xlabel("g norm")
-#         self.ax_feat.set_yticks([]); self.ax_param.set_yticks([])
-#         self.fig.tight_layout()
-
-
-#     def update(self, feat_dict: dict, g_dict: dict, epoch: int):
-#         """Update bars using numeric dicts: feat_dict {name:score}, g_dict {name:g}."""
-#         # lazy init on first update
-#         if self.fig is None:
-#             self._init_fig()
-
-#         # record epoch
-#         self.eps.append(epoch)
-
-#         # series for current epoch
-#         s_feat = pd.Series(feat_dict).fillna(0.0)
-#         s_g = pd.Series(g_dict).fillna(0.0)
-
-#         # pick top columns by current epoch values
-#         feat_cols = s_feat.sort_values(ascending=False).index[:self.top_feats].tolist()
-#         g_cols = s_g.sort_values(ascending=False).index[:self.top_params].tolist()
-
-#         # draw FEAT_TOP (left)
-#         self.ax_feat.cla()
-#         if feat_cols:
-#             vals = s_feat[feat_cols].values
-#             y = np.arange(len(feat_cols))[::-1]
-#             self.ax_feat.barh(y, vals, color='C0')
-#             self.ax_feat.set_yticks(y); self.ax_feat.set_yticklabels(feat_cols)
-#         else:
-#             self.ax_feat.set_yticks([])
-#         self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})")
-
-#         # draw G norms (right)
-#         self.ax_param.cla()
-#         if g_cols:
-#             vals_p = s_g[g_cols].values
-#             y = np.arange(len(g_cols))[::-1]
-#             self.ax_param.barh(y, vals_p, color='C1')
-#             self.ax_param.set_yticks(y); self.ax_param.set_yticklabels(g_cols)
-#         else:
-#             self.ax_param.set_yticks([])
-#         self.ax_param.set_title(f"G (grad norm) (epoch {epoch})")
-
-#         self.fig.tight_layout()
-
-#         # display created once; update thereafter
-#         if self.disp_id is None:
-#             self.disp_id = display(self.fig, display_id=True)
-#         else:
-#             try:
-#                 self.disp_id.update(self.fig)
-#             except Exception:
-#                 # fallback for non-notebook backends
-#                 self.fig.canvas.draw()
-#                 self.fig.canvas.flush_events()
-
-
 class LiveFeatGuBars:
     """Live horizontal bars for FEAT_TOP (left) and G (right) with automatic sizing."""
     def __init__(self, top_feats=30, top_params=30, figsize=(14, 4), dpi=110, max_display=80):
@@ -387,7 +293,6 @@ class LiveFeatGuBars:
 
 #########################################################################################################
 
-
 def plot_trades(
     df,
     col_signal1: str,
@@ -476,9 +381,9 @@ def plot_trades(
             hovertemplate='Pred: %{y:.3f}<extra></extra>'
         ))
 
-    # 6) optional features
-    if features == None:
-        features = [c for c in df.columns if c not in {col_action, col_signal1, col_signal2, col_close}]
+    # 6) optional features (alphabetical by default)
+    if features is None:
+        features = sorted([c for c in df.columns if c not in {col_action, col_signal1, col_signal2, col_close}])
     for feat in features:
         if feat in df:
             fig.add_trace(go.Scatter(
@@ -531,6 +436,8 @@ def plot_trades(
     )
 
     fig.show()
+
+
 
 
 #########################################################################################################
