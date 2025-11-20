@@ -1439,11 +1439,20 @@ def log_epoch_feature_importance(model,
     else:
         feature_names = feature_names or []
 
-    # --- 2) get projection parameter once ---
+    # --- 2) get projection parameter once --- #####################################################
+    # named = dict(model.named_parameters())
+    # p = named.get("feature_proj.weight")
+    
+    # if p is None or len(feature_names) == 0:
+    #     return {"top_token": None, "items": None, "score": None, "w_norm": None, "g_norm": None, "layer_token": layer_token}
+
     named = dict(model.named_parameters())
-    p = named.get("feature_proj.weight")
+    # prefer per-raw-feature projection if present (columns align to original features)
+    p = named.get("input_proj.weight") if "input_proj.weight" in named else named.get("feature_proj.weight")
+    
     if p is None or len(feature_names) == 0:
-        return {"top_token": None, "items": None, "score": None, "w_norm": None, "g_norm": None, "layer_token": layer_token}
+        empty = np.zeros(0)
+        return {"top_token": "", "items": [], "score": empty, "w_norm": empty.copy(), "g_norm": empty.copy(), "layer_token": layer_token or ""}
 
     # --- 3) read weights and grads on CPU and align names ---
     W = p.detach().cpu().numpy()                 # (out_dim, in_dim)
@@ -1731,7 +1740,8 @@ def log_epoch_summary(
     # build numeric dicts (no string parsing)
     gdict = {s: float(g) for s, (g, u) in items}
     # feat_res['top_token'] format "name:score,name:score,..."
-    featdict = {k: float(v) for k, v in (p.split(':',1) for p in feat_res['top_token'].split(','))}
     
+    featdict = {k: float(v) for k, v in (p.split(':',1) for p in feat_res['top_token'].split(','))}
+
     _live_bars.update(featdict, gdict, epoch)
 

@@ -16,6 +16,7 @@ import glob
 
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.transforms import blended_transform_factory
 import plotly.graph_objects as go
 from IPython.display import display, update_display, HTML
 import seaborn as sns
@@ -144,11 +145,217 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
+# class LiveFeatGuBars:
+#     """
+#     LiveFeatGuBars
+
+#     Two side-by-side horizontal bar plots: feature importance (left) and grad norms (right).
+#     Labels are single-line and fixed at the left margin for narrow bars; for wide bars the
+#     label is drawn inside the bar. Exactly one label is drawn per bar (no duplicates).
+#     """
+
+#     def __init__(self, top_feats=30, top_params=30, figsize=(14, 10), dpi=110, max_display=80):
+#         self.top_feats = top_feats
+#         self.top_params = top_params
+#         self.dpi = dpi
+#         self.base_figsize = figsize
+#         self.max_display = max_display
+
+#         self.fig = None
+#         self.ax_feat = None
+#         self.ax_param = None
+#         self.disp_id = None
+#         self.eps = []
+
+#     def _ellipsize(self, s: str, max_chars: int) -> str:
+#         if len(s) <= max_chars:
+#             return s
+#         if max_chars <= 3:
+#             return s[:max_chars]
+#         return s[: max_chars - 3] + "..."
+
+#     def _init_fig(self, width: float, height: float, left: float, wspace: float = 0.44):
+#         self.fig, (self.ax_feat, self.ax_param) = plt.subplots(
+#             1, 2, figsize=(width, height), dpi=self.dpi, constrained_layout=False
+#         )
+#         self.fig.subplots_adjust(left=left, right=0.98, wspace=wspace)
+#         for ax in (self.ax_feat, self.ax_param):
+#             ax.cla()
+#             ax.set_yticks([])
+#             ax.grid(axis="x", linestyle=":", linewidth=0.6, alpha=0.45)
+#         self.ax_feat.set_xlabel("score")
+#         self.ax_param.set_xlabel("g norm")
+
+#     def update(self, feat_dict: dict, g_dict: dict, epoch: int):
+#         s_feat = pd.Series(feat_dict).fillna(0.0)
+#         s_g = pd.Series(g_dict).fillna(0.0)
+
+#         feat_cols = s_feat.sort_values(ascending=False).index[: self.top_feats].tolist()[: self.max_display]
+#         g_cols = s_g.sort_values(ascending=False).index[: self.top_params].tolist()[: self.max_display]
+
+#         labels = [str(x) for x in feat_cols + g_cols]
+#         max_label_len = int(max((len(l) for l in labels), default=0))
+
+#         # reserve left area based on longest label
+#         char_inch = 0.11
+#         label_area_inch = min(max_label_len * char_inch, 28.0)
+
+#         base_width = max(self.base_figsize[0], 10.0)
+#         width = min(base_width + label_area_inch, 80.0)
+
+#         n_rows = max(len(feat_cols), len(g_cols), 1)
+#         per_row = 0.36
+#         extra_h = 1.2
+#         height = min(max(5.0, n_rows * per_row + extra_h), 48.0)
+
+#         left_margin = max(0.18, min(0.50, label_area_inch / width))
+
+#         should_init = (
+#             self.fig is None
+#             or (abs(self.fig.get_size_inches()[0] - width) > 0.1)
+#             or (abs(self.fig.get_size_inches()[1] - height) > 0.1)
+#         )
+#         if should_init:
+#             self._init_fig(width=width, height=height, left=left_margin, wspace=0.44)
+
+#         self.eps.append(epoch)
+
+#         # available width for labels (in inches); convert to points for fontsize estimation
+#         avail_label_inch = left_margin * width * 0.88
+#         if max_label_len <= 0:
+#             fontsize = 11
+#         else:
+#             max_font_by_width = int((avail_label_inch * 72) / (max_label_len * 0.6))
+#             fontsize = max(9, min(16, max_font_by_width))
+
+#         def bar_height(rows):
+#             if rows <= 8:
+#                 return 1.0
+#             if rows <= 20:
+#                 return 0.78
+#             if rows <= 40:
+#                 return 0.62
+#             return 0.50
+
+#         bh_feat = bar_height(len(feat_cols))
+#         bh_param = bar_height(len(g_cols))
+
+#         left_color = "#66C2FF"   # light blue
+#         right_color = "#FF8C42"  # orange
+#         edge_color = "#FFFFFF"
+#         edge_lw = 0.6
+
+#         # compute max chars that fit with chosen fontsize
+#         max_chars_fit = int((avail_label_inch * 72) / (fontsize * 0.6)) if fontsize > 0 else max_label_len
+#         max_chars_fit = max(6, max_chars_fit)
+
+#         feat_labels = [self._ellipsize(str(l), max_chars_fit) for l in feat_cols]
+#         param_labels = [self._ellipsize(str(l), max_chars_fit) for l in g_cols]
+
+#         # transforms for left-fixed labels (axes fraction x, data y)
+#         trans_feat = blended_transform_factory(self.ax_feat.transAxes, self.ax_feat.transData)
+#         trans_param = blended_transform_factory(self.ax_param.transAxes, self.ax_param.transData)
+#         left_x = 0.005
+
+#         # LEFT panel
+#         self.ax_feat.cla()
+#         if feat_cols:
+#             vals = s_feat[feat_cols].values
+#             y = np.arange(len(feat_cols))[::-1]
+#             bars = self.ax_feat.barh(
+#                 y, vals, color=left_color, align="center",
+#                 height=bh_feat, edgecolor=edge_color, linewidth=edge_lw, zorder=2
+#             )
+#             self.ax_feat.set_yticks(y)
+#             vmax = max(vals.max(), 1e-6)
+
+#             # compute mask: True if bar is wide enough to host an in-bar label
+#             widths = np.array([rect.get_width() for rect in bars])
+#             wide_enough = widths >= (0.14 * vmax)
+
+#             # draw exactly one label per bar:
+#             # - if wide_enough[i]: draw in-bar label
+#             # - else: draw left-fixed label
+#             for idx, (lbl, yv) in enumerate(zip(feat_labels, y)):
+#                 if wide_enough[idx]:
+#                     # in-bar label
+#                     x_text = widths[idx] * 0.02
+#                     self.ax_feat.text(
+#                         x_text, yv,
+#                         lbl, va="center", ha="left",
+#                         fontsize=fontsize, color="black", zorder=3, clip_on=True
+#                     )
+#                 else:
+#                     # left-fixed label (axes-fraction x, data y)
+#                     self.ax_feat.text(
+#                         left_x, yv, lbl,
+#                         transform=trans_feat, va="center", ha="left",
+#                         fontsize=fontsize, color="black", zorder=4, clip_on=False
+#                     )
+#             self.ax_feat.set_xlim(left=0)
+#         else:
+#             self.ax_feat.set_yticks([])
+
+#         self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})", fontsize=max(10, fontsize + 1))
+
+#         # RIGHT panel
+#         self.ax_param.cla()
+#         if g_cols:
+#             vals_p = s_g[g_cols].values
+#             y = np.arange(len(g_cols))[::-1]
+#             bars_p = self.ax_param.barh(
+#                 y, vals_p, color=right_color, align="center",
+#                 height=bh_param, edgecolor=edge_color, linewidth=edge_lw, zorder=2
+#             )
+#             self.ax_param.set_yticks(y)
+#             vmax_p = max(vals_p.max(), 1e-6)
+
+#             widths_p = np.array([rect.get_width() for rect in bars_p])
+#             wide_enough_p = widths_p >= (0.14 * vmax_p)
+
+#             for idx, (lbl, yv) in enumerate(zip(param_labels, y)):
+#                 if wide_enough_p[idx]:
+#                     x_text = widths_p[idx] * 0.02
+#                     self.ax_param.text(
+#                         x_text, yv,
+#                         lbl, va="center", ha="left",
+#                         fontsize=fontsize, color="black", zorder=3, clip_on=True
+#                     )
+#                 else:
+#                     self.ax_param.text(
+#                         left_x, yv, lbl,
+#                         transform=trans_param, va="center", ha="left",
+#                         fontsize=fontsize, color="black", zorder=4, clip_on=False
+#                     )
+#             self.ax_param.set_xlim(left=0)
+#         else:
+#             self.ax_param.set_yticks([])
+
+#         self.ax_param.set_title(f"G (grad norm) (epoch {epoch})", fontsize=max(10, fontsize + 1))
+
+#         # draw/update
+#         self.fig.canvas.draw_idle()
+#         if self.disp_id is None:
+#             self.disp_id = display(self.fig, display_id=True)
+#         else:
+#             self.disp_id.update(self.fig)
+
+
+
 class LiveFeatGuBars:
-    """Live horizontal bars for FEAT_TOP (left) and G (right) with automatic sizing."""
-    def __init__(self, top_feats=30, top_params=30, figsize=(14, 4), dpi=110, max_display=80):
-        # top_feats/top_params are nominal maximums used when selecting columns;
-        # max_display limits the number of bars actually drawn per side to keep output readable.
+    """
+    LiveFeatGuBars
+
+    Two side-by-side horizontal bar plots: feature importance (left) and grad norms (right).
+    - Feature/layer names and optional in-bar labels unchanged.
+    - Rank numbers 1..N with the bar value in parentheses (2 decimals) are printed outside
+      each subplot on the left margin (axes fraction x = -0.02), right-aligned so they do
+      not overlap the bars.
+    - Removes internal y-axis numeric ticks so only the outside rank/value text is visible.
+    - Usage: instantiate and call update(feat_dict, g_dict, epoch).
+    """
+
+    def __init__(self, top_feats=30, top_params=30, figsize=(14, 10), dpi=110, max_display=80):
         self.top_feats = top_feats
         self.top_params = top_params
         self.dpi = dpi
@@ -158,137 +365,220 @@ class LiveFeatGuBars:
         self.fig = None
         self.ax_feat = None
         self.ax_param = None
-        self.eps = []
         self.disp_id = None
+        self.eps = []
 
-    def _wrap_label(self, label, width=20):
-        # simple word-wrap for long labels
-        if len(label) <= width:
-            return label
-        parts = []
-        for i in range(0, len(label), width):
-            parts.append(label[i:i+width])
-        return "\n".join(parts)
+    def _ellipsize(self, s: str, max_chars: int) -> str:
+        if len(s) <= max_chars:
+            return s
+        if max_chars <= 3:
+            return s[:max_chars]
+        return s[: max_chars - 3] + "..."
 
-    def _init_fig(self, n_feat_rows, n_param_rows, avg_label_len):
-        # heuristics: per-bar height (inches), extra margins, and width scaling by label length
-        per_bar = 0.18  # inches per bar; balanced for density
-        extra = 1.2     # inches for titles/margins
-        max_height = 20.0
-        height = min(max(3.5, max(n_feat_rows, n_param_rows) * per_bar + extra), max_height)
-
-        # width base + extra if labels are long; clamp width to avoid huge images
-        base_width = max(self.base_figsize[0], 10.0)
-        width = min(base_width + max(0.0, (avg_label_len - 10) * 0.12), 36.0)
-
-        # create figure with constrained layout for better spacing
-        self.fig, (self.ax_feat, self.ax_param) = plt.subplots(1, 2, figsize=(width, height), dpi=self.dpi, constrained_layout=True)
-
-        # shared minimal init
+    def _init_fig(self, width: float, height: float, left: float, wspace: float = 0.44):
+        self.fig, (self.ax_feat, self.ax_param) = plt.subplots(
+            1, 2, figsize=(width, height), dpi=self.dpi, constrained_layout=False
+        )
+        self.fig.subplots_adjust(left=left, right=0.98, wspace=wspace)
         for ax in (self.ax_feat, self.ax_param):
             ax.cla()
+            # ensure no internal numeric y-ticks or labels
             ax.set_yticks([])
-            ax.grid(axis="x", linestyle=":", linewidth=0.6, alpha=0.6)
+            ax.set_yticklabels([])
+            ax.tick_params(axis='y', which='both', left=False, labelleft=False)
+            ax.grid(axis="x", linestyle=":", linewidth=0.6, alpha=0.45)
         self.ax_feat.set_xlabel("score")
         self.ax_param.set_xlabel("g norm")
 
     def update(self, feat_dict: dict, g_dict: dict, epoch: int):
-        """Update bars using numeric dicts: feat_dict {name:score}, g_dict {name:g}."""
-        # pick top columns by current epoch values (cap selection to avoid huge sorts)
         s_feat = pd.Series(feat_dict).fillna(0.0)
         s_g = pd.Series(g_dict).fillna(0.0)
 
-        # choose top nominal candidates then clamp to max_display for plotting
-        feat_cols = s_feat.sort_values(ascending=False).index[:self.top_feats].tolist()
-        g_cols = s_g.sort_values(ascending=False).index[:self.top_params].tolist()
+        feat_cols = s_feat.sort_values(ascending=False).index[: self.top_feats].tolist()[: self.max_display]
+        g_cols = s_g.sort_values(ascending=False).index[: self.top_params].tolist()[: self.max_display]
 
-        # clamp to a maximum displayable count to preserve readability
-        feat_cols = feat_cols[:self.max_display]
-        g_cols = g_cols[:self.max_display]
+        labels = [str(x) for x in feat_cols + g_cols]
+        max_label_len = int(max((len(l) for l in labels), default=0))
 
-        # measure label lengths to size figure
-        all_labels = [str(x) for x in feat_cols + g_cols]
-        avg_label_len = int(np.mean([len(l) for l in all_labels]) if all_labels else 0)
-        n_feat_rows = max(1, len(feat_cols))
-        n_param_rows = max(1, len(g_cols))
+        # reserve left area based on longest label
+        char_inch = 0.11
+        label_area_inch = min(max_label_len * char_inch, 28.0)
 
-        # lazy init or re-create figure if size needs to change significantly
-        if self.fig is None:
-            self._init_fig(n_feat_rows, n_param_rows, avg_label_len)
+        base_width = max(self.base_figsize[0], 10.0)
+        width = min(base_width + label_area_inch, 80.0)
 
-        # record epoch
+        n_rows = max(len(feat_cols), len(g_cols), 1)
+        per_row = 0.36
+        extra_h = 1.2
+        height = min(max(5.0, n_rows * per_row + extra_h), 48.0)
+
+        left_margin = max(0.18, min(0.50, label_area_inch / width))
+
+        should_init = (
+            self.fig is None
+            or (abs(self.fig.get_size_inches()[0] - width) > 0.1)
+            or (abs(self.fig.get_size_inches()[1] - height) > 0.1)
+        )
+        if should_init:
+            self._init_fig(width=width, height=height, left=left_margin, wspace=0.44)
+
         self.eps.append(epoch)
 
-        # prepare label wrapping and font sizing
-        wrap_width = 22 if avg_label_len > 20 else 30
-        feat_labels_wrapped = [self._wrap_label(str(l), width=wrap_width) for l in feat_cols]
-        param_labels_wrapped = [self._wrap_label(str(l), width=wrap_width) for l in g_cols]
+        # fontsize estimation
+        avail_label_inch = left_margin * width * 0.88
+        if max_label_len <= 0:
+            fontsize = 11
+        else:
+            max_font_by_width = int((avail_label_inch * 72) / (max_label_len * 0.6))
+            fontsize = max(9, min(16, max_font_by_width))
 
-        # dynamic font sizing: shrink when many rows
-        def font_for_rows(n_rows):
-            if n_rows <= 10:
-                return 10
-            elif n_rows <= 30:
-                return 9
-            elif n_rows <= 60:
-                return 8
-            else:
-                return 7
+        def bar_height(rows):
+            if rows <= 8:
+                return 1.0
+            if rows <= 20:
+                return 0.78
+            if rows <= 40:
+                return 0.62
+            return 0.50
 
-        feat_fontsize = font_for_rows(len(feat_cols))
-        param_fontsize = font_for_rows(len(g_cols))
+        bh_feat = bar_height(len(feat_cols))
+        bh_param = bar_height(len(g_cols))
 
-        # redraw FEAT_TOP (left)
+        left_color = "#66C2FF"   # light blue
+        right_color = "#FF8C42"  # orange
+        edge_color = "#FFFFFF"
+        edge_lw = 0.6
+
+        max_chars_fit = int((avail_label_inch * 72) / (fontsize * 0.6)) if fontsize > 0 else max_label_len
+        max_chars_fit = max(6, max_chars_fit)
+
+        feat_labels = [self._ellipsize(str(l), max_chars_fit) for l in feat_cols]
+        param_labels = [self._ellipsize(str(l), max_chars_fit) for l in g_cols]
+
+        # transforms: we'll place left-side rank/value using Axes fraction coordinates
+        # with x_out < 0 so text is outside left; use ha='right' to align against axis edge
+        left_x_out = -0.02  # axes fraction (negative -> outside left)
+        rank_font = max(9, fontsize - 1)
+
+        # LEFT panel
         self.ax_feat.cla()
+        # ensure no internal numeric y-ticks or labels (re-assert after cla)
+        self.ax_feat.set_yticks([])
+        self.ax_feat.set_yticklabels([])
+        self.ax_feat.tick_params(axis='y', which='both', left=False, labelleft=False)
+
         if feat_cols:
             vals = s_feat[feat_cols].values
             y = np.arange(len(feat_cols))[::-1]
-            self.ax_feat.barh(y, vals, color='C0', align='center', height=0.7)
-            self.ax_feat.set_yticks(y)
-            self.ax_feat.set_yticklabels(feat_labels_wrapped, fontsize=feat_fontsize)
-            self.ax_feat.set_xlim(left=0)  # for nicer baseline
+            bars = self.ax_feat.barh(
+                y, vals, color=left_color, align="center",
+                height=bh_feat, edgecolor=edge_color, linewidth=edge_lw, zorder=2
+            )
+            # no numeric ticks
+            self.ax_feat.set_yticks([])
+            self.ax_feat.set_yticklabels([])
+            self.ax_feat.tick_params(axis='y', which='both', left=False, labelleft=False)
+
+            vmax = max(vals.max(), 1e-6)
+            widths = np.array([rect.get_width() for rect in bars])
+            wide_enough = widths >= (0.14 * vmax)
+
+            # --- draw rank+value outside the axis on the left ---
+            trans_out_feat = blended_transform_factory(self.ax_feat.transAxes, self.ax_feat.transData)
+            for idx_zero, val in enumerate(vals):
+                idx = idx_zero + 1  # rank ascending: 1 = top
+                yv = y[idx_zero]
+                txt = f"{idx} ({val:.2e})"
+                self.ax_feat.text(
+                    left_x_out, yv, txt,
+                    transform=trans_out_feat, va="center", ha="right",
+                    fontsize=rank_font, color="gray", zorder=6, clip_on=False
+                )
+
+            # draw labels as before (in-bar or left-fixed just inside the axes)
+            for idx, (lbl, yv) in enumerate(zip(feat_labels, y)):
+                if wide_enough[idx]:
+                    x_text = widths[idx] * 0.02
+                    self.ax_feat.text(
+                        x_text, yv, lbl, va="center", ha="left",
+                        fontsize=fontsize, color="black", zorder=3, clip_on=True
+                    )
+                else:
+                    # left-fixed label inside axis area a bit to the right of the axis left edge
+                    # use axes-fraction->data transform so it's always aligned
+                    trans_inside = blended_transform_factory(self.ax_feat.transAxes, self.ax_feat.transData)
+                    self.ax_feat.text(
+                        0.01, yv, lbl,
+                        transform=trans_inside, va="center", ha="left",
+                        fontsize=fontsize, color="black", zorder=4, clip_on=False
+                    )
+            self.ax_feat.set_xlim(left=0)
         else:
             self.ax_feat.set_yticks([])
 
-        self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})", fontsize=10)
+        self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})", fontsize=max(10, fontsize + 1))
 
-        # redraw G norms (right)
+        # RIGHT panel
         self.ax_param.cla()
+        # re-assert no numeric y-ticks or labels
+        self.ax_param.set_yticks([])
+        self.ax_param.set_yticklabels([])
+        self.ax_param.tick_params(axis='y', which='both', left=False, labelleft=False)
+
         if g_cols:
             vals_p = s_g[g_cols].values
             y = np.arange(len(g_cols))[::-1]
-            self.ax_param.barh(y, vals_p, color='C1', align='center', height=0.7)
-            self.ax_param.set_yticks(y)
-            self.ax_param.set_yticklabels(param_labels_wrapped, fontsize=param_fontsize)
+            bars_p = self.ax_param.barh(
+                y, vals_p, color=right_color, align="center",
+                height=bh_param, edgecolor=edge_color, linewidth=edge_lw, zorder=2
+            )
+            # ensure no internal numeric ticks
+            self.ax_param.set_yticks([])
+            self.ax_param.set_yticklabels([])
+            self.ax_param.tick_params(axis='y', which='both', left=False, labelleft=False)
+
+            vmax_p = max(vals_p.max(), 1e-6)
+            widths_p = np.array([rect.get_width() for rect in bars_p])
+            wide_enough_p = widths_p >= (0.14 * vmax_p)
+
+            trans_out_param = blended_transform_factory(self.ax_param.transAxes, self.ax_param.transData)
+            for idx_zero, val in enumerate(vals_p):
+                idx = idx_zero + 1
+                yv = y[idx_zero]
+                txt = f"{idx} ({val:.2e})"
+                self.ax_param.text(
+                    left_x_out, yv, txt,
+                    transform=trans_out_param, va="center", ha="right",
+                    fontsize=rank_font, color="gray", zorder=6, clip_on=False
+                )
+
+            for idx, (lbl, yv) in enumerate(zip(param_labels, y)):
+                if wide_enough_p[idx]:
+                    x_text = widths_p[idx] * 0.02
+                    self.ax_param.text(
+                        x_text, yv, lbl, va="center", ha="left",
+                        fontsize=fontsize, color="black", zorder=3, clip_on=True
+                    )
+                else:
+                    trans_inside = blended_transform_factory(self.ax_param.transAxes, self.ax_param.transData)
+                    self.ax_param.text(
+                        0.01, yv, lbl,
+                        transform=trans_inside, va="center", ha="left",
+                        fontsize=fontsize, color="black", zorder=4, clip_on=False
+                    )
             self.ax_param.set_xlim(left=0)
         else:
             self.ax_param.set_yticks([])
 
-        self.ax_param.set_title(f"G (grad norm) (epoch {epoch})", fontsize=10)
+        self.ax_param.set_title(f"G (grad norm) (epoch {epoch})", fontsize=max(10, fontsize + 1))
 
-        # tidy layout and draw
-        try:
-            self.fig.canvas.draw_idle()
-        except Exception:
-            try:
-                self.fig.canvas.draw()
-                self.fig.canvas.flush_events()
-            except Exception:
-                pass
-
-        # display created once; update thereafter
+        # draw/update
+        self.fig.canvas.draw_idle()
         if self.disp_id is None:
             self.disp_id = display(self.fig, display_id=True)
         else:
-            try:
-                self.disp_id.update(self.fig)
-            except Exception:
-                # fallback for non-notebook backends
-                try:
-                    self.fig.canvas.draw()
-                    self.fig.canvas.flush_events()
-                except Exception:
-                    pass
+            self.disp_id.update(self.fig)
+
 
 
 #########################################################################################################
