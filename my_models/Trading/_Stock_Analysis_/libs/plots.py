@@ -145,203 +145,6 @@ class LiveRMSEPlot:
 #########################################################################################################
 
 
-# class LiveFeatGuBars:
-#     """
-#     LiveFeatGuBars
-
-#     Two side-by-side horizontal bar plots: feature importance (left) and grad norms (right).
-#     Labels are single-line and fixed at the left margin for narrow bars; for wide bars the
-#     label is drawn inside the bar. Exactly one label is drawn per bar (no duplicates).
-#     """
-
-#     def __init__(self, top_feats=30, top_params=30, figsize=(14, 10), dpi=110, max_display=80):
-#         self.top_feats = top_feats
-#         self.top_params = top_params
-#         self.dpi = dpi
-#         self.base_figsize = figsize
-#         self.max_display = max_display
-
-#         self.fig = None
-#         self.ax_feat = None
-#         self.ax_param = None
-#         self.disp_id = None
-#         self.eps = []
-
-#     def _ellipsize(self, s: str, max_chars: int) -> str:
-#         if len(s) <= max_chars:
-#             return s
-#         if max_chars <= 3:
-#             return s[:max_chars]
-#         return s[: max_chars - 3] + "..."
-
-#     def _init_fig(self, width: float, height: float, left: float, wspace: float = 0.44):
-#         self.fig, (self.ax_feat, self.ax_param) = plt.subplots(
-#             1, 2, figsize=(width, height), dpi=self.dpi, constrained_layout=False
-#         )
-#         self.fig.subplots_adjust(left=left, right=0.98, wspace=wspace)
-#         for ax in (self.ax_feat, self.ax_param):
-#             ax.cla()
-#             ax.set_yticks([])
-#             ax.grid(axis="x", linestyle=":", linewidth=0.6, alpha=0.45)
-#         self.ax_feat.set_xlabel("score")
-#         self.ax_param.set_xlabel("g norm")
-
-#     def update(self, feat_dict: dict, g_dict: dict, epoch: int):
-#         s_feat = pd.Series(feat_dict).fillna(0.0)
-#         s_g = pd.Series(g_dict).fillna(0.0)
-
-#         feat_cols = s_feat.sort_values(ascending=False).index[: self.top_feats].tolist()[: self.max_display]
-#         g_cols = s_g.sort_values(ascending=False).index[: self.top_params].tolist()[: self.max_display]
-
-#         labels = [str(x) for x in feat_cols + g_cols]
-#         max_label_len = int(max((len(l) for l in labels), default=0))
-
-#         # reserve left area based on longest label
-#         char_inch = 0.11
-#         label_area_inch = min(max_label_len * char_inch, 28.0)
-
-#         base_width = max(self.base_figsize[0], 10.0)
-#         width = min(base_width + label_area_inch, 80.0)
-
-#         n_rows = max(len(feat_cols), len(g_cols), 1)
-#         per_row = 0.36
-#         extra_h = 1.2
-#         height = min(max(5.0, n_rows * per_row + extra_h), 48.0)
-
-#         left_margin = max(0.18, min(0.50, label_area_inch / width))
-
-#         should_init = (
-#             self.fig is None
-#             or (abs(self.fig.get_size_inches()[0] - width) > 0.1)
-#             or (abs(self.fig.get_size_inches()[1] - height) > 0.1)
-#         )
-#         if should_init:
-#             self._init_fig(width=width, height=height, left=left_margin, wspace=0.44)
-
-#         self.eps.append(epoch)
-
-#         # available width for labels (in inches); convert to points for fontsize estimation
-#         avail_label_inch = left_margin * width * 0.88
-#         if max_label_len <= 0:
-#             fontsize = 11
-#         else:
-#             max_font_by_width = int((avail_label_inch * 72) / (max_label_len * 0.6))
-#             fontsize = max(9, min(16, max_font_by_width))
-
-#         def bar_height(rows):
-#             if rows <= 8:
-#                 return 1.0
-#             if rows <= 20:
-#                 return 0.78
-#             if rows <= 40:
-#                 return 0.62
-#             return 0.50
-
-#         bh_feat = bar_height(len(feat_cols))
-#         bh_param = bar_height(len(g_cols))
-
-#         left_color = "#66C2FF"   # light blue
-#         right_color = "#FF8C42"  # orange
-#         edge_color = "#FFFFFF"
-#         edge_lw = 0.6
-
-#         # compute max chars that fit with chosen fontsize
-#         max_chars_fit = int((avail_label_inch * 72) / (fontsize * 0.6)) if fontsize > 0 else max_label_len
-#         max_chars_fit = max(6, max_chars_fit)
-
-#         feat_labels = [self._ellipsize(str(l), max_chars_fit) for l in feat_cols]
-#         param_labels = [self._ellipsize(str(l), max_chars_fit) for l in g_cols]
-
-#         # transforms for left-fixed labels (axes fraction x, data y)
-#         trans_feat = blended_transform_factory(self.ax_feat.transAxes, self.ax_feat.transData)
-#         trans_param = blended_transform_factory(self.ax_param.transAxes, self.ax_param.transData)
-#         left_x = 0.005
-
-#         # LEFT panel
-#         self.ax_feat.cla()
-#         if feat_cols:
-#             vals = s_feat[feat_cols].values
-#             y = np.arange(len(feat_cols))[::-1]
-#             bars = self.ax_feat.barh(
-#                 y, vals, color=left_color, align="center",
-#                 height=bh_feat, edgecolor=edge_color, linewidth=edge_lw, zorder=2
-#             )
-#             self.ax_feat.set_yticks(y)
-#             vmax = max(vals.max(), 1e-6)
-
-#             # compute mask: True if bar is wide enough to host an in-bar label
-#             widths = np.array([rect.get_width() for rect in bars])
-#             wide_enough = widths >= (0.14 * vmax)
-
-#             # draw exactly one label per bar:
-#             # - if wide_enough[i]: draw in-bar label
-#             # - else: draw left-fixed label
-#             for idx, (lbl, yv) in enumerate(zip(feat_labels, y)):
-#                 if wide_enough[idx]:
-#                     # in-bar label
-#                     x_text = widths[idx] * 0.02
-#                     self.ax_feat.text(
-#                         x_text, yv,
-#                         lbl, va="center", ha="left",
-#                         fontsize=fontsize, color="black", zorder=3, clip_on=True
-#                     )
-#                 else:
-#                     # left-fixed label (axes-fraction x, data y)
-#                     self.ax_feat.text(
-#                         left_x, yv, lbl,
-#                         transform=trans_feat, va="center", ha="left",
-#                         fontsize=fontsize, color="black", zorder=4, clip_on=False
-#                     )
-#             self.ax_feat.set_xlim(left=0)
-#         else:
-#             self.ax_feat.set_yticks([])
-
-#         self.ax_feat.set_title(f"FEAT_TOP (epoch {epoch})", fontsize=max(10, fontsize + 1))
-
-#         # RIGHT panel
-#         self.ax_param.cla()
-#         if g_cols:
-#             vals_p = s_g[g_cols].values
-#             y = np.arange(len(g_cols))[::-1]
-#             bars_p = self.ax_param.barh(
-#                 y, vals_p, color=right_color, align="center",
-#                 height=bh_param, edgecolor=edge_color, linewidth=edge_lw, zorder=2
-#             )
-#             self.ax_param.set_yticks(y)
-#             vmax_p = max(vals_p.max(), 1e-6)
-
-#             widths_p = np.array([rect.get_width() for rect in bars_p])
-#             wide_enough_p = widths_p >= (0.14 * vmax_p)
-
-#             for idx, (lbl, yv) in enumerate(zip(param_labels, y)):
-#                 if wide_enough_p[idx]:
-#                     x_text = widths_p[idx] * 0.02
-#                     self.ax_param.text(
-#                         x_text, yv,
-#                         lbl, va="center", ha="left",
-#                         fontsize=fontsize, color="black", zorder=3, clip_on=True
-#                     )
-#                 else:
-#                     self.ax_param.text(
-#                         left_x, yv, lbl,
-#                         transform=trans_param, va="center", ha="left",
-#                         fontsize=fontsize, color="black", zorder=4, clip_on=False
-#                     )
-#             self.ax_param.set_xlim(left=0)
-#         else:
-#             self.ax_param.set_yticks([])
-
-#         self.ax_param.set_title(f"G (grad norm) (epoch {epoch})", fontsize=max(10, fontsize + 1))
-
-#         # draw/update
-#         self.fig.canvas.draw_idle()
-#         if self.disp_id is None:
-#             self.disp_id = display(self.fig, display_id=True)
-#         else:
-#             self.disp_id.update(self.fig)
-
-
-
 class LiveFeatGuBars:
     """
     LiveFeatGuBars
@@ -583,6 +386,151 @@ class LiveFeatGuBars:
 
 #########################################################################################################
 
+# def plot_trades(
+#     df,
+#     col_signal1: str,
+#     *,
+#     col_close: str='close',
+#     start_plot: 'datetime.time'=None,
+#     features: list[str]=None,
+#     col_signal2: str=None,
+#     col_action: str=None,
+#     trades: list[tuple]=None,
+#     buy_threshold: float=None,
+#     performance_stats: dict=None
+# ):
+#     """
+#     Plots:
+#       - price (col_close)
+#       - target signal (col_signal1)
+#       - optional pred. signal (col_signal2)
+#       - optional extra feature lines
+#       - optional buy/sell intervals from (trades,col_action)
+#       - optional threshold line
+#       - unified hover, cleaned legend, tall figure
+    
+#     All of col_signal2, col_action, trades, buy_threshold and performance_stats
+#     are optional. Pass only what you need.
+#     """
+#     # 1) filter by time if requested
+#     if start_plot is not None:
+#         df = df.loc[df.index.time >= start_plot]
+
+#     fig = go.Figure()
+
+#     # 2) draw trade‐interval bands if col_action + trades given
+#     intervals = []
+#     if col_action and trades is None:
+#         # infer intervals from col_action
+#         events, last_buy = df[col_action], None
+#         for ts, act in events.items():
+#             if act == 1:
+#                 last_buy = ts
+#             elif act == -1 and last_buy is not None:
+#                 intervals.append((last_buy, ts))
+#                 last_buy = None
+#     elif trades:
+#         # assume trades is list of ((b_dt,s_dt),...,ret_pc)
+#         intervals = [(b, s) for ((b,s),_,_) in trades]
+
+#     if intervals:
+#         # full‐height axis for shading
+#         fig.update_layout(yaxis3=dict(domain=[0,1], anchor='x', overlaying='y', visible=False))
+#         for i,(b0,b1) in enumerate(intervals):
+#             fig.add_trace(go.Scatter(
+#                 x=[b0,b1,b1,b0,b0],
+#                 y=[0,0,1,1,0],
+#                 mode='none',
+#                 fill='toself',
+#                 fillcolor='rgba(255,165,0,0.25)',
+#                 legendgroup='Trades',
+#                 name='Trades' if i==0 else None,
+#                 showlegend=(i==0),
+#                 yaxis='y3',
+#                 hoverinfo='skip'
+#             ))
+
+#     # 3) price line
+#     fig.add_trace(go.Scatter(
+#         x=df.index, y=df[col_close],
+#         mode='lines', line=dict(color='grey',width=1),
+#         name='Close', hovertemplate='Price: %{y:.3f}<extra></extra>'
+#     ))
+
+#     # 4) target signal
+#     fig.add_trace(go.Scatter(
+#         x=df.index, y=df[col_signal1],
+#         mode='lines', line=dict(color='blue',dash='dot',width=2),
+#         name='Target Signal', yaxis='y2',
+#         hovertemplate='Signal: %{y:.3f}<extra></extra>'
+#     ))
+
+#     # 5) optional pred. signal
+#     if col_signal2 and col_signal2 in df:
+#         fig.add_trace(go.Scatter(
+#             x=df.index, y=df[col_signal2],
+#             mode='lines', line=dict(color='crimson',dash='dot',width=2),
+#             name='Pred Signal', yaxis='y2',
+#             hovertemplate='Pred: %{y:.3f}<extra></extra>'
+#         ))
+
+#     # 6) optional features (alphabetical by default)
+#     if features is None:
+#         features = sorted([c for c in df.columns if c not in {col_action, col_signal1, col_signal2, col_close}])
+#     for feat in features:
+#         if feat in df:
+#             fig.add_trace(go.Scatter(
+#                 x=df.index, y=df[feat],
+#                 mode='lines', line=dict(width=1),
+#                 name=feat, yaxis='y2', visible='legendonly',
+#                 hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
+#             ))
+
+#     # 7) overlay individual trade legs (green) if trades list given
+#     if trades:
+#         for i,((b_dt,s_dt),_,ret_pc) in enumerate(trades, start=1):
+#             seg = df.loc[b_dt:s_dt, col_close]
+#             abs_gain = None
+#             if performance_stats and 'Trades Returns ($)' in performance_stats:
+#                 abs_gain = performance_stats['Trades Returns ($)'][i-1]
+#             hover = (
+#                 f"Return$:{abs_gain:.3f}<br>Return%:{ret_pc:.3f}%<extra></extra>"
+#                 if abs_gain is not None
+#                 else f"Return%:{ret_pc:.3f}%<extra></extra>"
+#             )
+#             fig.add_trace(go.Scatter(
+#                 x=seg.index, y=seg.values,
+#                 mode='lines+markers',
+#                 line=dict(color='green',width=1),
+#                 marker=dict(size=3,color='green'),
+#                 legendgroup='Trades', showlegend=False,
+#                 hovertemplate=hover
+#             ))
+
+#     # 8) optional threshold
+#     if buy_threshold is not None:
+#         fig.add_trace(go.Scatter(
+#             x=[df.index[0], df.index[-1]],
+#             y=[buy_threshold, buy_threshold],
+#             mode='lines', line=dict(color='purple',dash='dot',width=1),
+#             name='Threshold', yaxis='y2',
+#             hovertemplate=f"Thresh: {buy_threshold:.3f}<extra></extra>"
+#         ))
+
+#     # 9) layout tweaks
+#     fig.update_layout(
+#         hovermode='x unified',
+#         template='plotly_white',
+#         height=800,
+#         xaxis_title='Time',
+#         yaxis_title='Price',
+#         yaxis2=dict(overlaying='y',side='right',title='Signal',showgrid=False),
+#         legend=dict(font=dict(size=12),tracegroupgap=4)
+#     )
+
+#     fig.show()
+
+
 def plot_trades(
     df,
     col_signal1: str,
@@ -594,31 +542,27 @@ def plot_trades(
     col_action: str=None,
     trades: list[tuple]=None,
     buy_threshold: float=None,
-    performance_stats: dict=None
+    performance_stats: dict=None,
+    col_bid: str = None,
+    col_ask: str = None,
+    col_trailstop: str = None
 ):
     """
-    Plots:
-      - price (col_close)
-      - target signal (col_signal1)
-      - optional pred. signal (col_signal2)
-      - optional extra feature lines
-      - optional buy/sell intervals from (trades,col_action)
-      - optional threshold line
-      - unified hover, cleaned legend, tall figure
-    
-    All of col_signal2, col_action, trades, buy_threshold and performance_stats
-    are optional. Pass only what you need.
+    Interactive Plotly view of intraday trades and signals.
+
+    Shows price, primary signal, optional predicted signal and features,
+    highlights trade intervals, optionally draws threshold, and displays
+    bid/ask/trailstop in the unified hover.
     """
-    # 1) filter by time if requested
+    # filter by start time
     if start_plot is not None:
         df = df.loc[df.index.time >= start_plot]
 
     fig = go.Figure()
 
-    # 2) draw trade‐interval bands if col_action + trades given
+    # derive trade intervals either from trades list or from col_action series
     intervals = []
     if col_action and trades is None:
-        # infer intervals from col_action
         events, last_buy = df[col_action], None
         for ts, act in events.items():
             if act == 1:
@@ -627,11 +571,10 @@ def plot_trades(
                 intervals.append((last_buy, ts))
                 last_buy = None
     elif trades:
-        # assume trades is list of ((b_dt,s_dt),...,ret_pc)
         intervals = [(b, s) for ((b,s),_,_) in trades]
 
+    # shaded bands for trade intervals
     if intervals:
-        # full‐height axis for shading
         fig.update_layout(yaxis3=dict(domain=[0,1], anchor='x', overlaying='y', visible=False))
         for i,(b0,b1) in enumerate(intervals):
             fig.add_trace(go.Scatter(
@@ -647,31 +590,39 @@ def plot_trades(
                 hoverinfo='skip'
             ))
 
-    # 3) price line
+    # prepare customdata for unified hover: (bid,ask,trailstop)
+    n = len(df)
+    def _col_vals(name):
+        return df[name].to_numpy() if (name and name in df) else [float('nan')]*n
+    customdata = list(zip(_col_vals(col_bid), _col_vals(col_ask), _col_vals(col_trailstop)))
+
+    # price line with hover showing bid/ask/trailstop
     fig.add_trace(go.Scatter(
         x=df.index, y=df[col_close],
-        mode='lines', line=dict(color='grey',width=1),
-        name='Close', hovertemplate='Price: %{y:.3f}<extra></extra>'
+        mode='lines', line=dict(color='grey', width=1),
+        name='Close',
+        customdata=customdata,
+        hovertemplate='Price: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<extra></extra>'
     ))
 
-    # 4) target signal
+    # primary signal on secondary axis
     fig.add_trace(go.Scatter(
         x=df.index, y=df[col_signal1],
-        mode='lines', line=dict(color='blue',dash='dot',width=2),
+        mode='lines', line=dict(color='blue', dash='dot', width=2),
         name='Target Signal', yaxis='y2',
         hovertemplate='Signal: %{y:.3f}<extra></extra>'
     ))
 
-    # 5) optional pred. signal
+    # optional predicted signal
     if col_signal2 and col_signal2 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal2],
-            mode='lines', line=dict(color='crimson',dash='dot',width=2),
+            mode='lines', line=dict(color='crimson', dash='dot', width=2),
             name='Pred Signal', yaxis='y2',
             hovertemplate='Pred: %{y:.3f}<extra></extra>'
         ))
 
-    # 6) optional features (alphabetical by default)
+    # optional feature lines (hidden by default)
     if features is None:
         features = sorted([c for c in df.columns if c not in {col_action, col_signal1, col_signal2, col_close}])
     for feat in features:
@@ -683,7 +634,7 @@ def plot_trades(
                 hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
             ))
 
-    # 7) overlay individual trade legs (green) if trades list given
+    # overlay individual trade legs with per-trade hover
     if trades:
         for i,((b_dt,s_dt),_,ret_pc) in enumerate(trades, start=1):
             seg = df.loc[b_dt:s_dt, col_close]
@@ -698,36 +649,34 @@ def plot_trades(
             fig.add_trace(go.Scatter(
                 x=seg.index, y=seg.values,
                 mode='lines+markers',
-                line=dict(color='green',width=1),
-                marker=dict(size=3,color='green'),
+                line=dict(color='green', width=1),
+                marker=dict(size=3, color='green'),
                 legendgroup='Trades', showlegend=False,
                 hovertemplate=hover
             ))
 
-    # 8) optional threshold
+    # threshold line on signal axis
     if buy_threshold is not None:
         fig.add_trace(go.Scatter(
             x=[df.index[0], df.index[-1]],
             y=[buy_threshold, buy_threshold],
-            mode='lines', line=dict(color='purple',dash='dot',width=1),
+            mode='lines', line=dict(color='purple', dash='dot', width=1),
             name='Threshold', yaxis='y2',
             hovertemplate=f"Thresh: {buy_threshold:.3f}<extra></extra>"
         ))
 
-    # 9) layout tweaks
+    # layout and display
     fig.update_layout(
         hovermode='x unified',
         template='plotly_white',
         height=800,
         xaxis_title='Time',
         yaxis_title='Price',
-        yaxis2=dict(overlaying='y',side='right',title='Signal',showgrid=False),
-        legend=dict(font=dict(size=12),tracegroupgap=4)
+        yaxis2=dict(overlaying='y', side='right', title='Signal', showgrid=False),
+        legend=dict(font=dict(size=12), tracegroupgap=4)
     )
 
     fig.show()
-
-
 
 
 #########################################################################################################

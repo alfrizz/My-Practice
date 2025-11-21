@@ -15,7 +15,9 @@ import json
 
 ticker = 'AAPL'
 label_col  = "signal" 
+
 month_to_check = '2024-06'
+sel_val_rmse = 0.09436
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
 extra_windows = [30, 60, 90] #  to produce additional smoothed/rolling copies of selected indicators for each window 
@@ -23,15 +25,13 @@ extra_windows = [30, 60, 90] #  to produce additional smoothed/rolling copies of
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
 since_year = 2009
-train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 
+train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
 thresh_gb = 36 # use ram instead of memmap, if X_buf below this value
-
-sel_val_rmse = 0.09384
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -127,11 +127,11 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  128,     # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":   3,       # number of encoder layers
+    "TRANSFORMER_D_MODEL":  64,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_LAYERS":   4,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.2,     # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.05,     # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
@@ -142,8 +142,8 @@ hparams = {
     "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
     "PRED_HIDDEN":           128,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
     
-    "ALPHA_SMOOTH":          0.0,    # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
-    "WARMUP_STEPS":          5,      # linear warmup for slope penalty (0 = no warmup)
+    "ALPHA_SMOOTH":          1e-2,    # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
+    "WARMUP_STEPS":          3,      # linear warmup for slope penalty (0 = no warmup)
     
     "USE_HUBER":             False,  # if True use Huber for level term instead of MSE
     "HUBER_DELTA":           0.1,    # Huber delta (transition threshold); scale to your typical error
@@ -154,9 +154,11 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          1e-4,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              1,      # max grad norm; ↑training stability, ↓gradient expressivity
-    "ONECYCLE_MAX_LR":       1e-3,   # peak LR in the cycle
+    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
+    
+    "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
+    "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head (1 default)
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
@@ -173,28 +175,34 @@ hparams = {
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
 
+sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - hparams["LOOK_BACK"], 60))
+sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*hparams["LOOK_BACK"], 60))
 
 #########################################################################################################
 
 
-def signal_parameters(ticker):
+def ticker_parameters(ticker, bidask_spread_pct, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick):
 
     if ticker == 'AAPL':
-        sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - hparams["LOOK_BACK"], 60))
-        sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*hparams["LOOK_BACK"], 60))
         
-        features_cols =['in_sess_time', 'dist_low_30', 'dist_low_28', 'dist_low_60', 'eng_ema_cross_up', 'rsi', 'hour_time', 'minute_time', 'z_obv', 'rsi_30', 'adx_30', 'sma_pct_28', 'eng_bb_mid', 'dist_high_60', 'eng_vwap', 'dist_high_30', 'z_vwap_dev_60', 'dist_high_28', 'plus_di', 'sma_pct_14', 'z_vwap_dev_90', 'obv_diff_14', 'obv_diff_30', 'z_vwap_dev', 'adx', 'vwap_dev_pct_60', 'rsi_60', 'z_vwap_dev_30', 'vwap_dev_pct_30', 'adx_60', 'roc_14', 'minus_di', 'volume_z_90', 'sma_pct_60', 'atr_z_90', 'volume_z_60', 'eng_rsi', 'obv_pct_14', 'roc_28', 'plus_di_30', 'sma_pct_90', 'obv_diff_60', 'obv_pct_30', 'roc_30', 'vwap_dev_pct_90', 'obv_pct_60', 'vwap_dev_pct_z_90', 'roc_60', 'adx_90', 'eng_macd']
+        features_cols_tick =['dist_low_30', 'in_sess_time', 'dist_low_60', 'dist_low_28', 'eng_ema_cross_up', 'minute_time', 'rsi', 'hour_time', 'z_vwap_dev', 'dist_high_30', 'dist_high_60', 'eng_bb_mid', 'sma_pct_28', 'rsi_30', 'eng_vwap', 'plus_di', 'sma_pct_14', 'z_obv', 'adx_30', 'rsi_60', 'dist_high_28', 'roc_14', 'vwap_dev_pct_30', 'obv_diff_60', 'adx_60', 'volume_z_90', 'adx', 'z_vwap_dev_90', 'z_vwap_dev_60', 'obv_pct_14', 'minus_di', 'roc_28', 'obv_diff_14', 'obv_diff_30', 'vwap_dev_pct_60', 'plus_di_30', 'obv_pct_60', 'mom_sum_60', 'eng_macd', 'vwap_dev_pct_90', 'sma_pct_60', 'sma_pct_90', 'eng_ma', 'roc_30', 'obv_diff_90', 'obv_pct_30', 'vwap_dev_pct_z_90', 'volume_z_60', 'obv_z_90', 'obv_sma_90', 'adx_90', 'rsi_90', 'obv_pct_90', 'obv_sma_60', 'vwap_dev_pct_z_60', 'eng_obv', 'z_vwap_dev_30', 'ret_std_z_90', 'roc_60', 'atr_z_90', 'bb_w_z_90', 'macd_diff_z_60', 'obv_z_60', 'body_pct', 'vol_z_30', 'bb_w_z_60', 'minus_di_30', 'volume_z_30', 'macd_diff_z_90', 'plus_di_60']
 
 # ['adx', 'adx_30', 'adx_60', 'adx_90', 'eng_ma', 'dow_time', 'hour_time', 'minute_time', 'in_sess_time', 'mom_sum_30', 'mom_sum_60', 'mom_sum_90', 'macd_diff_z_30', 'macd_diff_z_60', 'macd_diff_z_90', 'eng_macd', 'bb_w_z_30', 'bb_w_z_60', 'bb_w_z_90']
+
+        trail_stop_tick = max(2*bidask_spread_pct, trail_stop_tick)
         
-        trailing_stop_pred = 0.2
-        pred_threshold = 0.1
-        return_threshold = 0.01
-        
-    return sess_start_pred, sess_start_shift, features_cols, trailing_stop_pred, pred_threshold, return_threshold
+    return features_cols_tick, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick
 
 # automatically executed function to get the parameters for the selected ticker
-sess_start_pred_tick, sess_start_shift_tick, features_cols_tick, trailing_stop_pred_tick, pred_threshold_tick, return_threshold_tick = signal_parameters(ticker)
+features_cols_tick, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
+                                                                                                               bidask_spread_pct   = bidask_spread_pct,
+                                                                                                               sell_minidx_tick    = -1,
+                                                                                                               trail_stop_tick     = 0.5,
+                                                                                                               sign_thresh_tick    = 0.2,
+                                                                                                               sign_smoothwin_tick = 1)
+                                                                                                               # ,return_threshold = 0.01)
+                                                                                                           
+
 
 
 

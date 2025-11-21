@@ -1440,12 +1440,6 @@ def log_epoch_feature_importance(model,
         feature_names = feature_names or []
 
     # --- 2) get projection parameter once --- #####################################################
-    # named = dict(model.named_parameters())
-    # p = named.get("feature_proj.weight")
-    
-    # if p is None or len(feature_names) == 0:
-    #     return {"top_token": None, "items": None, "score": None, "w_norm": None, "g_norm": None, "layer_token": layer_token}
-
     named = dict(model.named_parameters())
     # prefer per-raw-feature projection if present (columns align to original features)
     p = named.get("input_proj.weight") if "input_proj.weight" in named else named.get("feature_proj.weight")
@@ -1587,7 +1581,6 @@ def log_epoch_summary(
     # build a GN token listing all prefixes sorted by descending GN
     sorted_prefixes = [p for p, _ in sorted(prefix_gn.items(), key=lambda x: x[1], reverse=True)]
     gn_items = ",".join(f"{p}={prefix_gn[p]:.3f}" for p in sorted_prefixes) if sorted_prefixes else ""
-    # gn_token = f"GN[{gn_items},TOT={GN_tot:.3f}] | "
 
     # 3) 4) safe percentiles for GD and UR
     if g_vals:
@@ -1606,7 +1599,6 @@ def log_epoch_summary(
         UR_max = u_sorted[-1]
     else:
         UR_med = UR_max = 0.0
-
 
     # 5) Slip-rate & max hub (stateful LSTM diagnostic)
     slip_thresh=1e-6
@@ -1739,7 +1731,6 @@ def log_epoch_summary(
     # plotting
     # build numeric dicts (no string parsing)
     gdict = {s: float(g) for s, (g, u) in items}
-    # feat_res['top_token'] format "name:score,name:score,..."
     
     featdict = {k: float(v) for k, v in (p.split(':',1) for p in feat_res['top_token'].split(','))}
 
