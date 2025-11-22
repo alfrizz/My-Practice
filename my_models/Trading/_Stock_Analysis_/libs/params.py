@@ -14,9 +14,10 @@ import json
 #########################################################################################################
 
 ticker = 'AAPL'
-label_col  = "signal" 
+label_col  = "signal"
+shares_per_trade = 1
 
-month_to_check = '2024-06'
+month_to_check = '2023-06'
 sel_val_rmse = 0.09436
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -196,9 +197,9 @@ def ticker_parameters(ticker, bidask_spread_pct, sell_minidx_tick, trail_stop_ti
 # automatically executed function to get the parameters for the selected ticker
 features_cols_tick, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
                                                                                                                bidask_spread_pct   = bidask_spread_pct,
-                                                                                                               sell_minidx_tick    = -1,
+                                                                                                               sell_minidx_tick    = 0,
                                                                                                                trail_stop_tick     = 0.5,
-                                                                                                               sign_thresh_tick    = 0.2,
+                                                                                                               sign_thresh_tick    = 0.00015,
                                                                                                                sign_smoothwin_tick = 1)
                                                                                                                # ,return_threshold = 0.01)
                                                                                                            

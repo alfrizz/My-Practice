@@ -465,7 +465,7 @@ def smooth_scale_saturate(
 #     col_signal: str,
 #     col_action: str,
 #     buy_threshold: float,
-#     trailing_stop_pct: float,
+#     trail_stop_pct: float,
 #     sess_start: dt.time,
 #     col_close: str
 # ) -> pd.DataFrame:
@@ -480,7 +480,6 @@ def smooth_scale_saturate(
 #          – Compute trailing stop level.
 #          – If price drops below stop level and signal < buy_threshold → action=-1 (exit).
 #          – Else action=0 (hold).
-#     3) If still in trade at end of session, force action=-1 on last row.
 #     Returns a DataFrame with the new action column.
 #     """
 #     df = df.copy()
@@ -490,7 +489,7 @@ def smooth_scale_saturate(
 #     sig = df[col_signal].to_numpy()
 #     closes = df[col_close].to_numpy()
 #     times = df.index.time
-#     stop_thresh = trailing_stop_pct / 100.0
+#     stop_thresh = trail_stop_pct / 100.0
 
 #     in_trade = False
 #     peak_price = 0.0
@@ -513,140 +512,77 @@ def smooth_scale_saturate(
 #             else:
 #                 df.iat[i, df.columns.get_loc(col_action)] = 0
 
-#     if in_trade:
-#         df.iat[-1, df.columns.get_loc(col_action)] = -1
-
 #     return df
+
+
 
 def generate_trade_actions(
     df: pd.DataFrame,
     col_signal: str,
     col_action: str,
-    sell_minidx: int,
     buy_threshold: float,
     trail_stop_pct: float,
-    sess_start: dt.time
+    sess_start: dt.time,
+    col_close: str
 ) -> pd.DataFrame:
     """
-    From a continuous signal series, produce discrete trade actions.
+    From a continuous signal series, produce discrete per-bar trade actions and
+    a per-bar trailing-stop level.
 
-    - Enter when signal >= buy_threshold (after sess_start): action = 1.
-    - While in trade track peak marketable sell price and compute trailing stop.
-    - Exit (action = -1) when the marketable sell price falls below the trailing stop AND signal < buy_threshold.
-    - Forced sell index via sell_minidx:
-      * 0 -> no forced sell (do not auto-exit at end).
-      * >0 -> absolute 0-based row index (clipped to last row).
-      * <0 -> relative to end (-1 = last row, -2 = penultimate).
-    - After the forced-sell index is reached, no further entries are allowed.
+    Responsibilities (minimal, single-pass):
+      - Create a discrete action column (0 default, 1 = entry, -1 = exit).
+      - Maintain in_trade and peak_price state to compute a simple trailing stop.
+      - Return the input DataFrame with two new columns:
+          * col_action (int):  1 = Buy at this bar, -1 = Sell at this bar, 0 = no action
+          * "trailstop_price" (float): trailing stop price while in trade; 0 before/after trades
     """
+
     df = df.copy()
     n = len(df)
-    df[col_action] = 0
-    df["trailstop_price"] = float("nan")
+    df[col_action] = 0  # default no-action
 
     sig = df[col_signal].to_numpy()
-    asks = df["ask"].to_numpy()
-    bids = df["bid"].to_numpy()
+    closes = df[col_close].to_numpy()
     times = df.index.time
     stop_thresh = trail_stop_pct / 100.0
 
-    # compute forced-sell target (None means no forced sell)
-    if sell_minidx == 0:
-        target = None
-    elif sell_minidx > 0:
-        target = min(sell_minidx, n - 1)
-    else:
-        target = max(0, n + sell_minidx)
-
     in_trade = False
     peak_price = 0.0
-    entries_allowed = True
+
+    # minimal trail buffer (0.0 before/after trades)
+    trail = np.zeros(n, dtype=float)
 
     for i in range(n):
-        entry_price = asks[i]
-        exit_price = bids[i]
-
-        if target is not None and i == target:
-            if in_trade:
-                df.iat[i, df.columns.get_loc(col_action)] = -1
-                in_trade = False
-            entries_allowed = False
-            continue
-
-        stop_level = None  # will be set if/when in_trade becomes True for this row
+        price = closes[i]
+        t = times[i]
 
         if not in_trade:
-            if entries_allowed and sig[i] >= buy_threshold and times[i] >= sess_start:
+            # entry condition: signal >= threshold and after session start
+            if sig[i] >= buy_threshold and t >= sess_start:
                 df.iat[i, df.columns.get_loc(col_action)] = 1
                 in_trade = True
-                peak_price = entry_price
-                stop_level = peak_price * (1 - stop_thresh)
+                peak_price = price
+                # initialize trailing stop at entry bar
+                trail[i] = peak_price * (1 - stop_thresh)
         else:
-            peak_price = max(peak_price, exit_price)
+            # update peak and stop while in trade
+            peak_price = max(peak_price, price)
             stop_level = peak_price * (1 - stop_thresh)
-            if exit_price < stop_level and sig[i] < buy_threshold:
+            trail[i] = stop_level
+            # exit condition: price below stop and signal dropped below threshold
+            if price < stop_level and sig[i] < buy_threshold:
                 df.iat[i, df.columns.get_loc(col_action)] = -1
                 in_trade = False
             else:
                 df.iat[i, df.columns.get_loc(col_action)] = 0
 
-        if in_trade and stop_level is not None:
-            df.iat[i, df.columns.get_loc("trailstop_price")] = stop_level
-            
+    # attach canonical column expected by plotting code
+    df["trailstop_price"] = trail
     return df
+
 
 #########################################################################################################
 
-
-# def fees_for_one_share(price: float, side: str,
-#                        alpaca_comm_per_share: float = 0.0040,
-#                        finra_taf_per_share: float = 0.000166,
-#                        cat_per_share: float = 0.000009,
-#                        sec_fee_per_dollar: float = 0.00013810,
-#                        per_trade_minimum: float = 0.01) -> dict:
-#     """
-#     Compute regulatory + commission fees for a single share.
-#     Return per‑share commission + regulatory fees for one executed share.
-
-#     - price: share price used to convert SEC per‑dollar rate to per‑share.
-#     - side: "buy" or "sell".
-#     - sec_fee_per_dollar is $ per $1 (e.g. 0.00013810 => $138.10 / $1,000,000).
-#     - FINRA/CAT small components are bumped to per_trade_minimum if >0 and <minimum.
-#     """
-#     assert side in ("buy", "sell")
-
-#     # Alpaca commission (per share, both sides)
-#     alpaca_comm = float(alpaca_comm_per_share)
-
-#     # SEC fee: per-dollar of sale, applies only on sells. Convert to per-share by multiplying price.
-#     sec_raw = float(sec_fee_per_dollar) * float(price) if side == "sell" else 0.0
-
-#     # FINRA TAF: per-share on sells only
-#     finra_raw = float(finra_taf_per_share) if side == "sell" else 0.0
-
-#     # CAT: per executed equivalent share (both sides)
-#     cat_raw = float(cat_per_share)
-
-#     # Apply per-trade minimums for very small components (broker typically rounds small regulator fees)
-#     finra_billed = finra_raw
-#     cat_billed = cat_raw
-#     if 0 < finra_raw < per_trade_minimum:
-#         finra_billed = float(per_trade_minimum)
-#     if 0 < cat_raw < per_trade_minimum:
-#         cat_billed = float(per_trade_minimum)
-
-#     regulatory_billed = sec_raw + finra_billed + cat_billed
-
-#     total_per_share_billed = alpaca_comm + regulatory_billed
-
-#     return {
-#         "alpaca_comm": round(alpaca_comm, 8),
-#         "sec_raw": round(sec_raw, 8),
-#         "finra_billed": round(finra_billed, 8),
-#         "cat_billed": round(cat_billed, 8),
-#         "regulatory_billed": round(regulatory_billed, 8),
-#         "total_per_share_billed": round(total_per_share_billed, 8),
-#     }
 
 
 def fees_for_one_share(price: float, side: str,
@@ -655,11 +591,9 @@ def fees_for_one_share(price: float, side: str,
                        cat_per_share: float = 0.000009,
                        sec_fee_per_dollar: float = 0.00013810) -> dict:
     """
-    Compute per‑share commission + regulatory fees for one executed share.
+    Compute per-share commission + regulatory fees for one executed share.
 
-    - price: share price used to convert SEC per‑dollar rate to per‑share.
-    - side: "buy" or "sell".
-    - Returns exact per‑share components.
+    Returns precise per-share components and a rounded total for display.
     """
     assert side in ("buy", "sell")
 
@@ -668,7 +602,6 @@ def fees_for_one_share(price: float, side: str,
     finra_raw = float(finra_taf_per_share) if side == "sell" else 0.0
     cat_raw = float(cat_per_share)
 
-    # Keep exact per-share values.
     finra_billed = finra_raw
     cat_billed = cat_raw
 
@@ -676,12 +609,13 @@ def fees_for_one_share(price: float, side: str,
     total_per_share_billed = alpaca_comm + regulatory_billed
 
     return {
-        "alpaca_comm": round(alpaca_comm, 8),
-        "sec_raw": round(sec_raw, 8),
-        "finra_billed": round(finra_billed, 8),
-        "cat_billed": round(cat_billed, 8),
-        "regulatory_billed": round(regulatory_billed, 8),
-        "total_per_share_billed": round(total_per_share_billed, 8),
+        "alpaca_comm": alpaca_comm,
+        "sec_raw": sec_raw,
+        "finra_billed": finra_billed,
+        "cat_billed": cat_billed,
+        "regulatory_billed": regulatory_billed,
+        "total_per_share_billed": total_per_share_billed,
+        "total_per_share_billed_rounded": round(total_per_share_billed, 8),
     }
 
 
@@ -822,6 +756,7 @@ def fees_for_one_share(price: float, side: str,
 #         else:
 #             bh_gain = st_gain = 0.0
 
+
 #         perf_stats = {
 #             "Buy & Hold Return ($)": bh_gain,
 #             "Strategy Return ($)"  : st_gain,
@@ -836,149 +771,273 @@ def fees_for_one_share(price: float, side: str,
 #     return updated_results
 
 
+
+# def simulate_trading(
+#     results_by_day_sign: Dict[dt.date, Tuple[pd.DataFrame, List]],
+#     col_action: str,
+#     sess_start: dt.time,
+#     sess_end: dt.time,
+#     shares_per_trade: int = 1
+# ) -> Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, str]]]:
+#     """
+#     Minimal simulator: returns (df_sim, trades, perf) where perf contains only
+#     formatted strings: BUY & HOLD, TRADES (list of strings), STRATEGY.
+#     """
+#     updated = {}
+#     items = list(results_by_day_sign.items())
+#     if len(items) > 1:
+#         items = tqdm(items, desc="Simulating trading days", unit="day")
+
+#     def _r3(x): return round(float(x), 3)
+
+#     for day, (session_df, _) in items:
+#         df = session_df.sort_index().copy()
+#         position, cash = 0, 0.0
+#         session_open_price = None
+
+#         pos_buf, cash_buf, net_buf, act_buf, amt_buf = [], [], [], [], []
+
+#         for ts, row in df.iterrows():
+#             bid, ask = row["bid"], row["ask"]
+#             sig = int(row[col_action]); now = ts.time()
+
+#             # snapshot pre-trade state
+#             pos_buf.append(position)
+#             cash_buf.append(cash)
+#             net_buf.append(cash + position * bid)
+#             act_buf.append("")    # placeholder
+#             amt_buf.append(0)     # placeholder
+
+#             # apply trade
+#             if sess_start <= now < sess_end:
+#                 if session_open_price is None:
+#                     session_open_price = ask
+#                 if sig == 1:
+#                     q = int(shares_per_trade); position += q
+#                     fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"] * q
+#                     cash -= (ask * q) + fee
+#                     action, amt = "Buy", q
+#                 elif sig == -1 and position > 0:
+#                     q = min(int(shares_per_trade), position); position -= q
+#                     fee = fees_for_one_share(price=bid, side="sell")["total_per_share_billed"] * q
+#                     cash += (bid * q) - fee
+#                     action, amt = "Sell", -q
+#                 else:
+#                     action, amt = "Hold", 0
+#             else:
+#                 action, amt = "No trade", 0
+
+#             act_buf[-1] = action
+#             amt_buf[-1] = amt
+
+#         # build df_sim
+#         df_sim = df.copy()
+#         df_sim["Position"] = pos_buf
+#         df_sim["Cash"] = cash_buf
+#         df_sim["NetValue"] = net_buf
+#         df_sim["Action"] = act_buf
+#         df_sim["TradedAmount"] = amt_buf
+
+#         # detect round-trip trades (ask entry, bid exit)
+#         trades = []
+#         entry_p = entry_ts = None
+#         for ts, row in df_sim.iterrows():
+#             if row["Action"] == "Buy" and entry_p is None:
+#                 entry_p, entry_ts = row["ask"], ts
+#             elif row["Action"] == "Sell" and entry_p is not None:
+#                 exit_p, exit_ts = row["bid"], ts
+#                 pct = round(100 * (exit_p - entry_p) / entry_p, 3)
+#                 trades.append(((entry_ts, exit_ts), (entry_p, exit_p), pct))
+#                 entry_p = entry_ts = None
+#         if entry_p is not None:
+#             exit_p, exit_ts = df_sim["bid"].iat[-1], df_sim.index[-1]
+#             pct = round(100 * (exit_p - entry_p) / entry_p, 3)
+#             trades.append(((entry_ts, exit_ts), (entry_p, exit_p), pct))
+
+#         # session slice and BH numbers (for formatted line)
+#         session = df_sim.between_time(sess_start, sess_end)
+#         if not session.empty:
+#             open_ask = float(session["ask"].iloc[0]); close_bid = float(session["bid"].iloc[-1])
+#             buy_fee = fees_for_one_share(price=open_ask, side="buy")["total_per_share_billed"]
+#             sell_fee = fees_for_one_share(price=close_bid, side="sell")["total_per_share_billed"]
+#             bh_gain_exact = (close_bid - open_ask) - (buy_fee + sell_fee)
+#         else:
+#             open_ask = close_bid = 0.0
+#             buy_fee = sell_fee = 0.0
+#             bh_gain_exact = 0.0
+
+#         # Build TRADES formatted strings and compute per-trade PnL only for formatting
+#         trades_lines = []
+#         realized_vals = []
+#         for i, ((_b, _s), (ep, xp), pct) in enumerate(trades, start=1):
+#             buy_fee = fees_for_one_share(price=ep, side="buy")["total_per_share_billed"]
+#             sell_fee = fees_for_one_share(price=xp, side="sell")["total_per_share_billed"]
+#             total_fee = buy_fee + sell_fee
+#             pnl = (xp - ep) - total_fee
+#             r = _r3(pnl)
+#             realized_vals.append(r)
+#             trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) {_r3(total_fee)} = {_r3(pnl)}")
+
+#         # Strategy bracket line (formatted only)
+#         if realized_vals:
+#             parts = " + ".join([f"Trade({i}) {_r3(v)}" for i, v in enumerate(realized_vals, start=1)])
+#             strategy_line = f"[{parts} = {_r3(sum(realized_vals))}]"
+#         else:
+#             strategy_line = "[ = 0.000]"
+
+#         bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) {_r3(buy_fee + sell_fee)} = {_r3(bh_gain_exact)}"
+
+#         # PERF: only formatted strings (no numeric lists/fields)
+#         perf = {
+#             "BUY&HOLD": bh_line,
+#             "TRADES": trades_lines,
+#             "STRATEGY": strategy_line
+#         }
+
+#         updated[day] = (df_sim, trades, perf)
+
+#     return updated
+
+
 def simulate_trading(
     results_by_day_sign: Dict[dt.date, Tuple[pd.DataFrame, List]],
     col_action: str,
     sess_start: dt.time,
     sess_end: dt.time,
     shares_per_trade: int = 1
-) -> Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, object]]]:
+) -> Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, str]]]:
     """
-    Simulate minute-level P&L per day applying per-share fees, accumulate raw fees
-    during the day and round up the day total to cents at EOD (Alpaca behaviour).
-    Returns per-day (df_sim, trades, perf_stats).
+    Minimal intraday simulator (short, canonical).
+
+    - Snapshots pre-trade state per bar (Position, Cash, NetValue) so DF is
+      useful for debugging and plotting.
+    - Executes simple market buys (ask) and sells (bid) inside session window.
+    - Computes per-round-trip trades (entry = ask on Buy, exit = bid on Sell).
+    - Returns updated[day] = (df_sim, trades, perf) where perf contains ONLY
+      readable strings:
+        "BUY&HOLD" : "Bid(0) ... = <x>"
+        "TRADES"   : [ "Bid(i) ... = <xi>", ... ]  (each on its own line)
+        "STRATEGY" : "[Trade(1) x1 + Trade(2) x2 = <sum>]"
+    - All numeric formatting rounded to 3 decimals.
     """
-    import math
-
-    updated_results: Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, object]]] = {}
-
+    updated = {}
     items = list(results_by_day_sign.items())
     if len(items) > 1:
         items = tqdm(items, desc="Simulating trading days", unit="day")
 
+    def _r3(x): return round(float(x), 3)
+
     for day, (session_df, _) in items:
-        df_day = session_df.sort_index().copy()
+        df = session_df.sort_index().copy()
         position, cash = 0, 0.0
         session_open_price = None
 
-        positions, cash_balances = [], []
-        net_values, actions = [], []
-        traded_amounts = []
-        bh_running, st_running = [], []
+        pos_buf, cash_buf, net_buf, act_buf, amt_buf = [], [], [], [], []
 
-        day_fee_acc = 0.0  # accumulate raw per-trade fees across the day
+        for ts, row in df.iterrows():
+            bid, ask = row["bid"], row["ask"]
+            sig = int(row[col_action]); now = ts.time()
 
-        for ts, row in df_day.iterrows():
-            price_bid, price_ask = row["bid"], row["ask"]
-            sig = int(row[col_action])
-            now = ts.time()
+            # 1) snapshot pre-trade state (for df_sim)
+            pos_buf.append(position)
+            cash_buf.append(cash)
+            net_buf.append(cash + position * bid)
+            act_buf.append("")    # placeholder
+            amt_buf.append(0)     # placeholder
 
+            # 2) apply trade if in session
             if sess_start <= now < sess_end:
                 if session_open_price is None:
-                    session_open_price = price_ask
+                    session_open_price = ask
 
                 if sig == 1:
-                    qty = int(shares_per_trade)
-                    position += qty
-                    fee_detail = fees_for_one_share(price=price_ask, side="buy")
-                    total_fees = fee_detail["total_per_share_billed"] * qty
-                    day_fee_acc += total_fees
-                    cash -= (price_ask * qty) + total_fees
-                    action, amt = "Buy", qty
-
+                    q = int(shares_per_trade); position += q
+                    fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"] * q
+                    cash -= (ask * q) + fee
+                    action, amt = "Buy", q
                 elif sig == -1 and position > 0:
-                    qty = min(int(shares_per_trade), position)
-                    position -= qty
-                    fee_detail = fees_for_one_share(price=price_bid, side="sell")
-                    total_fees = fee_detail["total_per_share_billed"] * qty
-                    day_fee_acc += total_fees
-                    cash += (price_bid * qty) - total_fees
-                    action, amt = "Sell", -qty
-
+                    q = min(int(shares_per_trade), position); position -= q
+                    fee = fees_for_one_share(price=bid, side="sell")["total_per_share_billed"] * q
+                    cash += (bid * q) - fee
+                    action, amt = "Sell", -q
                 else:
                     action, amt = "Hold", 0
             else:
                 action, amt = "No trade", 0
 
-            positions.append(position)
-            cash_balances.append(round(cash, 6))
-            net_val = round(cash + position * price_bid, 6)
-            net_values.append(net_val)
-            actions.append(action)
-            traded_amounts.append(amt)
+            # 3) record action/amt into placeholders
+            act_buf[-1] = action
+            amt_buf[-1] = amt
 
-            if session_open_price is not None:
-                bh = round(price_bid - session_open_price, 6)
-                st = net_val
-            else:
-                bh = st = 0.0
+        # build df_sim for plotting/debug
+        df_sim = df.copy()
+        df_sim["Position"] = pos_buf
+        df_sim["Cash"] = cash_buf
+        df_sim["NetValue"] = net_buf
+        df_sim["Action"] = act_buf
+        df_sim["TradedAmount"] = amt_buf
 
-            bh_running.append(bh)
-            st_running.append(round(st, 6))
-
-        # At EOD: round up the day's accumulated fees to cents and adjust cash so net fees == rounded amount
-        day_fee_rounded = math.ceil(day_fee_acc * 100.0) / 100.0
-        cash += (day_fee_acc - day_fee_rounded)
-
-        # Build simulation DataFrame (rest unchanged)
-        df_sim = df_day.copy()
-        df_sim["Position"]        = positions
-        df_sim["Cash"]            = cash_balances
-        df_sim["NetValue"]        = net_values
-        df_sim["Action"]          = actions
-        df_sim["TradedAmount"]    = traded_amounts
-        df_sim["BuyHoldEarning"]  = bh_running
-        df_sim["StrategyEarning"] = st_running
-        df_sim["EarningDiff"]     = df_sim["StrategyEarning"] - df_sim["BuyHoldEarning"]
-
-        trades: List[Tuple[Tuple[pd.Timestamp, pd.Timestamp],
-                          Tuple[float, float],
-                          float]] = []
-        entry_price = None
-        entry_ts    = None
-
+        # detect round-trip trades (Buy ask -> Sell bid)
+        trades = []
+        entry_p = entry_ts = None
         for ts, row in df_sim.iterrows():
-            if row["Action"] == "Buy" and entry_price is None:
-                entry_price, entry_ts = row["ask"], ts
-            elif row["Action"] == "Sell" and entry_price is not None:
-                exit_price, exit_ts = row["bid"], ts
-                gain_pct = 100 * (exit_price - entry_price) / entry_price
-                trades.append((
-                    (entry_ts, exit_ts),
-                    (entry_price, exit_price),
-                    round(gain_pct, 3)
-                ))
-                entry_price = entry_ts = None
+            if row["Action"] == "Buy" and entry_p is None:
+                entry_p, entry_ts = row["ask"], ts
+            elif row["Action"] == "Sell" and entry_p is not None:
+                exit_p, exit_ts = row["bid"], ts
+                pct = round(100 * (exit_p - entry_p) / entry_p, 3)
+                trades.append(((entry_ts, exit_ts), (entry_p, exit_p), pct))
+                entry_p = entry_ts = None
+        if entry_p is not None:
+            exit_p, exit_ts = df_sim["bid"].iat[-1], df_sim.index[-1]
+            pct = round(100 * (exit_p - entry_p) / entry_p, 3)
+            trades.append(((entry_ts, exit_ts), (entry_p, exit_p), pct))
 
-        if entry_price is not None:
-            exit_price, exit_ts = df_sim["bid"].iat[-1], df_sim.index[-1]
-            gain_pct = 100 * (exit_price - entry_price) / entry_price
-            trades.append((
-                (entry_ts, exit_ts),
-                (entry_price, exit_price),
-                round(gain_pct, 3)
-            ))
-
+        # session buy&hold for formatted line
         session = df_sim.between_time(sess_start, sess_end)
         if not session.empty:
-            open_ask, close_bid = session["ask"].iloc[0], session["bid"].iloc[-1]
-            bh_gain = round(close_bid - open_ask, 3)
-            st_gain = round(session["NetValue"].iloc[-1], 3)
+            open_ask = float(session["ask"].iloc[0]); close_bid = float(session["bid"].iloc[-1])
+            buy_fee = fees_for_one_share(price=open_ask, side="buy")["total_per_share_billed"]
+            sell_fee = fees_for_one_share(price=close_bid, side="sell")["total_per_share_billed"]
+            bh_gain_exact = (close_bid - open_ask) - (buy_fee + sell_fee)
         else:
-            bh_gain = st_gain = 0.0
+            open_ask = close_bid = 0.0
+            buy_fee = sell_fee = 0.0
+            bh_gain_exact = 0.0
 
-        perf_stats = {
-            "Buy & Hold Return ($)": bh_gain,
-            "Strategy Return ($)"  : st_gain,
-            "Trades Returns ($)"   : [
-                round((pct / 100) * prices[0], 3)
-                for (_, _), prices, pct in trades
-            ]
+        # build TRADES formatted strings (compute per-trade pnl only for formatting)
+        trades_lines = []
+        realized_vals = []
+        for i, ((_b, _s), (ep, xp), pct) in enumerate(trades, start=1):
+            buy_fee = fees_for_one_share(price=ep, side="buy")["total_per_share_billed"]
+            sell_fee = fees_for_one_share(price=xp, side="sell")["total_per_share_billed"]
+            total_fee = buy_fee + sell_fee
+            pnl = (xp - ep) - total_fee
+            r = _r3(pnl)
+            realized_vals.append(r)
+            trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) {_r3(total_fee)} = {_r3(pnl)}")
+
+        # formatted Strategy  (strings only)
+        if realized_vals:
+            parts = " + ".join([f"Trade({i}) {_r3(v)}" for i, v in enumerate(realized_vals, start=1)])
+            strategy_line = f"{parts} = {_r3(sum(realized_vals))}"
+        else:
+            strategy_line = "0.000"
+
+        bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) {_r3(buy_fee + sell_fee)} = {_r3(bh_gain_exact)}"
+
+        # PERF: only formatted strings (no numeric lists/fields)
+        # use key without space as requested
+        perf = {
+            "BUY&HOLD": bh_line,
+            "TRADES": trades_lines,
+            "STRATEGY": strategy_line
         }
 
-        updated_results[day] = (df_sim, trades, perf_stats)
+        updated[day] = (df_sim, trades, perf)
 
-    return updated_results
+    return updated
+
 
 #########################################################################################################
 
@@ -994,7 +1053,7 @@ def run_trading_pipeline(
     merging_time_gap_thr: float,
     tau_time: float,
     tau_dur: float,
-    trailing_stop_pct: float,
+    trail_stop_pct: float,
     buy_threshold: float,
     smoothing_window: int,
     beta_sat: float,
@@ -1066,9 +1125,8 @@ def run_trading_pipeline(
             col_signal,
             col_action,
             buy_threshold,
-            trailing_stop_pct,
-            params.sess_start,
-            col_close,
+            trail_stop_pct,
+            params.sess_start
         )
         signaled[day] = (df_act, trades)
 

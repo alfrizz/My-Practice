@@ -839,6 +839,8 @@ def add_preds_and_split(
 
     df2 = df.copy()
     df2["pred_signal"] = np.nan
+    df2['ask'] = df2['close_raw'] * (1 + params.bidask_spread_pct/100)
+    df2['bid'] = df2['close_raw'] * (1 - params.bidask_spread_pct/100)
 
     tz_df = getattr(df.index, "tz", None)
 
