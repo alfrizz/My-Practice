@@ -28,7 +28,7 @@ createCSVsign = False # set to True to regenerate the 'sign' csv
 since_year = 2009
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
+bidask_spread_pct = 0.015 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
@@ -197,9 +197,9 @@ def ticker_parameters(ticker, bidask_spread_pct, sell_minidx_tick, trail_stop_ti
 # automatically executed function to get the parameters for the selected ticker
 features_cols_tick, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
                                                                                                                bidask_spread_pct   = bidask_spread_pct,
-                                                                                                               sell_minidx_tick    = 0,
-                                                                                                               trail_stop_tick     = 0.5,
-                                                                                                               sign_thresh_tick    = 0.00015,
+                                                                                                               sell_minidx_tick    = -3,
+                                                                                                               trail_stop_tick     = 0.35,
+                                                                                                               sign_thresh_tick    = 0.1,
                                                                                                                sign_smoothwin_tick = 1)
                                                                                                                # ,return_threshold = 0.01)
                                                                                                            
