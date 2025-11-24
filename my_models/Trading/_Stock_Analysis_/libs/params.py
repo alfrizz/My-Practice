@@ -182,7 +182,7 @@ sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 
 #########################################################################################################
 
 
-def ticker_parameters(ticker, bidask_spread_pct, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick):
+def ticker_parameters(ticker, bidask_spread_pct, sellmin_idx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick):
 
     if ticker == 'AAPL':
         
@@ -192,12 +192,12 @@ def ticker_parameters(ticker, bidask_spread_pct, sell_minidx_tick, trail_stop_ti
 
         trail_stop_tick = max(2*bidask_spread_pct, trail_stop_tick)
         
-    return features_cols_tick, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick
+    return features_cols_tick, sellmin_idx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
+features_cols_tick, sellmin_idx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
                                                                                                                bidask_spread_pct   = bidask_spread_pct,
-                                                                                                               sell_minidx_tick    = -1,
+                                                                                                               sellmin_idx_tick    = None,
                                                                                                                trail_stop_tick     = 0.35,
                                                                                                                sign_thresh_tick    = 0.1,
                                                                                                                sign_smoothwin_tick = 1)
