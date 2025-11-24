@@ -197,7 +197,7 @@ def ticker_parameters(ticker, bidask_spread_pct, sell_minidx_tick, trail_stop_ti
 # automatically executed function to get the parameters for the selected ticker
 features_cols_tick, sell_minidx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
                                                                                                                bidask_spread_pct   = bidask_spread_pct,
-                                                                                                               sell_minidx_tick    = -3,
+                                                                                                               sell_minidx_tick    = -1,
                                                                                                                trail_stop_tick     = 0.35,
                                                                                                                sign_thresh_tick    = 0.1,
                                                                                                                sign_smoothwin_tick = 1)

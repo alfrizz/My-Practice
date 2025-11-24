@@ -458,7 +458,7 @@ def plot_trades(
         mode='lines', line=dict(color='grey', width=1),
         name='Close',
         customdata=customdata,
-        hovertemplate='Price: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<extra></extra>'
+        hovertemplate='Close: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<extra></extra>'
     ))
 
     # primary signal on secondary axis
@@ -490,31 +490,23 @@ def plot_trades(
                 hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
             ))
 
-
-    # overlay individual trade legs with per-trade hover (show trade line and Return%)
-    if trades:
-        lines_source = performance_stats.get("TRADES") if performance_stats else None
-        for i,((b_dt,s_dt),_,ret_pc) in enumerate(trades, start=1):
-            seg = df.loc[b_dt:s_dt, col_close]
-            perf_line = None
-            if isinstance(lines_source, list) and len(lines_source) >= i:
-                perf_line = lines_source[i-1]
-            elif isinstance(lines_source, str):
-                parts = lines_source.splitlines()
-                if len(parts) >= i:
-                    perf_line = parts[i-1]
-
-            hover = f"{perf_line}<br>Return%:{ret_pc:.3f}%<extra></extra>" if perf_line else f"Return%:{ret_pc:.3f}%<extra></extra>"
-
-            fig.add_trace(go.Scatter(
-                x=seg.index, y=seg.values,
-                mode='lines+markers',
-                line=dict(color='green', width=1),
-                marker=dict(size=3, color='green'),
-                legendgroup='Trades', showlegend=False,
-                hovertemplate=hover
-            ))
-
+    # show return from performance_stats["TRADES"] and return%
+    lines_src = performance_stats["TRADES"]
+    
+    for i, ((b_dt, s_dt), _, ret_pc) in enumerate(trades, start=1):
+        seg = df.loc[b_dt:s_dt, col_close]
+        perf_line = lines_src[i-1]
+        rhs = perf_line.split('=')[-1].strip()
+        hover = f"Return: {float(rhs):.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
+    
+        fig.add_trace(go.Scatter(
+            x=seg.index, y=seg.values,
+            mode='lines+markers',
+            line=dict(color='green', width=1),
+            marker=dict(size=3, color='green'),
+            legendgroup='Trades', showlegend=False,
+            hovertemplate=hover
+        ))
 
     # threshold line on signal axis
     if buy_threshold is not None:
