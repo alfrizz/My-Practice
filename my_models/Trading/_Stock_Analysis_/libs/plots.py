@@ -427,7 +427,7 @@ def plot_trades(
                 intervals.append((last_buy, ts))
                 last_buy = None
     elif trades:
-        intervals = [(b, s) for ((b,s),_,_) in trades]
+        intervals = [(b, s) for ((b,s),_,_,_,_) in trades]
 
     # shaded bands for trade intervals
     if intervals:
@@ -493,7 +493,7 @@ def plot_trades(
     # show return from performance_stats["TRADES"] and return%
     lines_src = performance_stats["TRADES"]
     
-    for i, ((b_dt, s_dt), _, ret_pc) in enumerate(trades, start=1):
+    for i, ((b_dt, s_dt), _, ret_pc, _, _) in enumerate(trades, start=1):
         seg = df.loc[b_dt:s_dt, col_close]
         perf_line = lines_src[i-1]
         rhs = perf_line.split('=')[-1].strip()

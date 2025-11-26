@@ -427,6 +427,7 @@ def compute_continuous_signal(
 
 #########################################################################################################
 
+
 def smooth_scale_saturate(
     series:   pd.Series,
     window:   int,
@@ -458,87 +459,7 @@ def smooth_scale_saturate(
     
 #########################################################################################################
 
-
-# def generate_trade_actions(
-#     df: pd.DataFrame,
-#     col_signal: str,
-#     col_action: str,
-#     buy_threshold: float,
-#     trail_stop_pct: float,
-#     col_price: str = "close",
-#     sellmin_idx: int = None,
-# ) -> pd.DataFrame:
-#     """
-#     Generate per-bar trade actions (Buy=1, Sell=-1, Hold=0) using a simple
-#     signal threshold and an on-the-fly trailing stop. Returns the DataFrame
-#     with the action column and a trailstop_price column.
-#     """
-#     # work on a copy to avoid mutating the caller's DataFrame
-#     df = df.copy()
-
-#     # initialize action column to Hold (0) for every bar
-#     df[col_action] = 0
-
-#     # vectorized helpers for loop
-#     sig = df[col_signal].to_numpy()         # signal values as numpy array
-#     times = df.index.time                   # per-row times (datetime.time)
-#     loc_action = df.columns.get_loc(col_action)  # integer column position for fast iat writes
-
-#     # price series used to compute the running peak/trail
-#     prices = df[col_price].to_numpy(dtype=float)
-#     stop_frac = float(trail_stop_pct) / 100.0   # convert percent to fraction
-#     peak = 0.0                                  # running peak while in trade
-
-#     # array to store per-bar trail values; NaN when not in trade
-#     trail_arr = np.full(len(df), np.nan, dtype=float)
-
-#     # state: whether we are currently in a trade
-#     in_trade = False
-
-#     # iterate bars by integer index for fast iat access
-#     for i in range(len(df)):
-#         t = times[i]            # current bar time
-#         s = sig[i]              # current signal value
-#         p = prices[i]           # price used to update peak
-#         bid = float(df["bid"].iat[i])  # current bid used to compare against trail
-
-#         # default to no action this bar
-#         df.iat[i, loc_action] = 0
-
-#         if not in_trade:
-#             # entry condition: signal strong enough and after session start
-#             if (s >= buy_threshold) and (t >= params.sess_start):
-#                 df.iat[i, loc_action] = 1   # mark Buy
-#                 in_trade = True
-#                 peak = p                     # initialize peak at buy price
-#                 trail_arr[i] = peak * (1.0 - stop_frac)  # record trail at buy bar
-#         else:
-#             # while in trade, update the running peak and compute trail
-#             peak = max(peak, p)
-#             trail_val = peak * (1.0 - stop_frac)
-#             trail_arr[i] = trail_val  # record running trail for this bar
-
-#             # exit condition: signal dropped AND bid breached the trail
-#             if (s < buy_threshold) and (bid < trail_val):
-#                 df.iat[i, loc_action] = -1  # mark Sell
-#                 in_trade = False
-#                 peak = 0.0
-#                 # keep trail_arr[i] as the last trail value on the sell bar
-#             else:
-#                 # remain in trade, no explicit action this bar
-#                 df.iat[i, loc_action] = 0
-
-#     # attach the recorded trail array to the DataFrame (no separate recompute)
-#     df["trailstop_price"] = pd.Series(trail_arr, index=df.index)
-#     # if sellmin_idx is None and in_trade:
-#         # last_ask = float(df.iloc[-1]["ask"])
-#         # last_trail = float(df.iloc[-1]["trailstop_price"])
-
-#     return df
-
-
-_last_trail = 0 # Module-level carry of trailing-stop price between consecutive runs.
-
+_last_trail = 0.0
 def generate_trade_actions(
     df: pd.DataFrame,
     col_signal: str,
@@ -548,79 +469,54 @@ def generate_trade_actions(
     sellmin_idx: int,
     col_price: str = "close"
 ) -> pd.DataFrame:
-    """
-    Generate per-bar trade actions and trailing-stop prices.
-
-    Produces Buy/Sell/Hold actions from a signal series and computes a
-    per-bar trailing-stop price. If a trade remains open at the end of
-    the day, the final trailing-stop price is persisted to the module
-    carry variable so it can be applied on the next day's first buy.
-    """
     global _last_trail
-    # work on a copy to avoid mutating the caller's DataFrame
+
     df = df.copy()
-    # initialize action column to Hold (0) for every bar
     df[col_action] = 0
 
-    # vectorized helpers for loop
-    sig = df[col_signal].to_numpy()         # signal values as numpy array
-    times = df.index.time                   # per-row times (datetime.time)
-    loc_action = df.columns.get_loc(col_action)  # integer column position for fast iat writes
-
-    # price series used to compute the running peak/trail
+    sig = df[col_signal].to_numpy()
+    times = df.index.time
     prices = df[col_price].to_numpy(dtype=float)
-    stop_frac = float(trail_stop_pct) / 100.0   # convert percent to fraction
-    peak = 0.0                                  # running peak while in trade
+    stop_frac = float(trail_stop_pct) / 100.0
 
-    # array to store per-bar trail values; NaN when not in trade
     trail_arr = np.full(len(df), np.nan, dtype=float)
-    # state: whether we are currently in a trade
-    in_trade = False
+    open_flag = (_last_trail > 0)
 
-    # iterate bars by integer index for fast iat access
     for i in range(len(df)):
-        t = times[i]            # current bar time
-        s = sig[i]              # current signal value
-        p = prices[i]           # price used to update peak
-        bid = float(df["bid"].iat[i])  # current bid used to compare against trail
+        t = times[i]; s = sig[i]; p = prices[i]
+        bid = df["bid"].iat[i]
+        # df.at[df.index[i], col_action] = 0
 
-        # default to no action this bar
-        df.iat[i, loc_action] = 0
-
-        if not in_trade:
-            # entry condition: signal strong enough and after session start
-            if (s >= buy_threshold) and (t >= params.sess_start):
-                df.iat[i, loc_action] = 1   # mark Buy
-                in_trade = True
-                # initialize peak at buy price (or _last_trail if there is a carried open trade)
-                peak = max(p, _last_trail / (1.0 - stop_frac))     
-                _last_trail = 0 # clear the global variable
-                trail_arr[i] = peak * (1.0 - stop_frac)  # record trail at buy bar
-        else:
-            # while in trade, update the running peak and compute trail
-            peak = max(peak, p)
+        # if already in-trade (previous trail exists), compute peak from previous trail
+        if i > 0 and np.isfinite(trail_arr[i - 1]):
+            peak = max(p, trail_arr[i - 1] / (1.0 - stop_frac))
             trail_val = peak * (1.0 - stop_frac)
-            trail_arr[i] = trail_val  # record running trail for this bar
-
-            # exit condition: signal dropped AND bid breached the trail
+            trail_arr[i] = trail_val
             if (s < buy_threshold) and (bid < trail_val):
-                df.iat[i, loc_action] = -1  # mark Sell
-                in_trade = False
-                peak = 0.0
-                # keep trail_arr[i] as the last trail value on the sell bar
-            else:
-                # remain in trade, no explicit action this bar
-                df.iat[i, loc_action] = 0
+                df.at[df.index[i], col_action] = -1
+                trail_arr[i] = np.nan
+                open_flag = False
+            continue
 
-    # attach the recorded trail array to the DataFrame (no separate recompute)
+        # not in trade: possible entry
+        if (s >= buy_threshold) and (t >= params.sess_start):
+            df.at[df.index[i], col_action] = 1
+            # apply carried _last_trail directly when we enter; clear it so it's used only once
+            peak = max(p, _last_trail / (1.0 - stop_frac))
+            _last_trail = 0.0
+            trail_arr[i] = peak * (1.0 - stop_frac)
+            open_flag = True
+        else:
+            trail_arr[i] = np.nan
+
     df["trailstop_price"] = pd.Series(trail_arr, index=df.index)
-    if sellmin_idx is None and in_trade:
-        # last_ask = float(df.iloc[-1]["ask"])
-        _last_trail = float(df.iloc[-1]["trailstop_price"])
+
+    # persist last trail: last value if day ended with open trade, else 0
+    if sellmin_idx is None:
+        _last_trail = float(df["trailstop_price"].iloc[-1]) if open_flag else 0.0
 
     return df
 
-    
 #########################################################################################################
 
 
@@ -661,136 +557,12 @@ def fees_for_one_share(price: float, side: str,
 ##################################
 
 
-# def simulate_trading(
-#     results_by_day_sign: dict,
-#     col_action: str,
-#     trail_stop_pct: float,
-#     shares_per_trade: int = 1,
-#     sell_minidx = -1,
-#     col_close: str = "close"
-# ) -> dict:
-#     """
-#     Minimal simulator that only executes generator actions.
-#     - Trusts generator actions in col_action (1=Buy, -1=Sell, 0=Hold).
-#     - Does not compute or enforce any trailing stop or make entry/exit decisions.
-#     - Executes actions as-is, records trades and snapshots, and closes any open entry at the last bar.
-#     """
-#     updated = {}
-#     _r3 = lambda x: round(float(x), 3)
-#     q_per = int(shares_per_trade)
-#     buy_fee_per = lambda p: fees_for_one_share(price=p, side="buy")["total_per_share_billed"]
-#     sell_fee_per = lambda p: fees_for_one_share(price=p, side="sell")["total_per_share_billed"]
-
-#     for day, (session_df, _) in list(results_by_day_sign.items()):
-#         df = session_df.sort_index().copy()
-
-#         # keep sell_minidx handling out: simulator no longer schedules forced sells
-#         position = 0
-#         cash = 0.0
-#         entry_p = None
-#         entry_ts = None
-
-#         pos_buf, cash_buf, net_buf, act_buf, amt_buf = [], [], [], [], []
-#         trades = []
-
-#         exit_ts = df.index[sell_minidx]
-#         df.loc[exit_ts:, col_action] = -1
-
-#         # iterate bars; execute only the actions written in col_action
-#         for i, (ts, row) in enumerate(df.iterrows()):
-#             bid, ask = float(row["bid"]), float(row["ask"])
-#             act_signal = int(row.get(col_action, 0))   # authoritative action from generator
-#             now = ts.time()
-#             action, amt = "No trade", 0
-
-#             # Execute generator action directly (no decision logic here)
-#             if act_signal == 1 and position == 0:
-#                 q = q_per
-#                 position += q
-#                 fee = buy_fee_per(ask) * q
-#                 cash -= (ask * q) + fee
-#                 action, amt = "Buy", q
-#             elif act_signal == -1 and position > 0:
-#                 q = min(q_per, position)
-#                 position -= q
-#                 fee = sell_fee_per(bid) * q
-#                 cash += (bid * q) - fee
-#                 action, amt = "Sell", -q
-#             else:
-#                 action, amt = "Hold", 0
-
-#             # record round-trip when Sell closes an entry
-#             if action == "Sell" and entry_p is not None:
-#                 exit_p, exit_ts = bid, ts
-#                 pct = round(100 * (exit_p - entry_p) / entry_p, 3)
-#                 trades.append(((entry_ts, exit_ts), (entry_p, exit_p), pct))
-#                 entry_p, entry_ts = None, None
-
-#             # record entry on Buy
-#             if action == "Buy" and entry_p is None:
-#                 entry_p, entry_ts = ask, ts
-
-#             # snapshot state
-#             pos_buf.append(position)
-#             cash_buf.append(cash)
-#             net_buf.append(cash + position * bid)
-#             act_buf.append(action)
-#             amt_buf.append(amt)
-
-#         # finalize any open entry at day end (close at index given by sell_minidx)
-#         if entry_p is not None:
-#             exit_p = float(df.at[exit_ts, "bid"])
-#             pct = round(100 * (exit_p - entry_p) / entry_p, 3)
-#             trades.append(((entry_ts, exit_ts), (entry_p, exit_p), pct))
-
-#         # build df_sim (no trail column)
-#         df_sim = df.copy()
-#         df_sim["Position"] = pos_buf
-#         df_sim["Cash"] = cash_buf
-#         df_sim["NetValue"] = net_buf
-#         df_sim["Action"] = act_buf
-#         df_sim["TradedAmount"] = amt_buf
-
-#         # performance summary (unchanged)
-#         session = df_sim.between_time(params.sess_start, params.sess_end)
-#         if not session.empty:
-#             open_ask = float(session["ask"].iloc[0]); close_bid = float(session["bid"].iloc[-1])
-#             buy_fee = buy_fee_per(open_ask)
-#             sell_fee = sell_fee_per(close_bid)
-#             bh_gain_exact = (close_bid - open_ask) - (buy_fee + sell_fee)
-#         else:
-#             open_ask = close_bid = 0.0
-#             buy_fee = sell_fee = 0.0
-#             bh_gain_exact = 0.0
-
-#         trades_lines = []
-#         realized_vals = []
-#         for i, ((_b, _s), (ep, xp), pct) in enumerate(trades, start=1):
-#             buy_fee = buy_fee_per(ep)
-#             sell_fee = sell_fee_per(xp)
-#             total_fee = buy_fee + sell_fee
-#             pnl = (xp - ep) - total_fee
-#             r = _r3(pnl)
-#             realized_vals.append(r)
-#             trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) {_r3(total_fee)} = {_r3(pnl)}")
-
-#         strategy_line = (f"{' + '.join([f'Trade({i}) {_r3(v)}' for i, v in enumerate(realized_vals, start=1)])} = {_r3(sum(realized_vals))}"
-#                          if realized_vals else "0.000")
-#         bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) {_r3(buy_fee + sell_fee)} = {_r3(bh_gain_exact)}"
-
-#         perf = {"BUY&HOLD": bh_line, "TRADES": trades_lines, "STRATEGY": strategy_line}
-
-#         updated[day] = (df_sim, trades, perf)
-
-#     return updated
-
-
-
+_last_bid = 0.0
 def simulate_trading(
-    results_by_day_sign: dict,
+    day,
+    df,
     col_action: str,
     sellmin_idx: int,
-    col_close: str = "close",
     shares_per_trade: int = 1
 ) -> dict:
     """
@@ -799,119 +571,120 @@ def simulate_trading(
     - Does not compute or enforce any trailing stop or make entry/exit decisions.
     - Executes actions as-is, records trades and snapshots, and closes any open entry at the last bar.
     """
+    global _last_bid, _last_trail
     updated = {}
     _r3 = lambda x: round(float(x), 3)
-    q_per = int(shares_per_trade)
     buy_fee_per = lambda p: fees_for_one_share(price=p, side="buy")["total_per_share_billed"]
     sell_fee_per = lambda p: fees_for_one_share(price=p, side="sell")["total_per_share_billed"]
 
-    for day, (session_df, _) in list(results_by_day_sign.items()):
-        df = session_df.sort_index().copy()
+    df = df.sort_index().copy()
 
-        position, cash = 0, 0.0
-        ask_p, ask_ts, open_ask, close_bid = None, None, None, None
-        pos_buf, cash_buf, net_buf, act_buf, amt_buf, trades = [], [], [], [], [], []
+    position, cash, buy_fee = 0, 0.0, 0.0
+    ask_p, ask_ts, open_ask, close_bid = None, None, None, None
+    pos_buf, cash_buf, net_buf, act_buf, amt_buf, trades = [], [], [], [], [], []
+
+    carried_open = (_last_trail > 0)   # True if we start the day with a carried open trade
+
+    # setting the timestamp of the last sell at day end (index given by sellmin_idx)
+    if sellmin_idx is None: 
+        last_bid_ts = df.index[-1] 
+    elif sellmin_idx >= 0: 
+        last_bid_ts = df[df.index.time >= params.sess_start].index[sellmin_idx] 
+    else: # negative
+        last_bid_ts = df.index[sellmin_idx] 
+    df.loc[last_bid_ts:, col_action] = -1
+
+    # iterate bars; execute only the actions written in col_action
+    for ts, row in df.iterrows():
+        sell_fee = 0.0
+        amt = 0.0
+        bid, ask = float(row["bid"]), float(row["ask"])
+
+        # capture first ask inside session window
+        if open_ask is None and params.sess_start <= ts.time() <= params.sess_end:
+            open_ask = ask
+        # always update last bid (ends up as final bid)
+        close_bid = bid 
+
+        action, amt = "Hold", 0 # HOLD
         
-        if sellmin_idx is None: 
-            bid_ts = df.index[-1] 
-        elif sellmin_idx >= 0: 
-            bid_ts = df[df.index.time >= params.sess_start].index[sellmin_idx] 
-        else: # negative
-            bid_ts = df.index[sellmin_idx] 
-        df.loc[bid_ts:, col_action] = -1
-
-        # iterate bars; execute only the actions written in col_action
-        for i, (ts, row) in enumerate(df.iterrows()):
-            bid, ask = float(row["bid"]), float(row["ask"])
-
-            # capture first ask inside session window
-            if open_ask is None and params.sess_start <= ts.time() <= params.sess_end:
-                open_ask = ask
-            # always update last bid (ends up as final bid)
-            close_bid = bid
-            
-            act_signal = int(row.get(col_action, 0))   # authoritative action from generator
-            now = ts.time()
-            action, amt = "No trade", 0
-
-            # Execute generator action directly (no decision logic here)
-            if act_signal == 1 and position == 0:
-                q = q_per
-                position += q
-                fee = buy_fee_per(ask) * q
-                cash -= (ask * q) + fee
-                action, amt = "Buy", q
-            elif act_signal == -1 and position > 0:
-                q = min(q_per, position)
-                position -= q
-                fee = sell_fee_per(bid) * q
-                cash += (bid * q) - fee
-                action, amt = "Sell", -q
+        if row[col_action] == 1 and position == 0: # BUY
+            q = shares_per_trade
+            position += q
+            action, amt = "Buy", q
+            if _last_bid > 0: # it´s the continuation of a open trade
+                ask_p = _last_bid
+                buy_fee = 0.0
+                _last_bid = 0.0
             else:
-                action, amt = "Hold", 0
+                ask_p = ask
+                buy_fee = buy_fee_per(ask) * q
+            ask_ts = ts
+            cash -= (ask_p * q) + buy_fee
 
-            # record round-trip when Sell closes an entry
-            if action == "Sell" and ask_p is not None:
-                bid_p, bid_ts = bid, ts
-                pct = round(100 * (bid_p - ask_p) / ask_p, 3)
-                trades.append(((ask_ts, bid_ts), (ask_p, bid_p), pct))
-                ask_p, ask_ts = None, None
+        elif row[col_action] == -1 and position > 0:  # SELL
+            q = min(shares_per_trade, position)
+            position -= q
+            action, amt = "Sell", -q
+            # waive fee only for a carried open trade that is closed at/after last_bid_ts (the day's final sell)
+            if carried_open and ts >= last_bid_ts:
+                sell_fee = 0.0
+                carried_open = False
+            else:
+                sell_fee = sell_fee_per(bid) * q
+            cash += (bid * q) - sell_fee
 
-            # record entry on Buy
-            if action == "Buy" and ask_p is None:
-                ask_p, ask_ts = ask, ts
-
-            # snapshot state
-            pos_buf.append(position)
-            cash_buf.append(cash)
-            net_buf.append(cash + position * bid)
-            act_buf.append(action)
-            amt_buf.append(amt)
-
-        # build df_sim (no trail column)
-        df_sim = df.assign(
-            Position=pos_buf,
-            Cash=cash_buf,
-            NetValue=net_buf,
-            Action=act_buf,
-            TradedAmount=amt_buf
-        )
-
-        # finalize any open entry at day end (close at index given by sellmin_idx)
-        if ask_p is not None:
-            bid_p = float(df.at[bid_ts, "bid"])
+        # record round-trip when Sell closes an entry
+        if action == "Sell" and ask_p is not None:
+            bid_p = bid
+            bid_ts = ts
             pct = round(100 * (bid_p - ask_p) / ask_p, 3)
-            trades.append(((ask_ts, bid_ts), (ask_p, bid_p), pct))
+            trades.append(((ask_ts, bid_ts), (ask_p, bid_p), pct, buy_fee, sell_fee))
+            ask_p, ask_ts = None, None
+            buy_fee = sell_fee = 0.0
 
-        # performance summary (use values captured during the loop)
-        if open_ask is not None and close_bid is not None:
-            buy_fee = buy_fee_per(open_ask)
-            sell_fee = sell_fee_per(close_bid)
-            bh_gain_exact = (close_bid - open_ask) - (buy_fee + sell_fee)
-        else:
-            open_ask = close_bid = 0.0
-            buy_fee = sell_fee = bh_gain_exact = 0.0
+        # record entry on Buy
+        if action == "Buy" and ask_p is None:
+            ask_p, ask_ts = ask, ts
 
-        trades_lines = []
-        realized_vals = []
-        for i, ((_b, _s), (ep, xp), pct) in enumerate(trades, start=1):
-            buy_fee = buy_fee_per(ep)
-            sell_fee = sell_fee_per(xp)
-            total_fee = buy_fee + sell_fee
-            pnl = (xp - ep) - total_fee
-            r = _r3(pnl)
-            realized_vals.append(r)
-            trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) {_r3(total_fee)} = {_r3(pnl)}")
+        # snapshot state
+        pos_buf.append(position)
+        cash_buf.append(cash)
+        net_buf.append(cash + position * bid)
+        act_buf.append(action)
+        amt_buf.append(amt)
 
-        strategy_line = (f"{' + '.join([f'Trade({i}) {_r3(v)}' for i, v in enumerate(realized_vals, start=1)])} = {_r3(sum(realized_vals))}" if realized_vals else "0.000")
-        bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) {_r3(buy_fee + sell_fee)} = {_r3(bh_gain_exact)}"
-        perf = {"BUY&HOLD": bh_line, "TRADES": trades_lines, "STRATEGY": strategy_line}
+    # build df_sim (no trail column)
+    df_sim = df.assign(
+    Position=pos_buf,
+    Cash=cash_buf,
+    NetValue=net_buf,
+    Action=act_buf,
+    TradedAmount=amt_buf)
 
-        updated[day] = (df_sim, trades, perf)
+    # performance summary (minimal, no checks)
+    trades_lines = []; 
+    realized_vals = []
+    for i, trade in enumerate(trades, 1):
+        (_, _), (ep, xp), pct, buy_fee, sell_fee = trade
+        pnl = _r3((xp - ep) - (buy_fee + sell_fee))
+        realized_vals.append(pnl)
+        trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) [{_r3(buy_fee)}+{_r3(sell_fee)}] = {pnl}")
+    
+    strategy_line = (" + ".join([f"Trade({i}) {v}" for i,v in enumerate(realized_vals,1)]) + f" = {_r3(sum(realized_vals))}") if realized_vals else "0.000"
+
+    bh_buy_fee = buy_fee_per(open_ask) * shares_per_trade
+    bh_sell_fee = sell_fee_per(close_bid) * shares_per_trade
+    bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) [{_r3(bh_buy_fee)}+{_r3(bh_sell_fee)}] = {_r3((close_bid - open_ask) - (bh_buy_fee + bh_sell_fee))}"
+    perf = {"BUY&HOLD": bh_line, "TRADES": trades_lines, "STRATEGY": strategy_line}
+
+    if sellmin_idx is None:
+        _last_bid = float(df.iloc[-1]["bid"] if _last_trail > 0 else 0) # computed at the end of the day, to be reused the next day
+
+    updated[day] = (df_sim, trades, perf)
 
     return updated
 
-    
 #########################################################################################################
 
 
