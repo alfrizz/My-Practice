@@ -17,7 +17,7 @@ ticker = 'AAPL'
 label_col  = "signal"
 shares_per_trade = 1
 
-month_to_check = '2023-06'
+month_to_check = '2023-07'
 sel_val_rmse = 0.09436
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -182,7 +182,7 @@ sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 
 #########################################################################################################
 
 
-def ticker_parameters(ticker, bidask_spread_pct, sellmin_idx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick):
+def ticker_parameters(ticker, bidask_spread_pct, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick):
 
     if ticker == 'AAPL':
         
@@ -190,16 +190,16 @@ def ticker_parameters(ticker, bidask_spread_pct, sellmin_idx_tick, trail_stop_ti
 
 # ['adx', 'adx_30', 'adx_60', 'adx_90', 'eng_ma', 'dow_time', 'hour_time', 'minute_time', 'in_sess_time', 'mom_sum_30', 'mom_sum_60', 'mom_sum_90', 'macd_diff_z_30', 'macd_diff_z_60', 'macd_diff_z_90', 'eng_macd', 'bb_w_z_30', 'bb_w_z_60', 'bb_w_z_90']
 
-        trail_stop_tick = max(2*bidask_spread_pct, trail_stop_tick)
+        trailstop_pct_tick = max(2*bidask_spread_pct, trailstop_pct_tick)
         
-    return features_cols_tick, sellmin_idx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick
+    return features_cols_tick, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, sellmin_idx_tick, trail_stop_tick, sign_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
+features_cols_tick, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
                                                                                                                bidask_spread_pct   = bidask_spread_pct,
-                                                                                                               sellmin_idx_tick    = -1,
-                                                                                                               trail_stop_tick     = 0.35,
-                                                                                                               sign_thresh_tick    = 0.1,
+                                                                                                               sellmin_idx_tick    = None,
+                                                                                                               trailstop_pct_tick  = 0.35,
+                                                                                                               buy_thresh_tick     = 0.15,
                                                                                                                sign_smoothwin_tick = 1)
                                                                                                                # ,return_threshold = 0.01)
                                                                                                            
