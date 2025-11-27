@@ -958,13 +958,11 @@ def save_results_callback(study, trial):
         return
 
     # 2) Extract trial number, params, and objective value
-    entry = {
-        "trial"              : trial.number,
-        "pred_threshold"     : round(trial.params["pred_threshold"], 5),
-        "trailing_stop_pred" : round(trial.params["trailing_stop_pred"], 5),
-        "smoothing_window"   : round(trial.params["smoothing_window"], 5),
-        "avg_daily_pnl"      : trial.value,
-    }
+    entry = {"trial": trial.number}
+    for k, v in trial.params.items():
+        entry[k] = round(v, 5) if isinstance(v, (int, float)) else v
+    entry["avg_daily_pnl"] = trial.value
+
     _results.append(entry)
 
     # 3) Build & sort DataFrame of all completed trials so far

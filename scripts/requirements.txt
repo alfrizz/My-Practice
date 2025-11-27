@@ -10,6 +10,8 @@ numpy<2.0
 optuna==4.4.0
 pandas>=2.3.2
 plotly
+psycopg2-binary==2.9.11
+rich==13.9.4
 seaborn
 shap==0.48.0
 statsmodels==0.14.5

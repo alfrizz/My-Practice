@@ -5,7 +5,7 @@ services:
     build:
       context: ${HOME}/scripts
       dockerfile: Dockerfile
-    image: gpu-jl:latest
+    image: alfrizz/gpu-jl:latest
 
     restart: unless-stopped
 

@@ -38,6 +38,11 @@ sudo sort -u "$REQS" -o "$REQS"
 cd /home/alfrizz/scripts
 docker-compose -f docker-compose.yml build --no-cache jupyter
 
+# push image to docker hub
+if [ -z "$(docker info --format '{{.Username}}' 2>/dev/null)" ]; then docker login; fi
+docker image inspect alfrizz/gpu-jl:latest >/dev/null 2>&1 || docker tag gpu-jl:latest alfrizz/gpu-jl:latest
+docker push alfrizz/gpu-jl:latest
+
 # avoid name conflicts: stop and remove any existing container named gpu-jl
 docker stop gpu-jl 2>/dev/null || true
 docker rm gpu-jl 2>/dev/null || true

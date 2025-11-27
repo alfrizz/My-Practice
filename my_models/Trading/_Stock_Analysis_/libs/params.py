@@ -190,17 +190,17 @@ def ticker_parameters(ticker, bidask_spread_pct, sellmin_idx_tick, trailstop_pct
 
 # ['adx', 'adx_30', 'adx_60', 'adx_90', 'eng_ma', 'dow_time', 'hour_time', 'minute_time', 'in_sess_time', 'mom_sum_30', 'mom_sum_60', 'mom_sum_90', 'macd_diff_z_30', 'macd_diff_z_60', 'macd_diff_z_90', 'eng_macd', 'bb_w_z_30', 'bb_w_z_60', 'bb_w_z_90']
 
-        trailstop_pct_tick = max(2*bidask_spread_pct, trailstop_pct_tick)
+        trailstop_pct_tick = max(1.5 * bidask_spread_pct, trailstop_pct_tick) # safe minimum trail stop set to 'factor' times the bid spread (so bid starts enough higher than the trail)
         
     return features_cols_tick, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker            = ticker,
+features_cols_tick, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker          = ticker,
                                                                                                                bidask_spread_pct   = bidask_spread_pct,
                                                                                                                sellmin_idx_tick    = None,
-                                                                                                               trailstop_pct_tick  = 0.35,
-                                                                                                               buy_thresh_tick     = 0.15,
-                                                                                                               sign_smoothwin_tick = 1)
+                                                                                                               trailstop_pct_tick  = 0.05,
+                                                                                                               buy_thresh_tick     = 0.05,
+                                                                                                               sign_smoothwin_tick = 10)
                                                                                                                # ,return_threshold = 0.01)
                                                                                                            
 
