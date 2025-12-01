@@ -40,12 +40,12 @@ import matplotlib.pyplot as plt
 
 def build_tensors(
     df: pd.DataFrame,
-    look_back    = None,
-    sess_start   = None,
+    look_back   = None,
+    sess_start = None,
     *,
-    device       = torch.device("cpu"),
-    tmp_dir      = "/tmp/X_buf.dat",
-    thresh_gb    = params.thresh_gb,
+    device     = torch.device("cpu"),
+    tmp_dir    = "/tmp/X_buf.dat",
+    thresh_gb  = params.thresh_gb,
 ) -> tuple[
     torch.Tensor,  # X         shape=(N, look_back, F)
     torch.Tensor,  # y_sig     shape=(N,)
@@ -77,8 +77,7 @@ def build_tensors(
     F = len(feature_cols)
 
     # session start -> seconds
-    sess_time = sess_start.time() if hasattr(sess_start, "time") else sess_start
-    cutoff_sec = sess_time.hour * 3600 + sess_time.minute * 60
+    cutoff_sec = sess_start.hour * 3600 + sess_start.minute * 60
 
     # 2) First pass: per-day payloads and N_total
     day_groups = df.groupby(df.index.normalize(), sort=False)
@@ -107,7 +106,7 @@ def build_tensors(
         # window-end alignment: window [i : i+look_back] ends at i+look_back-1
         ends_np = day_df.index.to_numpy()[look_back - 1:]        # (T - look_back + 1,)
         secs = (ends_np - ends_np.astype("datetime64[D]")) / np.timedelta64(1, "s")
-        mask = secs >= cutoff_sec                                  # (T - look_back + 1,)
+        mask = secs >= cutoff_sec                                # (T - look_back + 1,)
 
         m = int(mask.sum())
         if m == 0:
@@ -316,7 +315,6 @@ class DayWindowDataset(Dataset):
         y_return:        torch.Tensor,   # (N_windows,)
         raw_close:       torch.Tensor,   # (N_windows,)
         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
-        sess_start_time: time,           # unused: already filtered upstream
         signal_thresh:   float,
         return_thresh:   float
     ):
@@ -445,7 +443,7 @@ def split_to_day_datasets(
     X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val,
     X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
     *,
-    sess_start_time:       time,
+    sess_start:            time,
     signal_thresh:         float,
     return_thresh:         float,
     train_batch:           int = 32,
@@ -474,14 +472,13 @@ def split_to_day_datasets(
     datasets = {}
     for name, Xd, ys, yr, rc, et in tqdm(splits, desc="Creating DayWindowDatasets", unit="split"):
         datasets[name] = DayWindowDataset(
-            X               = Xd,
-            y_signal        = ys,
-            y_return        = yr,
-            raw_close       = rc,  
-            end_times       = et,
-            sess_start_time = sess_start_time,
-            signal_thresh   = signal_thresh,
-            return_thresh   = return_thresh
+            X             = Xd,
+            y_signal      = ys,
+            y_return      = yr,
+            raw_close     = rc,  
+            end_times     = et,
+            signal_thresh = signal_thresh,
+            return_thresh = return_thresh
         )
 
     # Train loader: padded multi-day batches
@@ -530,7 +527,7 @@ def model_core_pipeline(
     train_prop: float,           # fraction of days → train
     val_prop: float,             # fraction of days → val
     train_batch: int,            # batch size for training
-    train_workers: int,            # DataLoader worker count
+    train_workers: int,          # DataLoader worker count
     prefetch_factor: int,        # DataLoader prefetch_factor
     signal_thresh: float,        # y_signal threshold
     return_thresh: float         # y_return threshold
@@ -542,21 +539,14 @@ def model_core_pipeline(
       1) build_tensors(df, look_back, sess_start)
       2) chronological_split(..., train_prop, val_prop, train_batch)
       3) carve end_times into train/val/test
-      4) split_to_day_datasets(
-           X_tr, y_sig_tr, y_ret_tr, raw_close_tr, end_times_tr,
-           X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val,
-           X_te, y_sig_te, y_ret_te, raw_close_te, end_times_te,
-           sess_start_time=sess_start,
-           signal_thresh, return_thresh,
-           train_batch, train_workers, prefetch_factor
-         )
+      4) split_to_day_datasets(...)
       cleans up all intermediate arrays before returning.
     """
     # 1) slide‐window tensorization
     X, y_sig, y_ret, raw_close, end_times = build_tensors(
-        df=df,
-        look_back=look_back,
-        sess_start=sess_start
+        df         = df,
+        look_back  = look_back,
+        sess_start = sess_start
     )
 
     # 2) split into train/val/test by calendar day
@@ -564,10 +554,10 @@ def model_core_pipeline(
      samples_per_day,
      day_id_tr, day_id_val, day_id_te) = chronological_split(
          X, y_sig, y_ret, raw_close,
-         end_times=end_times,
-         train_prop=train_prop,
-         val_prop=val_prop,
-         train_batch=train_batch
+         end_times   = end_times,
+         train_prop  = train_prop,
+         val_prop    = val_prop,
+         train_batch = train_batch
     )
     X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr  = train_split
     X_val, y_sig_val, y_ret_val, raw_close_val = val_split
@@ -591,7 +581,7 @@ def model_core_pipeline(
         # test split
         X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
 
-        sess_start_time       = sess_start,
+        sess_start            = sess_start,
         signal_thresh         = signal_thresh,
         return_thresh         = return_thresh,
         train_batch           = train_batch,

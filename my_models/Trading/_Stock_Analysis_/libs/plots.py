@@ -4,11 +4,11 @@ from typing import Sequence, List, Tuple, Optional, Union, Dict
 
 import pandas as pd
 import numpy  as np
+import datetime
 
 import gc
 import re
 import textwrap
-
 import math
 import os
 import json
@@ -23,6 +23,7 @@ import seaborn as sns
 sns.set_style("white")
 
 from tqdm.auto import tqdm
+import optuna
 from optuna.trial import TrialState
 import torch
 
@@ -538,7 +539,6 @@ def plot_trades(
 def aggregate_performance(
     perf_list: list,
     df: pd.DataFrame,
-    round_digits: int = 3
 ) -> None:
     """
     Aggregate and print summary when per-day perf dicts contain only formatted strings.
@@ -553,68 +553,39 @@ def aggregate_performance(
     """
     def _parse_eq_value(s: str) -> float:
         # expects formatted lines ending with " = <number>"
-        if not s or " = " not in s:
-            return 0.0
         return float(s.strip().split(" = ")[-1])
 
-    bh_per_day_vals = []
-    all_trade_vals = []
-    trades_count = 0
+    # collect buy&hold per-day values and all trade PnL values
+    bh_per_day_vals = [_parse_eq_value(perf.get("BUY&HOLD")) for perf in perf_list]
+    all_trade_vals = [_parse_eq_value(perf.get("STRATEGY")) for perf in perf_list]
 
-    for perf in perf_list:
-        if not perf:
-            continue
-        # accept common BUY&HOLD variants for backward compatibility
-        bh_line = perf.get("BUY&HOLD") or perf.get("BUY & HOLD") or perf.get("BUY &HOLD") or perf.get("BUY&HOLD")
-        if bh_line:
-            bh_per_day_vals.append(_parse_eq_value(bh_line))
+    trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
 
-        trades_lines = perf.get("TRADES")
-        if isinstance(trades_lines, list):
-            for line in trades_lines:
-                all_trade_vals.append(_parse_eq_value(line))
-            trades_count += len(trades_lines)
+    buyhold_sum = sum(bh_per_day_vals)
+    strategy_sum = sum(all_trade_vals)
 
-    buyhold_sum = round(sum(bh_per_day_vals), round_digits)
-    strategy_sum = round(sum(all_trade_vals), round_digits)
+    # first/last trading day and one-time B&H legs (simplified)
+    first_day = df.index.normalize().min()
+    last_day  = df.index.normalize().max()
 
-    # determine first/last trading day and one-time B&H legs (unchanged logic)
-    session_df = df.between_time(params.sess_start, params.sess_end)
-    if not session_df.empty:
-        first_day = session_df.index.normalize().min()
-        last_day = session_df.index.normalize().max()
-    else:
-        all_days = df.index.normalize().unique()
-        first_day = all_days.min()
-        last_day = all_days.max()
-
-    mask_start = ((df.index.normalize() == first_day) & (df.index.time >= params.sess_start))
-    if df.loc[mask_start, "ask"].empty:
-        mask_start = df.index.normalize() == first_day
-    start_ask = df.loc[mask_start, "ask"].iloc[0]
-
-    mask_end = ((df.index.normalize() == last_day) & (df.index.time <= params.sess_end))
-    if df.loc[mask_end, "bid"].empty:
-        mask_end = df.index.normalize() == last_day
-    end_bid = df.loc[mask_end, "bid"].iloc[-1]
+    start_ask = df.loc[df.index.normalize() == first_day, "ask"].iloc[0]
+    end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
 
     # prints (rounded)
     print("\n" + "=" * 115)
     print(f"Overall Summary ({first_day.date()} = {start_ask:.4f} → {last_day.date()} = {end_bid:.4f})")
-    print(f"\nOne-time buy&hold gain: {(end_bid - start_ask):.{round_digits}f}")
+    print(f"\nOne-time buy&hold gain: {(end_bid - start_ask):.{3}f}")
 
-    print(f"Buy & Hold – each day ($): {buyhold_sum:.{round_digits}f}")
-    print(f"Strategy Return ($): {strategy_sum:.{round_digits}f}")
+    print(f"Buy & Hold – each day ($): {buyhold_sum:.{3}f}")
+    print(f"Strategy Return ($): {strategy_sum:.{3}f}")
     print(f"Trades Count: {trades_count}")
-    if trades_count > 0:
-        per_trade = strategy_sum / trades_count
-        print(f"Strategy return per trade: {per_trade:.{round_digits}f}")
+    per_trade = strategy_sum / trades_count if trades_count > 0 else 0
+    print(f"Strategy return per trade: {per_trade:.{3}f}")
 
     num_days = df.index.normalize().nunique()
     print(f"Num. trading days: {num_days}")
-    if num_days > 0:
-        per_day = strategy_sum / num_days
-        print(f"Strategy return per trading day: {per_day:.{round_digits}f}")
+    per_day = strategy_sum / num_days
+    print(f"Strategy return per trading day: {per_day:.{3}f}")
 
     # small bar plot (same layout, rounded annotations)
     one_time_bh = end_bid - start_ask
@@ -624,8 +595,8 @@ def aggregate_performance(
         "Sum Strategy": strategy_sum
     }
     secondary = {
-        "Per trade": (strategy_sum / trades_count) if trades_count else 0.0,
-        "Per day": (strategy_sum / num_days) if num_days else 0.0
+        "Per trade": (per_trade),
+        "Per day": (per_day)
     }
 
     fig, ax1 = plt.subplots(figsize=(10, 5))
@@ -637,8 +608,8 @@ def aggregate_performance(
     x2 = np.arange(len(names2)) + len(names1)
 
     width = 0.6
-    bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", label="Primary metrics")
-    bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", label="Secondary metrics")
+    bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", label="Absolute")
+    bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", label="Relative")
 
     all_names = names1 + names2
     ax1.set_xticks(np.concatenate([x1, x2]))
@@ -650,14 +621,14 @@ def aggregate_performance(
 
     for bar in bars1:
         h = bar.get_height()
-        ax1.annotate(f"{h:.2f}",
+        ax1.annotate(f"{h:.3f}",
                      xy=(bar.get_x() + bar.get_width() / 2, h),
                      xytext=(0, 3), textcoords="offset points",
                      ha="center", va="bottom", fontsize=9)
 
     for bar in bars2:
         h = bar.get_height()
-        ax2.annotate(f"{h:.2f}",
+        ax2.annotate(f"{h:.3f}",
                      xy=(bar.get_x() + bar.get_width() / 2, h),
                      xytext=(0, 3), textcoords="offset points",
                      ha="center", va="bottom", fontsize=9)
@@ -669,7 +640,7 @@ def aggregate_performance(
     plt.tight_layout()
     plt.show()
 
-    
+
 #########################################################################################################
 
 
@@ -842,9 +813,11 @@ def make_live_plot_callback(fig, ax, line, handle):
 
     return live_plot_callback
 
-##########################
 
-def lightweight_plot_callback(study, trial):
+#############################################
+
+
+def plot_callback(study, trial):
     """
     Live-update a small Matplotlib line chart of trial.value vs. trial.number.
     `state` lives across calls and holds the figure, axes and data lists.
@@ -853,13 +826,13 @@ def lightweight_plot_callback(study, trial):
         return    # skip pruned or errored trials
         
     # 1) Initialize a single persistent state dict
-    if not hasattr(lightweight_plot_callback, "state"):
-        lightweight_plot_callback.state = {
+    if not hasattr(plot_callback, "state"):
+        plot_callback.state = {
             "initialized": False,
             "fig": None, "ax": None, "line": None, "handle": None,
             "x": [], "y": []
         }
-    state = lightweight_plot_callback.state
+    state = plot_callback.state
 
     # 2) Skip pruned or errored trials
     if trial.value is None:
@@ -901,28 +874,30 @@ def save_best_trial_callback(study, trial):
     best_params = trial.params
 
     # scan the folder for existing JSONs for this ticker
-    pattern = os.path.join(params.optuna_folder, f"{params.ticker}_*.json")
+    pattern = os.path.join(params.optuna_folder, f"{params.ticker}_*_target.json")
     files   = glob.glob(pattern)
 
     # extract the float values out of the filenames
     existing = []
-    prefix   = f"{params.ticker}_"
+    # regex matches: <TICKER>_<float>_target.json
+    rx = re.compile(rf'^{re.escape(params.ticker)}_(?P<val>-?\d+(?:\.\d+)?)_target\.json$')
     for fn in files:
         name = os.path.basename(fn)
-        # name looks like "AAPL_0.6036.json"
+        m = rx.match(name)
+        if not m:
+            continue
         try:
-            val = float(name[len(prefix):-5])
-            existing.append(val)
+            existing.append(float(m.group("val")))
         except ValueError:
             continue
 
     # only save if our new best_value beats all on disk
-    min_existing = min(existing) if existing else float("-inf")
-    if best_value <= min_existing:
+    max_existing = max(existing) if existing else float("-inf")
+    if best_value <= max_existing:
         return
 
     # dump to a new file
-    fname = f"{params.ticker}_{best_value:.4f}.json"
+    fname = f"{params.ticker}_{best_value:.4f}_target.json"
     path  = os.path.join(params.optuna_folder, fname)
     with open(path, "w") as fp:
         json.dump(
@@ -947,10 +922,6 @@ def save_results_callback(study, trial):
     2) Extracts the three hyperparameters plus the average daily PnL.
     3) Appends that data as a dict into the module‐level `_results` list.
     4) Builds a pandas DataFrame from `_results`, sorts it descending by avg_daily_pnl.
-    5) Finds the most recent JSON file in params.optuna_folder matching
-       '{ticker}_*.json', pulls its numeric suffix.
-    6) Writes out the sorted DataFrame to:
-         '{ticker}_{that_same_suffix}_pred_sign_params.csv'
     """
 
     # 1) Only process trials that ran to completion
@@ -961,7 +932,7 @@ def save_results_callback(study, trial):
     entry = {"trial": trial.number}
     for k, v in trial.params.items():
         entry[k] = round(v, 5) if isinstance(v, (int, float)) else v
-    entry["avg_daily_pnl"] = trial.value
+    entry["avg_daily_pnl"] = round(trial.value, 5)
 
     _results.append(entry)
 
@@ -969,27 +940,20 @@ def save_results_callback(study, trial):
     df = pd.DataFrame(_results)
     df = df.sort_values("avg_daily_pnl", ascending=False)
 
-    # 4) Locate the matching JSON file to copy its suffix
-    pattern = os.path.join(
-        params.optuna_folder,
-        f"{params.ticker}_*.json"
-    )
-    json_files = glob.glob(pattern)
-    if not json_files:
-        raise FileNotFoundError(
-            f"No JSON found matching pattern: {pattern}"
-        )
-
-    # Pick the most recently modified JSON
-    latest_json = max(json_files, key=os.path.getmtime)
-    base = os.path.splitext(os.path.basename(latest_json))[0]
-    # base looks like 'AAPL_0.4329'; split off the ticker_ prefix
-    suffix = base.split(f"{params.ticker}_", 1)[-1]
-
-    # 5) Construct the CSV filename & write it
-    csv_name = f"{params.ticker}_{suffix}_pred_sign_params.csv"
+    # 4) Construct the CSV filename & write it
+    csv_name = f"{params.ticker}_live_predicted.csv"
     out_path = os.path.join(params.optuna_folder, csv_name)
     df.to_csv(out_path, index=False)
+
+##########################
+
+# short formatter callback
+def short_log_callback(study, trial):
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    val = trial.value
+    best_val = study.best_value
+    best_idx = study.best_trial.number if study.best_trial is not None else None
+    print(f"[I {ts}] Trial {trial.number} finished with value: {val:.4f}. Best is trial {best_idx} with value: {best_val:.4f}.")
 
     
 ########################## 
@@ -998,6 +962,7 @@ def cleanup_callback(study, trial):
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+
 
 
 ####################################################################################################################

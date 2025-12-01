@@ -10,6 +10,7 @@ import torch.nn.functional as Funct
 import os
 import glob
 import json
+import re
 
 #########################################################################################################
 
@@ -17,7 +18,7 @@ ticker = 'AAPL'
 label_col  = "signal"
 shares_per_trade = 1
 
-month_to_check = '2023-07'
+month_to_check = '2021-03'
 sel_val_rmse = 0.09436
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -28,11 +29,11 @@ createCSVsign = False # set to True to regenerate the 'sign' csv
 since_year = 2009
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidask_spread_pct = 0.015 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
+bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
-thresh_gb = 36 # use ram instead of memmap, if X_buf below this value
+thresh_gb = 48 # use ram instead of memmap, if X_buf below this value
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -47,49 +48,25 @@ feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
 
-# Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
-# Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
-# Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
-# After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
-
-sess_start         = datetime.strptime('14:30', '%H:%M').time()  
-sess_premark       = datetime.strptime('09:00' , '%H:%M').time()  
-sess_end           = datetime.strptime('21:00' , '%H:%M').time() 
-
 #########################################################################################################
 
 
-def load_best_optuna_record(optuna_folder=optuna_folder, ticker=ticker):
+def load_target_sign_optuna_record(optuna_folder=optuna_folder, ticker=ticker):
     """
     Scan an Optuna‐output folder for JSON files matching '{ticker}_<value>.json',
-    ignore any '*_all.json' summary files, pick the one with the highest <value>,
-    and return its numeric value plus the 'params' dict.
-
-    Args:
-        optuna_folder: path to the directory containing ticker-specific JSONs
-        ticker:        stock ticker prefix for each JSON filename
-
-    Returns:
-        best_value: float  # the largest numeric prefix extracted from the filename
-        best_params: dict  # the 'params' field from that JSON record
-
-    Raises:
-        FileNotFoundError: if no matching JSON files are found
-        ValueError:       if the numeric prefix cannot be parsed
+    pick the one with the highest <value>, and return its numeric value plus the 'params' dict.
     """
-    # 1) find all files named like "TICKER_*.json", excluding the "*_all.json" summary
-    pattern = os.path.join(optuna_folder, f"{ticker}_*.json")
-    files = [f for f in glob.glob(pattern) if not f.endswith("_all.json")]
-    
-    if not files:
-        return None, {}          # or provide some hard-coded defaults
+    # 1) find all files named like "TICKER_*.json", excluding the "*optuna.json" summary
+    pattern = os.path.join(optuna_folder, f"{ticker}_*_target.json")
+    files = [f for f in glob.glob(pattern)]
 
-    # 2) pick the file whose suffix (after the underscore) is the largest float
+    # 2) pick the file whose suffix (after the underscore and before_target) is the largest float
+    # regex safely extracts the numeric value between ticker_ and _target.json
+    rx = re.compile(rf'^{re.escape(ticker)}_(?P<val>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)_target\.json$')
+
     def extract_value(path: str) -> float:
         name = os.path.splitext(os.path.basename(path))[0]
-        # name is "TICKER_<value>", split at first underscore
-        _, val_str = name.split("_", 1)
-        return float(val_str)
+        m = rx.match(name)
 
     best_file = max(files, key=extract_value)
 
@@ -102,7 +79,7 @@ def load_best_optuna_record(optuna_folder=optuna_folder, ticker=ticker):
     return best_value, best_params
 
 # automatically executed function to get the optuna values and parameters
-best_optuna_value, best_optuna_params = load_best_optuna_record()
+best_optuna_value, best_optuna_params = load_target_sign_optuna_record()
 
 
 #########################################################################################################
@@ -176,13 +153,21 @@ hparams = {
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
 
-sess_start_pred = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - hparams["LOOK_BACK"], 60))
-sess_start_shift = dt.time(*divmod((sess_start.hour * 60 + sess_start.minute) - 2*hparams["LOOK_BACK"], 60))
+# Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
+# Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
+# Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
+# After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
+
+sess_premark     = datetime.strptime('09:00' , '%H:%M').time()  
+sess_end         = datetime.strptime('21:00' , '%H:%M').time() 
+sess_start_reg   = datetime.strptime('14:30', '%H:%M').time()  
+sess_start_pred  = dt.time(*divmod((sess_start_reg.hour * 60 + sess_start_reg.minute) - hparams["LOOK_BACK"], 60))
+sess_start_shift = dt.time(*divmod((sess_start_reg.hour * 60 + sess_start_reg.minute) - 2*hparams["LOOK_BACK"], 60))
 
 #########################################################################################################
 
 
-def ticker_parameters(ticker, bidask_spread_pct, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick):
+def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick):
 
     if ticker == 'AAPL':
         
@@ -190,18 +175,19 @@ def ticker_parameters(ticker, bidask_spread_pct, sellmin_idx_tick, trailstop_pct
 
 # ['adx', 'adx_30', 'adx_60', 'adx_90', 'eng_ma', 'dow_time', 'hour_time', 'minute_time', 'in_sess_time', 'mom_sum_30', 'mom_sum_60', 'mom_sum_90', 'macd_diff_z_30', 'macd_diff_z_60', 'macd_diff_z_90', 'eng_macd', 'bb_w_z_30', 'bb_w_z_60', 'bb_w_z_90']
 
-        trailstop_pct_tick = max(1.5 * bidask_spread_pct, trailstop_pct_tick) # safe minimum trail stop set to 'factor' times the bid spread (so bid starts enough higher than the trail)
+        # trailstop_pct_tick = max(1.5 * bidask_spread_pct, trailstop_pct_tick) # safe minimum trail stop set to 'factor' times the bid spread (so bid starts enough higher than the trail)
         
-    return features_cols_tick, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick
+    return features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, sellmin_idx_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick = ticker_parameters(ticker          = ticker,
-                                                                                                               bidask_spread_pct   = bidask_spread_pct,
-                                                                                                               sellmin_idx_tick    = None,
-                                                                                                               trailstop_pct_tick  = 0.05,
-                                                                                                               buy_thresh_tick     = 0.05,
-                                                                                                               sign_smoothwin_tick = 10)
-                                                                                                               # ,return_threshold = 0.01)
+features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick \
+    = ticker_parameters(ticker              = ticker,
+                        sign_smoothwin_tick = 1,
+                        sellmin_idx_tick    = -1,
+                        sess_start_tick     = sess_start_pred,
+                        buy_thresh_tick     = 0.2968,
+                        trailstop_pct_tick  = .2963,
+                        return_thresh_tick  = 0) # TBD
                                                                                                            
 
 
