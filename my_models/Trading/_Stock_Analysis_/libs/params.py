@@ -183,10 +183,10 @@ def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_t
 features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick \
     = ticker_parameters(ticker              = ticker,
                         sign_smoothwin_tick = 1,
-                        sellmin_idx_tick    = -1,
+                        sellmin_idx_tick    = None,
                         sess_start_tick     = sess_start_pred,
-                        buy_thresh_tick     = 0.2968,
-                        trailstop_pct_tick  = .2963,
+                        buy_thresh_tick     = 0.15,
+                        trailstop_pct_tick  = 3.5,
                         return_thresh_tick  = 0) # TBD
                                                                                                            
 

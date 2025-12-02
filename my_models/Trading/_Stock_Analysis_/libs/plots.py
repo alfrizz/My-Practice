@@ -555,15 +555,6 @@ def aggregate_performance(
         # expects formatted lines ending with " = <number>"
         return float(s.strip().split(" = ")[-1])
 
-    # collect buy&hold per-day values and all trade PnL values
-    bh_per_day_vals = [_parse_eq_value(perf.get("BUY&HOLD")) for perf in perf_list]
-    all_trade_vals = [_parse_eq_value(perf.get("STRATEGY")) for perf in perf_list]
-
-    trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
-
-    buyhold_sum = sum(bh_per_day_vals)
-    strategy_sum = sum(all_trade_vals)
-
     # first/last trading day and one-time B&H legs (simplified)
     first_day = df.index.normalize().min()
     last_day  = df.index.normalize().max()
@@ -571,32 +562,41 @@ def aggregate_performance(
     start_ask = df.loc[df.index.normalize() == first_day, "ask"].iloc[0]
     end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
 
-    # prints (rounded)
     print("\n" + "=" * 115)
-    print(f"Overall Summary ({first_day.date()} = {start_ask:.4f} → {last_day.date()} = {end_bid:.4f})")
-    print(f"\nOne-time buy&hold gain: {(end_bid - start_ask):.{3}f}")
-
-    print(f"Buy & Hold – each day ($): {buyhold_sum:.{3}f}")
-    print(f"Strategy Return ($): {strategy_sum:.{3}f}")
-    print(f"Trades Count: {trades_count}")
-    per_trade = strategy_sum / trades_count if trades_count > 0 else 0
-    print(f"Strategy return per trade: {per_trade:.{3}f}")
-
+    print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
     num_days = df.index.normalize().nunique()
     print(f"Num. trading days: {num_days}")
-    per_day = strategy_sum / num_days
-    print(f"Strategy return per trading day: {per_day:.{3}f}")
+    trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
+    print(f"Trades Count: {trades_count}")
+
+    # collect buy&hold per-day values and all trade PnL values
+    bh_per_day_vals = [_parse_eq_value(perf.get("BUY&HOLD")) for perf in perf_list]
+    all_trade_vals = [_parse_eq_value(perf.get("STRATEGY")) for perf in perf_list]
+
+    one_time_bh = end_bid - start_ask
+    print(f"\nOne-Time B&H gain: {one_time_bh:.{3}f}")
+    strategy_sum = sum(all_trade_vals)
+    print(f"Sum Strategy gain: {strategy_sum:.{3}f}")
+    intraday_bh_sum = sum(bh_per_day_vals)
+    print(f"Sum Intraday B&H gain: {intraday_bh_sum:.{3}f}")
+
+    one_time_bh_per_day = one_time_bh / num_days if num_days else 0.0
+    print(f"\nOne-Time B&H gain per day: {one_time_bh_per_day:.{4}f}")
+    strategy_per_day = strategy_sum / num_days
+    print(f"Strategy gain per day: {strategy_per_day:.{4}f}")
+    strategy_per_trade = strategy_sum / trades_count if trades_count > 0 else 0
+    print(f"Strategy gain per trade: {strategy_per_trade:.{4}f}")
 
     # small bar plot (same layout, rounded annotations)
-    one_time_bh = end_bid - start_ask
     primary = {
-        "One-time B&H": one_time_bh,
-        "Sum intraday B&H": buyhold_sum,
-        "Sum Strategy": strategy_sum
+        "One-Time B&H gain": one_time_bh,
+        "Sum Strategy gain": strategy_sum,
+        "Sum Intraday B&H gain": intraday_bh_sum
     }
     secondary = {
-        "Per trade": (per_trade),
-        "Per day": (per_day)
+        "One-Time B&H per day": one_time_bh_per_day,
+        "Strategy gain per day": strategy_per_day,
+        "Strategy gain per trade": strategy_per_trade
     }
 
     fig, ax1 = plt.subplots(figsize=(10, 5))
@@ -628,14 +628,14 @@ def aggregate_performance(
 
     for bar in bars2:
         h = bar.get_height()
-        ax2.annotate(f"{h:.3f}",
+        ax2.annotate(f"{h:.4f}",
                      xy=(bar.get_x() + bar.get_width() / 2, h),
                      xytext=(0, 3), textcoords="offset points",
                      ha="center", va="bottom", fontsize=9)
 
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(handles1 + handles2, labels1 + labels2, loc="upper left")
+    ax1.legend(handles1 + handles2, labels1 + labels2, loc="lower left")
 
     plt.tight_layout()
     plt.show()
@@ -944,25 +944,6 @@ def save_results_callback(study, trial):
     csv_name = f"{params.ticker}_live_predicted.csv"
     out_path = os.path.join(params.optuna_folder, csv_name)
     df.to_csv(out_path, index=False)
-
-##########################
-
-# short formatter callback
-def short_log_callback(study, trial):
-    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
-    val = trial.value
-    best_val = study.best_value
-    best_idx = study.best_trial.number if study.best_trial is not None else None
-    print(f"[I {ts}] Trial {trial.number} finished with value: {val:.4f}. Best is trial {best_idx} with value: {best_val:.4f}.")
-
-    
-########################## 
-
-def cleanup_callback(study, trial):
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
 
 
 ####################################################################################################################

@@ -620,13 +620,6 @@ def simulate_trading(
         sell_fee = 0.0
         amt = 0.0
         bid, ask = float(row["bid"]), float(row["ask"])
-
-        # capture first ask inside session window for buy-and-hold baseline
-        if open_ask is None and sess_start <= ts.time() <= params.sess_end:
-            open_ask = ask
-        # always update last bid (this ends up as the final bid of the day)
-        close_bid = bid 
-
         action, amt = "Hold", 0 # HOLD
         
         # BUY branch: only enter if no current position
@@ -684,6 +677,18 @@ def simulate_trading(
         act_buf.append(action)
         amt_buf.append(amt)
 
+    # persist last bid for potential carry into next day (only when sellmin_idx is None)
+    if sellmin_idx is None:
+        _last_bid = float(df.iloc[-1]["bid"] if _last_trail > 0 else 0) # computed at the end of the day, to be reused the next day 
+    
+    # compute buy-and-hold fees explicitly for the day's open_ask and final close_bid
+    mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
+    open_ask = float(df.loc[mask, "ask"].iloc[0])
+    close_bid = float(df.loc[mask, "bid"].iloc[-1])
+    bh_buy_fee = buy_fee_per(open_ask) * shares_per_trade
+    bh_sell_fee = sell_fee_per(close_bid) * shares_per_trade
+    bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) [{_r3(bh_buy_fee)}+{_r3(bh_sell_fee)}] = {_r3((close_bid - open_ask) - (bh_buy_fee + bh_sell_fee))}"
+
     # build df_sim (no trail column) from recorded snapshots
     df_sim = df.assign(
     Position=pos_buf,
@@ -692,7 +697,7 @@ def simulate_trading(
     Action=act_buf,
     TradedAmount=amt_buf)
 
-    # performance summary (minimal, no checks)
+    # performance summary
     trades_lines = []; 
     realized_vals = []
     for i, trade in enumerate(trades, 1):
@@ -700,20 +705,10 @@ def simulate_trading(
         pnl = _r3((xp - ep) - (buy_fee + sell_fee))
         realized_vals.append(pnl)
         trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) [{_r3(buy_fee)}+{_r3(sell_fee)}] = {pnl}")
-    
+        
     # aggregate strategy line (sum of realized trade PnLs)
     strategy_line = (" + ".join([f"Trade({i}) {v}" for i,v in enumerate(realized_vals,1)]) + f" = {_r3(sum(realized_vals))}") if realized_vals else "0.000"
-
-    # compute buy-and-hold fees explicitly for the day's open_ask and final close_bid
-    bh_buy_fee = buy_fee_per(open_ask) * shares_per_trade
-    bh_sell_fee = sell_fee_per(close_bid) * shares_per_trade
-    bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) [{_r3(bh_buy_fee)}+{_r3(bh_sell_fee)}] = {_r3((close_bid - open_ask) - (bh_buy_fee + bh_sell_fee))}"
     perf = {"BUY&HOLD": bh_line, "TRADES": trades_lines, "STRATEGY": strategy_line}
-
-    # persist last bid for potential carry into next day (only when sellmin_idx is None)
-    if sellmin_idx is None:
-        _last_bid = float(df.iloc[-1]["bid"] if _last_trail > 0 else 0) # computed at the end of the day, to be reused the next day
-
     updated[day] = (df_sim, trades, perf)
 
     return updated
