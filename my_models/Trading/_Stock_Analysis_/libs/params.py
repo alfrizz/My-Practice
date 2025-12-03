@@ -34,7 +34,7 @@ bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for co
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
-thresh_gb = 48 # use ram instead of memmap, if X_buf below this value
+thresh_gb = 58 # use ram instead of memmap, if X_buf below this value
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 

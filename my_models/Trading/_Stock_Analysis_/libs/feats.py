@@ -60,7 +60,7 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
         phase = ((phase + np.pi) % (2.0 * np.pi)) - np.pi    # wrap to (-pi, pi]
         return (phase / np.pi).astype(np.float32)            # in (-1,1] as float32
 
-    sess_start_min = float(params.sess_start.hour * 60 + params.sess_start.minute)
+    sess_start_min = float(params.sess_start_reg.hour * 60 + params.sess_start_reg.minute)
     sess_start_hr = sess_start_min / 60.0
 
     # build base arrays (force numeric numpy arrays)
@@ -84,7 +84,7 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
     out["month_time"]       = (((_single_centered_phase_np(month0, 0.0, 12.0)) + 1.0) / 2.0).astype(np.float32)
     out["day_of_year_time"] = (((_single_centered_phase_np(doy, 0.0, 365.0)) + 1.0) / 2.0).astype(np.float32)
     out["week_of_year_time"] = (((_single_centered_phase_np(week0, 0.0, 52.0)) + 1.0) / 2.0).astype(np.float32)
-    out["in_sess_time"] = ((df.index.time >= params.sess_start) & (df.index.time < params.sess_end)).astype(np.float32)
+    out["in_sess_time"] = ((df.index.time >= params.sess_start_reg) & (df.index.time < params.sess_end)).astype(np.float32)
 
     return out
 
@@ -92,217 +92,7 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
 ###########################################
 
 
-# def standard_indicators(
-#     df: pd.DataFrame,
-#     extra_windows: Optional[Iterable[int]] = None,
-#     label_col: str = params.label_col,
-#     sma_short: int = 14,
-#     sma_long: int = 28,
-#     rsi_window: int = 14,
-#     macd_fast: int = 12,
-#     macd_slow: int = 26,
-#     macd_sig: int = 9,
-#     atr_window: int = 14,
-#     bb_window: int = 20,
-#     vwap_window: int = 14,
-#     vol_spike_window: int = 14,
-#     eps: float = 1e-9,
-# ) -> pd.DataFrame:
-#     """
-#     Compute standard 1m indicators (canonical defaults) and optional smoothed copies.
 
-#     Behavior (concise)
-#     - Compute canonical indicators once using conventional defaults used in 1m strategies:
-#       sma_short=14, sma_long=28, rsi=14, macd_fast=12, macd_slow=26, macd_sig=9,
-#       atr=14, bb=20, vwap=14, vol_spike=14.
-#     - If extra_windows provided (iterable of ints > 1), produce additional smoothed/rolling
-#       copies of selected indicators for each window w in sorted(unique(extra_windows)).
-#       Windowed columns are suffixed with _{w} (e.g., rsi_30, sma_60, macd_line_30).
-#     - Windowed rollings use min_periods=w so a windowed value becomes meaningful only after
-#       w samples (avoids early-sample bias).
-#     - Indicators replicated for extra windows:
-#       SMA/EMA/ROC, RSI, ATR, Bollinger Bands (bands + width), DI/ADX, OBV-derived,
-#       VWAP dev + z, vol_spike + vol_z, rolling volatility (ret_std), rolling extrema/distances,
-#       and smoothed MACD outputs (rolling mean of macd_line/macd_signal/macd_diff using min_periods=w).
-#     - Keep raw returns/log_ret and session time features single-scale.
-#     - Naming: canonical outputs keep simple names (e.g., rsi, macd_line); windowed copies use suffix _{w}.
-#     - Returns DataFrame with original OHLCV columns plus all indicators.
-
-#     Notes
-#     - Function is implemented causally (uses present and past only). It does not shift features relative
-#       to a supervised label; alignment is the caller's responsibility.
-#     """
-#     # defensive copy, ensure datetime index monotonic increasing
-#     df = df.copy()
-#     df.index = pd.to_datetime(df.index)
-#     df = df.sort_index()
-#     assert df.index.is_monotonic_increasing
-
-#     # prepare extra windows set (no window==1 duplicates)
-#     if extra_windows is None:
-#         W = []
-#     else:
-#         W = sorted({int(w) for w in extra_windows if (isinstance(w, (int, np.integer)) and int(w) > 1)})
-
-#     # required input columns
-#     cols_in = ["open", "high", "low", "close", "volume"]
-#     if label_col in df.columns:
-#         cols_in.append(label_col)
-#     base = df[cols_in].copy()
-#     o, h, l, c, v = base["open"], base["high"], base["low"], base["close"], base["volume"]
-
-#     def safe_div(num, den):
-#         with np.errstate(divide="ignore", invalid="ignore"):
-#             out = num / (den + eps)
-#         return out
-
-#     new = {}
-
-#     # base returns
-#     new["ret"] = c.pct_change()
-#     new["log_ret"] = np.log(c + eps).diff()
-
-#     # canonical SMA/EMA
-#     s14 = c.rolling(sma_short, min_periods=1).mean()
-#     s28 = c.rolling(sma_long, min_periods=1).mean()
-#     new[f"sma_{sma_short}"] = s14
-#     new[f"sma_{sma_long}"] = s28
-#     new[f"sma_pct_{sma_short}"] = safe_div(c - s14, s14)
-#     new[f"sma_pct_{sma_long}"] = safe_div(c - s28, s28)
-#     new[f"ema_{sma_short}"] = c.ewm(span=sma_short, adjust=False).mean()
-#     new[f"ema_{sma_long}"] = c.ewm(span=sma_long, adjust=False).mean()
-
-#     # canonical ROC (skip w==1)
-#     new[f"roc_{sma_short}"] = c.pct_change(sma_short)
-#     new[f"roc_{sma_long}"] = c.pct_change(sma_long)
-
-#     # candlestick geometry
-#     new["body"] = c - o
-#     new["body_pct"] = safe_div(c - o, o)
-#     new["upper_shad"] = h - np.maximum(o, c)
-#     new["lower_shad"] = np.minimum(o, c) - l
-#     new["range_pct"] = safe_div(h - l, c)
-
-#     # canonical RSI, MACD, ATR, BB, DI/ADX, OBV, VWAP, vol spike
-#     new["rsi"] = ta.momentum.RSIIndicator(close=c, window=rsi_window).rsi()
-#     macd = ta.trend.MACD(close=c, window_fast=macd_fast, window_slow=macd_slow, window_sign=macd_sig)
-#     new["macd_line"] = macd.macd()
-#     new["macd_signal"] = macd.macd_signal()
-#     new["macd_diff"] = macd.macd_diff()
-#     atr = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=atr_window)
-#     new["atr"] = atr.average_true_range()
-#     new["atr_pct"] = safe_div(new["atr"], c)
-#     bb = ta.volatility.BollingerBands(close=c, window=bb_window, window_dev=2)
-#     new["bb_lband"] = bb.bollinger_lband()
-#     new["bb_hband"] = bb.bollinger_hband()
-#     new["bb_w"] = safe_div(new["bb_hband"] - new["bb_lband"], bb.bollinger_mavg())
-#     adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=atr_window)
-#     new["plus_di"] = adx.adx_pos()
-#     new["minus_di"] = adx.adx_neg()
-#     new["adx"] = adx.adx()
-#     new["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=v).on_balance_volume()
-#     vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window)
-#     new["vwap"] = vwap.volume_weighted_average_price()
-#     new["vwap_dev_pct"] = 100.0 * safe_div(c - new["vwap"], new["vwap"])
-
-#     # vol spike and z (base window uses vol_spike_window)
-#     vol_roll = v.rolling(vol_spike_window, min_periods=vol_spike_window).mean().fillna(eps)
-#     new["vol_spike"] = safe_div(v, vol_roll)
-#     v_mu = v.rolling(vol_spike_window, min_periods=vol_spike_window).mean()
-#     v_sigma = v.rolling(vol_spike_window, min_periods=vol_spike_window).std().fillna(eps).replace(0.0, eps)
-#     new[f"vol_z_{vol_spike_window}"] = safe_div(v - v_mu, v_sigma)
-
-#     # rolling extrema (canonical sma_long)
-#     new[f"rolling_max_close_{sma_long}"] = c.rolling(sma_long, min_periods=sma_long).max()
-#     new[f"rolling_min_close_{sma_long}"] = c.rolling(sma_long, min_periods=sma_long).min()
-#     new[f"dist_high_{sma_long}"] = safe_div(new[f"rolling_max_close_{sma_long}"] - c, c)
-#     new[f"dist_low_{sma_long}"] = safe_div(c - new[f"rolling_min_close_{sma_long}"], c)
-
-#     # OBV base and derived (use vol_spike_window as canonical smoothing length)
-#     new["obv_sma"] = new["obv"].rolling(vol_spike_window, min_periods=vol_spike_window).mean()
-#     new[f"obv_diff_{vol_spike_window}"] = new["obv"].diff(vol_spike_window)
-#     denom_arr = (c.rolling(vol_spike_window, min_periods=vol_spike_window).mean().abs().replace(0.0, eps)).to_numpy(dtype=float)
-#     with np.errstate(divide="ignore", invalid="ignore"):
-#         pct = new[f"obv_diff_{vol_spike_window}"].to_numpy(dtype=float) / denom_arr
-#     new[f"obv_pct_{vol_spike_window}"] = pd.Series(np.where(np.isnan(pct), np.nan, pct), index=base.index)
-#     new[f"obv_sma_{vol_spike_window}"] = new["obv"].rolling(vol_spike_window, min_periods=vol_spike_window).mean()
-#     obv_sigma = new[f"obv_sma_{vol_spike_window}"].rolling(vol_spike_window, min_periods=vol_spike_window).std().fillna(eps).replace(0.0, eps)
-#     new[f"obv_z_{vol_spike_window}"] = safe_div(new["obv"] - new[f"obv_sma_{vol_spike_window}"], obv_sigma)
-
-#     # multi-horizon returns and windowed indicators (use same W)
-#     for w in W:
-#         # returns
-#         new[f"ret_{w}"] = c.pct_change(w)
-
-#         # SMA/EMA/ROC
-#         new[f"sma_{w}"] = c.rolling(w, min_periods=w).mean()
-#         new[f"sma_pct_{w}"] = safe_div(c - new[f"sma_{w}"], new[f"sma_{w}"])
-#         new[f"ema_{w}"] = c.ewm(span=w, adjust=False).mean()
-#         if w != 1:
-#             new[f"roc_{w}"] = c.pct_change(w)
-
-#         # RSI / ATR / BB / DI/ADX
-#         new[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=c, window=w).rsi()
-#         new[f"atr_{w}"] = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=w).average_true_range()
-#         new[f"atr_pct_{w}"] = safe_div(new[f"atr_{w}"], c)
-#         bb_w = ta.volatility.BollingerBands(close=c, window=w, window_dev=2)
-#         new[f"bb_lband_{w}"] = bb_w.bollinger_lband()
-#         new[f"bb_hband_{w}"] = bb_w.bollinger_hband()
-#         new[f"bb_w_{w}"] = safe_div(new[f"bb_hband_{w}"] - new[f"bb_lband_{w}"], bb_w.bollinger_mavg())
-#         adx_w = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w)
-#         new[f"plus_di_{w}"] = adx_w.adx_pos()
-#         new[f"minus_di_{w}"] = adx_w.adx_neg()
-#         new[f"adx_{w}"] = adx_w.adx()
-
-#         # OBV-derived
-#         new[f"obv_diff_{w}"] = new["obv"].diff(w)
-#         price_roll_mean = c.rolling(w, min_periods=w).mean().abs().fillna(eps)
-#         denom_arr = price_roll_mean.replace(0.0, eps).to_numpy(dtype=float)
-#         num = new[f"obv_diff_{w}"].to_numpy(dtype=float)
-#         with np.errstate(divide="ignore", invalid="ignore"):
-#             pct = num / denom_arr
-#         new[f"obv_pct_{w}"] = pd.Series(np.where(np.isnan(num), np.nan, pct), index=base.index)
-#         new[f"obv_sma_{w}"] = new["obv"].rolling(w, min_periods=w).mean()
-#         obv_std_eff = new[f"obv_sma_{w}"].rolling(w, min_periods=w).std().fillna(eps).replace(0.0, eps)
-#         new[f"obv_z_{w}"] = safe_div(new["obv"] - new[f"obv_sma_{w}"], obv_std_eff)
-
-#         # VWAP dev + z
-#         vwap_w = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=w)
-#         new[f"vwap_{w}"] = vwap_w.volume_weighted_average_price()
-#         new[f"vwap_dev_pct_{w}"] = 100.0 * safe_div(c - new[f"vwap_{w}"], new[f"vwap_{w}"])
-#         x_pct = new[f"vwap_dev_pct_{w}"]
-#         new[f"z_vwap_dev_{w}"] = safe_div(x_pct - x_pct.rolling(w, min_periods=w).mean(), x_pct.rolling(w, min_periods=w).std().fillna(eps))
-
-#         # vol spike + vol_z
-#         vol_roll_w = v.rolling(w, min_periods=w).mean().fillna(eps)
-#         new[f"vol_spike_{w}"] = safe_div(v, vol_roll_w)
-#         v_mu = v.rolling(w, min_periods=w).mean()
-#         v_sigma = v.rolling(w, min_periods=w).std().fillna(eps).replace(0.0, eps)
-#         new[f"vol_z_{w}"] = safe_div(v - v_mu, v_sigma)
-
-#         # rolling volatility
-#         new[f"ret_std_{w}"] = new["ret"].rolling(w, min_periods=w).std()
-
-#         # rolling extrema and distances
-#         new[f"rolling_max_close_{w}"] = c.rolling(w, min_periods=w).max()
-#         new[f"rolling_min_close_{w}"] = c.rolling(w, min_periods=w).min()
-#         new[f"dist_high_{w}"] = safe_div(new[f"rolling_max_close_{w}"] - c, c)
-#         new[f"dist_low_{w}"] = safe_div(c - new[f"rolling_min_close_{w}"], c)
-
-#         # MACD smoothing: rolling mean of canonical outputs (min_periods=w)
-#         new[f"macd_line_{w}"] = new["macd_line"].rolling(w, min_periods=w).mean()
-#         new[f"macd_signal_{w}"] = new["macd_signal"].rolling(w, min_periods=w).mean()
-#         new[f"macd_diff_{w}"] = new["macd_diff"].rolling(w, min_periods=w).mean()
-
-#     # time/session features (single-scale helper)
-#     try:
-#         time_feats = add_session_centered_time_features(base)
-#         new.update(time_feats.to_dict(orient="series"))
-#     except Exception:
-#         pass
-
-#     out = pd.concat([base, pd.DataFrame(new, index=base.index)], axis=1)
-#     return out
 
 def standard_indicators(
     df: pd.DataFrame,

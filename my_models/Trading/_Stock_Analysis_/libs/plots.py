@@ -399,9 +399,6 @@ def plot_trades(
     trades: list[tuple]=None,
     buy_thresh: float=None,
     performance_stats: dict=None,
-    # col_bid: str = None,
-    # col_ask: str = None,
-    # col_trailstop: str = None
 ):
     """
     Interactive Plotly view of intraday trades and signals.
@@ -418,16 +415,25 @@ def plot_trades(
 
     # derive trade intervals either from trades list or from action series
     intervals = []
-    if trades is None:
-        events, last_buy = df["action"], None
-        for ts, act in events.items():
-            if act == 1:
-                last_buy = ts
-            elif act == -1 and last_buy is not None:
-                intervals.append((last_buy, ts))
-                last_buy = None
-    else:
+
+    if trades is not None:
         intervals = [(b, s) for ((b,s),_,_,_,_) in trades]
+        lines_src = performance_stats["TRADES"]
+    
+        for i, ((b_dt, s_dt), _, ret_pc, _, _) in enumerate(trades, start=1):
+            seg = df.loc[b_dt:s_dt, col_close]
+            perf_line = lines_src[i-1]
+            rhs = perf_line.split('=')[-1].strip()
+            hover = f"Return: {float(rhs):.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
+        
+            fig.add_trace(go.Scatter(
+                x=seg.index, y=seg.values,
+                mode='lines+markers',
+                line=dict(color='green', width=1),
+                marker=dict(size=3, color='green'),
+                legendgroup='Trades', showlegend=False,
+                hovertemplate=hover
+            ))
 
     # shaded bands for trade intervals
     if intervals:
@@ -489,24 +495,6 @@ def plot_trades(
                 name=feat, yaxis='y2', visible='legendonly',
                 hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
             ))
-
-    # show return from performance_stats["TRADES"] and return%
-    lines_src = performance_stats["TRADES"]
-    
-    for i, ((b_dt, s_dt), _, ret_pc, _, _) in enumerate(trades, start=1):
-        seg = df.loc[b_dt:s_dt, col_close]
-        perf_line = lines_src[i-1]
-        rhs = perf_line.split('=')[-1].strip()
-        hover = f"Return: {float(rhs):.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
-    
-        fig.add_trace(go.Scatter(
-            x=seg.index, y=seg.values,
-            mode='lines+markers',
-            line=dict(color='green', width=1),
-            marker=dict(size=3, color='green'),
-            legendgroup='Trades', showlegend=False,
-            hovertemplate=hover
-        ))
 
     # threshold line on signal axis
     if buy_thresh is not None:
