@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as Funct
 
+import pandas as pd
 import os
 import glob
 import json
@@ -18,7 +19,7 @@ ticker = 'AAPL'
 label_col  = "signal"
 shares_per_trade = 1
 
-month_to_check = '2021-03'
+month_to_check = '2024-03'
 sel_val_rmse = 0.09436
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -47,39 +48,6 @@ sign_csv = save_path / f"{ticker}_2_sign.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
-
-#########################################################################################################
-
-
-def load_target_sign_optuna_record(optuna_folder=optuna_folder, ticker=ticker):
-    """
-    Scan an Optuna‐output folder for JSON files matching '{ticker}_<value>.json',
-    pick the one with the highest <value>, and return its numeric value plus the 'params' dict.
-    """
-    # 1) find all files named like "TICKER_*.json", excluding the "*optuna.json" summary
-    pattern = os.path.join(optuna_folder, f"{ticker}_*_target.json")
-    files = [f for f in glob.glob(pattern)]
-
-    # 2) pick the file whose suffix (after the underscore and before_target) is the largest float
-    # regex safely extracts the numeric value between ticker_ and _target.json
-    rx = re.compile(rf'^{re.escape(ticker)}_(?P<val>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)_target\.json$')
-
-    def extract_value(path: str) -> float:
-        name = os.path.splitext(os.path.basename(path))[0]
-        m = rx.match(name)
-
-    best_file = max(files, key=extract_value)
-
-    # 3) load and return the record
-    with open(best_file, "r") as fp:
-        record = json.load(fp)
-
-    best_value  = record["value"]
-    best_params = record["params"]
-    return best_value, best_params
-
-# automatically executed function to get the optuna values and parameters
-best_optuna_value, best_optuna_params = load_target_sign_optuna_record()
 
 
 #########################################################################################################
@@ -163,6 +131,49 @@ sess_end         = datetime.strptime('21:00' , '%H:%M').time()
 sess_start_reg   = datetime.strptime('14:30', '%H:%M').time()  
 sess_start_pred  = dt.time(*divmod((sess_start_reg.hour * 60 + sess_start_reg.minute) - hparams["LOOK_BACK"], 60))
 sess_start_shift = dt.time(*divmod((sess_start_reg.hour * 60 + sess_start_reg.minute) - 2*hparams["LOOK_BACK"], 60))
+
+
+#########################################################################################################
+
+
+def load_target_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker):
+    """
+    Find the Optuna JSON file named like '{ticker}_{value}_target.json' with the
+    largest numeric <value> and return (value, params) from that file.
+
+    Assumes at least one matching file exists; will raise if none are found.
+    """
+    # build glob pattern for files like "AAPL_1.8870_target.json"
+    pattern = os.path.join(optuna_folder, f"{ticker}_*_{sig_type}.json")
+
+    # compile regex to extract the numeric suffix between ticker_ and _target.json
+    rx = re.compile(
+        rf'^{re.escape(ticker)}_(?P<val>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)_{sig_type}\.json$'
+    )
+
+    # list all candidate files matching the glob pattern
+    files = glob.glob(pattern)
+
+    # keep only files that match the regex and parse their numeric suffix
+    matches = [
+        (p, float(rx.match(os.path.basename(p)).group("val"))) 
+        for p in files
+    ]
+
+    # pick the file with the largest numeric suffix (will raise if matches is empty)
+    best_file = max(matches, key=lambda t: t[1])[0]
+
+    # load the JSON record and return the stored value and params
+    with open(best_file, "r") as fp:
+        record = json.load(fp)
+
+    if sig_type == 'target':
+        record["params"]["sess_start"] = pd.to_datetime(record["params"]["sess_start"]).time()
+        return record["value"], record["params"]
+
+    if sig_type == 'predicted':
+        return record["best_value"], record["best_params"]
+
 
 #########################################################################################################
 

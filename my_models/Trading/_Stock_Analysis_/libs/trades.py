@@ -152,7 +152,6 @@ def is_dst_for_day(day, tz_str="US/Eastern"):
 def prepare_interpolate_data(
     df,
     sess_premark,           # str or datetime.time: grid lower‐bound each day
-    sess_start,             # str or datetime.time: official session open
     sess_end,               # str or datetime.time: official session close
     red_pretr_win=1,        # legacy argument (unused)
     tz_str="US/Eastern"     # timezone name for DST logic
@@ -465,23 +464,21 @@ _last_trail = 0.0
 def generate_trade_actions(
     df: pd.DataFrame,
     col_signal: str,
-    col_action: str,
     buy_thresh: float,
     trailstop_pct: float,
     sellmin_idx: int,
     sess_start: time,
-    col_price: str = "close"
+    col_price: str = "close",
+    col_smoothsign: float = None
 ) -> pd.DataFrame:
     """
-    Generate discrete trade actions (Buy/Sell/Hold) and a trailing-stop price series
-    from signals and price data. This function preserves the original logic and
-    returns the input dataframe augmented with `col_action` and `trailstop_price`.
+    Generate discrete trade actions (Buy/Sell/Hold) and a trailing-stop price series from signals and price data.
     """
     global _last_trail
 
     # work on a copy to avoid mutating caller's dataframe
     df = df.copy()
-    df[col_action] = 0 # HOLD
+    df["action"] = 0 # HOLD
 
     # extract arrays for faster indexed access inside the loop
     sig = df[col_signal].to_numpy()
@@ -498,7 +495,7 @@ def generate_trade_actions(
     for i in range(len(df)):
         
         # if already in-trade (previous trail exists), compute peak from previous trail
-        if i > 0 and np.isfinite(trail_arr[i - 1]) and df[col_action].iat[i - 1] != -1:
+        if i > 0 and np.isfinite(trail_arr[i - 1]) and df["action"].iat[i - 1] != -1:
             # compute the running peak using previous trail value and current price
             peak = max(prices[i], trail_arr[i - 1] / (1.0 - stop_frac))
             trail_val = peak * (1.0 - stop_frac)
@@ -508,7 +505,7 @@ def generate_trade_actions(
             if ((sig[i] < buy_thresh) # signal dropped below threshold
                 and (df["bid"].iat[i] < trail_val) #  bid price below running trail stop price
                 and (times[i] >= sess_start)): # sell only during trading time
-                df.at[df.index[i], col_action] = -1 # SELL
+                df.at[df.index[i], "action"] = -1 # SELL
                 open_flag = False
             continue
 
@@ -516,7 +513,7 @@ def generate_trade_actions(
         if (((sig[i] >= buy_thresh) 
             and (times[i] >= sess_start)) # buy only during trading time ...
                  or (_last_trail > 0)): # ... unless open trade carried from previous day
-            df.at[df.index[i], col_action] = 1 # BUY
+            df.at[df.index[i], "action"] = 1 # BUY
             # seed peak with either current price or carried last trail (converted back to peak)
             peak = max(prices[i], _last_trail / (1.0 - stop_frac))
             _last_trail = 0.0  # consume carried trail so it's used only once
@@ -577,14 +574,13 @@ _last_bid = 0.0
 def simulate_trading(
     day,
     df,
-    col_action: str,
     sellmin_idx: int,
     sess_start: time,
     shares_per_trade: int = 1
 ) -> dict:
     """
     Minimal simulator that only executes generator actions.
-    - Trusts generator actions in col_action (1=Buy, -1=Sell, 0=Hold).
+    - Trusts generator actions in "action" (1=Buy, -1=Sell, 0=Hold).
     - Does not compute or enforce any trailing stop or make entry/exit decisions.
     - Executes actions as-is, records trades and snapshots, and closes any open entry at the last bar.
     """
@@ -613,9 +609,9 @@ def simulate_trading(
     else: # negative
         last_bid_ts = df.index[sellmin_idx] 
     # force a sell action from last_bid_ts onward to close any open position at day end
-    df.loc[last_bid_ts:, col_action] = -1
+    df.loc[last_bid_ts:, "action"] = -1
 
-    # iterate bars; execute only the actions written in col_action
+    # iterate bars; execute only the actions written in "action"
     for ts, row in df.iterrows():
         sell_fee = 0.0
         amt = 0.0
@@ -623,7 +619,7 @@ def simulate_trading(
         action, amt = "Hold", 0 # HOLD
         
         # BUY branch: only enter if no current position
-        if row[col_action] == 1 and position == 0: # BUY
+        if row["action"] == 1 and position == 0: # BUY
             q = shares_per_trade
             position += q
             action, amt = "Buy", q
@@ -641,7 +637,7 @@ def simulate_trading(
             cash -= (ask_p * q) + buy_fee
 
         # SELL branch: only execute if we have a position to close
-        elif row[col_action] == -1 and position > 0:  # SELL
+        elif row["action"] == -1 and position > 0:  # SELL
             q = min(shares_per_trade, position)
             position -= q
             action, amt = "Sell", -q
@@ -677,6 +673,9 @@ def simulate_trading(
         act_buf.append(action)
         amt_buf.append(amt)
 
+    # build df_sim from recorded snapshots
+    df_sim = df.assign(Position=pos_buf, Cash=cash_buf, NetValue=net_buf, Action=act_buf, TradedAmount=amt_buf)
+
     # persist last bid for potential carry into next day (only when sellmin_idx is None)
     if sellmin_idx is None:
         _last_bid = float(df.iloc[-1]["bid"] if _last_trail > 0 else 0) # computed at the end of the day, to be reused the next day 
@@ -688,14 +687,6 @@ def simulate_trading(
     bh_buy_fee = buy_fee_per(open_ask) * shares_per_trade
     bh_sell_fee = sell_fee_per(close_bid) * shares_per_trade
     bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) [{_r3(bh_buy_fee)}+{_r3(bh_sell_fee)}] = {_r3((close_bid - open_ask) - (bh_buy_fee + bh_sell_fee))}"
-
-    # build df_sim (no trail column) from recorded snapshots
-    df_sim = df.assign(
-    Position=pos_buf,
-    Cash=cash_buf,
-    NetValue=net_buf,
-    Action=act_buf,
-    TradedAmount=amt_buf)
 
     # performance summary
     trades_lines = []; 
@@ -713,13 +704,12 @@ def simulate_trading(
 
     return updated
 
+
 #########################################################################################################
 
 
 def run_trading_pipeline(
     df: pd.DataFrame,
-    col_signal: str,
-    col_action: str,
     min_prof_thr: float,
     max_down_prop: float,
     gain_tightening_factor: float,
@@ -732,7 +722,8 @@ def run_trading_pipeline(
     smoothing_window: int,
     beta_sat: float,
     sess_start: time,
-    sell_min_idx: float,
+    sellmin_idx: float,
+    col_signal:str = "signal",
     col_price: str = "close"
 ) -> Optional[Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, Any]]]]:
     """
@@ -791,7 +782,8 @@ def run_trading_pipeline(
 
     # 4) assign back per day and generate actions
     signaled: Dict[dt.date, Tuple[pd.DataFrame, List]] = {}
-    for day, (df_sig, trades) in raw_signals.items():
+    sim_results: Dict[dt.date, Tuple[pd.DataFrame, List, Dict[str, Any]]] = {}  
+    for day, (df_sig, trades) in tqdm(raw_signals.items(), desc="Generate trade action, simulate trading …"):
         # pick the warped values matching this day's timestamps
         df_sig[col_signal] = warped.loc[df_sig.index]
 
@@ -799,9 +791,7 @@ def run_trading_pipeline(
         df_act = generate_trade_actions(
             df                  = df_sig,
             col_signal          = col_signal,
-            col_action          = col_action,
-            col_price           = close_price,
-            sellmin_idx         = sell_min_idx,
+            sellmin_idx         = sellmin_idx,
             buy_thresh          = buy_thresh,
             trailstop_pct       = trailstop_pct,
             sess_start          = sess_start
@@ -809,13 +799,14 @@ def run_trading_pipeline(
         signaled[day] = (df_act, trades)
 
         # 5) simulate P&L
-        sim_results = simulate_trading(
-            df                  = df_act,
-            day                 = day,
-            col_action          = col_action,
-            sess_start          = sess_start,
-            sellmin_idx         = sellmin_idx,
+        sim_results.update(
+            simulate_trading(
+                df                  = df_act,
+                day                 = day,
+                sess_start          = sess_start,
+                sellmin_idx         = sellmin_idx,
             )
+        )
 
     return sim_results
 

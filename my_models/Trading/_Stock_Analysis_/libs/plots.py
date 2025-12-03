@@ -396,13 +396,12 @@ def plot_trades(
     start_plot: 'datetime.time'=None,
     features: list[str]=None,
     col_signal2: str=None,
-    col_action: str=None,
     trades: list[tuple]=None,
-    buy_threshold: float=None,
+    buy_thresh: float=None,
     performance_stats: dict=None,
-    col_bid: str = None,
-    col_ask: str = None,
-    col_trailstop: str = None
+    # col_bid: str = None,
+    # col_ask: str = None,
+    # col_trailstop: str = None
 ):
     """
     Interactive Plotly view of intraday trades and signals.
@@ -417,17 +416,17 @@ def plot_trades(
 
     fig = go.Figure()
 
-    # derive trade intervals either from trades list or from col_action series
+    # derive trade intervals either from trades list or from action series
     intervals = []
-    if col_action and trades is None:
-        events, last_buy = df[col_action], None
+    if trades is None:
+        events, last_buy = df["action"], None
         for ts, act in events.items():
             if act == 1:
                 last_buy = ts
             elif act == -1 and last_buy is not None:
                 intervals.append((last_buy, ts))
                 last_buy = None
-    elif trades:
+    else:
         intervals = [(b, s) for ((b,s),_,_,_,_) in trades]
 
     # shaded bands for trade intervals
@@ -451,7 +450,7 @@ def plot_trades(
     n = len(df)
     def _col_vals(name):
         return df[name].to_numpy() if (name and name in df) else [float('nan')]*n
-    customdata = list(zip(_col_vals(col_bid), _col_vals(col_ask), _col_vals(col_trailstop)))
+    customdata = list(zip(_col_vals("bid"), _col_vals("ask"), _col_vals("trailstop_price")))
 
     # price line with hover showing bid/ask/trailstop
     fig.add_trace(go.Scatter(
@@ -481,7 +480,7 @@ def plot_trades(
 
     # optional feature lines (hidden by default)
     if features is None:
-        features = sorted([c for c in df.columns if c not in {col_action, col_signal1, col_signal2, col_close}])
+        features = sorted([c for c in df.columns if c not in {"action", col_signal1, col_signal2, col_close}])
     for feat in features:
         if feat in df:
             fig.add_trace(go.Scatter(
@@ -510,13 +509,13 @@ def plot_trades(
         ))
 
     # threshold line on signal axis
-    if buy_threshold is not None:
+    if buy_thresh is not None:
         fig.add_trace(go.Scatter(
             x=[df.index[0], df.index[-1]],
-            y=[buy_threshold, buy_threshold],
+            y=[buy_thresh, buy_thresh],
             mode='lines', line=dict(color='purple', dash='dot', width=1),
             name='Threshold', yaxis='y2',
-            hovertemplate=f"Thresh: {buy_threshold:.3f}<extra></extra>"
+            hovertemplate=f"Thresh: {buy_thresh:.3f}<extra></extra>"
         ))
 
     # layout and display
@@ -635,7 +634,7 @@ def aggregate_performance(
 
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(handles1 + handles2, labels1 + labels2, loc="lower left")
+    ax1.legend(handles1 + handles2, labels1 + labels2, loc="upper right")
 
     plt.tight_layout()
     plt.show()
