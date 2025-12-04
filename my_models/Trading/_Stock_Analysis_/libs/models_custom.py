@@ -580,7 +580,6 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
 
 ###################################################################################################### 
 
-
 def model_training_loop(
     model:                nn.Module,
     optimizer:            torch.optim.Optimizer,
@@ -609,6 +608,9 @@ def model_training_loop(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_feats = params.features_cols_tick
     model_hparams = params.hparams
+
+    gc.collect()
+    torch.cuda.empty_cache()
     model.to(device)
 
     live_plot = plots.LiveRMSEPlot()

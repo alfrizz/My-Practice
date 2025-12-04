@@ -1,3 +1,5 @@
 .*
 /my_models/Trading/_Stock_Analysis_/intraday_stocks
 /my_models/Trading/_Stock_Analysis_/dfs
+/my_models/Trading/_Stock_Analysis_/trainings/*.dat
+/my_models/Trading/_Stock_Analysis_/trainings/*.h5

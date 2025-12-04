@@ -34,7 +34,7 @@ bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for co
 
 feats_min_std = 0.03
 feats_max_corr = 0.997
-thresh_gb = 58 # use ram instead of memmap, if X_buf below this value
+thresh_gb = 56 # use ram instead of memmap, if X_buf below this value
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 stocks_folder  = "intraday_stocks" 
@@ -67,9 +67,9 @@ hparams = {
     "TCN_CHANNELS":          64,     # TCN output channels; independent from CONV_CHANNELS for flexibility
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
-    "USE_SHORT_LSTM":       False,    # enable bidirectional “short” LSTM
-    "SHORT_UNITS":          96,     # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
-    "DROPOUT_SHORT":        0.2,     # dropout after short-LSTM; ↑regularization
+    "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
+    "SHORT_UNITS":          128,     # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
+    "DROPOUT_SHORT":        0.1,     # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":      True,    # enable TransformerEncoder
@@ -77,7 +77,7 @@ hparams = {
     "TRANSFORMER_LAYERS":   4,       # number of encoder layers
     "TRANSFORMER_HEADS":    4,       # attention heads in each layer
     "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.05,     # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":        0.01,     # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
@@ -88,7 +88,7 @@ hparams = {
     "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
     "PRED_HIDDEN":           128,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
     
-    "ALPHA_SMOOTH":          1e-2,    # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
+    "ALPHA_SMOOTH":          0,      # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
     "WARMUP_STEPS":          3,      # linear warmup for slope penalty (0 = no warmup)
     
     "USE_HUBER":             False,  # if True use Huber for level term instead of MSE
@@ -100,10 +100,10 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          1e-5,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "WEIGHT_DECAY":          1e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              10,     # max grad norm; ↑training stability, ↓gradient expressivity
     
-    "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       1e-4,   # peak LR in the cycle
     "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head (1 default)
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
@@ -116,7 +116,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             45,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }

@@ -7,7 +7,8 @@ CONTAINER="gpu-jl"
 
 for pkg in "$@"; do
   echo "🚀 Installing '$pkg' in container…"
-  if docker exec -u root "$CONTAINER" pip install --no-cache-dir "$pkg"; then
+  docker start "$CONTAINER" 2>/dev/null || true
+  if docker exec -u root "$CONTAINER" python -m pip install --no-cache-dir "$pkg"; then
     name=$(docker exec "$CONTAINER" pip show "${pkg%%[=<>]*}" \
              | awk '/^Name:/ {print $2}')
     ver=$(docker exec "$CONTAINER" pip show "$name" \
