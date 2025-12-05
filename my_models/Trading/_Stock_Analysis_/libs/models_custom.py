@@ -543,7 +543,8 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
     val_base_preds, val_tot_preds, val_targs, val_lengths = [], [], [], []
 
     with torch.no_grad():
-        for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+        # for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+        for x_batch, y_signal, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
                 tqdm(loader, desc="eval", leave=False):
 
             x_batch = x_batch.to(device, non_blocking=True)
@@ -587,6 +588,7 @@ def model_training_loop(
     scaler:               torch.amp.GradScaler,
     train_loader,
     val_loader,
+    all_features = False
 ) -> float:
     """
     Train the model with a baseline head and a detached residual (delta) head using AMP.
@@ -643,7 +645,8 @@ def model_training_loop(
         epoch_start = datetime.utcnow().timestamp()
         epoch_samples = 0
 
-        for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+        # for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+        for x_batch, y_signal, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
 
             x_batch = x_batch.to(device, non_blocking=True)
@@ -800,8 +803,8 @@ def model_training_loop(
     if best_state is not None:
         model.load_state_dict(best_state)
         models_core.save_final_chkpt(
-            models_dir, best_state, best_val, model_feats, model_hparams,
-            tr_tot_metrics, val_tot_metrics, live_plot, suffix="_fin"
+            models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_tot_metrics, live_plot, 
+            suffix="_all" if all_features else "_fin"
         )
 
     for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):

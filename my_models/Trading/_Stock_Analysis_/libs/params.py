@@ -20,7 +20,7 @@ label_col  = "signal"
 shares_per_trade = 1
 
 month_to_check = '2024-03'
-sel_val_rmse = 0.09436
+sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
 extra_windows = [30, 60, 90] #  to produce additional smoothed/rolling copies of selected indicators for each window 
@@ -62,31 +62,31 @@ hparams = {
 
     # ── Temporal ConvNet (TCN) toggle ────────────────────
     "USE_TCN":               False,  # enable dilated Conv1d stack
-    "TCN_LAYERS":            3,      # number of dilated Conv1d layers
+    "TCN_LAYERS":            1,      # number of dilated Conv1d layers
     "TCN_KERNEL":            3,      # kernel size for each TCN layer
     "TCN_CHANNELS":          64,     # TCN output channels; independent from CONV_CHANNELS for flexibility
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
-    "USE_SHORT_LSTM":       True,    # enable bidirectional “short” LSTM
-    "SHORT_UNITS":          128,     # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
-    "DROPOUT_SHORT":        0.1,     # dropout after short-LSTM; ↑regularization
+    "USE_SHORT_LSTM":        False,  # enable bidirectional “short” LSTM
+    "SHORT_UNITS":           64,     # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
+    "DROPOUT_SHORT":         0.1,    # dropout after short-LSTM; ↑regularization
 
     # ── Transformer toggle ────────────────────────────────
-    "USE_TRANSFORMER":      True,    # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":  64,     # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":   4,       # number of encoder layers
-    "TRANSFORMER_HEADS":    4,       # attention heads in each layer
-    "TRANSFORMER_FF_MULT":  4,       # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":        0.01,     # transformer dropout; ↑regularization
+    "USE_TRANSFORMER":       True,   # enable TransformerEncoder
+    "TRANSFORMER_D_MODEL":   64,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_LAYERS":    3,      # number of encoder layers
+    "TRANSFORMER_HEADS":     4,      # attention heads in each layer
+    "TRANSFORMER_FF_MULT":   4,      # FFN expansion factor (d_model * MULT)
+    "DROPOUT_TRANS":         0.03,   # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
-    "USE_LONG_LSTM":        False,    # enable bidirectional “long” LSTM
-    "DROPOUT_LONG":         0.2,     # dropout after projection (or long-LSTM)
-    "LONG_UNITS":           128,     # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
+    "USE_LONG_LSTM":         False,  # enable bidirectional “long” LSTM
+    "LONG_UNITS":            64,     # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
+    "DROPOUT_LONG":          0.1,    # dropout after projection (or long-LSTM)
 
     # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
     "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
-    "PRED_HIDDEN":           128,    # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    "PRED_HIDDEN":           96,     # head MLP hidden dim; ↑capacity, ↓over-parameterization
     
     "ALPHA_SMOOTH":          0,      # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
     "WARMUP_STEPS":          3,      # linear warmup for slope penalty (0 = no warmup)
@@ -100,10 +100,10 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          1e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              10,     # max grad norm; ↑training stability, ↓gradient expressivity
+    "WEIGHT_DECAY":          3e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
     
-    "ONECYCLE_MAX_LR":       1e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
     "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head (1 default)
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
@@ -116,7 +116,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             45,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
@@ -136,10 +136,10 @@ sess_start_shift = dt.time(*divmod((sess_start_reg.hour * 60 + sess_start_reg.mi
 #########################################################################################################
 
 
-def load_target_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker):
+def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker):
     """
-    Find the Optuna JSON file named like '{ticker}_{value}_target.json' with the
-    largest numeric <value> and return (value, params) from that file.
+    Find the Optuna JSON file named like '{ticker}_{value}_{sig_type "target" or "predicted"}.json' 
+    with the largest numeric <value> and return (value, params) from that file.
 
     Assumes at least one matching file exists; will raise if none are found.
     """
@@ -182,9 +182,9 @@ def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_t
 
     if ticker == 'AAPL':
         
-        features_cols_tick =['dist_low_30', 'in_sess_time', 'dist_low_60', 'dist_low_28', 'eng_ema_cross_up', 'minute_time', 'rsi', 'hour_time', 'z_vwap_dev', 'dist_high_30', 'dist_high_60', 'eng_bb_mid', 'sma_pct_28', 'rsi_30', 'eng_vwap', 'plus_di', 'sma_pct_14', 'z_obv', 'adx_30', 'rsi_60', 'dist_high_28', 'roc_14', 'vwap_dev_pct_30', 'obv_diff_60', 'adx_60', 'volume_z_90', 'adx', 'z_vwap_dev_90', 'z_vwap_dev_60', 'obv_pct_14', 'minus_di', 'roc_28', 'obv_diff_14', 'obv_diff_30', 'vwap_dev_pct_60', 'plus_di_30', 'obv_pct_60', 'mom_sum_60', 'eng_macd', 'vwap_dev_pct_90', 'sma_pct_60', 'sma_pct_90', 'eng_ma', 'roc_30', 'obv_diff_90', 'obv_pct_30', 'vwap_dev_pct_z_90', 'volume_z_60', 'obv_z_90', 'obv_sma_90', 'adx_90', 'rsi_90', 'obv_pct_90', 'obv_sma_60', 'vwap_dev_pct_z_60', 'eng_obv', 'z_vwap_dev_30', 'ret_std_z_90', 'roc_60', 'atr_z_90', 'bb_w_z_90', 'macd_diff_z_60', 'obv_z_60', 'body_pct', 'vol_z_30', 'bb_w_z_60', 'minus_di_30', 'volume_z_30', 'macd_diff_z_90', 'plus_di_60']
+        features_cols_tick = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']
 
-# ['adx', 'adx_30', 'adx_60', 'adx_90', 'eng_ma', 'dow_time', 'hour_time', 'minute_time', 'in_sess_time', 'mom_sum_30', 'mom_sum_60', 'mom_sum_90', 'macd_diff_z_30', 'macd_diff_z_60', 'macd_diff_z_90', 'eng_macd', 'bb_w_z_30', 'bb_w_z_60', 'bb_w_z_90']
+        # 'roc_30', 'plus_di_60', 'obv_pct_60', 'bb_w_z_90', 'obv_sma_90', 'obv_diff_90', 'adx_30', 'obv_pct_90', 'roc_60',
 
         # trailstop_pct_tick = max(1.5 * bidask_spread_pct, trailstop_pct_tick) # safe minimum trail stop set to 'factor' times the bid spread (so bid starts enough higher than the trail)
         
@@ -196,8 +196,8 @@ features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_t
                         sign_smoothwin_tick = 1,
                         sellmin_idx_tick    = None,
                         sess_start_tick     = sess_start_pred,
-                        buy_thresh_tick     = 0.15,
-                        trailstop_pct_tick  = 3.5,
+                        buy_thresh_tick     = 0.1,
+                        trailstop_pct_tick  = 0.3,
                         return_thresh_tick  = 0) # TBD
                                                                                                            
 

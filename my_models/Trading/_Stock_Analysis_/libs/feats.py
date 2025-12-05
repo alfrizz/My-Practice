@@ -22,6 +22,7 @@ from captum.attr import IntegratedGradients
 from tqdm.auto import tqdm
 import ta
 from ta.volume import OnBalanceVolumeIndicator
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -1143,6 +1144,44 @@ def prune_features_by_variance_and_correlation(
 
 
 #########################################################################################################
+
+
+def extract_windows_from_loader(loader, h5_path = str(Path(params.models_folder) / "Xy.h5")):
+    """
+    Stream (batch[0], batch[1]) from a DataLoader into an extendable HDF5 file.
+    Preserves exact per-batch logic: batch[0].detach().cpu().numpy() and
+    batch[1].detach().cpu().numpy().reshape(-1).
+    Returns (X_ds, y_ds, h5_file) where X_ds/y_ds are h5py.Dataset objects.
+    """
+    it = iter(loader)
+    b0 = next(it)                      
+    xb0, yb0 = b0[0], b0[1]
+    L, F = int(xb0.shape[1]), int(xb0.shape[2])
+    dx = xb0.detach().cpu().numpy().dtype
+    dy = yb0.detach().cpu().numpy().reshape(-1).dtype
+
+    f = h5py.File(h5_path, "w")
+    X = f.create_dataset("X", shape=(0, L, F), maxshape=(None, L, F), dtype=dx, chunks=True)
+    y = f.create_dataset("y", shape=(0,), maxshape=(None,), dtype=dy, chunks=True)
+
+    def _append(ds, arr):
+        n0 = ds.shape[0]
+        ds.resize(n0 + arr.shape[0], axis=0)
+        ds[n0:n0 + arr.shape[0]] = arr
+
+    with torch.no_grad():
+        _append(X, xb0.detach().cpu().numpy())
+        _append(y, yb0.detach().cpu().numpy().reshape(-1))
+        for batch in tqdm(it, desc="Extracting windows"):
+            xb = batch[0].detach().cpu().numpy()
+            yb = batch[1].detach().cpu().numpy().reshape(-1)
+            _append(X, xb)
+            _append(y, yb)
+
+    return X, y, f
+
+
+######################################################################################################### 
 
 
 def predict_windows(model, X_np, batch_size=1024, device=params.device):

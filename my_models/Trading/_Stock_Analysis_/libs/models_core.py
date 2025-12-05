@@ -204,8 +204,6 @@ def chronological_split(
     raw_close:   torch.Tensor,
     end_times:   np.ndarray,      # (N,), dtype datetime64[ns]
     *,
-    train_prop:  float,
-    val_prop:    float,
     train_batch: int,
     device       = torch.device("cpu")
 ) -> Tuple[
@@ -243,11 +241,11 @@ def chronological_split(
 
     # 2) Determine day‐level cut points for train/val/test
     D             = len(samples_per_day)
-    orig_tr_days  = int(D * train_prop)
+    orig_tr_days  = int(D * params.train_prop)
     full_batches  = (orig_tr_days + train_batch - 1) // train_batch
     tr_days       = min(D, full_batches * train_batch)
     cut_train = max(0, tr_days - 1)
-    cut_val = min(D - 1, int(D * (train_prop + val_prop)))
+    cut_val = min(D - 1, int(D * (params.train_prop + params.val_prop)))
     
     # build cumsum then compute i_tr/i_val safely
     cumsum = np.concatenate([[0], np.cumsum(counts)])
@@ -301,7 +299,7 @@ class DayWindowDataset(Dataset):
     - Produces per-day shapes that pad_collate expects:
       - x        -> Tensor[W, T, F]       windows for that calendar day
       - y_sig    -> Tensor[W]             per-window scalar targets
-      - y_cls_bin-> Tensor[W]             binary labels (float) computed as y_sig > signal_thresh
+      # - y_cls_bin-> Tensor[W]             binary labels (float) computed as y_sig > signal_thresh
       - y_ret    -> Tensor[W]             per-window returns
       - y_ret_ter-> LongTensor[W]         ternary labels computed from return_thresh
       - rc       -> Tensor[W]             raw_close slice aligned to windows
@@ -315,11 +313,11 @@ class DayWindowDataset(Dataset):
         y_return:        torch.Tensor,   # (N_windows,)
         raw_close:       torch.Tensor,   # (N_windows,)
         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
-        signal_thresh:   float,
+        # signal_thresh:   float,
         return_thresh:   float
     ):
         # Store thresholds
-        self.signal_thresh = signal_thresh
+        # self.signal_thresh = signal_thresh
         self.return_thresh = return_thresh
 
         # 1) Store all buffers (raw_close always provided now)
@@ -352,8 +350,8 @@ class DayWindowDataset(Dataset):
         x     = self.X[s:e]           # (W, look_back, F)
         y_sig = self.y_signal[s:e]    # (W,)
     
-        # Binary label per window
-        y_cls_bin = (y_sig > self.signal_thresh).float()  # (W,)
+        # # Binary label per window
+        # y_cls_bin = (y_sig > self.signal_thresh).float()  # (W,)
     
         # True returns + ternary label
         y_ret     = self.y_return[s:e]                     # (W,)
@@ -369,7 +367,8 @@ class DayWindowDataset(Dataset):
         end_ts = self.end_times[e - 1]  # numpy.datetime64[ns]
     
         # Return the fixed 8-tuple with simplified shapes
-        return x, y_sig, y_cls_bin, y_ret, y_ret_ter, rc, wd, end_ts
+        # return x, y_sig, y_cls_bin, y_ret, y_ret_ter, rc, wd, end_ts
+        return x, y_sig, y_ret, y_ret_ter, rc, wd, end_ts
 
 
 ######################
@@ -387,7 +386,7 @@ def pad_collate(batch):
     Returns (9-tuple)
     - x_flat     Tensor[N, T, F]    flattened windows (N = B * W_max)
     - ysig_flat  Tensor[N]          flattened per-window scalar targets
-    - ybin_flat  Tensor[N]          flattened per-window binary labels
+    # - ybin_flat  Tensor[N]          flattened per-window binary labels
     - yret_flat  Tensor[N]          flattened per-window returns
     - yter_flat  LongTensor[N]      flattened per-window ternary labels
     - rc_flat    Tensor[N]          flattened per-window raw_close values
@@ -395,12 +394,13 @@ def pad_collate(batch):
     - ts_list    list               per-day end timestamps 
     - lengths    list[int]          true window counts per day 
     """
-    # Unpack fixed 8-tuple structure
-    x_list, ysig_list, ybin_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
+    # Unpack tuple structure
+    # x_list, ysig_list, ybin_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
+    x_list, ysig_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
 
     xs      = list(x_list)        # expect (W, T, F)
     ysig    = list(ysig_list)     # expect (W,)
-    ybin    = list(ybin_list)
+    # ybin    = list(ybin_list)
     yrets   = list(yret_list)
     yter    = list(yter_list)
     rc_seq  = list(rc_list)       # expect (W,)
@@ -410,7 +410,7 @@ def pad_collate(batch):
     # Pad per-day along the window axis -> shapes (B, W_max, ...)
     x_pad    = pad_sequence(xs,   batch_first=True)  # (B, W_max, T, F)
     ysig_pad = pad_sequence(ysig,   batch_first=True) # (B, W_max)
-    ybin_pad = pad_sequence(ybin, batch_first=True)   # (B, W_max)
+    # ybin_pad = pad_sequence(ybin, batch_first=True)   # (B, W_max)
     yret_pad = pad_sequence(yrets, batch_first=True)  # (B, W_max)
     yter_pad = pad_sequence(yter, batch_first=True)   # (B, W_max)
     rc_pad   = pad_sequence(rc_seq, batch_first=True) # (B, W_max)
@@ -425,7 +425,7 @@ def pad_collate(batch):
 
     x_flat    = x_pad.contiguous().view(B * W_max, T, F)   # (N, T, F)
     ysig_flat = ysig_pad.contiguous().view(B * W_max)      # (N,)
-    ybin_flat = ybin_pad.contiguous().view(B * W_max)      # (N,)
+    # ybin_flat = ybin_pad.contiguous().view(B * W_max)      # (N,)
     yret_flat = yret_pad.contiguous().view(B * W_max)      # (N,)
     yter_flat = yter_pad.contiguous().view(B * W_max)      # (N,)
     rc_flat   = rc_pad.contiguous().view(B * W_max)        # (N,)
@@ -433,7 +433,8 @@ def pad_collate(batch):
     # Keep per-day weekday vector (B,) for state resets; callers use lengths to align windows
     wd_per_day = wd_tensor.tolist()  # list[int] length B
 
-    return x_flat, ysig_flat, ybin_flat, yret_flat, yter_flat, rc_flat, wd_per_day, list(ts_list), lengths
+    # return x_flat, ysig_flat, ybin_flat, yret_flat, yter_flat, rc_flat, wd_per_day, list(ts_list), lengths
+    return x_flat, ysig_flat, yret_flat, yter_flat, rc_flat, wd_per_day, list(ts_list), lengths
     
 ###############
 
@@ -444,7 +445,7 @@ def split_to_day_datasets(
     X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
     *,
     sess_start:            time,
-    signal_thresh:         float,
+    # signal_thresh:         float,
     return_thresh:         float,
     train_batch:           int = 32,
     train_workers:         int = 0,
@@ -477,7 +478,7 @@ def split_to_day_datasets(
             y_return      = yr,
             raw_close     = rc,  
             end_times     = et,
-            signal_thresh = signal_thresh,
+            # signal_thresh = signal_thresh,
             return_thresh = return_thresh
         )
 
@@ -524,12 +525,10 @@ def model_core_pipeline(
     df,                          # feature‐enriched DataFrame
     look_back: int,              # how many ticks per window
     sess_start: time,            # session‐start cutoff for windows
-    train_prop: float,           # fraction of days → train
-    val_prop: float,             # fraction of days → val
     train_batch: int,            # batch size for training
     train_workers: int,          # DataLoader worker count
     prefetch_factor: int,        # DataLoader prefetch_factor
-    signal_thresh: float,        # y_signal threshold
+    # signal_thresh: float,        # y_signal threshold
     return_thresh: float         # y_return threshold
 ) -> tuple:
     """
@@ -555,8 +554,6 @@ def model_core_pipeline(
      day_id_tr, day_id_val, day_id_te) = chronological_split(
          X, y_sig, y_ret, raw_close,
          end_times   = end_times,
-         train_prop  = train_prop,
-         val_prop    = val_prop,
          train_batch = train_batch
     )
     X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr  = train_split
@@ -582,7 +579,7 @@ def model_core_pipeline(
         X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
 
         sess_start            = sess_start,
-        signal_thresh         = signal_thresh,
+        # signal_thresh         = signal_thresh,
         return_thresh         = return_thresh,
         train_batch           = train_batch,
         train_workers         = train_workers,
