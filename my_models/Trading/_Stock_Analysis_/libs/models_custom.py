@@ -543,7 +543,6 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
     val_base_preds, val_tot_preds, val_targs, val_lengths = [], [], [], []
 
     with torch.no_grad():
-        # for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
         for x_batch, y_signal, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
                 tqdm(loader, desc="eval", leave=False):
 
@@ -645,7 +644,6 @@ def model_training_loop(
         epoch_start = datetime.utcnow().timestamp()
         epoch_samples = 0
 
-        # for x_batch, y_signal, y_bin, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
         for x_batch, y_signal, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
 

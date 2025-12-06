@@ -93,8 +93,6 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
 ###########################################
 
 
-
-
 def standard_indicators(
     df: pd.DataFrame,
     extra_windows: Optional[Iterable[int]] = None,

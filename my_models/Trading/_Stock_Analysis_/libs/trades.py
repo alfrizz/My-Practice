@@ -491,8 +491,12 @@ def generate_trade_actions(
     # open_flag indicates whether we started the day with a carried open trade
     open_flag = (_last_trail > 0)
 
+    # allow scalar or per-row threshold
+    buy_arr = None if np.ndim(buy_thresh) == 0 else np.asarray(buy_thresh)
+
     # iterate over rows by index to compute actions and trailing stops
     for i in range(len(df)):
+        cur_thresh = float(buy_arr[i]) if buy_arr is not None else float(buy_thresh)
         
         # if already in-trade (previous trail exists), compute peak from previous trail
         if i > 0 and np.isfinite(trail_arr[i - 1]) and df["action"].iat[i - 1] != -1:
@@ -502,7 +506,7 @@ def generate_trade_actions(
             trail_arr[i] = trail_val
             
             # check exit SELL condition:  
-            if ((sig[i] < buy_thresh) # signal dropped below threshold
+            if ((sig[i] < cur_thresh) # signal dropped below threshold
                 and (df["bid"].iat[i] < trail_val) #  bid price below running trail stop price
                 and (times[i] >= sess_start)): # sell only during trading time
                 df.at[df.index[i], "action"] = -1 # SELL
@@ -510,7 +514,7 @@ def generate_trade_actions(
             continue
 
         # not in trade: possible entry BUY
-        if (((sig[i] >= buy_thresh) 
+        if (((sig[i] >= cur_thresh) 
             and (times[i] >= sess_start)) # buy only during trading time ...
                  or (_last_trail > 0)): # ... unless open trade carried from previous day
             df.at[df.index[i], "action"] = 1 # BUY

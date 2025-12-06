@@ -496,15 +496,42 @@ def plot_trades(
                 hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
             ))
 
-    # threshold line on signal axis
+    # # threshold line on signal axis
+    # if buy_thresh is not None:
+    #     fig.add_trace(go.Scatter(
+    #         x=[df.index[0], df.index[-1]],
+    #         y=[buy_thresh, buy_thresh],
+    #         mode='lines', line=dict(color='purple', dash='dot', width=1),
+    #         name='Threshold', yaxis='y2',
+    #         hovertemplate=f"Thresh: {buy_thresh:.3f}<extra></extra>"
+    #     ))
+
+    # threshold line on signal axis (supports scalar or per-row Series/array)
     if buy_thresh is not None:
-        fig.add_trace(go.Scatter(
-            x=[df.index[0], df.index[-1]],
-            y=[buy_thresh, buy_thresh],
-            mode='lines', line=dict(color='purple', dash='dot', width=1),
-            name='Threshold', yaxis='y2',
-            hovertemplate=f"Thresh: {buy_thresh:.3f}<extra></extra>"
-        ))
+        # if array-like, convert to numpy and validate length
+        if np.ndim(buy_thresh) == 0:
+            # scalar threshold
+            fig.add_trace(go.Scatter(
+                x=[df.index[0], df.index[-1]],
+                y=[float(buy_thresh), float(buy_thresh)],
+                mode='lines',
+                line=dict(color='purple', dash='dot', width=1),
+                name='Threshold', yaxis='y2',
+                hovertemplate=f"Thresh: {float(buy_thresh):.3f}<extra></extra>"
+            ))
+        else:
+            buy_arr = np.asarray(buy_thresh)
+            if buy_arr.shape[0] != len(df):
+                raise ValueError("buy_thresh length must match number of rows in df")
+            # plot per-row threshold (one value per timestamp)
+            fig.add_trace(go.Scatter(
+                x=df.index,
+                y=buy_arr,
+                mode='lines',
+                line=dict(color='purple', dash='dot', width=1),
+                name='Threshold', yaxis='y2',
+                hovertemplate='Thresh: %{y:.3f}<extra></extra>'
+            ))
 
     # layout and display
     fig.update_layout(

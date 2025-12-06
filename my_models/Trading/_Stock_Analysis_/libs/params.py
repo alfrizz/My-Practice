@@ -193,7 +193,7 @@ def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_t
 # automatically executed function to get the parameters for the selected ticker
 features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick \
     = ticker_parameters(ticker              = ticker,
-                        sign_smoothwin_tick = 1,
+                        sign_smoothwin_tick = 180,
                         sellmin_idx_tick    = None,
                         sess_start_tick     = sess_start_pred,
                         buy_thresh_tick     = 0.1,
