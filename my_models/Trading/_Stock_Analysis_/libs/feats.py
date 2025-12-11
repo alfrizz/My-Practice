@@ -97,13 +97,14 @@ def standard_indicators(
     extra_windows: Optional[Iterable[int]] = None,
     sma_short: int = 9,          # short SMA/EMA for 1m
     sma_long: int = 21,          # long SMA/EMA for 1m
-    rsi_window: int = 7,         # fast RSI for momentum on 1m
+    rsi_window: int = 6,         # fast RSI for momentum on 1m
     macd_fast: int = 12,
     macd_slow: int = 26,
     macd_sig: int = 9,
-    atr_window: int = 7,         # short ATR for stop sizing on 1m
+    atr_window: int = 14,         # short ATR for stop sizing on 1m
     bb_window: int = 20,
     vwap_window: int = 14,       # short VWAP window or session VWAP preferred
+    session_vwap: bool = True, 
     vol_spike_window: int = 14,
     z_candidates: Optional[Iterable[str]] = None,
     eps: float = 1e-9,
@@ -126,10 +127,7 @@ def standard_indicators(
     assert df.index.is_monotonic_increasing
 
     # prepare extra windows set (no window==1 duplicates)
-    if extra_windows is None:
-        W = []
-    else:
-        W = sorted({int(w) for w in extra_windows if (isinstance(w, (int, np.integer)) and int(w) > 1)})
+    win = sorted({int(w) for w in extra_windows if (isinstance(w, (int, np.integer)) and int(w) > 1)})
 
     # required input columns
     cols_in = ["open", "high", "low", "close", "volume", params.label_col]
@@ -186,8 +184,21 @@ def standard_indicators(
     new["minus_di"] = adx.adx_neg()
     new["adx"] = adx.adx()
     new["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=v).on_balance_volume()
-    vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window)
-    new["vwap"] = vwap.volume_weighted_average_price()
+    
+    # vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window)
+    # new["vwap"] = vwap.volume_weighted_average_price()
+    # new["vwap_dev_pct"] = 100.0 * safe_div(c - new["vwap"], new["vwap"])
+    
+    if session_vwap:
+        # session VWAP: cumulative price*vol / cumulative vol per calendar date
+        def _session_vwap(g):
+            pv = (g["close"] * g["volume"]).cumsum()
+            vol = g["volume"].cumsum().replace(0.0, eps)
+            return (pv / vol).fillna(method="ffill")
+        new["vwap"] = df[["close", "volume"]].groupby(df.index.date).apply(_session_vwap).reset_index(level=0, drop=True)
+    else:
+        vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window)
+        new["vwap"] = vwap.volume_weighted_average_price()
     new["vwap_dev_pct"] = 100.0 * safe_div(c - new["vwap"], new["vwap"])
 
     # vol spike and z (base window uses vol_spike_window)
@@ -215,7 +226,7 @@ def standard_indicators(
     new[f"obv_z_{vol_spike_window}"] = safe_div(new["obv"] - new[f"obv_sma_{vol_spike_window}"], obv_sigma)
 
     # ---------- multi-horizon generation: canonical rollings ----------
-    for w in W:
+    for w in win:
         # returns
         new[f"ret_{w}"] = c.pct_change(w)
 
@@ -292,17 +303,17 @@ def standard_indicators(
         z = (s - med) / mad
         return z.replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-20.0, 20.0)
     
-    for w in W:
+    for w in win:
         for base_name in z_candidates:
-            src = new.get(base_name)
-            if src is None:
-                src = new.get(f"{base_name}_{w}")
-            if src is None:
-                src = base.get(base_name)
-            if src is None:
+            key = f"{base_name}_{w}"
+            if key in new:
+                src = new[key]
+            elif base_name in new:
+                src = new[base_name]
+            elif base_name in base:
+                src = base[base_name]
+            else:
                 continue
-            if not isinstance(src, pd.Series):
-                src = pd.Series(src, index=base.index, dtype=float)
             new[f"{base_name}_z_{w}"] = _rolling_median_mad_z(src, w)
     
     time_feats = add_session_centered_time_features(base)

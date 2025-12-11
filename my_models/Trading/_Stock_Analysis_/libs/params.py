@@ -25,7 +25,7 @@ month_to_check = '2024-03'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
-extra_windows = [30, 60, 90] #  to produce additional smoothed/rolling copies of selected indicators for each window 
+extra_windows = [30, 45, 60] #  to produce additional smoothed/rolling copies of selected indicators for each window 
 
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
@@ -206,7 +206,7 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 #########################################################################################################
 
 
-def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick):
+def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mul_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick):
 
     if ticker == 'AAPL':
         
@@ -216,16 +216,17 @@ def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_t
 
         # trailstop_pct_tick = max(1.5 * bidask_spread_pct, trailstop_pct_tick) # safe minimum trail stop set to 'factor' times the bid spread (so bid starts enough higher than the trail)
         
-    return features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick
+    return features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mul_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick \
+features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mul_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick \
     = ticker_parameters(ticker              = ticker,
                         sign_smoothwin_tick = 180,
                         sellmin_idx_tick    = None,
                         sess_start_tick     = sess_start_pred,
                         buy_thresh_tick     = 0.1,
                         trailstop_pct_tick  = 0.3,
+                        atr_mul_tick        = 1,
                         return_thresh_tick  = 0) # TBD
                                                                                                            
 

@@ -23,6 +23,7 @@ _last_trail = 0.0
 _last_bid = 0.0
 ##################
 
+
 def generate_trade_actions(
     df: pd.DataFrame,
     col_signal: str,
@@ -30,145 +31,155 @@ def generate_trade_actions(
     sellmin_idx: int,
     sess_start: time,
     sign_thresh,
-    col_price: str = "close"
+    col_close: str = "close"
 ) -> pd.DataFrame:
     """
-    Generate discrete trade actions (Buy/Sell/Hold) and a trailing-stop price series from signals and price data.
+    Generate discrete trade actions (1=Buy, -1=Sell, 0=Hold) and a trailing-stop series.
+    - Works row-by-row: seeds entries, updates a running peak, computes a trailing stop
+      as `trail = peak * (1 - stop_frac)`, and issues sells when signal < threshold
+      and bid < trail (only during session).
+    - Supports scalar or per-row `sign_thresh`. Preserves carry-in via global _last_trail.
     """
     global _last_trail
 
-    # work on a copy to avoid mutating caller's dataframe
     df = df.copy()
-    df["action"] = 0 # HOLD
+    df["action"] = 0  # HOLD
 
-    # extract arrays for faster indexed access inside the loop
-    col_signal = df[col_signal].to_numpy()
-    sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh
-    times = df.index.time
-    prices = df[col_price].to_numpy(dtype=float)
-    stop_frac = float(trailstop_pct) / 100.0  # convert percent to fraction
-
-    # prepare an array to hold computed trailing stop prices (NaN when no open trade)
+    signal = df[col_signal].to_numpy(dtype=float)
+    close = df[col_close].to_numpy(dtype=float)
+    bid = df["bid"].to_numpy(dtype=float)
+    
+    sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh # the threshold field can be string or numeric
+    is_series = np.ndim(sign_thresh) != 0 # the threshold can be a constant or a series
+    
+    # trailing stop array and open flag for carry-in
     trail_arr = np.full(len(df), np.nan, dtype=float)
-    # open_flag indicates whether we started the day with a carried open trade
+    stop_frac = float(trailstop_pct) / 100.0
     open_flag = (_last_trail > 0)
 
-    # allow scalar or per-row threshold
-    cur_thr = None if np.ndim(sign_thresh) == 0 else np.asarray(sign_thresh)
-
-    # iterate over rows by index to compute actions and trailing stops
+    # iterate rows and compute actions + trailing stop
     for i in range(len(df)):
-        cur_thresh = float(cur_thr[i]) if cur_thr is not None else float(sign_thresh)
-        
-        # if already in-trade (previous trail exists), compute peak from previous trail
+        sign_thr = float(sign_thresh[i]) if is_series else float(sign_thresh)
+
+        # compute a single candidate peak and its trail value once per row
+        peak_candidate = close[i]
+        if i > 0 and np.isfinite(trail_arr[i - 1]):
+            peak_candidate = max(peak_candidate, trail_arr[i - 1] / (1.0 - stop_frac))
+        elif _last_trail > 0:
+            peak_candidate = max(peak_candidate, _last_trail / (1.0 - stop_frac))
+        trail_val = peak_candidate * (1.0 - stop_frac)
+
+        # if already in-trade (previous trail exists), update running trail and check exit
         if i > 0 and np.isfinite(trail_arr[i - 1]) and df["action"].iat[i - 1] != -1:
-            # compute the running peak using previous trail value and current price
-            peak = max(prices[i], trail_arr[i - 1] / (1.0 - stop_frac))
-            trail_val = peak * (1.0 - stop_frac)
             trail_arr[i] = trail_val
-            
-            # check exit SELL condition:  
-            if ((col_signal[i] < cur_thresh) # signal dropped below threshold
-                and (df["bid"].iat[i] < trail_val) #  bid price below running trail stop price
-                and (times[i] >= sess_start)): # sell only during trading time
-                df.at[df.index[i], "action"] = -1 # SELL
+            if (signal[i] < sign_thr 
+                and bid[i] < trail_val 
+                and df.index.time[i] >= sess_start):
+                df.at[df.index[i], "action"] = -1
                 open_flag = False
             continue
 
-        # not in trade: possible entry BUY
-        if (((col_signal[i] >= cur_thresh) 
-            and (times[i] >= sess_start)) # buy only during trading time ...
-                 or (_last_trail > 0)): # ... unless open trade carried from previous day
-            df.at[df.index[i], "action"] = 1 # BUY
-            # seed peak with either current price or carried last trail (converted back to peak)
-            peak = max(prices[i], _last_trail / (1.0 - stop_frac))
-            _last_trail = 0.0  # consume carried trail so it's used only once
-            trail_arr[i] = peak * (1.0 - stop_frac)
+        # not in trade: possible entry BUY (session or carry-in)
+        if ((signal[i] >= sign_thr 
+             and df.index.time[i] >= sess_start) 
+            or _last_trail > 0):
+            df.at[df.index[i], "action"] = 1
+            _last_trail = 0.0  # consume carried trail
+            trail_arr[i] = trail_val
             open_flag = True
 
-    # attach computed trailing stop series to dataframe
-    df["trailstop_price"] = pd.Series(trail_arr, index=df.index)
-
-    # persist last trail: last value if day ended with open trade, else 0
-    if sellmin_idx is None:
-        _last_trail = float(df["trailstop_price"].iloc[-1]) if open_flag else 0.0
+    df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
+    
+    if sellmin_idx is None: # persist previous day trail value
+        _last_trail = float(df["trail_stop_price"].iloc[-1]) if open_flag else 0.0
 
     return df
 
 
 ####################################
 
+
 def generate_tradact_inds(
     df: pd.DataFrame,
     col_signal: str,
-    sign_thresh: float,
     trailstop_pct: float,
     sellmin_idx: int,
     sess_start: time,
-    col_price: str = "close",
+    sign_thresh,
+    col_close: str = "close",
+    atr_mult: float = 1.0,
 ) -> pd.DataFrame:
     """
-    Generate discrete trade actions (Buy/Sell/Hold) and a trailing-stop price series from signals and price data.
+    Generate discrete trade actions (1=Buy, -1=Sell, 0=Hold), a trailing-stop series,
+    and an ATR-based stop series.
+    - Row-by-row generator: seeds entries, updates a running peak, computes a trailing
+      stop as `trail = peak * (1 - stop_frac)`, and issues sells when signal < threshold
+      and bid < trail (only during session).
+    - Also computes `atr_stop_price = peak - atr_mult * atr` for optional ATR-based exits.
+    - Supports scalar or per-row `sign_thresh`. Preserves carry-in via global _last_trail.
     """
     global _last_trail
 
-    # work on a copy to avoid mutating caller's dataframe
     df = df.copy()
-    df["action"] = 0 # HOLD
+    df["action"] = 0  # HOLD
 
-    # extract arrays for faster indexed access inside the loop
-    col_signal = df[col_signal].to_numpy()
-    sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh
-    times = df.index.time
-    prices = df[col_price].to_numpy(dtype=float)
-    stop_frac = float(trailstop_pct) / 100.0  # convert percent to fraction
+    signal = df[col_signal].to_numpy(dtype=float)
+    close = df[col_close].to_numpy(dtype=float)
+    bid = df["bid"].to_numpy(dtype=float)
+    atr = df["atr"].to_numpy(dtype=float)
+    
+    sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh # the threshold field can be string or numeric
+    is_series = np.ndim(sign_thresh) != 0 # the threshold can be a constant or a series
 
-    # prepare an array to hold computed trailing stop prices (NaN when no open trade)
+    # trailing stop and ATR stop arrays; open_flag for carry-in
     trail_arr = np.full(len(df), np.nan, dtype=float)
-    # open_flag indicates whether we started the day with a carried open trade
+    atr_arr = np.full(len(df), np.nan, dtype=float)
+    stop_frac = float(trailstop_pct) / 100.0
     open_flag = (_last_trail > 0)
 
-    # allow scalar or per-row threshold
-    cur_thr = None if np.ndim(sign_thresh) == 0 else np.asarray(sign_thresh)
-
-    # iterate over rows by index to compute actions and trailing stops
+    # iterate rows and compute actions + trailing stop + atr stop
     for i in range(len(df)):
-        cur_thresh = float(cur_thr[i]) if cur_thr is not None else float(sign_thresh)
-        
-        # if already in-trade (previous trail exists), compute peak from previous trail
+        sign_thr = float(sign_thresh[i]) if is_series else float(sign_thresh)
+
+        # compute a single candidate peak and its trail value once per row
+        peak_candidate = close[i]
+        if i > 0 and np.isfinite(trail_arr[i - 1]):
+            peak_candidate = max(peak_candidate, trail_arr[i - 1] / (1.0 - stop_frac))
+        elif _last_trail > 0:
+            peak_candidate = max(peak_candidate, _last_trail / (1.0 - stop_frac))
+        trail_val = peak_candidate * (1.0 - stop_frac)
+        atr_val = peak_candidate - atr_mult * atr[i]
+
+        # if already in-trade (previous trail exists), update running trail and check exit
         if i > 0 and np.isfinite(trail_arr[i - 1]) and df["action"].iat[i - 1] != -1:
-            # compute the running peak using previous trail value and current price
-            peak = max(prices[i], trail_arr[i - 1] / (1.0 - stop_frac))
-            trail_val = peak * (1.0 - stop_frac)
             trail_arr[i] = trail_val
-            
-            # check exit SELL condition:  
-            if ((col_signal[i] < cur_thresh) # signal dropped below threshold
-                and (df["bid"].iat[i] < trail_val) #  bid price below running trail stop price
-                and (times[i] >= sess_start)): # sell only during trading time
-                df.at[df.index[i], "action"] = -1 # SELL
+            atr_arr[i] = atr_val
+            if (signal[i] < sign_thr
+                and (bid[i] < trail_val 
+                     or bid[i] < atr_val)
+                and df.index.time[i] >= sess_start):
+                df.at[df.index[i], "action"] = -1
                 open_flag = False
             continue
 
-        # not in trade: possible entry BUY
-        if (((col_signal[i] >= cur_thresh) 
-            and (times[i] >= sess_start)) # buy only during trading time ...
-                 or (_last_trail > 0)): # ... unless open trade carried from previous day
-            df.at[df.index[i], "action"] = 1 # BUY
-            # seed peak with either current price or carried last trail (converted back to peak)
-            peak = max(prices[i], _last_trail / (1.0 - stop_frac))
-            _last_trail = 0.0  # consume carried trail so it's used only once
-            trail_arr[i] = peak * (1.0 - stop_frac)
+        # not in trade: possible entry BUY (session or carry-in)
+        if ((signal[i] >= sign_thr 
+             and df.index.time[i] >= sess_start) 
+            or _last_trail > 0):
+            df.at[df.index[i], "action"] = 1
+            _last_trail = 0.0  # consume carried trail
+            trail_arr[i] = trail_val
+            atr_arr[i] = atr_val
             open_flag = True
 
-    # attach computed trailing stop series to dataframe
-    df["trailstop_price"] = pd.Series(trail_arr, index=df.index)
+    df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
+    df["atr_stop_price"] = pd.Series(atr_arr, index=df.index)
 
-    # persist last trail: last value if day ended with open trade, else 0
-    if sellmin_idx is None:
-        _last_trail = float(df["trailstop_price"].iloc[-1]) if open_flag else 0.0
+    if sellmin_idx is None: # persist previous day trail value
+        _last_trail = float(df["trail_stop_price"].iloc[-1]) if open_flag else 0.0
 
     return df
+
 
     
 #########################################################################################################

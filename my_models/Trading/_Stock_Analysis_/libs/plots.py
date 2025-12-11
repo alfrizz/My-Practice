@@ -408,6 +408,7 @@ def plot_trades(
     highlights trade intervals, optionally draws threshold, and displays
     bid/ask/trailstop in the unified hover.
     """
+    df = df.copy()
     # filter by start time
     if start_plot is not None:
         df = df.loc[df.index.time >= start_plot]
@@ -457,7 +458,7 @@ def plot_trades(
     n = len(df)
     def _col_vals(name):
         return df[name].to_numpy() if (name and name in df) else [float('nan')]*n
-    customdata = list(zip(_col_vals("bid"), _col_vals("ask"), _col_vals("trailstop_price")))
+    customdata = list(zip(_col_vals("bid"), _col_vals("ask"), _col_vals("trail_stop_price"), _col_vals("atr_stop_price")))
 
     # price line with hover showing bid/ask/trailstop
     fig.add_trace(go.Scatter(
@@ -465,7 +466,7 @@ def plot_trades(
         mode='lines', line=dict(color='grey', width=1),
         name='Close',
         customdata=customdata,
-        hovertemplate='Close: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<extra></extra>'
+        hovertemplate='Close: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<br>Atr: %{customdata[3]:.3f}<extra></extra>'
     ))
 
     # primary signal 
@@ -488,7 +489,7 @@ def plot_trades(
 
     # optional feature lines (hidden by default)
     if features is None:
-        features = sorted([c for c in df.columns if c not in {"action", col_signal1, col_signal2, col_close,
+        features = sorted([c for c in df.columns if c not in {"action", col_signal1, col_signal2, col_close, sign_thresh,
                                                             "Position", "Cash", "NetValue", "Action", "TradedAmount",
                                                              "signal_raw", "trailstop_price",
                                                              }])
@@ -498,9 +499,10 @@ def plot_trades(
         rmin, rmax = df[col_close].min(), df[col_close].max()
         span = (rmax - rmin) or 1.0
         for f in features:
-            if f in df:
+            if f in df and f not in (col_signal1, col_signal2, sign_thresh):
                 a, b = df[f].min(), df[f].max()
                 df.loc[:, f] = ((df[f] - a) / ((b - a) or 1e-9)) * span + rmin
+
 
     for feat in sorted(features):
         if feat in df:
@@ -551,7 +553,7 @@ def plot_trades(
     )
 
     fig.show()
-
+    
 
 #########################################################################################################
 
