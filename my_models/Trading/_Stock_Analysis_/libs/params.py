@@ -13,6 +13,8 @@ import glob
 import json
 import re
 
+from tqdm import tqdm
+
 #########################################################################################################
 
 ticker = 'AAPL'
@@ -37,6 +39,11 @@ feats_max_corr = 0.997
 thresh_gb = 56 # use ram instead of memmap, if X_buf below this value
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+#########################################################################################################
+
+
 stocks_folder  = "intraday_stocks" 
 optuna_folder = "optuna_results" 
 models_folder = "trainings" 
@@ -45,9 +52,30 @@ log_file = Path(models_folder) / "training_diagnostics.txt"
 save_path  = Path("dfs")
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
+inds_unsc_csv = save_path / f"{ticker}_3_inds_unsc.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
 test_csv = save_path / f"{ticker}_4_test.csv"
 trainval_csv = save_path / f"{ticker}_4_trainval.csv"
+
+
+def _human(n):
+    for u in ("B","KB","MB","GB"):
+        if abs(n) < 1024: return f"{n:3.1f}{u}"
+        n /= 1024
+    return f"{n:.1f}TB"
+
+def to_csv_with_progress(df, path, chunksize=100_000, index=True):
+    with open(path, "w", newline="") as f:
+        df.iloc[:0].to_csv(f, index=index, date_format="%Y-%m-%d %H:%M:%S")  # header only
+        total = len(df)
+        pbar = tqdm(total=total, desc="Saving CSV", unit="rows")
+        for start in range(0, total, chunksize):
+            end = start + chunksize
+            df.iloc[start:end].to_csv(f, index=index, header=False, date_format="%Y-%m-%d %H:%M:%S")
+            f.flush()
+            pbar.update(min(end, total) - start)
+            pbar.set_postfix_str(f"size={_human(f.tell())}")
+        pbar.close()
 
 
 #########################################################################################################

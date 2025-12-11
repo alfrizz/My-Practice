@@ -9,7 +9,7 @@
     "tau_time": 8,
     "tau_dur": 229,
     "trailstop_pct": 0.030364600350609013,
-    "buy_thresh": 0.11078059499255467,
+    "sign_thresh": 0.11078059499255467,
     "beta_sat": 17,
     "smoothing_window": 1,
     "sellmin_idx": null,

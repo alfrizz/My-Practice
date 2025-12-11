@@ -92,20 +92,18 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
 
 ###########################################
 
-
 def standard_indicators(
     df: pd.DataFrame,
     extra_windows: Optional[Iterable[int]] = None,
-    label_col: str = params.label_col,
-    sma_short: int = 14,
-    sma_long: int = 28,
-    rsi_window: int = 14,
+    sma_short: int = 9,          # short SMA/EMA for 1m
+    sma_long: int = 21,          # long SMA/EMA for 1m
+    rsi_window: int = 7,         # fast RSI for momentum on 1m
     macd_fast: int = 12,
     macd_slow: int = 26,
     macd_sig: int = 9,
-    atr_window: int = 14,
+    atr_window: int = 7,         # short ATR for stop sizing on 1m
     bb_window: int = 20,
-    vwap_window: int = 14,
+    vwap_window: int = 14,       # short VWAP window or session VWAP preferred
     vol_spike_window: int = 14,
     z_candidates: Optional[Iterable[str]] = None,
     eps: float = 1e-9,
@@ -134,9 +132,7 @@ def standard_indicators(
         W = sorted({int(w) for w in extra_windows if (isinstance(w, (int, np.integer)) and int(w) > 1)})
 
     # required input columns
-    cols_in = ["open", "high", "low", "close", "volume"]
-    if label_col in df.columns:
-        cols_in.append(label_col)
+    cols_in = ["open", "high", "low", "close", "volume", params.label_col]
     base = df[cols_in].copy()
     o, h, l, c, v = base["open"], base["high"], base["low"], base["close"], base["volume"]
 
@@ -324,7 +320,7 @@ def engineered_indicators(
     rsi_low: float = 30.0,
     rsi_high: float = 70.0,
     adx_thr: float = 20.0,
-    mult_w: int = 14,
+    mult_w: int =7,
     eps: float = 1e-9,
     fillna_zero: bool = True,
     small_factor: float = 1e-3,
@@ -837,7 +833,6 @@ def assign_percentiles_from_diag(
 
 def scaling_with_percentiles(
     df: pd.DataFrame,
-    label_col: str,
     diag: pd.DataFrame,
     train_prop: float = 0.7,
     val_prop: float = 0.15,
@@ -879,7 +874,7 @@ def scaling_with_percentiles(
 
     # select numeric features and exclude label
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    feat_cols = [c for c in numeric_cols if c != label_col]
+    feat_cols = [c for c in numeric_cols if c != params.label_col]
     df[numeric_cols] = df[numeric_cols].astype(np.float64, copy=False)
 
     if not feat_cols:

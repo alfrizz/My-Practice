@@ -390,15 +390,16 @@ class LiveFeatGuBars:
 
 def plot_trades(
     df,
-    col_signal1: str,
     *,
     col_close: str='close',
     start_plot: 'datetime.time'=None,
     features: list[str]=None,
+    col_signal1: str=None,
     col_signal2: str=None,
+    sign_thresh: float=None,
     trades: list[tuple]=None,
-    buy_thresh: float=None,
     performance_stats: dict=None,
+    autoscale: bool=False
 ):
     """
     Interactive Plotly view of intraday trades and signals.
@@ -467,15 +468,16 @@ def plot_trades(
         hovertemplate='Close: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<extra></extra>'
     ))
 
-    # primary signal on secondary axis
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df[col_signal1],
-        mode='lines', line=dict(color='blue', dash='dot', width=2),
-        name='Target Signal', yaxis='y2',
-        hovertemplate='Signal: %{y:.3f}<extra></extra>'
-    ))
+    # primary signal 
+    if col_signal1 and col_signal1 in df:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df[col_signal1],
+            mode='lines', line=dict(color='blue', dash='dot', width=2),
+            name='Target Signal', yaxis='y2',
+            hovertemplate='Signal: %{y:.3f}<extra></extra>'
+        ))
 
-    # optional predicted signal
+    # secondary signal
     if col_signal2 and col_signal2 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal2],
@@ -486,8 +488,21 @@ def plot_trades(
 
     # optional feature lines (hidden by default)
     if features is None:
-        features = sorted([c for c in df.columns if c not in {"action", col_signal1, col_signal2, col_close}])
-    for feat in features:
+        features = sorted([c for c in df.columns if c not in {"action", col_signal1, col_signal2, col_close,
+                                                            "Position", "Cash", "NetValue", "Action", "TradedAmount",
+                                                             "signal_raw", "trailstop_price",
+                                                             }])
+        
+    # minimal in-place autoscale (map each feature into close range)
+    if autoscale:
+        rmin, rmax = df[col_close].min(), df[col_close].max()
+        span = (rmax - rmin) or 1.0
+        for f in features:
+            if f in df:
+                a, b = df[f].min(), df[f].max()
+                df.loc[:, f] = ((df[f] - a) / ((b - a) or 1e-9)) * span + rmin
+
+    for feat in sorted(features):
         if feat in df:
             fig.add_trace(go.Scatter(
                 x=df.index, y=df[feat],
@@ -496,33 +511,24 @@ def plot_trades(
                 hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
             ))
 
-    # # threshold line on signal axis
-    # if buy_thresh is not None:
-    #     fig.add_trace(go.Scatter(
-    #         x=[df.index[0], df.index[-1]],
-    #         y=[buy_thresh, buy_thresh],
-    #         mode='lines', line=dict(color='purple', dash='dot', width=1),
-    #         name='Threshold', yaxis='y2',
-    #         hovertemplate=f"Thresh: {buy_thresh:.3f}<extra></extra>"
-    #     ))
-
     # threshold line on signal axis (supports scalar or per-row Series/array)
-    if buy_thresh is not None:
+    if sign_thresh is not None:
+        sign_thr = df[sign_thresh]
         # if array-like, convert to numpy and validate length
-        if np.ndim(buy_thresh) == 0:
+        if np.ndim(sign_thr) == 0:
             # scalar threshold
             fig.add_trace(go.Scatter(
                 x=[df.index[0], df.index[-1]],
-                y=[float(buy_thresh), float(buy_thresh)],
+                y=[float(sign_thr), float(sign_thr)],
                 mode='lines',
                 line=dict(color='purple', dash='dot', width=1),
                 name='Threshold', yaxis='y2',
-                hovertemplate=f"Thresh: {float(buy_thresh):.3f}<extra></extra>"
+                hovertemplate=f"Thresh: {float(sign_thr):.3f}<extra></extra>"
             ))
         else:
-            buy_arr = np.asarray(buy_thresh)
+            buy_arr = np.asarray(sign_thr)
             if buy_arr.shape[0] != len(df):
-                raise ValueError("buy_thresh length must match number of rows in df")
+                raise ValueError("sign_thr length must match number of rows in df")
             # plot per-row threshold (one value per timestamp)
             fig.add_trace(go.Scatter(
                 x=df.index,
