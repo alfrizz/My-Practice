@@ -52,10 +52,11 @@ log_file = Path(models_folder) / "training_diagnostics.txt"
 save_path  = Path("dfs")
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
-inds_unsc_csv = save_path / f"{ticker}_3_inds_unsc.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
-test_csv = save_path / f"{ticker}_4_test.csv"
-trainval_csv = save_path / f"{ticker}_4_trainval.csv"
+indunsc_test_csv = save_path / f"{ticker}_4_indunsc_test.csv"
+indunsc_trainval_csv = save_path / f"{ticker}_4_indunsc_trainval.csv"
+test_csv = save_path / f"{ticker}_5_test.csv"
+trainval_csv = save_path / f"{ticker}_5_trainval.csv"
 
 
 def _human(n):
@@ -206,7 +207,8 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 #########################################################################################################
 
 
-def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mul_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick):
+def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mult_tick, vwap_atr_mult_tick, \
+                      rsi_thresh_tick, buy_thresh_tick, sign_smoothwin_tick):
 
     if ticker == 'AAPL':
         
@@ -216,18 +218,22 @@ def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_t
 
         # trailstop_pct_tick = max(1.5 * bidask_spread_pct, trailstop_pct_tick) # safe minimum trail stop set to 'factor' times the bid spread (so bid starts enough higher than the trail)
         
-    return features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mul_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick
+    return features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mult_tick, vwap_atr_mult_tick, \
+    rsi_thresh_tick, buy_thresh_tick, sign_smoothwin_tick
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mul_tick, buy_thresh_tick, sign_smoothwin_tick, return_thresh_tick \
+features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mult_tick, vwap_atr_mult_tick, \
+rsi_thresh_tick, buy_thresh_tick, sign_smoothwin_tick\
     = ticker_parameters(ticker              = ticker,
                         sign_smoothwin_tick = 180,
                         sellmin_idx_tick    = None,
                         sess_start_tick     = sess_start_pred,
                         buy_thresh_tick     = 0.1,
                         trailstop_pct_tick  = 0.3,
-                        atr_mul_tick        = 1,
-                        return_thresh_tick  = 0) # TBD
+                        atr_mult_tick       = 10,
+                        vwap_atr_mult_tick  = 10,
+                        rsi_thresh_tick     = 35)
+                        # return_thresh_tick  = 0 # TBD
                                                                                                            
 
 

@@ -69,9 +69,10 @@ def generate_trade_actions(
             peak_candidate = max(peak_candidate, _last_trail / (1.0 - stop_frac))
         trail_val = peak_candidate * (1.0 - stop_frac)
 
-        # if already in-trade (previous trail exists), update running trail and check exit
+        # if already in-trade (previous trail exists), update running trail and check exit SELL
         if i > 0 and np.isfinite(trail_arr[i - 1]) and df["action"].iat[i - 1] != -1:
             trail_arr[i] = trail_val
+            
             if (signal[i] < sign_thr 
                 and bid[i] < trail_val 
                 and df.index.time[i] >= sess_start):
@@ -99,15 +100,20 @@ def generate_trade_actions(
 ####################################
 
 
-def generate_tradact_inds(
+def generate_tradact_ema921(
     df: pd.DataFrame,
     col_signal: str,
+    sign_thresh,
     trailstop_pct: float,
     sellmin_idx: int,
     sess_start: time,
-    sign_thresh,
-    col_close: str = "close",
-    atr_mult: float = 1.0,
+    col_close: str       = "close",
+    col_atr: str         = "atr_14",
+    col_rsi: str         = "rsi_6",
+    col_vwap: str        = "vwap_14",
+    rsi_thresh: int      = 50,
+    atr_mult: float      = 1.0,
+    vwap_atr_mult: float = 0.5,
 ) -> pd.DataFrame:
     """
     Generate discrete trade actions (1=Buy, -1=Sell, 0=Hold), a trailing-stop series,
@@ -125,8 +131,8 @@ def generate_tradact_inds(
 
     signal = df[col_signal].to_numpy(dtype=float)
     close = df[col_close].to_numpy(dtype=float)
+    atr = df[col_atr].to_numpy(dtype=float)
     bid = df["bid"].to_numpy(dtype=float)
-    atr = df["atr"].to_numpy(dtype=float)
     
     sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh # the threshold field can be string or numeric
     is_series = np.ndim(sign_thresh) != 0 # the threshold can be a constant or a series
@@ -150,10 +156,11 @@ def generate_tradact_inds(
         trail_val = peak_candidate * (1.0 - stop_frac)
         atr_val = peak_candidate - atr_mult * atr[i]
 
-        # if already in-trade (previous trail exists), update running trail and check exit
+        # if already in-trade (previous trail exists), update running trail and check exit SELL
         if i > 0 and np.isfinite(trail_arr[i - 1]) and df["action"].iat[i - 1] != -1:
             trail_arr[i] = trail_val
             atr_arr[i] = atr_val
+            
             if (signal[i] < sign_thr
                 and (bid[i] < trail_val 
                      or bid[i] < atr_val)
@@ -163,8 +170,12 @@ def generate_tradact_inds(
             continue
 
         # not in trade: possible entry BUY (session or carry-in)
-        if ((signal[i] >= sign_thr 
-             and df.index.time[i] >= sess_start) 
+        if (
+            (signal[i] >= sign_thr 
+             and df[col_rsi].iat[i] > rsi_thresh
+             and df[col_close].iat[i] > df[col_vwap].iat[i] + vwap_atr_mult * df[col_atr].iat[i]
+             and df.index.time[i] >= sess_start
+             ) 
             or _last_trail > 0):
             df.at[df.index[i], "action"] = 1
             _last_trail = 0.0  # consume carried trail

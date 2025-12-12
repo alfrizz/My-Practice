@@ -92,6 +92,7 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
 
 ###########################################
 
+
 def standard_indicators(
     df: pd.DataFrame,
     extra_windows: Optional[Iterable[int]] = None,
@@ -167,39 +168,38 @@ def standard_indicators(
     new["range_pct"] = safe_div(h - l, c)
 
     # canonical RSI, MACD, ATR, BB, DI/ADX, OBV, VWAP, vol spike
-    new["rsi"] = ta.momentum.RSIIndicator(close=c, window=rsi_window).rsi()
+    new[f"rsi_{rsi_window}"] = ta.momentum.RSIIndicator(close=c, window=rsi_window).rsi()
+    
     macd = ta.trend.MACD(close=c, window_fast=macd_fast, window_slow=macd_slow, window_sign=macd_sig)
     new["macd_line"] = macd.macd()
     new["macd_signal"] = macd.macd_signal()
     new["macd_diff"] = macd.macd_diff()
-    atr = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=atr_window)
-    new["atr"] = atr.average_true_range()
-    new["atr_pct"] = safe_div(new["atr"], c)
+    
+    new[f"atr_{atr_window}"] = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=atr_window).average_true_range()
+    new[f"atr_pct_{atr_window}"] = safe_div(new[f"atr_{atr_window}"], c)
+    
     bb = ta.volatility.BollingerBands(close=c, window=bb_window, window_dev=2)
-    new["bb_lband"] = bb.bollinger_lband()
-    new["bb_hband"] = bb.bollinger_hband()
-    new["bb_w"] = safe_div(new["bb_hband"] - new["bb_lband"], bb.bollinger_mavg())
+    new[f"bb_lband_{bb_window}"] = bb.bollinger_lband()
+    new[f"bb_hband_{bb_window}"] = bb.bollinger_hband()
+    new[f"bb_w_{bb_window}"] = safe_div(new[f"bb_hband_{bb_window}"] - new[f"bb_lband_{bb_window}"], bb.bollinger_mavg())
+    
     adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=atr_window)
     new["plus_di"] = adx.adx_pos()
     new["minus_di"] = adx.adx_neg()
+    
     new["adx"] = adx.adx()
     new["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=v).on_balance_volume()
     
-    # vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window)
-    # new["vwap"] = vwap.volume_weighted_average_price()
-    # new["vwap_dev_pct"] = 100.0 * safe_div(c - new["vwap"], new["vwap"])
-    
     if session_vwap:
-        # session VWAP: cumulative price*vol / cumulative vol per calendar date
         def _session_vwap(g):
             pv = (g["close"] * g["volume"]).cumsum()
             vol = g["volume"].cumsum().replace(0.0, eps)
-            return (pv / vol).fillna(method="ffill")
-        new["vwap"] = df[["close", "volume"]].groupby(df.index.date).apply(_session_vwap).reset_index(level=0, drop=True)
+            return (pv / vol).ffill()
+        vwap_s = df[["close", "volume"]].groupby(df.index.date).apply(_session_vwap).reset_index(level=0, drop=True).squeeze()
     else:
-        vwap = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window)
-        new["vwap"] = vwap.volume_weighted_average_price()
-    new["vwap_dev_pct"] = 100.0 * safe_div(c - new["vwap"], new["vwap"])
+        vwap_s = ta.volume.VolumeWeightedAveragePrice(high=h, low=l, close=c, volume=v, window=vwap_window).volume_weighted_average_price().squeeze()
+    new[f"vwap_{vwap_window}"] = pd.Series(np.asarray(vwap_s).ravel(), index=base.index, dtype=float)
+    new[f"vwap_dev_pct_{vwap_window}"] = 100.0 * safe_div(c - new[f"vwap_{vwap_window}"], new[f"vwap_{vwap_window}"])
 
     # vol spike and z (base window uses vol_spike_window)
     vol_roll = v.rolling(vol_spike_window, min_periods=vol_spike_window).mean().fillna(eps)
@@ -292,7 +292,7 @@ def standard_indicators(
         new[f"macd_signal_{w}"] = new["macd_signal"].rolling(w, min_periods=w).mean()
         new[f"macd_diff_{w}"] = new["macd_diff"].rolling(w, min_periods=w).mean()
 
-    # ---------- apply robust z only to selected drift-prone indicators ----------
+    # ---------- apply robust z only to selected drift-prone indicators (minimal) ----------
     def _rolling_median_mad_z(s: pd.Series, w: int) -> pd.Series:
         med = s.rolling(w, min_periods=w).median()
         mad = (s - med).abs().rolling(w, min_periods=w).median() * 1.4826
@@ -314,7 +314,9 @@ def standard_indicators(
                 src = base[base_name]
             else:
                 continue
-            new[f"{base_name}_z_{w}"] = _rolling_median_mad_z(src, w)
+            # minimal coercion to 1-D Series aligned to base.index
+            src_s = pd.Series(np.asarray(src).ravel(), index=base.index, dtype=float)
+            new[f"{base_name}_z_{w}"] = _rolling_median_mad_z(src_s, w)
     
     time_feats = add_session_centered_time_features(base)
     new.update(time_feats.to_dict(orient="series"))

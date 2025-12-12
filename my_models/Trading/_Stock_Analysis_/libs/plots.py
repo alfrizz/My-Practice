@@ -388,113 +388,329 @@ class LiveFeatGuBars:
 #########################################################################################################
 
 
+# def plot_trades(
+#     df,
+#     *,
+#     col_close: str='close',
+#     start_plot: 'datetime.time'=None,
+#     features: list[str]=None,
+#     col_signal1: str=None,
+#     col_signal2: str=None,
+#     sign_thresh: float=None,
+#     trades: list[tuple]=None,
+#     performance_stats: dict=None,
+#     autoscale: bool=False
+# ):
+#     """
+#     Interactive Plotly view of intraday trades and signals.
+
+#     Shows price, primary signal, optional predicted signal and features,
+#     highlights trade intervals, optionally draws threshold, and displays
+#     bid/ask/trailstop in the unified hover.
+#     """
+#     df = df.copy()
+#     # filter by start time
+#     if start_plot is not None:
+#         df = df.loc[df.index.time >= start_plot]
+
+#     fig = go.Figure()
+
+#     # derive trade intervals either from trades list or from action series
+#     intervals = []
+
+#     if trades is not None:
+#         intervals = [(b, s) for ((b,s),_,_,_,_) in trades]
+#         lines_src = performance_stats["TRADES"]
+    
+#         for i, ((b_dt, s_dt), _, ret_pc, _, _) in enumerate(trades, start=1):
+#             seg = df.loc[b_dt:s_dt, col_close]
+#             perf_line = lines_src[i-1]
+#             rhs = perf_line.split('=')[-1].strip()
+#             hover = f"Return: {float(rhs):.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
+        
+#             fig.add_trace(go.Scatter(
+#                 x=seg.index, y=seg.values,
+#                 mode='lines+markers',
+#                 line=dict(color='green', width=1),
+#                 marker=dict(size=3, color='green'),
+#                 legendgroup='Trades', showlegend=False,
+#                 hovertemplate=hover
+#             ))
+
+#     # shaded bands for trade intervals
+#     if intervals:
+#         fig.update_layout(yaxis3=dict(domain=[0,1], anchor='x', overlaying='y', visible=False))
+#         for i,(b0,b1) in enumerate(intervals):
+#             fig.add_trace(go.Scatter(
+#                 x=[b0,b1,b1,b0,b0],
+#                 y=[0,0,1,1,0],
+#                 mode='none',
+#                 fill='toself',
+#                 fillcolor='rgba(255,165,0,0.25)',
+#                 legendgroup='Trades',
+#                 name='Trades' if i==0 else None,
+#                 showlegend=(i==0),
+#                 yaxis='y3',
+#                 hoverinfo='skip'
+#             ))
+
+#     # prepare customdata for unified hover: (bid,ask,trailstop)
+#     n = len(df)
+#     def _col_vals(name):
+#         return df[name].to_numpy() if (name and name in df) else [float('nan')]*n
+#     customdata = list(zip(_col_vals("bid"), _col_vals("ask"), _col_vals("trail_stop_price"), _col_vals("atr_stop_price")))
+
+#     # price line with hover showing bid/ask/trailstop
+#     fig.add_trace(go.Scatter(
+#         x=df.index, y=df[col_close],
+#         mode='lines', line=dict(color='grey', width=1),
+#         name='Close',
+#         customdata=customdata,
+#         hovertemplate='Close: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<br>Atr: %{customdata[3]:.3f}<extra></extra>'
+#     ))
+
+#     # primary signal 
+#     if col_signal1 and col_signal1 in df:
+#         fig.add_trace(go.Scatter(
+#             x=df.index, y=df[col_signal1],
+#             mode='lines', line=dict(color='blue', dash='dot', width=2),
+#             name='Target Signal', yaxis='y2',
+#             hovertemplate='Signal: %{y:.3f}<extra></extra>'
+#         ))
+
+#     # secondary signal
+#     if col_signal2 and col_signal2 in df:
+#         fig.add_trace(go.Scatter(
+#             x=df.index, y=df[col_signal2],
+#             mode='lines', line=dict(color='crimson', dash='dot', width=2),
+#             name='Pred Signal', yaxis='y2',
+#             hovertemplate='Pred: %{y:.3f}<extra></extra>'
+#         ))
+
+#     # optional feature lines (hidden by default)
+#     if features is None:
+#         features = sorted([c for c in df.columns if c not in {"action", col_signal1, col_signal2, col_close, sign_thresh,
+#                                                             "Position", "Cash", "NetValue", "Action", "TradedAmount",
+#                                                              "signal_raw", "trailstop_price",
+#                                                              }])
+        
+#     # minimal in-place autoscale (map each feature into close range)
+#     if autoscale:
+#         rmin, rmax = df[col_close].min(), df[col_close].max()
+#         span = (rmax - rmin) or 1.0
+#         for f in features:
+#             if f in df and f not in (col_signal1, col_signal2, sign_thresh):
+#                 a, b = df[f].min(), df[f].max()
+#                 df.loc[:, f] = ((df[f] - a) / ((b - a) or 1e-9)) * span + rmin
+
+
+#     for feat in sorted(features):
+#         if feat in df:
+#             fig.add_trace(go.Scatter(
+#                 x=df.index, y=df[feat],
+#                 mode='lines', line=dict(width=1),
+#                 name=feat, yaxis='y2', visible='legendonly',
+#                 hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
+#             ))
+
+#     # threshold line on signal axis (supports scalar or per-row Series/array)
+#     if sign_thresh is not None:
+#         sign_thr = df[sign_thresh]
+#         # if array-like, convert to numpy and validate length
+#         if np.ndim(sign_thr) == 0:
+#             # scalar threshold
+#             fig.add_trace(go.Scatter(
+#                 x=[df.index[0], df.index[-1]],
+#                 y=[float(sign_thr), float(sign_thr)],
+#                 mode='lines',
+#                 line=dict(color='purple', dash='dot', width=1),
+#                 name='Threshold', yaxis='y2',
+#                 hovertemplate=f"Thresh: {float(sign_thr):.3f}<extra></extra>"
+#             ))
+#         else:
+#             buy_arr = np.asarray(sign_thr)
+#             if buy_arr.shape[0] != len(df):
+#                 raise ValueError("sign_thr length must match number of rows in df")
+#             # plot per-row threshold (one value per timestamp)
+#             fig.add_trace(go.Scatter(
+#                 x=df.index,
+#                 y=buy_arr,
+#                 mode='lines',
+#                 line=dict(color='purple', dash='dot', width=1),
+#                 name='Threshold', yaxis='y2',
+#                 hovertemplate='Thresh: %{y:.3f}<extra></extra>'
+#             ))
+
+#     # layout and display
+#     fig.update_layout(
+#         hovermode='x unified',
+#         template='plotly_white',
+#         height=800,
+#         xaxis_title='Time',
+#         yaxis_title='Price',
+#         yaxis2=dict(overlaying='y', side='right', title='Signal', showgrid=False),
+#         legend=dict(font=dict(size=12), tracegroupgap=4)
+#     )
+
+#     fig.show()
+    
+
+
 def plot_trades(
     df,
     *,
-    col_close: str='close',
-    start_plot: 'datetime.time'=None,
-    features: list[str]=None,
-    col_signal1: str=None,
-    col_signal2: str=None,
-    sign_thresh: float=None,
-    trades: list[tuple]=None,
-    performance_stats: dict=None,
-    autoscale: bool=False
+    col_close: str = "close",
+    start_plot: "datetime.time" = None,
+    features: list[str] = None,
+    col_signal1: str = None,
+    col_signal2: str = None,
+    sign_thresh: float = None,
+    trades: list[tuple] = None,
+    performance_stats: dict = None,
+    autoscale: bool = False,
+    extra_hover_fields: list[str] = None,
 ):
     """
-    Interactive Plotly view of intraday trades and signals.
+    Minimal, clear intraday trade plot.
 
-    Shows price, primary signal, optional predicted signal and features,
-    highlights trade intervals, optionally draws threshold, and displays
-    bid/ask/trailstop in the unified hover.
+    - Plots price, optional primary/secondary signals and optional feature lines.
+    - Highlights trade intervals when `trades` is provided.
+    - Unified hover shows Signal, Threshold, Close, Bid, Ask, Trail stop, ATR stop,
+      and any `extra_hover_fields` in the order provided.
+    - Keeps naming and behaviour compatible with the previous version; only adds
+      `extra_hover_fields` and places Signal/Threshold at the top of the hover and legend.
     """
     df = df.copy()
-    # filter by start time
+
+    # optional time filter
     if start_plot is not None:
         df = df.loc[df.index.time >= start_plot]
 
     fig = go.Figure()
 
-    # derive trade intervals either from trades list or from action series
+    # --- trade interval traces (green segments) ---
     intervals = []
-
     if trades is not None:
-        intervals = [(b, s) for ((b,s),_,_,_,_) in trades]
+        intervals = [(b, s) for ((b, s), _, _, _, _) in trades]
         lines_src = performance_stats["TRADES"]
-    
         for i, ((b_dt, s_dt), _, ret_pc, _, _) in enumerate(trades, start=1):
             seg = df.loc[b_dt:s_dt, col_close]
-            perf_line = lines_src[i-1]
-            rhs = perf_line.split('=')[-1].strip()
+            perf_line = lines_src[i - 1]
+            rhs = perf_line.split("=")[-1].strip()
             hover = f"Return: {float(rhs):.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
-        
             fig.add_trace(go.Scatter(
                 x=seg.index, y=seg.values,
-                mode='lines+markers',
-                line=dict(color='green', width=1),
-                marker=dict(size=3, color='green'),
-                legendgroup='Trades', showlegend=False,
+                mode="lines+markers",
+                line=dict(color="green", width=1),
+                marker=dict(size=3, color="green"),
+                legendgroup="Trades", showlegend=False,
                 hovertemplate=hover
             ))
 
     # shaded bands for trade intervals
     if intervals:
-        fig.update_layout(yaxis3=dict(domain=[0,1], anchor='x', overlaying='y', visible=False))
-        for i,(b0,b1) in enumerate(intervals):
+        fig.update_layout(yaxis3=dict(domain=[0, 1], anchor="x", overlaying="y", visible=False))
+        for i, (b0, b1) in enumerate(intervals):
             fig.add_trace(go.Scatter(
-                x=[b0,b1,b1,b0,b0],
-                y=[0,0,1,1,0],
-                mode='none',
-                fill='toself',
-                fillcolor='rgba(255,165,0,0.25)',
-                legendgroup='Trades',
-                name='Trades' if i==0 else None,
-                showlegend=(i==0),
-                yaxis='y3',
-                hoverinfo='skip'
+                x=[b0, b1, b1, b0, b0],
+                y=[0, 0, 1, 1, 0],
+                mode="none",
+                fill="toself",
+                fillcolor="rgba(255,165,0,0.25)",
+                legendgroup="Trades",
+                name="Trades" if i == 0 else None,
+                showlegend=(i == 0),
+                yaxis="y3",
+                hoverinfo="skip"
             ))
 
-    # prepare customdata for unified hover: (bid,ask,trailstop)
-    n = len(df)
-    def _col_vals(name):
-        return df[name].to_numpy() if (name and name in df) else [float('nan')]*n
-    customdata = list(zip(_col_vals("bid"), _col_vals("ask"), _col_vals("trail_stop_price"), _col_vals("atr_stop_price")))
+    # --- helper to produce arrays for customdata ---
+    def _arr_for(x):
+        # support column name (string) or scalar threshold
+        if isinstance(x, str):
+            return df.get(x, pd.Series(np.nan, index=df.index)).to_numpy()
+        val = float(x) if x is not None else np.nan
+        return np.full(len(df), val, dtype=float)
 
-    # price line with hover showing bid/ask/trailstop
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df[col_close],
-        mode='lines', line=dict(color='grey', width=1),
-        name='Close',
-        customdata=customdata,
-        hovertemplate='Close: %{y:.3f}<br>Bid: %{customdata[0]:.3f}<br>Ask: %{customdata[1]:.3f}<br>Trail: %{customdata[2]:.3f}<br>Atr: %{customdata[3]:.3f}<extra></extra>'
-    ))
+    # --- unified customdata: Signal, Threshold, Bid, Ask, Trail, ATR, extras ---
+    arrays = [
+        _arr_for(col_signal1),
+        _arr_for(sign_thresh),
+        df.get("bid", pd.Series(np.nan, index=df.index)).to_numpy(),
+        df.get("ask", pd.Series(np.nan, index=df.index)).to_numpy(),
+        df.get("trail_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(),
+        df.get("atr_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(),
+    ] + [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
+    customdata = list(zip(*arrays))
 
-    # primary signal 
+    # --- hover template: Close price and other fields ---
+    parts = [
+        "Close: %{y:.3f}",
+        "Bid: %{customdata[0]:.3f}",
+        "Ask: %{customdata[1]:.3f}",
+        "Trail_run: %{customdata[2]:.3f}",
+        "Atr_run: %{customdata[3]:.3f}",
+    ]
+    for j, col in enumerate((extra_hover_fields or []), start=6):
+        parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
+    hover_template = "<br>".join(parts) + "<extra></extra>"
+
+    # --- primary signal and threshold traces added before price so they appear early in legend ---
     if col_signal1 and col_signal1 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal1],
-            mode='lines', line=dict(color='blue', dash='dot', width=2),
-            name='Target Signal', yaxis='y2',
-            hovertemplate='Signal: %{y:.3f}<extra></extra>'
+            mode="lines", line=dict(color="blue", dash="dot", width=2),
+            name="Target Signal", yaxis="y2",
+            hovertemplate="Signal: %{y:.3f}<extra></extra>"
         ))
 
-    # secondary signal
+    if sign_thresh is not None:
+        # plot scalar or per-row threshold; keep behaviour minimal and consistent
+        sign_arr = _arr_for(sign_thresh)
+        if np.ndim(sign_arr) == 0:
+            fig.add_trace(go.Scatter(
+                x=[df.index[0], df.index[-1]],
+                y=[float(sign_arr), float(sign_arr)],
+                mode="lines",
+                line=dict(color="purple", dash="dot", width=1),
+                name="Threshold", yaxis="y2",
+                hovertemplate=f"Thresh: {float(sign_arr):.3f}<extra></extra>"
+            ))
+        else:
+            fig.add_trace(go.Scatter(
+                x=df.index, y=sign_arr,
+                mode="lines",
+                line=dict(color="purple", dash="dot", width=1),
+                name="Threshold", yaxis="y2",
+                hovertemplate="Thresh: %{y:.3f}<extra></extra>"
+            ))
+
+    # --- price line with unified hover (uses customdata where index 0=signal,1=thresh,...) ---
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df[col_close],
+        mode="lines", line=dict(color="grey", width=1),
+        name="Close",
+        customdata=customdata,
+        hovertemplate=hover_template
+    ))
+
+    # secondary signal (kept after price)
     if col_signal2 and col_signal2 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal2],
-            mode='lines', line=dict(color='crimson', dash='dot', width=2),
-            name='Pred Signal', yaxis='y2',
-            hovertemplate='Pred: %{y:.3f}<extra></extra>'
+            mode="lines", line=dict(color="crimson", dash="dot", width=2),
+            name="Pred Signal", yaxis="y2",
+            hovertemplate="Pred: %{y:.3f}<extra></extra>"
         ))
 
-    # optional feature lines (hidden by default)
+    # --- feature lines (hidden by default) ---
     if features is None:
-        features = sorted([c for c in df.columns if c not in {"action", col_signal1, col_signal2, col_close, sign_thresh,
-                                                            "Position", "Cash", "NetValue", "Action", "TradedAmount",
-                                                             "signal_raw", "trailstop_price",
-                                                             }])
-        
-    # minimal in-place autoscale (map each feature into close range)
+        features = sorted([c for c in df.columns if c not in {
+            "action", col_signal1, col_signal2, col_close, sign_thresh,
+            "Position", "Cash", "NetValue", "Action", "TradedAmount",
+            "signal_raw", "trailstop_price",
+        }])
+
     if autoscale:
         rmin, rmax = df[col_close].min(), df[col_close].max()
         span = (rmax - rmin) or 1.0
@@ -503,57 +719,30 @@ def plot_trades(
                 a, b = df[f].min(), df[f].max()
                 df.loc[:, f] = ((df[f] - a) / ((b - a) or 1e-9)) * span + rmin
 
-
     for feat in sorted(features):
         if feat in df:
             fig.add_trace(go.Scatter(
                 x=df.index, y=df[feat],
-                mode='lines', line=dict(width=1),
-                name=feat, yaxis='y2', visible='legendonly',
-                hovertemplate=f'{feat}: %{{y:.3f}}<extra></extra>'
+                mode="lines", line=dict(width=1),
+                name=feat, yaxis="y2", visible="legendonly",
+                hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>"
             ))
 
-    # threshold line on signal axis (supports scalar or per-row Series/array)
-    if sign_thresh is not None:
-        sign_thr = df[sign_thresh]
-        # if array-like, convert to numpy and validate length
-        if np.ndim(sign_thr) == 0:
-            # scalar threshold
-            fig.add_trace(go.Scatter(
-                x=[df.index[0], df.index[-1]],
-                y=[float(sign_thr), float(sign_thr)],
-                mode='lines',
-                line=dict(color='purple', dash='dot', width=1),
-                name='Threshold', yaxis='y2',
-                hovertemplate=f"Thresh: {float(sign_thr):.3f}<extra></extra>"
-            ))
-        else:
-            buy_arr = np.asarray(sign_thr)
-            if buy_arr.shape[0] != len(df):
-                raise ValueError("sign_thr length must match number of rows in df")
-            # plot per-row threshold (one value per timestamp)
-            fig.add_trace(go.Scatter(
-                x=df.index,
-                y=buy_arr,
-                mode='lines',
-                line=dict(color='purple', dash='dot', width=1),
-                name='Threshold', yaxis='y2',
-                hovertemplate='Thresh: %{y:.3f}<extra></extra>'
-            ))
-
-    # layout and display
+    # --- layout and display ---
     fig.update_layout(
-        hovermode='x unified',
-        template='plotly_white',
+        hovermode="x unified",
+        template="plotly_white",
         height=800,
-        xaxis_title='Time',
-        yaxis_title='Price',
-        yaxis2=dict(overlaying='y', side='right', title='Signal', showgrid=False),
+        xaxis_title="Time",
+        yaxis_title="Price",
+        yaxis2=dict(overlaying="y", side="right", title="Signal", showgrid=False),
         legend=dict(font=dict(size=12), tracegroupgap=4)
     )
 
     fig.show()
-    
+
+
+
 
 #########################################################################################################
 
