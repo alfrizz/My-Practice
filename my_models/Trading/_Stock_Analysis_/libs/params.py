@@ -21,7 +21,7 @@ ticker = 'AAPL'
 label_col  = "signal"
 shares_per_trade = 1
 
-month_to_check = '2024-03'
+month_to_check = '2022-12'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -207,32 +207,28 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 #########################################################################################################
 
 
-def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mult_tick, vwap_atr_mult_tick, \
-                      rsi_thresh_tick, buy_thresh_tick, sign_smoothwin_tick):
+def ticker_parameters(ticker, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, rsi_thresh_tick, atr_mult_tick, vwap_atr_mult_tick, buy_thresh_tick, sign_smoothwin_tick):
 
     if ticker == 'AAPL':
         
         features_cols_tick = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']
 
         # 'roc_30', 'plus_di_60', 'obv_pct_60', 'bb_w_z_90', 'obv_sma_90', 'obv_diff_90', 'adx_30', 'obv_pct_90', 'roc_60',
-
         # trailstop_pct_tick = max(1.5 * bidask_spread_pct, trailstop_pct_tick) # safe minimum trail stop set to 'factor' times the bid spread (so bid starts enough higher than the trail)
         
-    return features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mult_tick, vwap_atr_mult_tick, \
-    rsi_thresh_tick, buy_thresh_tick, sign_smoothwin_tick
+    return features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, rsi_thresh_tick, atr_mult_tick, vwap_atr_mult_tick, buy_thresh_tick, sign_smoothwin_tick
 
 # automatically executed function to get the parameters for the selected ticker
-features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, atr_mult_tick, vwap_atr_mult_tick, \
-rsi_thresh_tick, buy_thresh_tick, sign_smoothwin_tick\
+features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, rsi_thresh_tick, atr_mult_tick, vwap_atr_mult_tick, buy_thresh_tick, sign_smoothwin_tick\
     = ticker_parameters(ticker              = ticker,
                         sign_smoothwin_tick = 180,
                         sellmin_idx_tick    = None,
-                        sess_start_tick     = sess_start_pred,
-                        buy_thresh_tick     = 0.1,
-                        trailstop_pct_tick  = 0.3,
-                        atr_mult_tick       = 10,
-                        vwap_atr_mult_tick  = 10,
-                        rsi_thresh_tick     = 35)
+                        sess_start_tick     = sess_start_reg,
+                        buy_thresh_tick     = 0,
+                        trailstop_pct_tick  = 0.2,
+                        rsi_thresh_tick     = 60,
+                        atr_mult_tick       = 4,
+                        vwap_atr_mult_tick  = 2)
                         # return_thresh_tick  = 0 # TBD
                                                                                                            
 
