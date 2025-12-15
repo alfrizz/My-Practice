@@ -388,6 +388,199 @@ class LiveFeatGuBars:
 #########################################################################################################
 
 
+# def plot_trades(
+#     df,
+#     *,
+#     col_close: str = "close",
+#     start_plot: "datetime.time" = None,
+#     features: list[str] = None,
+#     col_signal1: str = None,
+#     col_signal2: str = None,
+#     sign_thresh: float = None,
+#     trades: list[tuple] = None,
+#     performance_stats: dict = None,
+#     autoscale: bool = False,
+#     extra_hover_fields: list[str] = None,
+# ):
+#     """
+#     Minimal, clear intraday trade plot.
+
+#     - Plots price, optional primary/secondary signals and optional feature lines.
+#     - Highlights trade intervals when `trades` is provided.
+#     - Unified hover shows Signal, Threshold, Close, Bid, Ask, Trail stop, ATR stop,
+#       and any `extra_hover_fields` in the order provided.
+#     - Keeps naming and behaviour compatible with the previous version; only adds
+#       `extra_hover_fields` and places Signal/Threshold at the top of the hover and legend.
+#     """
+#     df = df.copy()
+
+#     # optional time filter
+#     if start_plot is not None:
+#         df = df.loc[df.index.time >= start_plot]
+
+#     fig = go.Figure()
+
+#     # --- trade interval traces (green segments) ---
+#     intervals = []
+#     if trades is not None:
+#         intervals = [(b, s) for ((b, s), _, _, _, _) in trades]
+#         lines_src = performance_stats["TRADES"]
+#         for i, ((b_dt, s_dt), _, ret_pc, _, _) in enumerate(trades, start=1):
+#             seg = df.loc[b_dt:s_dt, col_close]
+#             perf_line = lines_src[i - 1]
+#             rhs = perf_line.split("=")[-1].strip()
+#             hover = f"Return: {float(rhs):.3f}<br>Return%: {ret_pc:.3f}%<extra></extra>"
+#             fig.add_trace(go.Scatter(
+#                 x=seg.index, y=seg.values,
+#                 mode="lines+markers",
+#                 line=dict(color="green", width=1),
+#                 marker=dict(size=3, color="green"),
+#                 legendgroup="Trades", showlegend=False,
+#                 hovertemplate=hover
+#             ))
+
+#     # shaded bands for trade intervals
+#     if intervals:
+#         fig.update_layout(yaxis3=dict(domain=[0, 1], anchor="x", overlaying="y", visible=False))
+#         for i, (b0, b1) in enumerate(intervals):
+#             fig.add_trace(go.Scatter(
+#                 x=[b0, b1, b1, b0, b0],
+#                 y=[0, 0, 1, 1, 0],
+#                 mode="none",
+#                 fill="toself",
+#                 fillcolor="rgba(255,165,0,0.25)",
+#                 legendgroup="Trades",
+#                 name="Trades" if i == 0 else None,
+#                 showlegend=(i == 0),
+#                 yaxis="y3",
+#                 hoverinfo="skip"
+#             ))
+
+#     # --- build customdata AFTER autoscale so hover matches plotted traces ---
+#     def _arr_for(x):
+#         if isinstance(x, str):
+#             return df.get(x, pd.Series(np.nan, index=df.index)).to_numpy()
+#         val = float(x) if x is not None else np.nan
+#         return np.full(len(df), val, dtype=float)
+    
+#     arrays = [
+#         _arr_for(col_signal1),                 # 0
+#         _arr_for(sign_thresh),                 # 1
+#         df.get("bid", pd.Series(np.nan, index=df.index)).to_numpy(),            # 2
+#         df.get("ask", pd.Series(np.nan, index=df.index)).to_numpy(),            # 3
+#         df.get("trail_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(),# 4
+#         df.get("atr_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(),  # 5
+#         df.get("vwap_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(), # 6
+#         df.get("action", pd.Series(np.nan, index=df.index)).to_numpy(), # 7
+#     ] + [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
+#     customdata = list(zip(*arrays))
+    
+#     parts = [
+#         "Close: %{y:.3f}",
+#         "Bid: %{customdata[2]:.3f}",
+#         "Ask: %{customdata[3]:.3f}",
+#         "Trail_run: %{customdata[4]:.3f}",
+#         "Atr_run: %{customdata[5]:.3f}",
+#         "Vwap_run: %{customdata[6]:.3f}",
+#         "Action: %{customdata[7]:.3f}",
+#     ]
+
+#     # compute start index for extras dynamically
+#     start_idx = len(arrays) - len(extra_hover_fields or [])
+
+#     for j, col in enumerate((extra_hover_fields or []), start=start_idx):
+#         parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
+#     hover_template = "<br>".join(parts) + "<extra></extra>"
+
+#     # --- primary signal and threshold traces added before price so they appear early in legend ---
+#     if col_signal1 and col_signal1 in df:
+#         fig.add_trace(go.Scatter(
+#             x=df.index, y=df[col_signal1],
+#             mode="lines", line=dict(color="blue", dash="dot", width=2),
+#             name="Target Signal", yaxis="y2",
+#             hovertemplate="Signal: %{y:.3f}<extra></extra>"
+#         ))
+
+#     if sign_thresh is not None:
+#         # plot scalar or per-row threshold; keep behaviour minimal and consistent
+#         sign_arr = _arr_for(sign_thresh)
+#         if np.ndim(sign_arr) == 0:
+#             fig.add_trace(go.Scatter(
+#                 x=[df.index[0], df.index[-1]],
+#                 y=[float(sign_arr), float(sign_arr)],
+#                 mode="lines",
+#                 line=dict(color="purple", dash="dot", width=1),
+#                 name="Threshold", yaxis="y2",
+#                 hovertemplate=f"Thresh: {float(sign_arr):.3f}<extra></extra>"
+#             ))
+#         else:
+#             fig.add_trace(go.Scatter(
+#                 x=df.index, y=sign_arr,
+#                 mode="lines",
+#                 line=dict(color="purple", dash="dot", width=1),
+#                 name="Threshold", yaxis="y2",
+#                 hovertemplate="Thresh: %{y:.3f}<extra></extra>"
+#             ))
+
+#     # --- price line with unified hover (uses customdata where index 0=signal,1=thresh,...) ---
+#     fig.add_trace(go.Scatter(
+#         x=df.index, y=df[col_close],
+#         mode="lines", line=dict(color="grey", width=1),
+#         name="Close",
+#         customdata=customdata,
+#         hovertemplate=hover_template
+#     ))
+
+#     # secondary signal (kept after price)
+#     if col_signal2 and col_signal2 in df:
+#         fig.add_trace(go.Scatter(
+#             x=df.index, y=df[col_signal2],
+#             mode="lines", line=dict(color="crimson", dash="dot", width=2),
+#             name="Pred Signal", yaxis="y2",
+#             hovertemplate="Pred: %{y:.3f}<extra></extra>"
+#         ))
+
+#     # --- feature lines (hidden by default) ---
+#     if features is None:
+#         features = sorted([c for c in df.columns if c not in {
+#             "action", col_signal1, col_signal2, col_close, sign_thresh,
+#             "Position", "Cash", "NetValue", "Action", "TradedAmount",
+#             "signal_raw", "trailstop_price",
+#         }])
+
+#     if autoscale:
+#         rmin, rmax = df[col_close].min(), df[col_close].max()
+#         span = (rmax - rmin) or 1.0
+#         for f in features:
+#             if f in df and f not in (col_signal1, col_signal2, sign_thresh):
+#                 df[f] = df[f].astype(float)
+#                 a, b = df[f].min(), df[f].max()
+#                 df.loc[:, f] = ((df[f] - a) / ((b - a) or 1e-9)) * span + rmin
+
+#     for feat in sorted(features):
+#         if feat in df:
+#             fig.add_trace(go.Scatter(
+#                 x=df.index, y=df[feat],
+#                 mode="lines", line=dict(width=1),
+#                 name=feat, yaxis="y2", visible="legendonly",
+#                 hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>"
+#             ))
+
+#     # --- layout and display ---
+#     fig.update_layout(
+#         hovermode="x unified",
+#         template="plotly_white",
+#         height=800,
+#         xaxis_title="Time",
+#         yaxis_title="Price",
+#         yaxis2=dict(overlaying="y", side="right", title="Signal", showgrid=False),
+#         legend=dict(font=dict(size=12), tracegroupgap=4)
+#     )
+
+#     fig.show()
+
+
+
 def plot_trades(
     df,
     *,
@@ -403,24 +596,96 @@ def plot_trades(
     extra_hover_fields: list[str] = None,
 ):
     """
-    Minimal, clear intraday trade plot.
+    Compact intraday trade plot with unified hover and two distinct hover sections.
 
-    - Plots price, optional primary/secondary signals and optional feature lines.
-    - Highlights trade intervals when `trades` is provided.
-    - Unified hover shows Signal, Threshold, Close, Bid, Ask, Trail stop, ATR stop,
-      and any `extra_hover_fields` in the order provided.
-    - Keeps naming and behaviour compatible with the previous version; only adds
-      `extra_hover_fields` and places Signal/Threshold at the top of the hover and legend.
+    - Plots close price, optional primary/secondary signals and optional feature lines.
+    - Highlights trade intervals when `trades` is provided (green segment traces).
+    - Hover is shown as two separate sections (one trace per section) under the timestamp:
+      first the State section (Position, Cash, NetValue, TradedAmount, Action sim, Action gen),
+      then the Market section (Close, Bid, Ask, Trail_run, Atr_run, Vwap_run, plus extras).
+    - Minimal edits: separate hover templates and two traces; rest of logic preserved.
     """
     df = df.copy()
-
-    # optional time filter
     if start_plot is not None:
         df = df.loc[df.index.time >= start_plot]
 
     fig = go.Figure()
 
-    # --- trade interval traces (green segments) ---
+    # helper to produce scalar or per-row numeric arrays
+    def _arr_for(x):
+        if isinstance(x, str):
+            return df.get(x, pd.Series(np.nan, index=df.index)).to_numpy()
+        val = float(x) if x is not None else np.nan
+        return np.full(len(df), val, dtype=float)
+
+    # arrays used in customdata (only what we need for the hover)
+    bid_arr = df.get("bid", pd.Series(np.nan, index=df.index)).to_numpy()
+    ask_arr = df.get("ask", pd.Series(np.nan, index=df.index)).to_numpy()
+    trail_arr = df.get("trail_stop_price", pd.Series(np.nan, index=df.index)).to_numpy()
+    atr_arr = df.get("atr_stop_price", pd.Series(np.nan, index=df.index)).to_numpy()
+    vwap_arr = df.get("vwap_stop_price", pd.Series(np.nan, index=df.index)).to_numpy()
+    act_num_arr = df.get("action", pd.Series(np.nan, index=df.index)).to_numpy()
+
+    pos_arr = df.get("Position", pd.Series(np.nan, index=df.index)).to_numpy()
+    cash_arr = df.get("Cash", pd.Series(np.nan, index=df.index)).to_numpy()
+    net_arr = df.get("NetValue", pd.Series(np.nan, index=df.index)).to_numpy()
+    traded_amt_arr = df.get("TradedAmount", pd.Series(np.nan, index=df.index)).to_numpy()
+    action_str_arr = df.get("Action", df.get("action", pd.Series(np.nan, index=df.index))).astype(str).to_numpy()
+
+    extras = [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
+
+    # customdata ordering:
+    # 0 bid,1 ask,2 trail,3 atr,4 vwap,5 action_gen,
+    # 6 pos,7 cash,8 net,9 traded_amt,10 action_sim, extras...
+    customdata = list(zip(
+        bid_arr, ask_arr, trail_arr, atr_arr, vwap_arr, act_num_arr,
+        pos_arr, cash_arr, net_arr, traded_amt_arr, action_str_arr,
+        *extras
+    ))
+
+    # --- two separate hover templates (one per trace) ---
+    # State template (first hover block under the automatic timestamp)
+    state_parts = [
+        "",  # keep Plotly automatic timestamp at top
+        "Position: %{customdata[6]:.0f}",
+        "Cash: %{customdata[7]:.3f}",
+        "NetValue: %{customdata[8]:.3f}",
+        "TradedAmount: %{customdata[9]:.0f}",
+        "Action (sim): %{customdata[10]}",
+        "Action (gen): %{customdata[5]:.3f}",
+    ]
+    state_template = "<br>".join(state_parts) + "<extra></extra>"
+
+    # Market section (separate block shown after the State block)
+    market_parts = [
+        "Close: %{y:.3f}",
+        "Bid: %{customdata[0]:.3f}",
+        "Ask: %{customdata[1]:.3f}",
+        "Trail_run: %{customdata[2]:.3f}",
+        "Atr_run: %{customdata[3]:.3f}",
+        "Vwap_run: %{customdata[4]:.3f}",
+    ]
+    extras_start_idx = 11
+    for j, col in enumerate((extra_hover_fields or []), start=extras_start_idx):
+        market_parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
+
+    # no spacer appended here
+    market_template = "<br>".join(market_parts) + "<extra></extra>"
+
+
+
+    # --- add an invisible state trace first (its hover forms the first section) ---
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df[col_close],            # y can be price; trace is invisible
+        mode="markers",
+        marker=dict(size=0, opacity=0),
+        hovertemplate=state_template,
+        customdata=customdata,
+        showlegend=False,
+        hoverinfo="text"
+    ))
+
+    # trade interval traces (green segments)
     intervals = []
     if trades is not None:
         intervals = [(b, s) for ((b, s), _, _, _, _) in trades]
@@ -439,7 +704,6 @@ def plot_trades(
                 hovertemplate=hover
             ))
 
-    # shaded bands for trade intervals
     if intervals:
         fig.update_layout(yaxis3=dict(domain=[0, 1], anchor="x", overlaying="y", visible=False))
         for i, (b0, b1) in enumerate(intervals):
@@ -456,43 +720,7 @@ def plot_trades(
                 hoverinfo="skip"
             ))
 
-    # --- build customdata AFTER autoscale so hover matches plotted traces ---
-    def _arr_for(x):
-        if isinstance(x, str):
-            return df.get(x, pd.Series(np.nan, index=df.index)).to_numpy()
-        val = float(x) if x is not None else np.nan
-        return np.full(len(df), val, dtype=float)
-    
-    arrays = [
-        _arr_for(col_signal1),                 # 0
-        _arr_for(sign_thresh),                 # 1
-        df.get("bid", pd.Series(np.nan, index=df.index)).to_numpy(),            # 2
-        df.get("ask", pd.Series(np.nan, index=df.index)).to_numpy(),            # 3
-        df.get("trail_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(),# 4
-        df.get("atr_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(),  # 5
-        df.get("vwap_stop_price", pd.Series(np.nan, index=df.index)).to_numpy(), # 6
-        df.get("action", pd.Series(np.nan, index=df.index)).to_numpy(), # 7
-    ] + [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
-    customdata = list(zip(*arrays))
-    
-    parts = [
-        "Close: %{y:.3f}",
-        "Bid: %{customdata[2]:.3f}",
-        "Ask: %{customdata[3]:.3f}",
-        "Trail_run: %{customdata[4]:.3f}",
-        "Atr_run: %{customdata[5]:.3f}",
-        "Vwap_run: %{customdata[6]:.3f}",
-        "Action: %{customdata[7]:.3f}",
-    ]
-
-    # compute start index for extras dynamically
-    start_idx = len(arrays) - len(extra_hover_fields or [])
-
-    for j, col in enumerate((extra_hover_fields or []), start=start_idx):
-        parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
-    hover_template = "<br>".join(parts) + "<extra></extra>"
-
-    # --- primary signal and threshold traces added before price so they appear early in legend ---
+    # primary/secondary signals and threshold traces (kept after price; not in hover)
     if col_signal1 and col_signal1 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal1],
@@ -502,7 +730,6 @@ def plot_trades(
         ))
 
     if sign_thresh is not None:
-        # plot scalar or per-row threshold; keep behaviour minimal and consistent
         sign_arr = _arr_for(sign_thresh)
         if np.ndim(sign_arr) == 0:
             fig.add_trace(go.Scatter(
@@ -522,16 +749,6 @@ def plot_trades(
                 hovertemplate="Thresh: %{y:.3f}<extra></extra>"
             ))
 
-    # --- price line with unified hover (uses customdata where index 0=signal,1=thresh,...) ---
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df[col_close],
-        mode="lines", line=dict(color="grey", width=1),
-        name="Close",
-        customdata=customdata,
-        hovertemplate=hover_template
-    ))
-
-    # secondary signal (kept after price)
     if col_signal2 and col_signal2 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal2],
@@ -540,7 +757,16 @@ def plot_trades(
             hovertemplate="Pred: %{y:.3f}<extra></extra>"
         ))
 
-    # --- feature lines (hidden by default) ---
+    # --- add price trace second (its hover forms the Market section) ---
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df[col_close],
+        mode="lines", line=dict(color="grey", width=1),
+        name="Close",
+        customdata=customdata,
+        hovertemplate=market_template
+    ))
+
+    # feature lines (hidden by default) and autoscale behaviour preserved
     if features is None:
         features = sorted([c for c in df.columns if c not in {
             "action", col_signal1, col_signal2, col_close, sign_thresh,
@@ -566,7 +792,6 @@ def plot_trades(
                 hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>"
             ))
 
-    # --- layout and display ---
     fig.update_layout(
         hovermode="x unified",
         template="plotly_white",

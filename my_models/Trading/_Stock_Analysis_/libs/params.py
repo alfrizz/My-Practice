@@ -21,7 +21,7 @@ ticker = 'AAPL'
 label_col  = "signal"
 shares_per_trade = 1
 
-month_to_check = '2022-12'
+month_to_check = '2023-01'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -225,10 +225,10 @@ features_cols_tick, sellmin_idx_tick, sess_start_tick, trailstop_pct_tick, rsi_t
                         sellmin_idx_tick    = None,
                         sess_start_tick     = sess_start_reg,
                         buy_thresh_tick     = 0,
-                        trailstop_pct_tick  = 0.2,
+                        trailstop_pct_tick  = 0.7,
                         rsi_thresh_tick     = 60,
                         atr_mult_tick       = 4,
-                        vwap_atr_mult_tick  = 2)
+                        vwap_atr_mult_tick  = 6)
                         # return_thresh_tick  = 0 # TBD
                                                                                                            
 
