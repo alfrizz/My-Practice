@@ -18,11 +18,97 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 
-##################
+#########################################################################################################
+
+def fees_for_one_share(price: float, 
+                       side: str, # buy or sell
+                       alpaca_comm_per_share: float = 0.0040,
+                       finra_taf_per_share: float = 0.000166,
+                       cat_fee_per_trade: float = 0.000009,
+                       sec_fee_per_dollar: float = 0.0000229) -> dict:
+
+    """
+    Compute per-share commission + regulatory fees for one executed share.
+
+    Returns precise per-share components and a rounded total for display.
+    """
+    alpaca_comm = float(alpaca_comm_per_share)
+    
+    # SEC fee applies only on sells, proportional to trade value
+    sec_raw = sec_fee_per_dollar * price if side == "sell" else 0.0
+
+    # FINRA TAF applies only on sells, per share, but billed per trade
+    if side == "sell":
+        # round UP to nearest cent, cap at $8.30
+        finra_total_trade = min(math.ceil(finra_taf_per_share * 100) / 100, 8.30)
+        finra_billed = finra_total_trade
+    else:
+        finra_billed = 0.0
+
+    # CAT fee is per trade, not per share
+    cat_billed = cat_fee_per_trade if side == "sell" else 0.0
+
+    # Regulatory billed = SEC + FINRA + CAT
+    regulatory_billed = sec_raw + finra_billed + cat_billed
+
+    total_per_share_billed = alpaca_comm + regulatory_billed
+
+    return {
+        "alpaca_comm": alpaca_comm,
+        "sec_raw": sec_raw,
+        "finra_billed": finra_billed,
+        "cat_billed": cat_billed,
+        "regulatory_billed": regulatory_billed,
+        "total_per_share_billed": total_per_share_billed,
+        "total_per_share_billed_rounded": round(total_per_share_billed, 8),
+    }
+
+##################################
+
+def _format_perf(df, trades, shares, buy_fee_per, sell_fee_per, sess_start):
+    _r3 = lambda x: round(float(x), 3)
+    # buy-and-hold over the session
+    mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
+    if mask.sum() == 0:
+        bh_line = "BUY&HOLD: no bars in session range"
+    else:
+        open_ask = float(df.loc[mask, "ask"].iloc[0])
+        close_bid = float(df.loc[mask, "bid"].iloc[-1])
+        delta_val_bh = (close_bid - open_ask) * shares
+        bh_buy_fee = buy_fee_per(open_ask) * shares
+        bh_sell_fee = sell_fee_per(close_bid) * shares
+        bh_pnl = _r3(delta_val_bh - (bh_buy_fee + bh_sell_fee))
+        bh_line = (
+            f"Qty({shares}): Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} "
+            f"- Fee(0) = [{_r3(delta_val_bh)} - ({_r3(bh_buy_fee)}+{_r3(bh_sell_fee)})] = {bh_pnl}"
+        )
+
+    # trade summary
+    trades_lines, realized_vals = [], []
+    for i, trade in enumerate(trades, 1):
+        (_, _), (ep, xp), pct, buy_fee, sell_fee = trade  # fees already scaled by shares
+        delta_val = (xp - ep) * shares
+        pnl = _r3(delta_val - (buy_fee + sell_fee))
+        realized_vals.append(pnl)
+        trades_lines.append(
+            f"Qty({shares}): Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} "
+            f"- Fee({i}) = [{_r3(delta_val)} - ({_r3(buy_fee)}+{_r3(sell_fee)})] = {pnl}"
+        )
+
+    strategy_line = (
+        " + ".join([f"Trade({i}) {v}" for i, v in enumerate(realized_vals, 1)]) +
+        f" = {_r3(sum(realized_vals))}"
+    ) if realized_vals else "0.000"
+
+    return {"BUY&HOLD": bh_line, "TRADES": trades_lines, "STRATEGY": strategy_line}
+
+
+##################################
 _last_trail = 0.0
-_last_bid = 0.0
+_last_ask = 0.0
 _last_position = 0.0
-##################
+_last_cash = 100000.0
+##################################
 
 
 def generate_trade_actions(
@@ -194,177 +280,8 @@ def generate_tradact_elab(
     return df
 
 
-#########################################################################################################
+####################################################################################################### 
 
-
-def fees_for_one_share(price: float, side: str,
-                       alpaca_comm_per_share: float = 0.0040,
-                       finra_taf_per_share: float = 0.000166,
-                       cat_per_share: float = 0.000009,
-                       sec_fee_per_dollar: float = 0.00013810) -> dict:
-    """
-    Compute per-share commission + regulatory fees for one executed share.
-
-    Returns precise per-share components and a rounded total for display.
-    """
-    assert side in ("buy", "sell")
-
-    alpaca_comm = float(alpaca_comm_per_share)
-    sec_raw = float(sec_fee_per_dollar) * float(price) if side == "sell" else 0.0
-    finra_raw = float(finra_taf_per_share) if side == "sell" else 0.0
-    cat_raw = float(cat_per_share)
-
-    finra_billed = finra_raw
-    cat_billed = cat_raw
-
-    regulatory_billed = sec_raw + finra_billed + cat_billed
-    total_per_share_billed = alpaca_comm + regulatory_billed
-
-    return {
-        "alpaca_comm": alpaca_comm,
-        "sec_raw": sec_raw,
-        "finra_billed": finra_billed,
-        "cat_billed": cat_billed,
-        "regulatory_billed": regulatory_billed,
-        "total_per_share_billed": total_per_share_billed,
-        "total_per_share_billed_rounded": round(total_per_share_billed, 8),
-    }
-
-
-##################################
-
-
-
-# def simulate_trading(
-#     day,
-#     df,
-#     sellmin_idx: int,
-#     sess_start: time,
-#     shares: int = 1 # shares per trade
-# ) -> dict:
-#     """
-#     Minimal simulator that only executes generator actions.
-#     - Trusts generator actions in "action" (1=Buy, -1=Sell, 0=Hold).
-#     - Does not compute or enforce any trailing stop or make entry/exit decisions.
-#     - Executes actions as-is, records trades and snapshots, and closes any open entry at the last bar.
-#     """
-#     global _last_bid, _last_trail
-#     updated = {}
-#     _r3 = lambda x: round(float(x), 3)
-#     buy_fee_per = lambda p: fees_for_one_share(price=p, side="buy")["total_per_share_billed"]
-#     sell_fee_per = lambda p: fees_for_one_share(price=p, side="sell")["total_per_share_billed"]
-
-#     # work on a sorted copy so we don't mutate caller's dataframe and iteration is stable
-#     df = df.sort_index().copy()
-
-#     # running state for the simulator
-#     position, cash, buy_fee = 0.0, 0.0, 0.0
-#     ask_p, ask_ts, open_ask, close_bid = None, None, None, None
-#     pos_buf, cash_buf, net_buf, act_buf, amt_buf, trades = [], [], [], [], [], []
-
-#     # marker: True if generator indicated we started the day with a carried open trade
-#     carried_open = (_last_trail > 0)   # True if we start the day with a carried open trade
-
-#     # determine the timestamp that marks the day's final sell (based on sellmin_idx)
-#     if sellmin_idx is None: 
-#         last_bid_ts = df.index[-1] 
-#     elif sellmin_idx >= 0: 
-#         last_bid_ts = df[df.index.time >= sess_start].index[sellmin_idx] 
-#     else: # negative
-#         last_bid_ts = df.index[sellmin_idx] 
-
-#     # iterate bars; execute only the actions written in "action"
-#     for ts, row in df.iterrows():
-#         sell_fee = 0.0
-#         amt = 0.0
-#         bid, ask = float(row["bid"]), float(row["ask"])
-#         action, amt = "Hold", 0 # HOLD
-        
-#         # BUY branch: only enter if no current position
-#         if row["action"] == 1 and position == 0: # BUY
-#             position += shares
-#             action, amt = "Buy", shares
-#             # if there is a carried bid from previous day, treat this as continuation
-#             if _last_bid > 0: # it´s the continuation of a carried open trade
-#                 ask_p = _last_bid
-#                 buy_fee = 0.0
-#                 _last_bid = 0.0
-#                 ask_ts = df.index[0]
-#             else:
-#                 # normal fresh buy: charge buy fee based on current ask
-#                 ask_p = ask
-#                 buy_fee = buy_fee_per(ask) * shares
-#                 ask_ts = ts
-#             # debit cash for the buy price plus buy fee
-#             cash -= (ask_p * shares) + buy_fee
-        
-#         # SELL branch: only execute if we have a position to close, or to force a 'fake' sell action for a open position at day end
-#         if ((row["action"] == -1) or (carried_open and ts == last_bid_ts)) and position > 0:
-#             # shares to close (never more than current position)
-#             shares = min(shares, position)
-#             # update position and record the executed action/amount
-#             position -= shares
-#             action, amt = "Sell", -shares
-#             # waive fee only when closing a carried trade at/after the last_bid_ts
-#             if carried_open and ts >= last_bid_ts:
-#                 sell_fee = 0.0
-#                 carried_open = False  # mark carried trade as closed
-#             else:
-#                 sell_fee = sell_fee_per(bid) * shares
-#             # credit cash net of sell fee
-#             cash += (bid * shares) - sell_fee
-
-#         # record round-trip when Sell closes an entry
-#         if action == "Sell" and ask_p is not None:
-#             bid_p = bid
-#             bid_ts = ts
-#             pct = round(100 * (bid_p - ask_p) / ask_p, 3)
-#             trades.append(((ask_ts, bid_ts), (ask_p, bid_p), pct, buy_fee, sell_fee))
-#             # clear entry tracking and reset fees for next trade
-#             ask_p, ask_ts = None, None
-#             buy_fee = sell_fee = 0.0
-
-#         # record entry on Buy if not already tracked
-#         if action == "Buy" and ask_p is None:
-#             ask_p, ask_ts = ask, ts
-
-#         # snapshot state for this bar (position, cash, net value, action, traded amount)
-#         pos_buf.append(position)
-#         cash_buf.append(cash)
-#         net_buf.append(cash + position * bid)
-#         act_buf.append(action)
-#         amt_buf.append(amt)
-
-#     # build df_sim from recorded snapshots
-#     df_sim = df.assign(Position=pos_buf, Cash=cash_buf, NetValue=net_buf, Action=act_buf, TradedAmount=amt_buf)
-
-#     # persist last bid for potential carry into next day (only when sellmin_idx is None)
-#     if sellmin_idx is None:
-#         _last_bid = float(df.iloc[-1]["bid"] if _last_trail > 0 else 0) # computed at the end of the day, to be reused the next day 
-    
-#     # compute buy-and-hold fees explicitly for the day's open_ask and final close_bid
-#     mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
-#     open_ask = float(df.loc[mask, "ask"].iloc[0])
-#     close_bid = float(df.loc[mask, "bid"].iloc[-1])
-#     bh_buy_fee = buy_fee_per(open_ask) * shares
-#     bh_sell_fee = sell_fee_per(close_bid) * shares
-#     bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) [{_r3(bh_buy_fee)}+{_r3(bh_sell_fee)}] = {_r3((close_bid - open_ask) - (bh_buy_fee + bh_sell_fee))}"
-
-#     # performance summary
-#     trades_lines = []; 
-#     realized_vals = []
-#     for i, trade in enumerate(trades, 1):
-#         (_, _), (ep, xp), pct, buy_fee, sell_fee = trade
-#         pnl = _r3((xp - ep) - (buy_fee + sell_fee))
-#         realized_vals.append(pnl)
-#         trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) [{_r3(buy_fee)}+{_r3(sell_fee)}] = {pnl}")
-        
-#     # aggregate strategy line (sum of realized trade PnLs)
-#     strategy_line = (" + ".join([f"Trade({i}) {v}" for i,v in enumerate(realized_vals,1)]) + f" = {_r3(sum(realized_vals))}") if realized_vals else "0.000"
-#     perf = {"BUY&HOLD": bh_line, "TRADES": trades_lines, "STRATEGY": strategy_line}
-#     updated[day] = (df_sim, trades, perf)
-
-#     return updated
 
 def simulate_trading(
     day,
@@ -379,9 +296,8 @@ def simulate_trading(
     - Does not compute or enforce any trailing stop or make entry/exit decisions.
     - Executes actions as-is, records trades and snapshots, and closes any open entry at the last bar.
     """
-    global _last_bid, _last_trail, _last_position # , _last_bid_ts
+    global _last_ask, _last_trail, _last_position, _last_cash #, _last_ask_ts
     updated = {}
-    _r3 = lambda x: round(float(x), 3)
     buy_fee_per = lambda p: fees_for_one_share(price=p, side="buy")["total_per_share_billed"]
     sell_fee_per = lambda p: fees_for_one_share(price=p, side="sell")["total_per_share_billed"]
 
@@ -389,9 +305,9 @@ def simulate_trading(
     df = df.sort_index().copy()
 
     # running state for the simulator
-    position, cash, buy_fee = float(_last_position), 0.0, 0.0
+    position, cash,  = float(_last_position), float(_last_cash)
     ask_p, ask_ts, open_ask, close_bid = None, None, None, None
-    pos_buf, cash_buf, net_buf, act_buf, amt_buf, trades = [], [], [], [], [], []
+    pos_buf, cash_buf, net_buf, act_buf, trades = [], [], [], [], []
 
     # determine the timestamp that marks the day's final sell (based on sellmin_idx)
     if sellmin_idx is None: 
@@ -403,115 +319,64 @@ def simulate_trading(
 
     # iterate bars; execute only the actions written in "action"
     for ts, row in df.iterrows():
-        sell_fee = 0.0
-        amt = 0.0
         bid, ask = float(row["bid"]), float(row["ask"])
         action= "Hold"
 
-        # # BUY branch
-        # if row["action"] == 1 and position == 0: # new trade
-        #     position += shares
-        #     action = "Buy"
-        #     amt = shares
-        #     ask_p = ask
-        #     ask_ts = ts
-        #     buy_fee = buy_fee_per(ask) * shares
-        #     cash -= (ask_p * shares) + buy_fee
-        # elif row["action"] == 2 and _last_bid > 0: # carried trade with open position ('fake' buy)
-        #     ask_p = float(_last_bid) # last bid of previous day same trade
-        #     ask_ts =  df.index[0] # it should be _last_bid_ts, but the plot must be adjusted
-        #     buy_fee= 0.0 # no additional buy fees for an already open trade
-        #     _last_bid = 0.0 # reset global variable
-
         # BUY branch
+        is_fake_buy  = row["action"] == 2 and _last_ask > 0 # carried trade with open position ('fake' buy)
         if row["action"] == 1 and position == 0:  # new trade
             position += shares
-            action, amt, ask_p, ask_ts = "Buy", shares, ask, ts
+            action = "Buy"
+            ask_p = ask
+            ask_ts = ts
             buy_fee = buy_fee_per(ask) * shares
             cash -= (ask_p * shares) + buy_fee
-        elif row["action"] == 2 and _last_bid > 0:  # carried trade with open position ('fake' buy)
-            ask_p, ask_ts, buy_fee = float(_last_bid), df.index[0], 0.0  # no additional buy fee
-            _last_bid = 0.0  # reset global variable
-    
-        # # SELL branch
-        # if ((row["action"] == -1) # regular sell
-        #     or (_last_trail > 0 and ts == last_bid_ts) # 'fake' sell action for a open position at day end
-        # and position > 0):
-        #     # shares to close (never more than current position)
-        #     shares = min(shares, position)
-        #     amt = -shares
-        #     # waive fee only when closing a carried trade at the last_bid_ts
-        #     if _last_trail > 0 and ts == last_bid_ts: # 'fake' sell
-        #         sell_fee = 0.0 # the sell fee will be charged at real sell the day after
-        #         action = "Hold"
-        #     else: # regular sell
-        #         sell_fee = sell_fee_per(bid) * shares
-        #         position -= shares
-        #         action = "Sell"
-        #     cash += (bid * shares) - sell_fee
-        #     bid_p, bid_ts = bid, ts
-        #     pct = round(100 * (bid_p - ask_p) / ask_p, 3)
-        #     trades.append(((ask_ts, bid_ts), (ask_p, bid_p), pct, buy_fee, sell_fee))
-        #     # clear entry tracking and reset fees for next trade
-        #     ask_p, ask_ts = None, None
-        #     buy_fee = sell_fee = 0.0
+        elif is_fake_buy:  
+            ask_p, ask_ts = float(_last_ask), df.index[0] # df.index[0] is a placeholder; if needed the true prior-day timestamp, persist and use _last_ask_ts instead
+            buy_fee = 0.0  # no additional buy fee
+            _last_ask = 0.0  # reset global variable
 
         # SELL branch
-        if position > 0 and (
-            row["action"] == -1 or (_last_trail > 0 and ts == last_bid_ts)
-        ):
-            shares = min(shares, position)  # shares to close (max: current position)
-            amt = -shares
-            if _last_trail > 0 and ts == last_bid_ts:  # 'fake' sell
-                sell_fee, action = 0.0, "Hold"  # fee waived, charged later on real sell
+        is_fake_sell = _last_trail > 0 and ts == last_bid_ts # trade still open to carry to the next day ('fake' sell)
+        if position > 0 and (row["action"] == -1 or is_fake_sell):
+            shares_qty  = min(shares, position)  # shares to close (max: current position)
+            if is_fake_sell:  
+                sell_fee = 0.0 # fee waived, charged later on real sell
+                action = "Hold"  
+                bid_p = ask_p # to simulate zero return for the trade not closed yet
             else:  # regular sell
-                sell_fee = sell_fee_per(bid) * shares
-                position -= shares
+                sell_fee = sell_fee_per(bid) * shares_qty
+                position -= shares_qty
                 action = "Sell"
-        
-            cash += (bid * shares) - sell_fee
-            bid_p, bid_ts = bid, ts
+                bid_p = bid
+                cash += (bid * shares_qty) - sell_fee
+            bid_ts = ts
             pct = round(100 * (bid_p - ask_p) / ask_p, 3)
             trades.append(((ask_ts, bid_ts), (ask_p, bid_p), pct, buy_fee, sell_fee))
-            ask_p, ask_ts, buy_fee, sell_fee = None, None, 0.0, 0.0  # reset for next trade
 
         # snapshot state for this bar (position, cash, net value, action, traded amount)
         pos_buf.append(position)
         cash_buf.append(cash)
         net_buf.append(cash + position * bid)
         act_buf.append(action)
-        amt_buf.append(amt)
 
     # build df_sim from recorded snapshots
-    df_sim = df.assign(Position=pos_buf, Cash=cash_buf, NetValue=net_buf, Action=act_buf, TradedAmount=amt_buf)
-
+    df_sim = df.assign(Position=pos_buf, Cash=cash_buf, NetValue=net_buf, Action=act_buf)
+    
+    _last_position, _last_cash = float(position), float(cash)
     # persist last bid for potential carry into next day (only when sellmin_idx is None)
-    if sellmin_idx is None:
-        _last_bid = float(df.iloc[-1]["bid"] if _last_trail > 0 else 0) # computed at the end of the day, to be reused the next day 
-        # _last_bid_ts = df.index[-1]
+    if sellmin_idx is None and position > 0:
+        _last_ask = float(float(ask_p) if _last_trail > 0 else 0) # computed at the end of the day, to be reused the next day 
+        # _last_ask_ts = df.index[-1]
 
-    _last_position = float(position)
-
-    # compute buy-and-hold fees explicitly for the day's open_ask and final close_bid
-    mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
-    open_ask = float(df.loc[mask, "ask"].iloc[0])
-    close_bid = float(df.loc[mask, "bid"].iloc[-1])
-    bh_buy_fee = buy_fee_per(open_ask) * shares
-    bh_sell_fee = sell_fee_per(close_bid) * shares
-    bh_line = f"Bid(0) {_r3(close_bid)} - Ask(0) {_r3(open_ask)} - Fee(0) [{_r3(bh_buy_fee)}+{_r3(bh_sell_fee)}] = {_r3((close_bid - open_ask) - (bh_buy_fee + bh_sell_fee))}"
-
-    # performance summary
-    trades_lines = []; 
-    realized_vals = []
-    for i, trade in enumerate(trades, 1):
-        (_, _), (ep, xp), pct, buy_fee, sell_fee = trade
-        pnl = _r3((xp - ep) - (buy_fee + sell_fee))
-        realized_vals.append(pnl)
-        trades_lines.append(f"Bid({i}) {_r3(xp)} - Ask({i}) {_r3(ep)} - Fee({i}) [{_r3(buy_fee)}+{_r3(sell_fee)}] = {pnl}")
-        
-    # aggregate strategy line (sum of realized trade PnLs)
-    strategy_line = (" + ".join([f"Trade({i}) {v}" for i,v in enumerate(realized_vals,1)]) + f" = {_r3(sum(realized_vals))}") if realized_vals else "0.000"
-    perf = {"BUY&HOLD": bh_line, "TRADES": trades_lines, "STRATEGY": strategy_line}
+    perf = _format_perf(
+        df=df,
+        trades=trades,
+        shares=shares,
+        buy_fee_per=buy_fee_per,
+        sell_fee_per=sell_fee_per,
+        sess_start=sess_start,
+    )
     updated[day] = (df_sim, trades, perf)
 
     return updated

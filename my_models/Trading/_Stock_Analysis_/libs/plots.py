@@ -601,7 +601,7 @@ def plot_trades(
     - Plots close price, optional primary/secondary signals and optional feature lines.
     - Highlights trade intervals when `trades` is provided (green segment traces).
     - Hover is shown as two separate sections (one trace per section) under the timestamp:
-      first the State section (Position, Cash, NetValue, TradedAmount, Action sim, Action gen),
+      first the State section (Position, Cash, NetValue, Action sim, Action gen),
       then the Market section (Close, Bid, Ask, Trail_run, Atr_run, Vwap_run, plus extras).
     - Minimal edits: separate hover templates and two traces; rest of logic preserved.
     """
@@ -629,19 +629,19 @@ def plot_trades(
     pos_arr = df.get("Position", pd.Series(np.nan, index=df.index)).to_numpy()
     cash_arr = df.get("Cash", pd.Series(np.nan, index=df.index)).to_numpy()
     net_arr = df.get("NetValue", pd.Series(np.nan, index=df.index)).to_numpy()
-    traded_amt_arr = df.get("TradedAmount", pd.Series(np.nan, index=df.index)).to_numpy()
     action_str_arr = df.get("Action", df.get("action", pd.Series(np.nan, index=df.index))).astype(str).to_numpy()
 
     extras = [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
 
     # customdata ordering:
     # 0 bid,1 ask,2 trail,3 atr,4 vwap,5 action_gen,
-    # 6 pos,7 cash,8 net,9 traded_amt,10 action_sim, extras...
-    customdata = list(zip(
+    # 6 pos,7 cash,8 net,9 action_sim, extras...
+    # customdata ordering (base fields)
+    base_fields = [
         bid_arr, ask_arr, trail_arr, atr_arr, vwap_arr, act_num_arr,
-        pos_arr, cash_arr, net_arr, traded_amt_arr, action_str_arr,
-        *extras
-    ))
+        pos_arr, cash_arr, net_arr, action_str_arr,
+    ]
+    customdata = list(zip(*base_fields, *(extras or [])))
 
     # --- two separate hover templates (one per trace) ---
     # State template (first hover block under the automatic timestamp)
@@ -650,8 +650,7 @@ def plot_trades(
         "Position: %{customdata[6]:.0f}",
         "Cash: %{customdata[7]:.3f}",
         "NetValue: %{customdata[8]:.3f}",
-        "TradedAmount: %{customdata[9]:.0f}",
-        "Action (sim): %{customdata[10]}",
+        "Action (sim): %{customdata[9]}",
         "Action (gen): %{customdata[5]:.3f}",
     ]
     state_template = "<br>".join(state_parts) + "<extra></extra>"
@@ -665,8 +664,7 @@ def plot_trades(
         "Atr_run: %{customdata[3]:.3f}",
         "Vwap_run: %{customdata[4]:.3f}",
     ]
-    extras_start_idx = 11
-    for j, col in enumerate((extra_hover_fields or []), start=extras_start_idx):
+    for j, col in enumerate((extra_hover_fields or []), start=len(base_fields)):
         market_parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
 
     # no spacer appended here
