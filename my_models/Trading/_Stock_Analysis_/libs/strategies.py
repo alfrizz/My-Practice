@@ -44,7 +44,7 @@ def generate_trade_actions(
     global _last_trail
 
     df = df.copy()
-    df["action"] = 0  
+    df["action"] = 0  # not in trade by default
 
     signal = df[col_signal].to_numpy(dtype=float)
     close = df[col_close].to_numpy(dtype=float)
@@ -59,7 +59,7 @@ def generate_trade_actions(
     # iterate rows and compute actions + trailing stop
     for i in range(len(df)):
         sign_thr = float(sign_thresh[i]) if is_series else float(sign_thresh)
-        prev_action = df["action"].iat[i - 1] if i > 0 else 0 
+        prev_action = df["action"].iat[i - 1] if i > 0 else (2 if _last_trail > 0 else 0)
 
         # compute a single candidate peak and its trail value once per row
         peak = close[i]
@@ -67,16 +67,16 @@ def generate_trade_actions(
             peak = max(peak, trail_arr[i - 1] / (1.0 - stop_frac))
         elif _last_trail > 0:
             peak = max(peak, _last_trail / (1.0 - stop_frac))
+            df.at[df.index[i], "action"] = 2 # in trade
+            _last_trail = 0.0  # consume carried trail
 
         trail_arr[i] = peak * (1.0 - stop_frac) # running trail
 
         # possible BUY
         if prev_action in [0,-1]:
-            if ((signal[i] >= sign_thr 
-                 and df.index.time[i] >= sess_start) 
-                or _last_trail > 0):
+            if (signal[i] >= sign_thr 
+                 and df.index.time[i] >= sess_start):
                 df.at[df.index[i], "action"] = 1 # buy action
-                _last_trail = 0.0  # consume carried trail
             else: 
                 df.at[df.index[i], "action"] = 0 # not in trade
                 trail_arr[i] = np.nan
@@ -93,7 +93,7 @@ def generate_trade_actions(
     df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
     
     if sellmin_idx is None: # persist previous day trail value if still in trade
-        _last_trail = float(df["trail_stop_price"].iat[-1]) if int(df["action"].iat[-1]) in (1, 2) else 0.0
+        _last_trail = float(df["trail_stop_price"].iat[-1]) if int(df["action"].iat[-1]) in [1, 2] else 0.0
 
     return df
 
@@ -129,8 +129,6 @@ def generate_tradact_elab(
 
     df = df.copy()
     df["action"] = 0  # not in trade by default
-    # if _last_trail > 0:
-    #     df.at[df.index[0], "action"] = 2
 
     signal = df[col_signal].to_numpy(dtype=float)
     close = df[col_close].to_numpy(dtype=float)
@@ -150,7 +148,6 @@ def generate_tradact_elab(
     # iterate rows and compute actions + trailing stop + atr stop
     for i in range(len(df)):
         sign_thr = float(sign_thresh[i]) if is_series else float(sign_thresh)
-        # prev_action = df["action"].iat[i - 1] if i > 0 else 0
         prev_action = df["action"].iat[i - 1] if i > 0 else (2 if _last_trail > 0 else 0)
 
         # compute a single candidate peak and its trail value once per row
@@ -177,13 +174,10 @@ def generate_tradact_elab(
                 df.at[df.index[i], "action"] = 0 # not in trade
                 trail_arr[i] = atr_arr[i] = np.nan
 
-        # possible SELL (or carried trade)
+        # possible SELL 
         if prev_action in [1,2]:
-            # if _last_trail > 0: # carried trade from previous day
-            #     df.at[df.index[i], "action"] = 2 # in trade
-            #     _last_trail = 0.0  # consume carried trail
-            if ((signal[i] < sign_thr
-                or bid[i] < trail_arr[i]
+            if (signal[i] < sign_thr
+                and (bid[i] < trail_arr[i]
                 or bid[i] < atr_arr[i])
                 and df.index.time[i] >= sess_start):
                 df.at[df.index[i], "action"] = -1 # sell action
@@ -195,7 +189,7 @@ def generate_tradact_elab(
     df["vwap_stop_price"] = pd.Series(vwap_arr, index=df.index)
 
     if sellmin_idx is None: # persist previous day trail value if still in trade
-        _last_trail = float(df["trail_stop_price"].iat[-1]) if int(df["action"].iat[-1]) in (1, 2) else 0.0
+        _last_trail = float(df["trail_stop_price"].iat[-1]) if int(df["action"].iat[-1]) in [1, 2] else 0.0
       
     return df
 
