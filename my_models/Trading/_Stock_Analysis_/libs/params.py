@@ -21,7 +21,7 @@ ticker = 'AAPL'
 label_col  = "signal"
 shares_per_trade = 1
 
-month_to_check = '2023-01'
+month_to_check = '2023-06'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
