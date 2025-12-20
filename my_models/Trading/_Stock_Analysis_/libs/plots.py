@@ -1,4 +1,4 @@
-from libs import params, trades
+from libs import params, trades, strategies
 
 from typing import Sequence, List, Tuple, Optional, Union, Dict
 
@@ -387,6 +387,221 @@ class LiveFeatGuBars:
 #########################################################################################################
 
 
+
+# def plot_trades(
+#     df,
+#     *,
+#     col_close: str = "close",
+#     start_plot: "datetime.time" = None,
+#     features: list[str] = None,
+#     col_signal1: str = None,
+#     col_signal2: str = None,
+#     sign_thresh: float = None,
+#     trades: list[tuple] = None,
+#     performance_stats: dict = None,
+#     autoscale: bool = False,
+#     extra_hover_fields: list[str] = None,
+# ):
+#     """
+#     Compact intraday trade plot with unified hover and two distinct hover sections.
+
+#     - Plots close price, optional primary/secondary signals and optional feature lines.
+#     - Highlights trade intervals when `trades` is provided (green segment traces).
+#     - Hover is shown as two separate sections (one trace per section) under the timestamp:
+#       first the State section (Position, Cash, Pnl, Action, Shares),
+#       then the Market section (Close, Bid, Ask, Trail_run, Atr_run, Vwap_run, plus extras).
+#     - Price line is colored by action: green=Buy, red=Sell, grey=Hold/other.
+#     """
+#     df = df.copy()
+#     if start_plot is not None:
+#         df = df.loc[df.index.time >= start_plot]
+
+#     fig = go.Figure()
+
+#     # helper to produce scalar or per-row numeric arrays
+#     def _arr_for(x):
+#         if isinstance(x, str):
+#             return df.get(x, pd.Series(np.nan, index=df.index)).to_numpy()
+#         val = float(x) if x is not None else np.nan
+#         return np.full(len(df), val, dtype=float)
+
+#     # arrays used in customdata (only what we need for the hover)
+#     bid_arr = df.get("bid", pd.Series(np.nan, index=df.index)).to_numpy()
+#     ask_arr = df.get("ask", pd.Series(np.nan, index=df.index)).to_numpy()
+#     trail_arr = df.get("trail_stop_price", pd.Series(np.nan, index=df.index)).to_numpy()
+#     atr_arr = df.get("atr_stop_price", pd.Series(np.nan, index=df.index)).to_numpy()
+#     vwap_arr = df.get("vwap_stop_price", pd.Series(np.nan, index=df.index)).to_numpy()
+
+#     act_arr = df.get("Action", df.get("action", pd.Series(np.nan, index=df.index))).astype(str).to_numpy()
+#     shar_arr = df.get("Shares", pd.Series(np.nan, index=df.index)).to_numpy()
+#     pos_arr = df.get("Position", pd.Series(np.nan, index=df.index)).to_numpy()
+#     cash_arr = df.get("Cash", pd.Series(np.nan, index=df.index)).to_numpy()
+#     net_arr = df.get("Pnl", pd.Series(np.nan, index=df.index)).to_numpy()
+#     trade_arr = df.get("TradeID", pd.Series(np.nan, index=df.index)).to_numpy()
+
+#     extras = [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
+
+#     # customdata ordering (must follow the same order as in the market parts and state parts below)
+#     base_fields = [
+#         bid_arr, ask_arr, trail_arr, atr_arr, vwap_arr, trade_arr, act_arr, shar_arr, pos_arr, cash_arr, net_arr
+#     ]
+#     customdata = list(zip(*base_fields, *(extras or [])))
+
+#     # Market section (second block)
+#     market_parts = [
+#         "Close: %{y:.3f}",
+#         "Bid: %{customdata[0]:.3f}",
+#         "Ask: %{customdata[1]:.3f}",
+#         "Trail_run: %{customdata[2]:.3f}",
+#         "Atr_run: %{customdata[3]:.3f}",
+#         "Vwap_run: %{customdata[4]:.3f}",
+#     ]
+#     for j, col in enumerate((extra_hover_fields or []), start=len(base_fields)):
+#         market_parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
+#     market_template = "<br>".join(market_parts) + "<extra></extra>"
+
+#     # State template (first hover block under the automatic timestamp)
+#     state_parts = [
+#         "",
+#         "TrID: %{customdata[5]:.0f}",
+#         "Action: %{customdata[6]}",
+#         "Shares (traded): %{customdata[7]:.0f}",
+#         "Position: %{customdata[8]:.0f}",
+#         "Cash: %{customdata[9]:.3f}",
+#         "Pnl: %{customdata[10]:.3f}",
+#     ]
+#     state_template = "<br>".join(state_parts) + "<extra></extra>"
+    
+#     # --- invisible state trace first (its hover forms the first section) ---
+#     fig.add_trace(go.Scatter(
+#         x=df.index, y=df[col_close],            # y can be price; trace is invisible
+#         mode="markers",
+#         marker=dict(size=0, opacity=0),
+#         hovertemplate=state_template,
+#         customdata=customdata,
+#         showlegend=False,
+#         hoverinfo="text"
+#     ))
+
+#     # --- price trace(s) colored by action; green/red width scales with traded size, grey is thin ---
+#     color_map = {"buy": "green", "sell": "red"}
+#     actions_norm = []
+#     for a in act_arr:
+#         a_lower = str(a).lower()
+#         if a_lower.startswith("buy"):
+#             actions_norm.append("buy")
+#         elif a_lower.startswith("sell"):
+#             actions_norm.append("sell")
+#         else:
+#             actions_norm.append("hold")
+
+#     segments = []
+#     if len(df) > 0:
+#         start_idx = 0
+#         curr = actions_norm[0]
+#         for i in range(1, len(df)):
+#             if actions_norm[i] != curr:
+#                 segments.append((start_idx, i, curr))
+#                 start_idx = i
+#                 curr = actions_norm[i]
+#         segments.append((start_idx, len(df), curr))
+
+#     for si, (s, e, act_tag) in enumerate(segments):
+#         color = color_map.get(act_tag, "grey")
+#         seg_shares = shar_arr[s:e]
+#         avg_shares = np.nanmean(np.abs(seg_shares)) if len(seg_shares) else 0.0
+#         if color == "grey":
+#             width = 1.2  # thin for hold/other
+#         else:
+#             width = 1.5 + 0.15 * avg_shares
+#             width = min(width, 6.0)
+#         fig.add_trace(go.Scatter(
+#             x=df.index[s:e],
+#             y=df[col_close].iloc[s:e],
+#             mode="lines",
+#             line=dict(color=color, width=width),
+#             name="Close" if si == 0 else None,
+#             customdata=customdata[s:e],
+#             hovertemplate=market_template,
+#             showlegend=(si == 0),
+#         ))
+
+#     # primary/secondary signals and threshold traces (unchanged)
+#     if col_signal1 and col_signal1 in df:
+#         fig.add_trace(go.Scatter(
+#             x=df.index, y=df[col_signal1],
+#             mode="lines", line=dict(color="blue", dash="dot", width=2),
+#             name="Target Signal", yaxis="y2",
+#             hovertemplate="Signal: %{y:.3f}<extra></extra>"
+#         ))
+
+#     if sign_thresh is not None:
+#         sign_arr = _arr_for(sign_thresh)
+#         if np.ndim(sign_arr) == 0:
+#             fig.add_trace(go.Scatter(
+#                 x=[df.index[0], df.index[-1]],
+#                 y=[float(sign_arr), float(sign_arr)],
+#                 mode="lines",
+#                 line=dict(color="purple", dash="dot", width=1),
+#                 name="Threshold", yaxis="y2",
+#                 hovertemplate=f"Thresh: {float(sign_arr):.3f}<extra></extra>"
+#             ))
+#         else:
+#             fig.add_trace(go.Scatter(
+#                 x=df.index, y=sign_arr,
+#                 mode="lines",
+#                 line=dict(color="purple", dash="dot", width=1),
+#                 name="Threshold", yaxis="y2",
+#                 hovertemplate="Thresh: %{y:.3f}<extra></extra>"
+#             ))
+
+#     if col_signal2 and col_signal2 in df:
+#         fig.add_trace(go.Scatter(
+#             x=df.index, y=df[col_signal2],
+#             mode="lines", line=dict(color="crimson", dash="dot", width=2),
+#             name="Pred Signal", yaxis="y2",
+#             hovertemplate="Pred: %{y:.3f}<extra></extra>"
+#         ))
+
+#     # feature lines (hidden by default) and autoscale behaviour preserved
+#     if features is None:
+#         features = sorted([c for c in df.columns if c not in {
+#             "action", col_signal1, col_signal2, col_close, sign_thresh,
+#             "Position", "Cash", "Pnl", "Action", "TradedAmount",
+#             "signal_raw", "trailstop_price",
+#         }])
+
+#     if autoscale:
+#         rmin, rmax = df[col_close].min(), df[col_close].max()
+#         span = (rmax - rmin) or 1.0
+#         for f in features:
+#             if f in df and f not in (col_signal1, col_signal2, sign_thresh):
+#                 df[f] = df[f].astype(float)
+#                 a, b = df[f].min(), df[f].max()
+#                 df.loc[:, f] = ((df[f] - a) / ((b - a) or 1e-9)) * span + rmin
+
+#     for feat in sorted(features):
+#         if feat in df:
+#             fig.add_trace(go.Scatter(
+#                 x=df.index, y=df[feat],
+#                 mode="lines", line=dict(width=1),
+#                 name=feat, yaxis="y2", visible="legendonly",
+#                 hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>"
+#             ))
+
+#     fig.update_layout(
+#         hovermode="x unified",
+#         template="plotly_white",
+#         height=800,
+#         xaxis_title="Time",
+#         yaxis_title="Price",
+#         yaxis2=dict(overlaying="y", side="right", title="Signal", showgrid=False),
+#         legend=dict(font=dict(size=12), tracegroupgap=4)
+#     )
+
+#     fig.show()
+
+
 def plot_trades(
     df,
     *,
@@ -402,14 +617,12 @@ def plot_trades(
     extra_hover_fields: list[str] = None,
 ):
     """
-    Compact intraday trade plot with unified hover and two distinct hover sections.
+    Compact intraday trade plot with unified hover.
 
-    - Plots close price, optional primary/secondary signals and optional feature lines.
-    - Highlights trade intervals when `trades` is provided (green segment traces).
-    - Hover is shown as two separate sections (one trace per section) under the timestamp:
-      first the State section (Position, Cash, NetValue, Action sim, Action gen),
-      then the Market section (Close, Bid, Ask, Trail_run, Atr_run, Vwap_run, plus extras).
-    - Minimal edits: separate hover templates and two traces; rest of logic preserved.
+    - Always plots the close price as a continuous grey line.
+    - Adds green/red markers at buy/sell timestamps; marker size scales with traded shares.
+    - A single invisible trace emits the unified hover (State + Market); visible traces skip hover.
+    - Optional primary/secondary signals and feature lines (hidden by default) on a secondary y-axis.
     """
     df = df.copy()
     if start_plot is not None:
@@ -417,14 +630,13 @@ def plot_trades(
 
     fig = go.Figure()
 
-    # helper to produce scalar or per-row numeric arrays
     def _arr_for(x):
         if isinstance(x, str):
             return df.get(x, pd.Series(np.nan, index=df.index)).to_numpy()
         val = float(x) if x is not None else np.nan
         return np.full(len(df), val, dtype=float)
 
-    # arrays used in customdata (only what we need for the hover)
+    # customdata fields
     bid_arr = df.get("bid", pd.Series(np.nan, index=df.index)).to_numpy()
     ask_arr = df.get("ask", pd.Series(np.nan, index=df.index)).to_numpy()
     trail_arr = df.get("trail_stop_price", pd.Series(np.nan, index=df.index)).to_numpy()
@@ -435,30 +647,16 @@ def plot_trades(
     shar_arr = df.get("Shares", pd.Series(np.nan, index=df.index)).to_numpy()
     pos_arr = df.get("Position", pd.Series(np.nan, index=df.index)).to_numpy()
     cash_arr = df.get("Cash", pd.Series(np.nan, index=df.index)).to_numpy()
-    net_arr = df.get("NetValue", pd.Series(np.nan, index=df.index)).to_numpy()
+    net_arr = df.get("Pnl", pd.Series(np.nan, index=df.index)).to_numpy()
+    trade_arr = df.get("TradeID", pd.Series(np.nan, index=df.index)).to_numpy()
 
     extras = [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
 
-    # customdata ordering (base fields)
-    # 0 bid, 1 ask, 2 trail, 3 atr, 4 vwap, 5 act, 6 shar, 7 pos, 8 cash, 9 net, extras...
-    base_fields = [
-        bid_arr, ask_arr, trail_arr, atr_arr, vwap_arr, act_arr, shar_arr, pos_arr, cash_arr, net_arr,
-    ]
+    # customdata ordering: 0 bid,1 ask,2 trail,3 atr,4 vwap,5 trade,6 act,7 shar,8 pos,9 cash,10 net, extras...
+    base_fields = [bid_arr, ask_arr, trail_arr, atr_arr, vwap_arr, trade_arr, act_arr, shar_arr, pos_arr, cash_arr, net_arr]
     customdata = list(zip(*base_fields, *(extras or [])))
 
-    # --- two separate hover templates (one per trace) ---
-    # State template (first hover block under the automatic timestamp)
-    state_parts = [
-        "",
-        "Action: %{customdata[5]}",
-        "Shares (traded): %{customdata[6]:.0f}",
-        "Position: %{customdata[7]:.0f}",
-        "Cash: %{customdata[8]:.3f}",
-        "NetValue: %{customdata[9]:.3f}",
-    ]
-    state_template = "<br>".join(state_parts) + "<extra></extra>"
-
-    # Market section (separate block shown after the State block)
+    # hover blocks
     market_parts = [
         "Close: %{y:.3f}",
         "Bid: %{customdata[0]:.3f}",
@@ -470,67 +668,77 @@ def plot_trades(
     for j, col in enumerate((extra_hover_fields or []), start=len(base_fields)):
         market_parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
 
-    # no spacer appended here
-    market_template = "<br>".join(market_parts) + "<extra></extra>"
+    state_parts = [
+        "",
+        "TrID: %{customdata[5]:.0f}",
+        "Action: %{customdata[6]}",
+        "Shares (traded): %{customdata[7]:.0f}",
+        "Position: %{customdata[8]:.0f}",
+        "Cash: %{customdata[9]:.3f}",
+        "Pnl: %{customdata[10]:.3f}",
+    ]
 
+    hover_template = "<br>".join(state_parts + [""] + market_parts) + "<extra></extra>"
 
-
-    # --- add an invisible state trace first (its hover forms the first section) ---
+    # invisible trace for unified hover
     fig.add_trace(go.Scatter(
-        x=df.index, y=df[col_close],            # y can be price; trace is invisible
+        x=df.index, y=df[col_close],
         mode="markers",
         marker=dict(size=0, opacity=0),
-        hovertemplate=state_template,
+        hovertemplate=hover_template,
         customdata=customdata,
         showlegend=False,
-        hoverinfo="text"
+        hoverinfo="text",
     ))
 
-    # trade interval traces (green segments)
-    intervals = []
-    if trades is not None:
-        intervals = [(b, s) for ((b, s), _, _, _, _, _, _) in trades]
-        lines_src = performance_stats["TRADES"]
-        for i, ((b_dt, s_dt), (ask_p, bid_p), _, _, _, _, _) in enumerate(trades, start=1):
-            seg = df.loc[b_dt:s_dt, col_close]
-            perf_line = lines_src[i - 1]
-            rhs = perf_line.split("=")[-1].strip()
-            ret_pct = round(100 * (bid_p - ask_p) / ask_p, 3)
-            hover = f"Return: {float(rhs):.3f}<br>Return%: {ret_pct:.3f}%<extra></extra>"
-            fig.add_trace(go.Scatter(
-                x=seg.index, y=seg.values,
-                mode="lines+markers",
-                line=dict(color="green", width=1),
-                marker=dict(size=3, color="green"),
-                legendgroup="Trades", showlegend=False,
-                # hovertemplate=hover
-                hoverinfo="skip"
-            ))
+    # base price line (grey, continuous) — hover skipped
+    fig.add_trace(go.Scatter(
+        x=df.index,
+        y=df[col_close],
+        mode="lines",
+        line=dict(color="grey", width=1.2),
+        name="Close",
+        hoverinfo="skip",
+        showlegend=True,
+    ))
 
-    # if intervals:
-        # fig.update_layout(yaxis3=dict(domain=[0, 1], anchor="x", overlaying="y", visible=False))
-        # for i, (b0, b1) in enumerate(intervals):
-        #     alpha = min(0.03, 0.01 + 0.005 * (i % 5))  # ultra-light shading
-        #     fig.add_trace(go.Scatter(
-        #         x=[b0, b1, b1, b0, b0],
-        #         y=[0, 0, 1, 1, 0],
-        #         mode="none",
-        #         fill="toself",
-        #         fillcolor=f"rgba(255,165,0,{alpha})",
-        #         legendgroup="Trades",
-        #         name="Trades" if i == 0 else None,
-        #         showlegend=(i == 0),
-        #         yaxis="y3",
-        #         hoverinfo="skip"
-        #     ))
+    # buy/sell markers sized by traded shares — hover skipped on these
+    actions_lower = np.char.lower(act_arr.astype(str))
+    buy_mask = np.array([a.startswith("buy") for a in actions_lower])
+    sell_mask = np.array([a.startswith("sell") for a in actions_lower])
 
-    # primary/secondary signals and threshold traces (kept after price; not in hover)
+    def _sizes(shares_arr):
+        return np.clip(np.nan_to_num(np.abs(shares_arr), nan=0.0) * 0.3 + 6, 6, 18)
+
+    if buy_mask.any():
+        fig.add_trace(go.Scatter(
+            x=df.index[buy_mask],
+            y=df[col_close].iloc[buy_mask],
+            mode="markers",
+            marker=dict(color="green", size=_sizes(shar_arr[buy_mask]), opacity=0.9),
+            name="Buy",
+            hoverinfo="skip",
+            showlegend=True,
+        ))
+
+    if sell_mask.any():
+        fig.add_trace(go.Scatter(
+            x=df.index[sell_mask],
+            y=df[col_close].iloc[sell_mask],
+            mode="markers",
+            marker=dict(color="red", size=_sizes(shar_arr[sell_mask]), opacity=0.9),
+            name="Sell",
+            hoverinfo="skip",
+            showlegend=True,
+        ))
+
+    # primary/secondary signals and threshold
     if col_signal1 and col_signal1 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal1],
             mode="lines", line=dict(color="blue", dash="dot", width=2),
             name="Target Signal", yaxis="y2",
-            hovertemplate="Signal: %{y:.3f}<extra></extra>"
+            hovertemplate="Signal: %{y:.3f}<extra></extra>",
         ))
 
     if sign_thresh is not None:
@@ -542,7 +750,7 @@ def plot_trades(
                 mode="lines",
                 line=dict(color="purple", dash="dot", width=1),
                 name="Threshold", yaxis="y2",
-                hovertemplate=f"Thresh: {float(sign_arr):.3f}<extra></extra>"
+                hovertemplate=f"Thresh: {float(sign_arr):.3f}<extra></extra>",
             ))
         else:
             fig.add_trace(go.Scatter(
@@ -550,7 +758,7 @@ def plot_trades(
                 mode="lines",
                 line=dict(color="purple", dash="dot", width=1),
                 name="Threshold", yaxis="y2",
-                hovertemplate="Thresh: %{y:.3f}<extra></extra>"
+                hovertemplate="Thresh: %{y:.3f}<extra></extra>",
             ))
 
     if col_signal2 and col_signal2 in df:
@@ -558,23 +766,14 @@ def plot_trades(
             x=df.index, y=df[col_signal2],
             mode="lines", line=dict(color="crimson", dash="dot", width=2),
             name="Pred Signal", yaxis="y2",
-            hovertemplate="Pred: %{y:.3f}<extra></extra>"
+            hovertemplate="Pred: %{y:.3f}<extra></extra>",
         ))
 
-    # --- add price trace second (its hover forms the Market section) ---
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df[col_close],
-        mode="lines", line=dict(color="grey", width=1),
-        name="Close",
-        customdata=customdata,
-        hovertemplate=market_template
-    ))
-
-    # feature lines (hidden by default) and autoscale behaviour preserved
+    # feature lines (hidden by default), optional autoscale
     if features is None:
         features = sorted([c for c in df.columns if c not in {
             "action", col_signal1, col_signal2, col_close, sign_thresh,
-            "Position", "Cash", "NetValue", "Action", "TradedAmount",
+            "Position", "Cash", "Pnl", "Action", "TradedAmount",
             "signal_raw", "trailstop_price",
         }])
 
@@ -593,7 +792,7 @@ def plot_trades(
                 x=df.index, y=df[feat],
                 mode="lines", line=dict(width=1),
                 name=feat, yaxis="y2", visible="legendonly",
-                hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>"
+                hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>",
             ))
 
     fig.update_layout(
@@ -603,80 +802,248 @@ def plot_trades(
         xaxis_title="Time",
         yaxis_title="Price",
         yaxis2=dict(overlaying="y", side="right", title="Signal", showgrid=False),
-        legend=dict(font=dict(size=12), tracegroupgap=4)
+        legend=dict(font=dict(size=12), tracegroupgap=4),
     )
 
     fig.show()
-
-
+    
 #########################################################################################################
 
 
-def aggregate_performance(
-    perf_list: list,
-    shares: int,
-    df: pd.DataFrame,
-) -> None:
-    """
-    Aggregate and print summary when per-day perf dicts contain only formatted strings.
+# def aggregate_performance(
+#     perf_list: list,
+#     shares: int,
+#     df: pd.DataFrame,
+# ) -> None:
+#     """
+#     Aggregate and print summary when per-day perf dicts contain only formatted strings.
 
-    - Parses perf entries created by simulate_trading (lines ending " = <number>").
-    - Computes:
-        * one-time buy&hold across dataset (start ask -> end bid)
-        * sum of per-day buy&hold (parsed)
-        * canonical Strategy = sum(all per-trade PnL parsed from TRADES lines)
-        * Trades Count, Strategy per trade, Strategy per day
-    - Prints concise table and a small bar plot (unchanged layout).
+#     - Parses perf entries created by simulate_trading (lines ending " = <number>").
+#     - Computes:
+#         * one-time buy&hold across dataset (start ask -> end bid)
+#         * sum of per-day buy&hold (parsed)
+#         * canonical Strategy = sum(all per-trade PnL parsed from TRADES lines)
+#         * Trades Count, Strategy per trade, Strategy per day
+#     - Prints concise table and a small bar plot (unchanged layout).
+#     """
+#     def _parse_eq_value(s: str) -> float:
+#         # expects strings ending with "... PNL=<number>"
+#         return float(s.rsplit("PNL=", 1)[-1].strip())
+
+#     # first/last trading day and one-time B&H legs (simplified)
+#     first_day = df.index.normalize().min()
+#     last_day  = df.index.normalize().max()
+
+#     start_ask = df.loc[df.index.normalize() == first_day, "ask"].iloc[0]
+#     end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
+
+#     print("\n" + "=" * 115)
+#     print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
+#     num_days = df.index.normalize().nunique()
+#     print(f"Num. trading days: {num_days}")
+#     trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
+#     print(f"Trades Count: {trades_count}")
+
+#     # collect buy&hold per-day values and all trade PnL values
+#     bh_per_day_vals = [_parse_eq_value(perf.get("BUY&HOLD")) for perf in perf_list]
+#     all_trade_vals = [_parse_eq_value(perf.get("STRATEGY")) for perf in perf_list]
+
+#     one_time_bh = (end_bid - start_ask) * shares
+#     print(f"\nOne-Time B&H gain: {one_time_bh:.{3}f}")
+#     strategy_sum = sum(all_trade_vals)
+#     print(f"Sum Strategy gain: {strategy_sum:.{3}f}")
+#     intraday_bh_sum = sum(bh_per_day_vals)
+#     print(f"Sum Intraday B&H gain: {intraday_bh_sum:.{3}f}")
+
+#     one_time_bh_per_day = one_time_bh / num_days if num_days else 0.0
+#     print(f"\nOne-Time B&H gain per day: {one_time_bh_per_day:.{4}f}")
+#     strategy_per_day = strategy_sum / num_days
+#     print(f"Strategy gain per day: {strategy_per_day:.{4}f}")
+#     strategy_per_trade = strategy_sum / trades_count if trades_count > 0 else 0
+#     print(f"Strategy gain per trade: {strategy_per_trade:.{4}f}")
+
+#     # small bar plot (same layout, rounded annotations)
+#     primary = {
+#         "One-Time B&H gain": one_time_bh,
+#         "Sum Strategy gain": strategy_sum,
+#         "Sum Intraday B&H gain": intraday_bh_sum
+#     }
+#     secondary = {
+#         "One-Time B&H per day": one_time_bh_per_day,
+#         "Strategy gain per day": strategy_per_day,
+#         "Strategy gain per trade": strategy_per_trade
+#     }
+
+#     fig, ax1 = plt.subplots(figsize=(10, 5))
+#     ax2 = ax1.twinx()
+
+#     names1 = list(primary.keys())
+#     names2 = list(secondary.keys())
+#     x1 = np.arange(len(names1))
+#     x2 = np.arange(len(names2)) + len(names1)
+
+#     width = 0.6
+#     bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", label="Absolute")
+#     bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", label="Relative")
+
+#     all_names = names1 + names2
+#     ax1.set_xticks(np.concatenate([x1, x2]))
+#     ax1.set_xticklabels(all_names, rotation=30, ha="right")
+#     ax1.set_ylabel("USD (big sums)")
+#     ax2.set_ylabel("USD (per trade/day)")
+#     ax1.set_title(f"Performance Summary ({first_day.date()} → {last_day.date()})")
+#     ax1.yaxis.grid(True, linestyle="--", alpha=0.5)
+
+#     for bar in bars1:
+#         h = bar.get_height()
+#         ax1.annotate(f"{h:.3f}",
+#                      xy=(bar.get_x() + bar.get_width() / 2, h),
+#                      xytext=(0, 3), textcoords="offset points",
+#                      ha="center", va="bottom", fontsize=9)
+
+#     for bar in bars2:
+#         h = bar.get_height()
+#         ax2.annotate(f"{h:.4f}",
+#                      xy=(bar.get_x() + bar.get_width() / 2, h),
+#                      xytext=(0, 3), textcoords="offset points",
+#                      ha="center", va="bottom", fontsize=9)
+
+#     handles1, labels1 = ax1.get_legend_handles_labels()
+#     handles2, labels2 = ax2.get_legend_handles_labels()
+#     ax1.legend(handles1 + handles2, labels1 + labels2, loc="upper right")
+
+#     plt.tight_layout()
+#     plt.show()
+
+
+# def aggregate_performance(perf_list: list, shares: int, df: pd.DataFrame) -> None:
+#     """
+#     Aggregate and print summary:
+#       - One-time all-in B&H from first ask to last bid using params.init_cash
+#       - Sum of per-day STRATEGY PNLs (parsed)
+#       - Sum of per-day INTRADAY PNLs (parsed)
+#       - Trades count, per-day and per-trade strategy stats
+#     Expects perf entries with keys: INTRADAY (PNL=...), STRATEGY (PNL=...), TRADES (list).
+#     """
+#     def _parse_eq_value(s: str) -> float:
+#         if not s:
+#             return 0.0
+#         return float(s.rsplit("PNL=", 1)[-1].strip())
+
+#     # First/last day and prices
+#     first_day = df.index.normalize().min()
+#     last_day  = df.index.normalize().max()
+#     start_ask = df.loc[df.index.normalize() == first_day, "ask"].iloc[0]
+#     end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
+
+#     num_days = df.index.normalize().nunique()
+#     trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
+
+#     print("\n" + "=" * 115)
+#     print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
+#     print(f"Num. trading days: {num_days}")
+#     print(f"Trades Count: {trades_count}")
+
+#     # Parse PNLs from perf_list
+#     intraday_per_day  = [_parse_eq_value(perf.get("INTRADAY"))  for perf in perf_list]
+#     strategy_per_day  = [_parse_eq_value(perf.get("STRATEGY"))  for perf in perf_list]
+
+#     # One-time all-in B&H with init cash
+#     fee_open  = strategies.fees_for_one_share(price=start_ask, side="buy")["total_per_share_billed"]
+#     fee_close = strategies.fees_for_one_share(price=end_bid,   side="sell")["total_per_share_billed"]
+#     shares_bh = int(params.init_cash // (start_ask + fee_open))
+#     invested  = shares_bh * (start_ask + fee_open)
+#     proceeds  = shares_bh * (end_bid - fee_close)
+#     one_time_bh = proceeds - invested
+
+#     intraday_sum = sum(intraday_per_day)
+#     strategy_sum = sum(strategy_per_day)
+
+#     print(f"\nOne-Time B&H (all-in) gain: {one_time_bh:.3f}")
+#     print(f"Sum Strategy gain: {strategy_sum:.3f}")
+#     print(f"Sum Intraday gain: {intraday_sum:.3f}")
+
+#     one_time_bh_per_day    = one_time_bh / num_days if num_days else 0.0
+#     strategy_per_day_avg   = strategy_sum / num_days if num_days else 0.0
+#     strategy_per_trade_avg = strategy_sum / trades_count if trades_count else 0.0
+
+#     print(f"\nOne-Time B&H gain per day: {one_time_bh_per_day:.4f}")
+#     print(f"Strategy gain per day: {strategy_per_day_avg:.4f}")
+#     print(f"Strategy gain per trade: {strategy_per_trade_avg:.4f}")
+
+def aggregate_performance(perf_list: list, shares: int, df: pd.DataFrame) -> None:
+    """
+    Aggregate and print summary:
+      - One-time all-in B&H from first ask to last bid using params.init_cash
+      - Sum of per-day STRATEGY PNLs (parsed)
+      - Sum of per-day INTRADAY PNLs (parsed)
+    Expects perf entries with keys: INTRADAY (PNL=...), STRATEGY (PNL=...), TRADES (list).
     """
     def _parse_eq_value(s: str) -> float:
-        # expects formatted lines ending with " = <number>"
-        return float(s.strip().split(" = ")[-1])
+        if not s:
+            return 0.0
+        return float(s.rsplit("PNL=", 1)[-1].strip())
 
-    # first/last trading day and one-time B&H legs (simplified)
+    init_cap = float(params.init_cash) if getattr(params, "init_cash", None) is not None else 0.0
+    def pct(gain: float) -> float:
+        return (gain / init_cap * 100.0) if init_cap else 0.0
+
     first_day = df.index.normalize().min()
     last_day  = df.index.normalize().max()
-
     start_ask = df.loc[df.index.normalize() == first_day, "ask"].iloc[0]
     end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
 
+    num_days = df.index.normalize().nunique()
+    trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
+
     print("\n" + "=" * 115)
     print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
-    num_days = df.index.normalize().nunique()
     print(f"Num. trading days: {num_days}")
-    trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
     print(f"Trades Count: {trades_count}")
+    print(f"Initial capital: {init_cap:.3f}")
 
-    # collect buy&hold per-day values and all trade PnL values
-    bh_per_day_vals = [_parse_eq_value(perf.get("BUY&HOLD")) for perf in perf_list]
-    all_trade_vals = [_parse_eq_value(perf.get("STRATEGY")) for perf in perf_list]
+    intraday_per_day  = [_parse_eq_value(perf.get("INTRADAY"))  for perf in perf_list]
+    strategy_per_day  = [_parse_eq_value(perf.get("STRATEGY"))  for perf in perf_list]
 
-    one_time_bh = (end_bid - start_ask) * shares
-    print(f"\nOne-Time B&H gain: {one_time_bh:.{3}f}")
-    strategy_sum = sum(all_trade_vals)
-    print(f"Sum Strategy gain: {strategy_sum:.{3}f}")
-    intraday_bh_sum = sum(bh_per_day_vals)
-    print(f"Sum Intraday B&H gain: {intraday_bh_sum:.{3}f}")
+    fee_open  = strategies.fees_for_one_share(price=start_ask, side="buy")["total_per_share_billed"]
+    fee_close = strategies.fees_for_one_share(price=end_bid,   side="sell")["total_per_share_billed"]
+    shares_bh = int(init_cap // (start_ask + fee_open))
+    invested  = shares_bh * (start_ask + fee_open)
+    proceeds  = shares_bh * (end_bid - fee_close)
+    one_time_bh_gain = proceeds - invested
 
-    one_time_bh_per_day = one_time_bh / num_days if num_days else 0.0
-    print(f"\nOne-Time B&H gain per day: {one_time_bh_per_day:.{4}f}")
-    strategy_per_day = strategy_sum / num_days
-    print(f"Strategy gain per day: {strategy_per_day:.{4}f}")
-    strategy_per_trade = strategy_sum / trades_count if trades_count > 0 else 0
-    print(f"Strategy gain per trade: {strategy_per_trade:.{4}f}")
+    intraday_sum = sum(intraday_per_day)
+    strategy_sum = sum(strategy_per_day)
 
-    # small bar plot (same layout, rounded annotations)
+    one_time_bh_final = init_cap + one_time_bh_gain
+    intraday_final    = init_cap + intraday_sum
+    strategy_final    = init_cap + strategy_sum
+
+    print(f"\nOne-Time B&H gain: {one_time_bh_gain:.3f} | final: {one_time_bh_final:.3f} | PnL%: {pct(one_time_bh_gain):.2f}%")
+    print(f"Sum Strategy gain: {strategy_sum:.3f} | final: {strategy_final:.3f} | PnL%: {pct(strategy_sum):.2f}%")
+    print(f"Sum Intraday gain: {intraday_sum:.3f} | final: {intraday_final:.3f} | PnL%: {pct(intraday_sum):.2f}%")
+
+    one_time_bh_per_day    = one_time_bh_gain / num_days if num_days else 0.0
+    strategy_per_day_avg   = strategy_sum / num_days if num_days else 0.0
+    strategy_per_trade_avg = strategy_sum / trades_count if trades_count else 0.0
+
+    print(f"\nOne-Time B&H gain per day: {one_time_bh_per_day:.4f}")
+    print(f"Strategy gain per day: {strategy_per_day_avg:.4f}")
+    print(f"Strategy gain per trade: {strategy_per_trade_avg:.4f}")
+
+    # Bar plot: one-time B&H, strategy, intraday
     primary = {
-        "One-Time B&H gain": one_time_bh,
+        "One-Time B&H gain": one_time_bh_gain,
         "Sum Strategy gain": strategy_sum,
-        "Sum Intraday B&H gain": intraday_bh_sum
+        "Sum Intraday gain": intraday_sum,
     }
     secondary = {
         "One-Time B&H per day": one_time_bh_per_day,
-        "Strategy gain per day": strategy_per_day,
-        "Strategy gain per trade": strategy_per_trade
+        "Strategy gain per day": strategy_per_day_avg,
+        "Strategy gain per trade": strategy_per_trade_avg,
     }
 
-    fig, ax1 = plt.subplots(figsize=(10, 5))
+    fig, ax1 = plt.subplots(figsize=(9, 5))
     ax2 = ax1.twinx()
 
     names1 = list(primary.keys())
@@ -691,22 +1058,20 @@ def aggregate_performance(
     all_names = names1 + names2
     ax1.set_xticks(np.concatenate([x1, x2]))
     ax1.set_xticklabels(all_names, rotation=30, ha="right")
-    ax1.set_ylabel("USD (big sums)")
+    ax1.set_ylabel("USD (absolute)")
     ax2.set_ylabel("USD (per trade/day)")
     ax1.set_title(f"Performance Summary ({first_day.date()} → {last_day.date()})")
     ax1.yaxis.grid(True, linestyle="--", alpha=0.5)
 
     for bar in bars1:
         h = bar.get_height()
-        ax1.annotate(f"{h:.3f}",
-                     xy=(bar.get_x() + bar.get_width() / 2, h),
+        ax1.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width() / 2, h),
                      xytext=(0, 3), textcoords="offset points",
                      ha="center", va="bottom", fontsize=9)
 
     for bar in bars2:
         h = bar.get_height()
-        ax2.annotate(f"{h:.4f}",
-                     xy=(bar.get_x() + bar.get_width() / 2, h),
+        ax2.annotate(f"{h:.4f}", xy=(bar.get_x() + bar.get_width() / 2, h),
                      xytext=(0, 3), textcoords="offset points",
                      ha="center", va="bottom", fontsize=9)
 
@@ -716,8 +1081,7 @@ def aggregate_performance(
 
     plt.tight_layout()
     plt.show()
-
-
+    
 #########################################################################################################
 
 

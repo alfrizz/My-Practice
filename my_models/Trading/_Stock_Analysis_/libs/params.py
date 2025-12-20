@@ -20,8 +20,9 @@ from tqdm import tqdm
 ticker = 'AAPL'
 label_col  = "signal"
 shares_per_trade = 1
+init_cash = 115000
 
-month_to_check = '2023-06'
+month_to_check = '2024-01'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
