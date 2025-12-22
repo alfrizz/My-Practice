@@ -78,8 +78,6 @@ def _format_perf(
     df,
     trades,
     shares,
-    # buy_fee_per,
-    # sell_fee_per,
     sess_start,
 ):
     """
@@ -93,8 +91,6 @@ def _format_perf(
     # minimal intraday: buy all possible at open, sell all at close, persist proceeds
     ask_buy  = float(df.loc[mask, "ask"].iloc[0])
     bid_sell = float(df.loc[mask, "bid"].iloc[-1])
-    # fee_buy  = buy_fee_per(ask_buy)
-    # fee_sell = sell_fee_per(bid_sell)
     fee_buy = fees_for_one_share(price=ask_buy, side="buy")["total_per_share_billed"] 
     fee_sell = fees_for_one_share(price=bid_sell, side="sell")["total_per_share_billed"]
     
@@ -334,8 +330,6 @@ def simulate_trading(
 
     df = df.sort_index().copy()
     updated = {}
-    # buy_fee_per = lambda p: fees_for_one_share(price=p, side="buy")["total_per_share_billed"]
-    # sell_fee_per = lambda p: fees_for_one_share(price=p, side="sell")["total_per_share_billed"]
     
     position = int(_last_position)
     cash = _last_cash
@@ -360,13 +354,11 @@ def simulate_trading(
         # BUY branch
         if row["action"] == 1:  # buy
             action = "Buy"
-            # shares_max = int((cash * invest_frac) // (ask + buy_fee_per(ask)))
             per_share_buy_fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"] 
             shares_max = int((cash * invest_frac) // (ask + per_share_buy_fee))
             shares_qty = max(1, int(shares_max * row["buy_weight"]))
             position += shares_qty
             buy_cost = ask * shares_qty
-            # buy_fee = buy_fee_per(ask) * shares_qty
             buy_fee = per_share_buy_fee * shares_qty
             cash -= buy_cost + buy_fee
 
@@ -377,7 +369,6 @@ def simulate_trading(
             shares_qty = max(1, int(position * row["sell_weight"]))
             position = max(0, position - shares_qty)
             sell_cost = bid * shares_qty
-            # sell_fee = sell_fee_per(bid) * shares_qty
             sell_fee = per_share_sell_fee * shares_qty
             cash += sell_cost - sell_fee
 
@@ -411,8 +402,6 @@ def simulate_trading(
         df=df_sim,
         trades=trades,
         shares=shares,
-        # buy_fee_per=buy_fee_per,
-        # sell_fee_per=sell_fee_per,
         sess_start=sess_start,
     )
 

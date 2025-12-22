@@ -22,7 +22,7 @@ label_col  = "signal"
 shares_per_trade = 1
 init_cash = 115000
 
-month_to_check = '2024-01'
+month_to_check = '2024-02'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
