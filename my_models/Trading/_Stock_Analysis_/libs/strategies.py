@@ -23,7 +23,7 @@ _sell_intr_posamnt = params.init_cash   # intraday pot start
 _last_pnl          = params.init_cash   # strategy prior PnL baseline
 _last_cash         = params.init_cash   # cash for trading loop
 _last_position     = 0
-_last_trail        = 0.0
+_last_trail        = None
 #########################################################################################################
 
 
@@ -77,7 +77,6 @@ def fees_for_one_share(price: float,
 def _format_perf(
     df,
     trades,
-    shares,
     sess_start,
 ):
     """
@@ -103,8 +102,8 @@ def _format_perf(
     
     intraday_line = (
         f"shares({shares}); "
-        f"[buy@{_round(ask_buy)}, fee_buy={_round(fee_buy)}, pos_amnt_buy {_round(amt_buy)}]; "
-        f"[sell@{_round(bid_sell)}, fee_sell={_round(fee_sell)}, pos_amnt_sell {_round(amt_sell)}]; "
+        f"[ask_buy={_round(ask_buy)}, fee_buy={_round(fee_buy)}, pos_amnt_buy={_round(amt_buy)}]; "
+        f"[bid_sell={_round(bid_sell)}, fee_sell={_round(fee_sell)}, pos_amnt_sell={_round(amt_sell)}]; "
         f"PNL={_round(intr_pnl)}"
     )
 
@@ -240,15 +239,15 @@ def generate_tradact_elab(
     col_signal: str,
     sign_thresh,
     trailstop_pct: float,
-    sellmin_idx: int,
     sess_start: time,
+    reset_peak: bool     = False,
     col_close: str       = "close",
     col_atr: str         = "atr_14",
     col_rsi: str         = "rsi_6",
     col_vwap: str        = "vwap_14",
     rsi_thresh: int      = 50,
     atr_mult: float      = 1.0,
-    vwap_atr_mult: float = 0.5,
+    vwap_atr_mult: float = 0.5,    
 ) -> pd.DataFrame:
     """
     Generate discrete trade actions (1=Buy, -1=Sell, 0=NotInTrade, 2=InTrade), a trailing-stop series,
@@ -257,10 +256,8 @@ def generate_tradact_elab(
       stop as `trail = peak * (1 - stop_frac)`, and issues sells when signal < threshold
       and bid < trail (only during session).
     - Also computes `atr_stop_price = peak - atr_mult * atr` for optional ATR-based exits.
-    - Supports scalar or per-row `sign_thresh`. Preserves carry-in via global _last_trail.
+    - Supports scalar or per-row `sign_thresh`. 
     """
-    global _last_trail, _last_position
-
     df = df.copy()
     df["action"] = 0  # not in trade by default
 
@@ -269,7 +266,6 @@ def generate_tradact_elab(
     atr = df[col_atr].to_numpy(dtype=float)
     rsi = df[col_rsi].to_numpy(dtype=float)
     vwap = df[col_vwap].to_numpy(dtype=float)
-    bid = df["bid"].to_numpy(dtype=float)
     
     sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh # the threshold field can be string or numeric
     is_series = np.ndim(sign_thresh) != 0 # the threshold can be a constant or a series
@@ -284,24 +280,24 @@ def generate_tradact_elab(
     # iterate rows and compute actions + trailing stop + atr stop
     for i in range(len(df)):
         sign_thr = float(sign_thresh[i]) if is_series else float(sign_thresh)
-
         # compute a single candidate peak and its trail value once per row
-        peak = max(close[i], trail_arr[i - 1] / (1.0 - stop_frac))
-        trail_arr[i] = peak * (1.0 - stop_frac) # running trail
-        atr_arr[i]   = peak - atr_mult * atr[i] # running atr
-        vwap_arr[i]  = vwap[i] + vwap_atr_mult * atr[i] # running vwap
+        peak = max(close[i], trail_arr[i - 1] / (1.0 - stop_frac) if i>0 else close[i])
+        trail_arr[i] = peak * (1.0 - stop_frac) # running trail 
+        atr_arr[i]   = peak - atr_mult * atr[i] # running atr (ATR decreses it: to exit a trade, require a smaller close price in volatile markets)
+        vwap_arr[i]  = vwap[i] + vwap_atr_mult * atr[i] # running vwap (ATR increses it: to enter a trade, require a larger close price in volatile markets)
 
         if df.index.time[i] >= sess_start:               
             if signal[i] >= sign_thr:   # possible BUY        
                 if rsi[i] > rsi_thresh or close[i] > vwap_arr[i]:
                     df.at[df.index[i], "action"] = 1  # buy action
-                    buy_weight[i] = (signal[i] - sign_thr) / sign_thr * 100
+                    buy_weight[i] = (signal[i] - sign_thr) / sign_thr
     
             else: # signal[i] < sign_thr   # possible SELL  
-                if bid[i] < trail_arr[i] or bid[i] < atr_arr[i]:
+                if close[i] < trail_arr[i] or close[i] < atr_arr[i]:
                     df.at[df.index[i], "action"] = -1  # sell action
-                    sell_weight[i] = (sign_thr - signal[i]) / sign_thr * 100
-                
+                    sell_weight[i] = (sign_thr - signal[i]) / sign_thr
+                    trail_arr[i] = close[i] * (1.0 - stop_frac) if reset_peak else trail_arr[i]
+        
     df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
     df["atr_stop_price"] = pd.Series(atr_arr, index=df.index)
     df["vwap_stop_price"] = pd.Series(vwap_arr, index=df.index)
@@ -317,14 +313,21 @@ def generate_tradact_elab(
 def simulate_trading(
     day,
     df,
-    sellmin_idx: int,
     sess_start: time,
-    shares: int = 1,
-    invest_frac: float = 0.1,
+    invest_frac: float = 0.1,   # fraction of cash available to allocate per buy signal (0..1)
+    buy_factor: float = 0.0,    # interpolation factor for buys: 0 => use buy_weight as-is; 1 => use full shares_max (0..1)
+    sell_factor: float = 0.0,   # interpolation factor for sells: 0 => use sell_weight as-is; 1 => sell full position (0..1)
 ) -> dict:
     """
-    Simulate intraday trading using provided actions; carry prior day state.
-    - Uses globals for carried position/cash and last bid/ask markers.
+    Simulate intraday trading using discrete actions produced by generate_tradact_elab.
+    Behavior
+    - Iterates rows (intraday bars) in chronological order and executes only actions present in `df["action"]`.
+    - Maintains carried state across calls using globals `_last_position` and `_last_cash`.
+    - For BUY actions: computes an affordable `shares_max` from `cash`, `invest_frac`, `ask`, and per-share buy fee,
+      then sizes the order by interpolating between the generator's `buy_weight` and full allocation using `buy_factor`.
+    - For SELL actions: sizes the order by interpolating between the generator's `sell_weight` and full position using `sell_factor`.
+    - Ensures executed shares do not exceed affordability (`shares_max`) or holdings (`position`) and skips zero-sized trades.
+    - Records each executed trade and snapshots Position, Cash, Pnl, Shares, Action for every bar.
     """
     global _last_position, _last_cash
 
@@ -336,12 +339,6 @@ def simulate_trading(
     buy_cost = sell_cost = 0.0
     pos_buf, posamt_buf, cash_buf, pnl_buf, act_buf, shar_buf = [], [], [], [], [], []
     trades = []
-
-    # Determine last bid timestamp based on sellmin_idx
-    if sellmin_idx is None:
-        last_bid_ts = df.index[-1]
-    else:
-        last_bid_ts = df.index[sellmin_idx]
 
     # Iterate bars; execute only given actions
     for ts, row in df.iterrows():
@@ -355,8 +352,12 @@ def simulate_trading(
         if row["action"] == 1:  # buy
             action = "Buy"
             per_share_buy_fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"] 
-            shares_max = int((cash * invest_frac) // (ask + per_share_buy_fee))
-            shares_qty = max(1, int(shares_max * row["buy_weight"]))
+            # shares_max = math.ceil((cash * invest_frac) / (ask + per_share_buy_fee))
+            # # limit to allocation target and to the number of affordable shares
+            shares_max = min(int(cash // (ask + per_share_buy_fee)), math.ceil((cash * invest_frac) / (ask + per_share_buy_fee)))
+            # shares_qty = max(1, int(shares_max * row["buy_weight"]))
+            # buy: interpolate weight toward full allocation, compute affordable shares, clamp to [0, shares_max]
+            shares_qty = min(shares_max, max(0, math.ceil(shares_max * (row["buy_weight"] * (1.0 - buy_factor) + buy_factor))))
             position += shares_qty
             buy_cost = ask * shares_qty
             buy_fee = per_share_buy_fee * shares_qty
@@ -366,8 +367,11 @@ def simulate_trading(
         if position > 0 and row["action"] == -1:
             action = "Sell"
             per_share_sell_fee = fees_for_one_share(price=bid, side="sell")["total_per_share_billed"]
-            shares_qty = max(1, int(position * row["sell_weight"]))
-            position = max(0, position - shares_qty)
+            # shares_qty = max(1, int(position * row["sell_weight"]))
+            # sell: interpolate weight toward full position, compute shares to sell, clamp to [0, position]
+            shares_qty = min(position, max(0, math.ceil(position * (row["sell_weight"] * (1.0 - sell_factor) + sell_factor))))
+            # position = max(0, position - shares_qty)
+            position -= shares_qty
             sell_cost = bid * shares_qty
             sell_fee = per_share_sell_fee * shares_qty
             cash += sell_cost - sell_fee
@@ -375,18 +379,19 @@ def simulate_trading(
         pos_amount = position * bid
         tot_pnl = cash + pos_amount
 
-        trades.append((
-            ts,
-            (ask, bid),
-            (buy_fee, sell_fee),
-            (buy_cost, sell_cost),
-            action,
-            shares_qty,
-            position,
-            pos_amount,
-            cash,
-            tot_pnl
-        ))
+        if shares_qty > 0:
+            trades.append((
+                ts,
+                (ask, bid),
+                (buy_fee, sell_fee),
+                (buy_cost, sell_cost),
+                action,
+                shares_qty,
+                position,
+                pos_amount,
+                cash,
+                tot_pnl
+            ))
 
         # snapshots: MUST run once per row
         pos_buf.append(position)
@@ -401,7 +406,6 @@ def simulate_trading(
     df_sim, perf = _format_perf(
         df=df_sim,
         trades=trades,
-        shares=shares,
         sess_start=sess_start,
     )
 

@@ -496,13 +496,12 @@ def plot_trades(
     posamt_arr  = df.get("Posamt", pd.Series(np.nan, index=df.index)).to_numpy()
     cash_arr = df.get("Cash", pd.Series(np.nan, index=df.index)).to_numpy()
     net_arr  = df.get("Pnl", pd.Series(np.nan, index=df.index)).to_numpy()
-    trade_arr= df.get("TradeID", pd.Series(np.nan, index=df.index)).to_numpy()
-
-    # extras = [df.get(col, pd.Series(np.nan, index=df.index)).to_numpy() for col in (extra_hover_fields or [])]
+    # trade_arr= df.get("TradeID", pd.Series(np.nan, index=df.index)).to_numpy()
+    trade_arr = np.where((t := df.get("TradeID", pd.Series(np.nan, index=df.index)).fillna(0).astype(int).astype(str)) == "0", "", t)
 
     # customdata ordering
     base_fields = [bid_arr, ask_arr, trail_arr, atr_arr, vwap_arr, trade_arr, act_arr, shar_arr, pos_arr, posamt_arr, cash_arr, net_arr]
-    customdata = list(zip(*base_fields)) #, *(extras or [])))
+    customdata = list(zip(*base_fields))
 
     market_parts = [
         "Close: %{y:.3f}",
@@ -512,15 +511,13 @@ def plot_trades(
         "Atr_run: %{customdata[3]:.3f}",
         "Vwap_run: %{customdata[4]:.3f}",
     ]
-    # for j, col in enumerate((extra_hover_fields or []), start=len(base_fields)):
-    #     market_parts.append(f"{col}: %{{customdata[{j}]:.3f}}")
 
     state_parts = [
         "",
         "TrID: %{customdata[5]:.0f}",
         "Action: %{customdata[6]}",
         "Shares: %{customdata[7]:.0f}",
-        "Position: %{customdata[8]:.0f}",
+        "Position: %{customdata[8]:.0f}", 
         "PosAmt: %{customdata[9]:.3f}",
         "Cash: %{customdata[10]:.3f}",
         "Pnl: %{customdata[11]:.3f}",
@@ -551,8 +548,8 @@ def plot_trades(
 
     # buy/sell markers — hover skipped
     actions_lower = np.char.lower(act_arr.astype(str))
-    buy_mask = np.array([a.startswith("buy") for a in actions_lower])
-    sell_mask = np.array([a.startswith("sell") for a in actions_lower])
+    buy_mask = np.array([a.startswith("buy") for a in actions_lower]) & shar_arr != 0
+    sell_mask = np.array([a.startswith("sell") for a in actions_lower]) & shar_arr != 0
 
     def _sizes(shares_arr):
         return np.clip(np.nan_to_num(np.abs(shares_arr), nan=0.0) * 0.3 + 6, 6, 18)
@@ -594,7 +591,7 @@ def plot_trades(
 #########################################################################################################
 
 
-def aggregate_performance(perf_list: list, shares: int, df: pd.DataFrame) -> None:
+def aggregate_performance(perf_list: list, df: pd.DataFrame) -> None:
     """
     Aggregate and print summary:
       - One-time all-in B&H from first ask to last bid using params.init_cash
