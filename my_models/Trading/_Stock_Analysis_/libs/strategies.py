@@ -290,13 +290,15 @@ def generate_tradact_elab(
             if signal[i] >= sign_thr:   # possible BUY        
                 if rsi[i] > rsi_thresh or close[i] > vwap_arr[i]:
                     df.at[df.index[i], "action"] = 1  # buy action
-                    buy_weight[i] = (signal[i] - sign_thr) / sign_thr
+                    # buy_weight[i] = (signal[i] - sign_thr) / sign_thr
+                    buy_weight[i]  = 0.0 if (not np.isfinite(sign_thr) or sign_thr == 0) else (signal[i] - sign_thr) / sign_thr
     
             else: # signal[i] < sign_thr   # possible SELL  
                 if close[i] < trail_arr[i] or close[i] < atr_arr[i]:
                     df.at[df.index[i], "action"] = -1  # sell action
-                    sell_weight[i] = (sign_thr - signal[i]) / sign_thr
                     trail_arr[i] = close[i] * (1.0 - stop_frac) if reset_peak else trail_arr[i]
+                    # sell_weight[i] = (sign_thr - signal[i]) / sign_thr
+                    sell_weight[i] = 0.0 if (not np.isfinite(sign_thr) or sign_thr == 0) else (sign_thr - signal[i]) / sign_thr
         
     df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
     df["atr_stop_price"] = pd.Series(atr_arr, index=df.index)
@@ -352,10 +354,8 @@ def simulate_trading(
         if row["action"] == 1:  # buy
             action = "Buy"
             per_share_buy_fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"] 
-            # shares_max = math.ceil((cash * invest_frac) / (ask + per_share_buy_fee))
-            # # limit to allocation target and to the number of affordable shares
+            # limit to allocation target and to the number of affordable shares
             shares_max = min(int(cash // (ask + per_share_buy_fee)), math.ceil((cash * invest_frac) / (ask + per_share_buy_fee)))
-            # shares_qty = max(1, int(shares_max * row["buy_weight"]))
             # buy: interpolate weight toward full allocation, compute affordable shares, clamp to [0, shares_max]
             shares_qty = min(shares_max, max(0, math.ceil(shares_max * (row["buy_weight"] * (1.0 - buy_factor) + buy_factor))))
             position += shares_qty
@@ -367,10 +367,8 @@ def simulate_trading(
         if position > 0 and row["action"] == -1:
             action = "Sell"
             per_share_sell_fee = fees_for_one_share(price=bid, side="sell")["total_per_share_billed"]
-            # shares_qty = max(1, int(position * row["sell_weight"]))
             # sell: interpolate weight toward full position, compute shares to sell, clamp to [0, position]
             shares_qty = min(position, max(0, math.ceil(position * (row["sell_weight"] * (1.0 - sell_factor) + sell_factor))))
-            # position = max(0, position - shares_qty)
             position -= shares_qty
             sell_cost = bid * shares_qty
             sell_fee = per_share_sell_fee * shares_qty

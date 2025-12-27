@@ -546,10 +546,15 @@ def plot_trades(
         showlegend=True,
     ))
 
-    # buy/sell markers — hover skipped
-    actions_lower = np.char.lower(act_arr.astype(str))
-    buy_mask = np.array([a.startswith("buy") for a in actions_lower]) & shar_arr != 0
-    sell_mask = np.array([a.startswith("sell") for a in actions_lower]) & shar_arr != 0
+    # # buy/sell markers — hover skipped
+    # actions_lower = np.char.lower(act_arr.astype(str))
+    # buy_mask = np.array([a.startswith("buy") for a in actions_lower]) & shar_arr != 0
+    # sell_mask = np.array([a.startswith("sell") for a in actions_lower]) & shar_arr != 0
+    # normalize and build masks robustly
+    act_series = df.get("Action", df.get("action", pd.Series("", index=df.index))).astype(str).str.strip().str.lower()
+    shares_num = pd.to_numeric(df.get("Shares", 0), errors="coerce").fillna(0).astype(float)
+    buy_mask  = act_series.str.startswith("buy", na=False) & (shares_num != 0)
+    sell_mask = act_series.str.startswith("sell", na=False) & (shares_num != 0)
 
     def _sizes(shares_arr):
         return np.clip(np.nan_to_num(np.abs(shares_arr), nan=0.0) * 0.3 + 6, 6, 18)
@@ -557,7 +562,8 @@ def plot_trades(
     if buy_mask.any():
         fig.add_trace(go.Scatter(
             x=df.index[buy_mask],
-            y=df[col_close].iloc[buy_mask],
+            # y=df[col_close].iloc[buy_mask],
+            y=df.loc[buy_mask, col_close],
             mode="markers",
             marker=dict(color="green", size=_sizes(shar_arr[buy_mask]), opacity=0.9),
             name="Buy",
@@ -566,8 +572,9 @@ def plot_trades(
         ))
     if sell_mask.any():
         fig.add_trace(go.Scatter(
-            x=df.index[sell_mask],
-            y=df[col_close].iloc[sell_mask],
+            x=df.index[sell_mask], 
+            # y=df[col_close].iloc[sell_mask], 
+            y=df.loc[sell_mask, col_close],
             mode="markers",
             marker=dict(color="red", size=_sizes(shar_arr[sell_mask]), opacity=0.9),
             name="Sell",
