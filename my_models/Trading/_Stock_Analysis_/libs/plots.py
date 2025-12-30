@@ -396,6 +396,7 @@ def plot_trades(
     col_signal1: str = None,
     col_signal2: str = None,
     sign_thresh: float = None,
+    axis_sig_thresh: str = "first",
     trades: list[tuple] = None,
     performance_stats: dict = None,
     autoscale: bool = False,
@@ -412,13 +413,16 @@ def plot_trades(
             return df.get(x, pd.Series(np.nan, index=df.index)).to_numpy()
         val = float(x) if x is not None else np.nan
         return np.full(len(df), val, dtype=float)
+
+    # choose y-axis for signals/threshold: "first" -> y1, "second" -> y2 
+    sig_yaxis = "y2" if str(axis_sig_thresh).lower().startswith("second") else "y1"
     
     # signals
     if col_signal1 and col_signal1 in df:
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal1],
             mode="lines", line=dict(color="blue", dash="dot", width=2),
-            name="Target Signal", yaxis="y1",
+            name="Target Signal", yaxis=sig_yaxis,
             hovertemplate="Signal: %{y:.3f}<extra></extra>",
         ))
         
@@ -430,7 +434,7 @@ def plot_trades(
                 y=[float(sign_arr), float(sign_arr)],
                 mode="lines",
                 line=dict(color="purple", dash="dot", width=1),
-                name="Threshold", yaxis="y1",
+                name="Threshold", yaxis=sig_yaxis,
                 hovertemplate=f"Thresh: {float(sign_arr):.3f}<extra></extra>",
             ))
         else:
@@ -438,7 +442,7 @@ def plot_trades(
                 x=df.index, y=sign_arr,
                 mode="lines",
                 line=dict(color="purple", dash="dot", width=1),
-                name="Threshold", yaxis="y1",
+                name="Threshold", yaxis=sig_yaxis,
                 hovertemplate="Thresh: %{y:.3f}<extra></extra>",
             ))
             
@@ -446,7 +450,7 @@ def plot_trades(
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal2],
             mode="lines", line=dict(color="crimson", dash="dot", width=2),
-            name="Pred Signal", yaxis="y1",
+            name="Pred Signal", yaxis=sig_yaxis,
             hovertemplate="Pred: %{y:.3f}<extra></extra>",
         ))
 
@@ -546,10 +550,6 @@ def plot_trades(
         showlegend=True,
     ))
 
-    # # buy/sell markers — hover skipped
-    # actions_lower = np.char.lower(act_arr.astype(str))
-    # buy_mask = np.array([a.startswith("buy") for a in actions_lower]) & shar_arr != 0
-    # sell_mask = np.array([a.startswith("sell") for a in actions_lower]) & shar_arr != 0
     # normalize and build masks robustly
     act_series = df.get("Action", df.get("action", pd.Series("", index=df.index))).astype(str).str.strip().str.lower()
     shares_num = pd.to_numeric(df.get("Shares", 0), errors="coerce").fillna(0).astype(float)
@@ -562,7 +562,6 @@ def plot_trades(
     if buy_mask.any():
         fig.add_trace(go.Scatter(
             x=df.index[buy_mask],
-            # y=df[col_close].iloc[buy_mask],
             y=df.loc[buy_mask, col_close],
             mode="markers",
             marker=dict(color="green", size=_sizes(shar_arr[buy_mask]), opacity=0.9),
@@ -573,7 +572,6 @@ def plot_trades(
     if sell_mask.any():
         fig.add_trace(go.Scatter(
             x=df.index[sell_mask], 
-            # y=df[col_close].iloc[sell_mask], 
             y=df.loc[sell_mask, col_close],
             mode="markers",
             marker=dict(color="red", size=_sizes(shar_arr[sell_mask]), opacity=0.9),

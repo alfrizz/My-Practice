@@ -22,7 +22,7 @@ label_col  = "signal"
 shares_per_trade = 1
 init_cash = 100000
 
-month_to_check = '2024-05'
+month_to_check = '2024-06'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -208,15 +208,15 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 #########################################################################################################
 
 if ticker == 'AAPL':
-    col_signal_tick     = 'ema_9'
-    sign_thresh_tick    = 'ema_21'
-    reset_peak_tick     = True
-    rsi_thresh_tick     = 75
-    atr_mult_tick       = 0.49
-    vwap_atr_mult_tick  = 2.029
-    invest_frac_tick    = 0.052
-    buy_factor_tick     = 0.063
-    sell_factor_tick    = 0.436
-    trailstop_pct_tick  = 0.012
-    sess_start_tick     = sess_start_reg
+    col_signal_tick     = 'macd_diff'
+    sign_thresh_tick    = 1e-09
+    reset_peak_tick     = False
+    rsi_thresh_tick     = 52.000
+    atr_mult_tick       = 1.036
+    vwap_atr_mult_tick  = 2.345
+    invest_frac_tick    = 0.055
+    buy_factor_tick     = 0.258
+    sell_factor_tick    = 0.185
+    trailstop_pct_tick  = 0.016
+    sess_start_tick     = sess_start_pred
     features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']
