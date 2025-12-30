@@ -1,4 +1,4 @@
-from libs import params, trades, strategies
+from libs import params, trades
 
 from typing import Sequence, List, Tuple, Optional, Union, Dict
 
@@ -597,8 +597,15 @@ def plot_trades(
 
 #########################################################################################################
 
+def _parse_eq_value(s: str) -> float:
+    if not s:
+        return 0.0
+    return float(s.rsplit("PNL=", 1)[-1].strip())
 
-def aggregate_performance(perf_list: list, df: pd.DataFrame) -> None:
+
+def aggregate_performance(df: pd.DataFrame,
+                         perf_list: list,
+                         ) -> None:
     """
     Aggregate and print summary:
       - One-time all-in B&H from first ask to last bid using params.init_cash
@@ -606,11 +613,6 @@ def aggregate_performance(perf_list: list, df: pd.DataFrame) -> None:
       - Sum of per-day INTRADAY PNLs (parsed)
     Expects perf entries with keys: INTRADAY (PNL=...), STRATEGY (PNL=...), TRADES (list).
     """
-    def _parse_eq_value(s: str) -> float:
-        if not s:
-            return 0.0
-        return float(s.rsplit("PNL=", 1)[-1].strip())
-
     init_cap = float(params.init_cash) if getattr(params, "init_cash", None) is not None else 0.0
     def pct(gain: float) -> float:
         return (gain / init_cap * 100.0) if init_cap else 0.0
@@ -621,7 +623,7 @@ def aggregate_performance(perf_list: list, df: pd.DataFrame) -> None:
     end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
 
     num_days = df.index.normalize().nunique()
-    trades_count = sum(len(perf.get("TRADES", [])) for perf in perf_list if perf)
+    trades_count = sum(len(perf["TRADES"]) for perf in perf_list if perf)
 
     print("\n" + "=" * 115)
     print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
@@ -629,9 +631,10 @@ def aggregate_performance(perf_list: list, df: pd.DataFrame) -> None:
     print(f"Trades Count: {trades_count}")
     print(f"Initial capital: {init_cap:.3f}")
 
-    intraday_per_day  = [_parse_eq_value(perf.get("INTRADAY"))  for perf in perf_list]
-    strategy_per_day  = [_parse_eq_value(perf.get("STRATEGY"))  for perf in perf_list]
+    intraday_per_day  = [_parse_eq_value(perf["INTRADAY"])  for perf in perf_list]
+    strategy_per_day  = [_parse_eq_value(perf["STRATEGY"])  for perf in perf_list]
 
+    from libs import strategies # it must be here (and not at the beginning of the file) to avoid circular imports
     fee_open  = strategies.fees_for_one_share(price=start_ask, side="buy")["total_per_share_billed"]
     fee_close = strategies.fees_for_one_share(price=end_bid,   side="sell")["total_per_share_billed"]
     shares_bh = int(init_cap // (start_ask + fee_open))

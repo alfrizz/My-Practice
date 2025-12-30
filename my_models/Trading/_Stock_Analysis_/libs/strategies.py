@@ -19,11 +19,21 @@ from tqdm import tqdm
 
 
 #########################################################################################################
-_sell_intr_posamnt = params.init_cash   # intraday pot start
-_last_pnl          = params.init_cash   # strategy prior PnL baseline
-_last_cash         = params.init_cash   # cash for trading loop
-_last_position     = 0
-_last_trail        = None
+# _sell_intr_posamnt = params.init_cash   # intraday pot start
+# _last_pnl          = params.init_cash   # strategy prior PnL baseline
+# _last_cash         = params.init_cash   # cash for trading loop
+# _last_position     = 0
+# _last_trail        = None
+
+
+def reset_globals():
+    """Reset module-level global variables used by simulate_trading/_format_perf."""
+    global _sell_intr_posamnt, _last_pnl, _last_cash, _last_position, _last_trail
+    _sell_intr_posamnt = params.init_cash   # intraday pot start
+    _last_pnl          = params.init_cash   # strategy prior PnL baseline
+    _last_cash         = params.init_cash   # cash for trading loop
+    _last_position     = 0
+    _last_trail        = None
 #########################################################################################################
 
 
@@ -135,7 +145,7 @@ def _format_perf(
         cash_tr = cost + fee
                 
         trades_lines.append(
-            f"Tr[{tr_idx}]: Time({ts.strftime("%H:%M")})Ask({_round(ask)})Bid({_round(bid)})Act({action})"
+            f"Tr[{tr_idx}]: Time({ts.strftime('%H:%M')})Ask({_round(ask)})Bid({_round(bid)})Act({action})"
             f"Shrs({shares_qty})Pos({position}); "
             f"CashTr({_round(cash_tr)})=Cost({_round(cost)})-Fee({_round(fee)}); "
             f"P&L({_round(tot_pnl)})=CashTot({_round(cash)})+PosAmt({_round(pos_amount)})"
@@ -237,17 +247,17 @@ def generate_trade_actions(
 def generate_tradact_elab(
     df: pd.DataFrame,
     col_signal: str,
-    sign_thresh,
+    sign_thresh: str,
+    col_atr: str,
+    col_rsi: str,
+    col_vwap: str,
+    reset_peak: bool,
+    rsi_thresh: int,
     trailstop_pct: float,
-    sess_start: time,
-    reset_peak: bool     = False,
-    col_close: str       = "close",
-    col_atr: str         = "atr_14",
-    col_rsi: str         = "rsi_6",
-    col_vwap: str        = "vwap_14",
-    rsi_thresh: int      = 50,
-    atr_mult: float      = 1.0,
-    vwap_atr_mult: float = 0.5,    
+    atr_mult: float,
+    vwap_atr_mult: float,    
+    col_close: str   = "close",
+    sess_start: time = params.sess_start_reg,
 ) -> pd.DataFrame:
     """
     Generate discrete trade actions (1=Buy, -1=Sell, 0=NotInTrade, 2=InTrade), a trailing-stop series,
@@ -315,10 +325,10 @@ def generate_tradact_elab(
 def simulate_trading(
     day,
     df,
-    sess_start: time,
     invest_frac: float = 0.1,   # fraction of cash available to allocate per buy signal (0..1)
-    buy_factor: float = 0.0,    # interpolation factor for buys: 0 => use buy_weight as-is; 1 => use full shares_max (0..1)
+    buy_factor: float  = 0.0,    # interpolation factor for buys: 0 => use buy_weight as-is; 1 => use full shares_max (0..1)
     sell_factor: float = 0.0,   # interpolation factor for sells: 0 => use sell_weight as-is; 1 => sell full position (0..1)
+    sess_start: time   = params.sess_start_reg,
 ) -> dict:
     """
     Simulate intraday trading using discrete actions produced by generate_tradact_elab.
