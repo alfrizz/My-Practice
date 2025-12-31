@@ -22,6 +22,7 @@ from IPython.display import display, update_display, HTML, Javascript
 import seaborn as sns
 sns.set_style("white")
 
+from collections import defaultdict
 from tqdm.auto import tqdm
 import optuna
 from optuna.trial import TrialState
@@ -596,10 +597,17 @@ def plot_trades(
 #########################################################################################################
 
 def _parse_eq_value(s: str) -> float:
-    if not s:
-        return 0.0
-    return float(s.rsplit("PNL=", 1)[-1].strip())
+    return float(s.rsplit("PNL=", 1)[-1].strip()) if s else 0.0
 
+def compute_buy_hold_gain(start_price: float, end_price: float, init_cash: float):
+    from libs import strategies  # keep inside to avoid circular imports
+    fee_open  = strategies.fees_for_one_share(price=start_price, side="buy")["total_per_share_billed"]
+    fee_close = strategies.fees_for_one_share(price=end_price,   side="sell")["total_per_share_billed"]
+    shares_bh = int(init_cash // (start_price + fee_open))
+    invested  = shares_bh * (start_price + fee_open)
+    proceeds  = shares_bh * (end_price - fee_close)
+    one_time_bh_gain = proceeds - invested
+    return one_time_bh_gain
 
 def aggregate_performance(df: pd.DataFrame,
                          perf_list: list,
@@ -609,11 +617,10 @@ def aggregate_performance(df: pd.DataFrame,
       - One-time all-in B&H from first ask to last bid using params.init_cash
       - Sum of per-day STRATEGY PNLs (parsed)
       - Sum of per-day INTRADAY PNLs (parsed)
-    Expects perf entries with keys: INTRADAY (PNL=...), STRATEGY (PNL=...), TRADES (list).
+    Expects perf_day entries with keys: INTRADAY (PNL=...), STRATEGY (PNL=...), TRADES (list).
     """
-    init_cap = float(params.init_cash) if getattr(params, "init_cash", None) is not None else 0.0
     def pct(gain: float) -> float:
-        return (gain / init_cap * 100.0) if init_cap else 0.0
+        return (gain / params.init_cash * 100.0) 
 
     first_day = df.index.normalize().min()
     last_day  = df.index.normalize().max()
@@ -621,31 +628,33 @@ def aggregate_performance(df: pd.DataFrame,
     end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
 
     num_days = df.index.normalize().nunique()
-    trades_count = sum(len(perf["TRADES"]) for perf in perf_list if perf)
+    trades_count = sum(len(perf_day["TRADES"]) for perf_day in perf_list)
 
     print("\n" + "=" * 115)
     print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
     print(f"Num. trading days: {num_days}")
     print(f"Trades Count: {trades_count}")
-    print(f"Initial capital: {init_cap:.3f}")
+    print(f"Initial capital: {params.init_cash:.3f}")
 
-    intraday_per_day  = [_parse_eq_value(perf["INTRADAY"])  for perf in perf_list]
-    strategy_per_day  = [_parse_eq_value(perf["STRATEGY"])  for perf in perf_list]
+    intraday_per_day  = [_parse_eq_value(perf_day["INTRADAY"])  for perf_day in perf_list]
+    strategy_per_day  = [_parse_eq_value(perf_day["STRATEGY"])  for perf_day in perf_list]
 
-    from libs import strategies # it must be here (and not at the beginning of the file) to avoid circular imports
-    fee_open  = strategies.fees_for_one_share(price=start_ask, side="buy")["total_per_share_billed"]
-    fee_close = strategies.fees_for_one_share(price=end_bid,   side="sell")["total_per_share_billed"]
-    shares_bh = int(init_cap // (start_ask + fee_open))
-    invested  = shares_bh * (start_ask + fee_open)
-    proceeds  = shares_bh * (end_bid - fee_close)
-    one_time_bh_gain = proceeds - invested
+    # from libs import strategies # it must be here (and not at the beginning of the file) to avoid circular imports
+    # fee_open  = strategies.fees_for_one_share(price=start_ask, side="buy")["total_per_share_billed"]
+    # fee_close = strategies.fees_for_one_share(price=end_bid,   side="sell")["total_per_share_billed"]
+    # shares_bh = int(params.init_cash // (start_ask + fee_open))
+    # invested  = shares_bh * (start_ask + fee_open)
+    # proceeds  = shares_bh * (end_bid - fee_close)
+    # one_time_bh_gain = proceeds - invested
+
+    one_time_bh_gain = compute_buy_hold_gain(start_ask, end_bid, params.init_cash)
 
     intraday_sum = sum(intraday_per_day)
     strategy_sum = sum(strategy_per_day)
 
-    one_time_bh_final = init_cap + one_time_bh_gain
-    intraday_final    = init_cap + intraday_sum
-    strategy_final    = init_cap + strategy_sum
+    one_time_bh_final = params.init_cash + one_time_bh_gain
+    intraday_final    = params.init_cash + intraday_sum
+    strategy_final    = params.init_cash + strategy_sum
 
     print(f"\nOne-Time B&H gain: {one_time_bh_gain:.3f} | final: {one_time_bh_final:.3f} | PnL%: {pct(one_time_bh_gain):.2f}%")
     print(f"Sum Strategy gain: {strategy_sum:.3f} | final: {strategy_final:.3f} | PnL%: {pct(strategy_sum):.2f}%")
@@ -709,6 +718,32 @@ def aggregate_performance(df: pd.DataFrame,
 
     plt.tight_layout()
     plt.show()
+
+    # --- per-month summaries
+    days = sorted(df.index.normalize().unique())
+    if days and len({d.to_period("M") for d in days}) > 1:
+        month_map = defaultdict(list)
+        for d, perf in zip(days, perf_list):
+            month_map[d.to_period("M")].append((d, perf))
+    
+        for m, items in sorted(month_map.items()):
+            days_m = [d for d, _ in items]
+            df_m = df[df.index.normalize().isin(days_m)]
+            start_m = df_m.loc[df_m.index.normalize() == min(days_m), "ask"].iloc[0]
+            end_m   = df_m.loc[df_m.index.normalize() == max(days_m), "bid"].iloc[-1]
+    
+            intraday_m = sum(_parse_eq_value(p["INTRADAY"]) for _, p in items)
+            strategy_m = sum(_parse_eq_value(p["STRATEGY"]) for _, p in items)
+            trades_m   = sum(len(p["TRADES"]) for _, p in items)
+            ndays_m    = len(set(days_m))
+
+            one_time_bh_m = compute_buy_hold_gain(start_m, end_m, params.init_cash)
+    
+            print(f"\nMonthly Summary {m} ({min(days_m).date()} = {start_m:.3f} → {max(days_m).date()} = {end_m:.3f})")
+            print(f"Num. trading days: {ndays_m}  Trades Count: {trades_m}  Initial capital: {params.init_cash:.3f}")
+            print(f"One-Time B&H gain: {one_time_bh_m:.3f} | final: {params.init_cash+one_time_bh_m:.3f} | PnL%: {pct(one_time_bh_m):.2f}%")
+            print(f"Sum Strategy gain: {strategy_m:.3f} | final: {params.init_cash+strategy_m:.3f} | PnL%: {pct(strategy_m):.2f}%")
+            print(f"Sum Intraday gain: {intraday_m:.3f} | final: {params.init_cash+intraday_m:.3f} | PnL%: {pct(intraday_m):.2f}%")
 
     
 #########################################################################################################
