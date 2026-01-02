@@ -22,7 +22,7 @@ label_col  = "signal"
 shares_per_trade = 1
 init_cash = 100000
 
-month_to_check = '2024-06'
+month_to_check = '2022-12'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -206,17 +206,18 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 
 
 #########################################################################################################
-# Params => trad_comb={'col_signal': 'ema_9', 'sign_thresh': 'ema_21'}, reset_peak=True, rsi_thresh=46.00000, atr_mult=0.14746, vwap_atr_mult=-3.82959, invest_frac=0.12650, buy_factor=0.20910, sell_factor=0.28811, trailstop_pct=0.01686, sess_start=14:30:00
+# 	reset_peak	rsi_thresh	atr_mult	vwap_atr_mult	invest_frac	buy_factor	sell_factor	trailstop_pct	sess_start	avg_daily_pnl
+# 1	1	58	7.88449	-2.74498	0.02717	0.1979	0.01003	0.34552	14:30:00	68.91149
 if ticker == 'AAPL':
     col_signal_tick     = 'ema_9'
     sign_thresh_tick    = 'ema_21'
     reset_peak_tick     = True
-    rsi_thresh_tick     = 46.000
-    atr_mult_tick       = 0.14746
-    vwap_atr_mult_tick  = -3.82959
-    invest_frac_tick    = 0.12650
-    buy_factor_tick     = 0.20910
-    sell_factor_tick    = 0.28811
-    trailstop_pct_tick  = 0.01686
+    rsi_thresh_tick     = 58.000
+    atr_mult_tick       = 7.88449
+    vwap_atr_mult_tick  = -2.74498
+    invest_frac_tick    = 0.02717
+    buy_factor_tick     = 0.1979
+    sell_factor_tick    = 0.01003
+    trailstop_pct_tick  = 0.34552
     sess_start_tick     = sess_start_reg
     features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']

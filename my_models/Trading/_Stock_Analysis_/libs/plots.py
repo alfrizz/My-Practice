@@ -581,6 +581,10 @@ def plot_trades(
             showlegend=True,
         ))
 
+    # adding a dotted line identifying the session start
+    x_v = df.index[0].normalize() + pd.Timedelta(hours=params.sess_start_tick.hour, minutes=params.sess_start_tick.minute, seconds=params.sess_start_tick.second)
+    fig.add_vline(x=x_v, line=dict(color="black", dash="dot", width=1), opacity=0.6)
+
     fig.update_layout(
         hovermode="x unified",
         template="plotly_white",
@@ -596,154 +600,143 @@ def plot_trades(
 
 #########################################################################################################
 
-def _parse_eq_value(s: str) -> float:
-    return float(s.rsplit("PNL=", 1)[-1].strip()) if s else 0.0
+# def compute_buy_hold_gain(start_price: float, end_price: float, init_cash: float):
+#     from libs import strategies  # keep inside to avoid circular imports
+#     fee_open  = strategies.fees_for_one_share(price=start_price, side="buy")["total_per_share_billed"]
+#     fee_close = strategies.fees_for_one_share(price=end_price,   side="sell")["total_per_share_billed"]
+#     shares_bh = int(init_cash // (start_price + fee_open))
+#     invested  = shares_bh * (start_price + fee_open)
+#     proceeds  = shares_bh * (end_price - fee_close)
+#     one_time_bh_gain = proceeds - invested
+#     return one_time_bh_gain
 
-def compute_buy_hold_gain(start_price: float, end_price: float, init_cash: float):
-    from libs import strategies  # keep inside to avoid circular imports
-    fee_open  = strategies.fees_for_one_share(price=start_price, side="buy")["total_per_share_billed"]
-    fee_close = strategies.fees_for_one_share(price=end_price,   side="sell")["total_per_share_billed"]
-    shares_bh = int(init_cash // (start_price + fee_open))
-    invested  = shares_bh * (start_price + fee_open)
-    proceeds  = shares_bh * (end_price - fee_close)
-    one_time_bh_gain = proceeds - invested
-    return one_time_bh_gain
+# def aggregate_performance(df: pd.DataFrame,
+#                          perf_list: list,
+#                          ) -> None:
+#     """
+#     Aggregate and print summary:
+#       - One-time all-in B&H from first ask to last bid using params.init_cash
+#       - Sum of per-day STRATEGY PNLs (parsed)
+#       - Sum of per-day INTRADAY PNLs (parsed)
+#     Expects perf_day entries with keys: INTRADAY (PNL=...), STRATEGY (PNL=...), TRADES (list).
+#     """
+#     def pct(gain: float) -> float:
+#         return (gain / params.init_cash * 100.0) 
 
-def aggregate_performance(df: pd.DataFrame,
-                         perf_list: list,
-                         ) -> None:
-    """
-    Aggregate and print summary:
-      - One-time all-in B&H from first ask to last bid using params.init_cash
-      - Sum of per-day STRATEGY PNLs (parsed)
-      - Sum of per-day INTRADAY PNLs (parsed)
-    Expects perf_day entries with keys: INTRADAY (PNL=...), STRATEGY (PNL=...), TRADES (list).
-    """
-    def pct(gain: float) -> float:
-        return (gain / params.init_cash * 100.0) 
+#     first_day = df.index.normalize().min()
+#     last_day  = df.index.normalize().max()
+#     start_ask = df.loc[df.index.normalize() == first_day, "ask"].iloc[0]
+#     end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
 
-    first_day = df.index.normalize().min()
-    last_day  = df.index.normalize().max()
-    start_ask = df.loc[df.index.normalize() == first_day, "ask"].iloc[0]
-    end_bid   = df.loc[df.index.normalize() == last_day,  "bid"].iloc[-1]
+#     num_days = df.index.normalize().nunique()
+#     trades_count = sum(len(perf_day["TRADES"]) for perf_day in perf_list)
 
-    num_days = df.index.normalize().nunique()
-    trades_count = sum(len(perf_day["TRADES"]) for perf_day in perf_list)
+#     print("\n" + "=" * 115)
+#     print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
+#     print(f"Num. trading days: {num_days}")
+#     print(f"Trades Count: {trades_count}")
+#     print(f"Initial capital: {params.init_cash:.3f}")
 
-    print("\n" + "=" * 115)
-    print(f"Overall Summary ({first_day.date()} = {start_ask:.3f} → {last_day.date()} = {end_bid:.3f})")
-    print(f"Num. trading days: {num_days}")
-    print(f"Trades Count: {trades_count}")
-    print(f"Initial capital: {params.init_cash:.3f}")
+#     intraday_per_day  = [_parse_eq_value(perf_day["INTRADAY"])  for perf_day in perf_list]
+#     strategy_per_day  = [_parse_eq_value(perf_day["STRATEGY"])  for perf_day in perf_list]
 
-    intraday_per_day  = [_parse_eq_value(perf_day["INTRADAY"])  for perf_day in perf_list]
-    strategy_per_day  = [_parse_eq_value(perf_day["STRATEGY"])  for perf_day in perf_list]
+#     one_time_bh_gain = compute_buy_hold_gain(start_ask, end_bid, params.init_cash)
 
-    # from libs import strategies # it must be here (and not at the beginning of the file) to avoid circular imports
-    # fee_open  = strategies.fees_for_one_share(price=start_ask, side="buy")["total_per_share_billed"]
-    # fee_close = strategies.fees_for_one_share(price=end_bid,   side="sell")["total_per_share_billed"]
-    # shares_bh = int(params.init_cash // (start_ask + fee_open))
-    # invested  = shares_bh * (start_ask + fee_open)
-    # proceeds  = shares_bh * (end_bid - fee_close)
-    # one_time_bh_gain = proceeds - invested
+#     intraday_sum = sum(intraday_per_day)
+#     strategy_sum = sum(strategy_per_day)
 
-    one_time_bh_gain = compute_buy_hold_gain(start_ask, end_bid, params.init_cash)
+#     one_time_bh_final = params.init_cash + one_time_bh_gain
+#     intraday_final    = params.init_cash + intraday_sum
+#     strategy_final    = params.init_cash + strategy_sum
 
-    intraday_sum = sum(intraday_per_day)
-    strategy_sum = sum(strategy_per_day)
+#     print(f"\nOne-Time B&H gain: {one_time_bh_gain:.3f} | final: {one_time_bh_final:.3f} | PnL%: {pct(one_time_bh_gain):.2f}%")
+#     print(f"Sum Strategy gain: {strategy_sum:.3f} | final: {strategy_final:.3f} | PnL%: {pct(strategy_sum):.2f}%")
+#     print(f"Sum Intraday gain: {intraday_sum:.3f} | final: {intraday_final:.3f} | PnL%: {pct(intraday_sum):.2f}%")
 
-    one_time_bh_final = params.init_cash + one_time_bh_gain
-    intraday_final    = params.init_cash + intraday_sum
-    strategy_final    = params.init_cash + strategy_sum
+#     one_time_bh_per_day    = one_time_bh_gain / num_days if num_days else 0.0
+#     strategy_per_day_avg   = strategy_sum / num_days if num_days else 0.0
+#     strategy_per_trade_avg = strategy_sum / trades_count if trades_count else 0.0
 
-    print(f"\nOne-Time B&H gain: {one_time_bh_gain:.3f} | final: {one_time_bh_final:.3f} | PnL%: {pct(one_time_bh_gain):.2f}%")
-    print(f"Sum Strategy gain: {strategy_sum:.3f} | final: {strategy_final:.3f} | PnL%: {pct(strategy_sum):.2f}%")
-    print(f"Sum Intraday gain: {intraday_sum:.3f} | final: {intraday_final:.3f} | PnL%: {pct(intraday_sum):.2f}%")
+#     print(f"\nOne-Time B&H gain per day: {one_time_bh_per_day:.4f}")
+#     print(f"Strategy gain per day: {strategy_per_day_avg:.4f}")
+#     print(f"Strategy gain per trade: {strategy_per_trade_avg:.4f}")
 
-    one_time_bh_per_day    = one_time_bh_gain / num_days if num_days else 0.0
-    strategy_per_day_avg   = strategy_sum / num_days if num_days else 0.0
-    strategy_per_trade_avg = strategy_sum / trades_count if trades_count else 0.0
+#     # Bar plot: one-time B&H, strategy, intraday
+#     primary = {
+#         "One-Time B&H gain": one_time_bh_gain,
+#         "Sum Strategy gain": strategy_sum,
+#         "Sum Intraday gain": intraday_sum,
+#     }
+#     secondary = {
+#         "One-Time B&H per day": one_time_bh_per_day,
+#         "Strategy gain per day": strategy_per_day_avg,
+#         "Strategy gain per trade": strategy_per_trade_avg,
+#     }
 
-    print(f"\nOne-Time B&H gain per day: {one_time_bh_per_day:.4f}")
-    print(f"Strategy gain per day: {strategy_per_day_avg:.4f}")
-    print(f"Strategy gain per trade: {strategy_per_trade_avg:.4f}")
+#     fig, ax1 = plt.subplots(figsize=(9, 5))
+#     ax2 = ax1.twinx()
 
-    # Bar plot: one-time B&H, strategy, intraday
-    primary = {
-        "One-Time B&H gain": one_time_bh_gain,
-        "Sum Strategy gain": strategy_sum,
-        "Sum Intraday gain": intraday_sum,
-    }
-    secondary = {
-        "One-Time B&H per day": one_time_bh_per_day,
-        "Strategy gain per day": strategy_per_day_avg,
-        "Strategy gain per trade": strategy_per_trade_avg,
-    }
+#     names1 = list(primary.keys())
+#     names2 = list(secondary.keys())
+#     x1 = np.arange(len(names1))
+#     x2 = np.arange(len(names2)) + len(names1)
 
-    fig, ax1 = plt.subplots(figsize=(9, 5))
-    ax2 = ax1.twinx()
+#     width = 0.6
+#     bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", label="Absolute")
+#     bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", label="Relative")
 
-    names1 = list(primary.keys())
-    names2 = list(secondary.keys())
-    x1 = np.arange(len(names1))
-    x2 = np.arange(len(names2)) + len(names1)
+#     all_names = names1 + names2
+#     ax1.set_xticks(np.concatenate([x1, x2]))
+#     ax1.set_xticklabels(all_names, rotation=30, ha="right")
+#     ax1.set_ylabel("USD (absolute)")
+#     ax2.set_ylabel("USD (per trade/day)")
+#     ax1.set_title(f"Performance Summary ({first_day.date()} → {last_day.date()})")
+#     ax1.yaxis.grid(True, linestyle="--", alpha=0.5)
 
-    width = 0.6
-    bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", label="Absolute")
-    bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", label="Relative")
+#     for bar in bars1:
+#         h = bar.get_height()
+#         ax1.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width() / 2, h),
+#                      xytext=(0, 3), textcoords="offset points",
+#                      ha="center", va="bottom", fontsize=9)
 
-    all_names = names1 + names2
-    ax1.set_xticks(np.concatenate([x1, x2]))
-    ax1.set_xticklabels(all_names, rotation=30, ha="right")
-    ax1.set_ylabel("USD (absolute)")
-    ax2.set_ylabel("USD (per trade/day)")
-    ax1.set_title(f"Performance Summary ({first_day.date()} → {last_day.date()})")
-    ax1.yaxis.grid(True, linestyle="--", alpha=0.5)
+#     for bar in bars2:
+#         h = bar.get_height()
+#         ax2.annotate(f"{h:.4f}", xy=(bar.get_x() + bar.get_width() / 2, h),
+#                      xytext=(0, 3), textcoords="offset points",
+#                      ha="center", va="bottom", fontsize=9)
 
-    for bar in bars1:
-        h = bar.get_height()
-        ax1.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width() / 2, h),
-                     xytext=(0, 3), textcoords="offset points",
-                     ha="center", va="bottom", fontsize=9)
+#     handles1, labels1 = ax1.get_legend_handles_labels()
+#     handles2, labels2 = ax2.get_legend_handles_labels()
+#     ax1.legend(handles1 + handles2, labels1 + labels2, loc="upper right")
 
-    for bar in bars2:
-        h = bar.get_height()
-        ax2.annotate(f"{h:.4f}", xy=(bar.get_x() + bar.get_width() / 2, h),
-                     xytext=(0, 3), textcoords="offset points",
-                     ha="center", va="bottom", fontsize=9)
+#     plt.tight_layout()
+#     plt.show()
 
-    handles1, labels1 = ax1.get_legend_handles_labels()
-    handles2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(handles1 + handles2, labels1 + labels2, loc="upper right")
-
-    plt.tight_layout()
-    plt.show()
-
-    # --- per-month summaries
-    days = sorted(df.index.normalize().unique())
-    if days and len({d.to_period("M") for d in days}) > 1:
-        month_map = defaultdict(list)
-        for d, perf in zip(days, perf_list):
-            month_map[d.to_period("M")].append((d, perf))
+    # # --- per-month summaries
+    # days = sorted(df.index.normalize().unique())
+    # if days and len({d.to_period("M") for d in days}) > 1:
+    #     month_map = defaultdict(list)
+    #     for d, perf in zip(days, perf_list):
+    #         month_map[d.to_period("M")].append((d, perf))
     
-        for m, items in sorted(month_map.items()):
-            days_m = [d for d, _ in items]
-            df_m = df[df.index.normalize().isin(days_m)]
-            start_m = df_m.loc[df_m.index.normalize() == min(days_m), "ask"].iloc[0]
-            end_m   = df_m.loc[df_m.index.normalize() == max(days_m), "bid"].iloc[-1]
+    #     for m, items in sorted(month_map.items()):
+    #         days_m = [d for d, _ in items]
+    #         df_m = df[df.index.normalize().isin(days_m)]
+    #         start_m = df_m.loc[df_m.index.normalize() == min(days_m), "ask"].iloc[0]
+    #         end_m   = df_m.loc[df_m.index.normalize() == max(days_m), "bid"].iloc[-1]
     
-            intraday_m = sum(_parse_eq_value(p["INTRADAY"]) for _, p in items)
-            strategy_m = sum(_parse_eq_value(p["STRATEGY"]) for _, p in items)
-            trades_m   = sum(len(p["TRADES"]) for _, p in items)
-            ndays_m    = len(set(days_m))
+    #         intraday_m = sum(_parse_eq_value(p["INTRADAY"]) for _, p in items)
+    #         strategy_m = sum(_parse_eq_value(p["STRATEGY"]) for _, p in items)
+    #         trades_m   = sum(len(p["TRADES"]) for _, p in items)
+    #         ndays_m    = len(set(days_m))
 
-            one_time_bh_m = compute_buy_hold_gain(start_m, end_m, params.init_cash)
+    #         one_time_bh_m = compute_buy_hold_gain(start_m, end_m, params.init_cash)
     
-            print(f"\nMonthly Summary {m} ({min(days_m).date()} = {start_m:.3f} → {max(days_m).date()} = {end_m:.3f})")
-            print(f"Num. trading days: {ndays_m}  Trades Count: {trades_m}  Initial capital: {params.init_cash:.3f}")
-            print(f"One-Time B&H gain: {one_time_bh_m:.3f} | final: {params.init_cash+one_time_bh_m:.3f} | PnL%: {pct(one_time_bh_m):.2f}%")
-            print(f"Sum Strategy gain: {strategy_m:.3f} | final: {params.init_cash+strategy_m:.3f} | PnL%: {pct(strategy_m):.2f}%")
-            print(f"Sum Intraday gain: {intraday_m:.3f} | final: {params.init_cash+intraday_m:.3f} | PnL%: {pct(intraday_m):.2f}%")
+    #         print(f"\nMonthly Summary {m} ({min(days_m).date()} = {start_m:.3f} → {max(days_m).date()} = {end_m:.3f})")
+    #         print(f"Num. trading days: {ndays_m}  Trades Count: {trades_m}  Initial capital: {params.init_cash:.3f}")
+    #         print(f"One-Time B&H gain: {one_time_bh_m:.3f} | final: {params.init_cash+one_time_bh_m:.3f} | PnL%: {pct(one_time_bh_m):.2f}%")
+    #         print(f"Sum Strategy gain: {strategy_m:.3f} | final: {params.init_cash+strategy_m:.3f} | PnL%: {pct(strategy_m):.2f}%")
+    #         print(f"Sum Intraday gain: {intraday_m:.3f} | final: {params.init_cash+intraday_m:.3f} | PnL%: {pct(intraday_m):.2f}%")
 
     
 #########################################################################################################
@@ -1014,41 +1007,102 @@ def save_best_trial_callback(study, trial):
 
 ########################## 
 
+# # in-memory accumulator for completed trial results
+# _results: list[dict] = []
+
+# def save_results_callback(study, trial):
+#     """
+#     Optuna callback to persist completed trials to a CSV whose name
+#     matches the JSON filename produced by a different Optuna run.
+
+#     What this function does:
+#     1) Skips any trial that was pruned or errored.
+#     2) Extracts the three hyperparameters plus the average daily PnL.
+#     3) Appends that data as a dict into the module‐level `_results` list.
+#     4) Builds a pandas DataFrame from `_results`, sorts it descending by avg_daily_pnl.
+#     """
+
+#     # 1) Only process trials that ran to completion
+#     if trial.state != TrialState.COMPLETE:
+#         return
+
+#     # 2) Extract trial number, params, and objective value
+#     entry = {"trial": trial.number}
+#     for k, v in trial.params.items():
+#         entry[k] = round(v, 5) if isinstance(v, (int, float)) else v
+#     entry["avg_daily_pnl"] = round(trial.value, 5)
+
+#     _results.append(entry)
+
+#     # 3) Build & sort DataFrame of all completed trials so far
+#     df = pd.DataFrame(_results)
+#     df = df.sort_values("avg_daily_pnl", ascending=False)
+
+#     # 4) Construct the CSV filename & write it
+#     csv_name = f"{params.ticker}_live_predicted.csv"
+#     out_path = os.path.join(params.optuna_folder, csv_name)
+#     df.to_csv(out_path, index=False)
+
+
+
 # in-memory accumulator for completed trial results
 _results: list[dict] = []
 
+# track last written best value and path so we only write/replace when best changes
+_last_best_value: float | None = None
+_last_csv_path: str | None = None
+
 def save_results_callback(study, trial):
     """
-    Optuna callback to persist completed trials to a CSV whose name
-    matches the JSON filename produced by a different Optuna run.
-
-    What this function does:
-    1) Skips any trial that was pruned or errored.
-    2) Extracts the three hyperparameters plus the average daily PnL.
-    3) Appends that data as a dict into the module‐level `_results` list.
-    4) Builds a pandas DataFrame from `_results`, sorts it descending by avg_daily_pnl.
+    Optuna callback that accumulates completed trials and writes a single CSV
+    named "{ticker}_{best_rounded}_predicted.csv" only when the study best value
+    (rounded to 4 decimals) changes. Behavior:
+      - skip non-complete trials
+      - expand 'tc_id' into 'col_signal' and 'sign_thresh' when a mapping exists
+      - append every completed trial to the in-memory _results list
+      - sort results by avg_daily_pnl and write the CSV only when the rounded
+        best value differs from the last written one (previous file is removed)
+    This function makes the minimal changes required to avoid NameError when
+    the trading_combinations mapping lives in the notebook's __main__ module.
     """
-
-    # 1) Only process trials that ran to completion
+    # only process fully completed trials
     if trial.state != TrialState.COMPLETE:
         return
 
-    # 2) Extract trial number, params, and objective value
+    # build entry: expand tc_id into its combo fields when mapping is available
     entry = {"trial": trial.number}
+    tc_map = globals().get("trading_combinations") or getattr(__import__("__main__"), "trading_combinations", None)
     for k, v in trial.params.items():
-        entry[k] = round(v, 5) if isinstance(v, (int, float)) else v
-    entry["avg_daily_pnl"] = round(trial.value, 5)
+        if k == "tc_id" and tc_map and v in tc_map:
+            combo = tc_map[v]
+            entry["col_signal"] = combo.get("col_signal")
+            entry["sign_thresh"] = combo.get("sign_thresh")
+        else:
+            entry[k] = round(v, 5) if isinstance(v, (int, float)) else v
 
+    entry["avg_daily_pnl"] = round(trial.value, 5)
     _results.append(entry)
 
-    # 3) Build & sort DataFrame of all completed trials so far
-    df = pd.DataFrame(_results)
-    df = df.sort_values("avg_daily_pnl", ascending=False)
+    # build sorted DataFrame of all completed trials so far
+    df = pd.DataFrame(_results).sort_values("avg_daily_pnl", ascending=False)
 
-    # 4) Construct the CSV filename & write it
-    csv_name = f"{params.ticker}_live_predicted.csv"
-    out_path = os.path.join(params.optuna_folder, csv_name)
-    df.to_csv(out_path, index=False)
+    # write CSV only when the rounded best value changes; keep exactly one file
+    global _last_best_value, _last_csv_path
+    best_val = getattr(study, "best_value", None)
+    if best_val is None:
+        return
+
+    best_rounded = round(float(best_val), 4)
+    if _last_best_value is None or best_rounded != _last_best_value:
+        if _last_csv_path and os.path.exists(_last_csv_path):
+            os.remove(_last_csv_path)
+
+        csv_name = f"{params.ticker}_{best_rounded}_predicted.csv"
+        out_path = os.path.join(params.optuna_folder, csv_name)
+        df.to_csv(out_path, index=False)
+
+        _last_best_value = best_rounded
+        _last_csv_path = out_path
 
 
 ####################################################################################################################
