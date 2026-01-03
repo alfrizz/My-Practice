@@ -151,112 +151,37 @@ def reset_globals(start_price: float = None):
     """Reset module-level global variables used by simulate_trading/_format_perf.
     If start_price is provided, initialize the one-time buy&hold position using that price.
     """
-    global _sell_intr_posamnt, _last_pnl, _last_cash, _bh_leftover, _bh_shares, _last_trail, _last_position
+    global _sell_intr_posamnt, _last_pnl, _last_cash, _bh_leftover, _last_bh_final, _bh_shares, _last_position
 
     _sell_intr_posamnt = params.init_cash   # intraday pot start
     _last_pnl          = params.init_cash   # strategy prior PnL baseline
     _last_cash         = params.init_cash   # cash for trading loop
-    _last_trail        = None
     _last_position     = 0
 
-    # buy&hold carried position: None = not initialized yet
-    _bh_shares = None
-    _bh_leftover = params.init_cash
-
-    # If caller provided canonical first-day ask, initialize B&H now
-    if start_price is not None:
-        fee_open = fees_for_one_share(price=start_price, side="buy")["total_per_share_billed"]
-        _bh_shares = int(params.init_cash // (start_price + fee_open))
-        invested = _bh_shares * (start_price + fee_open)
-        _bh_leftover = params.init_cash - invested
+     # initialize B&H
+    fee_open = fees_for_one_share(price=start_price, side="buy")["total_per_share_billed"]
+    _bh_shares = int(params.init_cash // (start_price + fee_open))
+    invested = _bh_shares * (start_price + fee_open)
+    _bh_leftover = params.init_cash - invested
+    _last_bh_final = params.init_cash
 
 
 #######################################################################################################
 
 
-
-# def compute_buy_hold_gain(start_price: float, end_price: float, init_cash: float):
-#     """
-#     Lazy-init a single carried buy&hold position (integer shares + leftover) on first call,
-#     then compute the position value at end_price on every call.
-
-#     Returns: (one_time_gain, final_cap, shares_bh, leftover)
-#     """
-#     global _bh_shares, _bh_leftover
-
-#     # fees for initialization and for valuation
-#     fee_open  = fees_for_one_share(price=start_price, side="buy")["total_per_share_billed"]
-#     fee_close = fees_for_one_share(price=end_price,   side="sell")["total_per_share_billed"]
-
-#     # initialize carried B&H position once (lazy)
-#     if _bh_shares is None:
-#         _bh_shares = int(init_cash // (start_price + fee_open))
-#         invested = _bh_shares * (start_price + fee_open)
-#         _bh_leftover = init_cash - invested
-
-#     # compute proceeds/value using stored integer shares and leftover
-#     proceeds  = _bh_shares * (end_price - fee_close)
-#     final_cap = _bh_leftover + proceeds
-#     one_time_bh_gain = final_cap - init_cash
-
-#     # show shares, start/end prices, leftover cash, invested amount, current position value and PNL
-#     buynhold_line = (
-#         f"shares({_bh_shares}); [start={_round(start_price)} end={_round(end_price)}]; "
-#         f"leftover={_round(_bh_leftover)}; total_cap={_round(one_time_bh_final)}; PNL={_round(one_time_bh_gain)}"
-#     )
-
-#     return one_time_bh_gain, final_cap, _bh_shares, _bh_leftover
-
-
-def compute_buy_hold_gain(start_price: float, end_price: float, init_cash: float):
-    """
-    Lazy-init a single carried buy&hold position (integer shares + leftover) on first call,
-    then compute the position value at end_price on every call.
-
-    Returns: (one_time_gain, final_cap, shares_bh, leftover, buynhold_line)
-    """
-    global _bh_shares, _bh_leftover
-
-    _round = lambda x: round(float(x), 3)
-
-    # fees for initialization and for valuation
-    fee_open  = fees_for_one_share(price=start_price, side="buy")["total_per_share_billed"]
-    fee_close = fees_for_one_share(price=end_price,   side="sell")["total_per_share_billed"]
-
-    # initialize carried B&H position once (lazy)
-    if _bh_shares is None:
-        _bh_shares = int(init_cash // (start_price + fee_open))
-        invested = _bh_shares * (start_price + fee_open)
-        _bh_leftover = init_cash - invested
-
-    # compute proceeds/value using stored integer shares and leftover
-    proceeds  = _bh_shares * (end_price - fee_close)
-    final_cap = _bh_leftover + proceeds
-    one_time_bh_gain = final_cap - init_cash
-
-    # formatted line describing the daily B&H state (total_cap uses final_cap)
-    buynhold_line = (
-        f"shares({_bh_shares}); [start={_round(start_price)} end={_round(end_price)}]; "
-        f"leftover={_round(_bh_leftover)}; total_cap={_round(final_cap)}; PNL={_round(one_time_bh_gain)}"
-    )
-
-    return buynhold_line
-
-
-############################################
-
-
-def compute_intraday_gain(prev_cap: float, df_day: pd.DataFrame, sess_start):
+def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start):
     """
     Minimal intraday: buy integer shares at first ask after sess_start (including buy fee),
     sell at last bid before sess_end (including sell fee). Carry leftover cash forward.
-    Returns: intr_pnl, new_cap, shares, amt_buy, amt_sell, leftover, intraday_line
+    Lazy-init a single carried buy&hold position (integer shares + leftover) on first call,
+    then compute the position value at end_price on every call.
     """
+    global _bh_shares, _bh_leftover, _last_bh_final
     _round = lambda x: round(float(x), 3)
-    mask = (df_day.index.time >= sess_start) & (df_day.index.time <= params.sess_end)
+    mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
 
-    ask_buy  = float(df_day.loc[mask, "ask"].iloc[0])
-    bid_sell = float(df_day.loc[mask, "bid"].iloc[-1])
+    ask_buy  = float(df.loc[mask, "ask"].iloc[0])
+    bid_sell = float(df.loc[mask, "bid"].iloc[-1])
     fee_buy  = fees_for_one_share(price=ask_buy, side="buy")["total_per_share_billed"]
     fee_sell = fees_for_one_share(price=bid_sell, side="sell")["total_per_share_billed"]
 
@@ -281,92 +206,27 @@ def compute_intraday_gain(prev_cap: float, df_day: pd.DataFrame, sess_start):
         f"leftover={_round(leftover)}; PNL={_round(intr_pnl)}"
     )
 
-    return new_cap, intraday_line
+    # compute proceeds/value using stored integer shares and leftover
+    proceeds  = _bh_shares * (bid_sell - fee_sell)
+    final_cap = _bh_leftover + proceeds
+    
+    # one_time_bh_gain = final_cap - params.init_cash
+    
+    # per-day B&H delta (today's total_cap minus yesterday's total_cap)
+    per_day_bh_gain = final_cap - _last_bh_final
+    _last_bh_final = final_cap
+
+    # formatted line describing the daily B&H state
+    buynhold_line = (
+        f"shares({_bh_shares}); [start={_round(ask_buy)} end={_round(bid_sell)}]; "
+        f"leftover={_round(_bh_leftover)}; total_cap={_round(final_cap)}; PNL={_round(per_day_bh_gain)}"
+    )
+
+    return new_cap, intraday_line, buynhold_line
 
 
 ############################################
 
-
-# def _format_perf(
-#     df,
-#     trades,
-#     sess_start,
-# ):
-#     """
-#     Build performance summary (intraday buy/sell, trades, strategy deltas).
-#     Uses compute_intraday_gain and compute_buy_hold_gain for consistent integer-share logic.
-#     """
-#     global _sell_intr_posamnt, _last_pnl
-
-#     _round = lambda x: round(float(x), 3)
-#     mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
-
-#     # --- intraday using helper (carries leftover cash) ---
-#     intr_pnl, new_cap, shares, amt_buy, amt_sell, leftover, intraday_line = compute_intraday_gain(
-#         prev_cap=_sell_intr_posamnt, df_day=df, sess_start=sess_start
-#     )
-#     _sell_intr_posamnt = new_cap
-
-#     # --- trades / strategy lines (unchanged) ---
-#     trades_lines, delta_totals = [], []
-#     trade_ids = pd.Series(np.nan, index=df.index)
-#     tr_idx = 0  # counts only buy/sell trades
-
-#     for trade in trades:
-#         (
-#             ts,
-#             (ask, bid),
-#             (buy_fee, sell_fee),
-#             (buy_cost, sell_cost),
-#             action, shares_qty, position, pos_amount, cash, tot_pnl
-#         ) = trade
-
-#         if action not in ("Sell", "Buy"):
-#             continue  # skip and don't increment
-
-#         tr_idx += 1
-#         trade_ids.loc[df.index == ts] = tr_idx
-
-#         if action == "Buy":
-#             cost = -buy_cost
-#             fee = -buy_fee
-#         else:  # Sell
-#             cost = sell_cost
-#             fee = -sell_fee
-#         cash_tr = cost + fee
-
-#         trades_lines.append(
-#             f"Tr[{tr_idx}]: Time({ts.strftime('%H:%M')})Ask({_round(ask)})Bid({_round(bid)})Act({action})"
-#             f"Shrs({shares_qty})Pos({position}); "
-#             f"CashTr({_round(cash_tr)})=Cost({_round(cost)})-Fee({_round(fee)}); "
-#             f"P&L({_round(tot_pnl)})=CashTot({_round(cash)})+PosAmt({_round(pos_amount)})"
-#         )
-
-#         delta = tot_pnl - _last_pnl
-#         delta_totals.append((tr_idx, _round(delta)))
-#         _last_pnl = tot_pnl
-
-#     strategy_line = (
-#         " + ".join([f"Δ[{idx}]:{val}" for idx, val in delta_totals]) +
-#         f" PNL={_round(sum(val for _, val in delta_totals))}"
-#     )
-
-#     # --- one-time buy & hold for the day using same integer-share + leftover logic ---
-#     # Use day's first ask and last bid to compute a per-day buy-hold (for reporting)
-#     start_price = float(df.loc[mask, "ask"].iloc[0])
-#     end_price = float(df.loc[mask, "bid"].iloc[-1])
-#     one_time_bh_gain, one_time_bh_final, shares_bh, leftover_bh = compute_buy_hold_gain(
-#         start_price=start_price, end_price=end_price, init_cash=params.init_cash
-#     )
-
-#     df = df.assign(TradeID=trade_ids)
-#     perf = {
-#         "INTRADAY": intraday_line,
-#         "TRADES": trades_lines,
-#         "STRATEGY": strategy_line,
-#         "BUYNHOLD": buynhold_line
-#     }
-#     return df, perf
 
 def _format_perf(
     df,
@@ -374,19 +234,12 @@ def _format_perf(
     sess_start,
 ):
     """
-    Build performance summary (intraday buy/sell, trades, strategy deltas).
+    Build performance summary (buy and hold, intraday buy/sell, trades, strategy deltas).
     Uses compute_intraday_gain and compute_buy_hold_gain for consistent integer-share logic.
     """
     global _sell_intr_posamnt, _last_pnl
 
     _round = lambda x: round(float(x), 3)
-    mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
-
-    # --- intraday using helper (carries leftover cash) ---
-    new_cap, intraday_line = compute_intraday_gain(
-        prev_cap=_sell_intr_posamnt, df_day=df, sess_start=sess_start
-    )
-    _sell_intr_posamnt = new_cap
 
     # --- trades / strategy lines (unchanged) ---
     trades_lines, delta_totals = [], []
@@ -427,22 +280,22 @@ def _format_perf(
         delta_totals.append((tr_idx, _round(delta)))
         _last_pnl = tot_pnl
 
+    df = df.assign(TradeID=trade_ids)
+
     strategy_line = (
         " + ".join([f"Δ[{idx}]:{val}" for idx, val in delta_totals]) +
         f" PNL={_round(sum(val for _, val in delta_totals))}"
     )
 
-    # --- one-time buy & hold for the day using same integer-share + leftover logic ---
-    # Use day's first ask and last bid to compute a per-day buy-hold (for reporting)
-    start_price = float(df.loc[mask, "ask"].iloc[0])
-    end_price = float(df.loc[mask, "bid"].iloc[-1])
-
-    # compute_buy_hold_gain now returns (one_time_gain, final_cap, shares_bh, leftover_bh, buynhold_line)
-    buynhold_line = compute_buy_hold_gain(
-        start_price=start_price, end_price=end_price, init_cash=params.init_cash
+   # --- one-time buy & hold for the day using same integer-share + leftover logic --- &  --- intraday using helper (carries leftover cash) ---
+    new_cap, intraday_line, buynhold_line = compute_intraday_bh(
+       prev_cap=_sell_intr_posamnt, 
+        df=df, 
+        sess_start=sess_start
     )
+    
+    _sell_intr_posamnt = new_cap
 
-    df = df.assign(TradeID=trade_ids)
     perf = {
         "INTRADAY": intraday_line,
         "TRADES": trades_lines,
@@ -571,10 +424,8 @@ def _parse_eq_value(s: str) -> float:
 def rolling_monthly_summary(df, sim_results):
     """
     Rolling monthly summary:
-      - Read per-day BUYNHOLD cumulative PNLs from sim_results (value - init_cash).
+      - Treat per-day BUYNHOLD entries as deltas (daily B&H PnL).
       - Strategy and Intraday are summed per-month and carried forward independently.
-      - For each month we compute B&H start/final from the per-day cumulative values,
-        so we don't re-run integer-share math here.
     """
     month_map = defaultdict(list)
     for k in sorted(sim_results):
@@ -604,25 +455,22 @@ def rolling_monthly_summary(df, sim_results):
         end_m   = df_m.loc[df_m.index.normalize() == max(days_m), "bid"].iloc[-1]
 
         # intraday and strategy are per-day deltas (sum them)
-        intraday_m   = sum(_parse_eq_value(p["INTRADAY"]) for _, p in items)
-        strategy_m   = sum(_parse_eq_value(p["STRATEGY"]) for _, p in items)
-        bh_vals = [_parse_eq_value(p["BUYNHOLD"]) for _, p in items] # Each per-day BUYNHOLD is (value - init_cash). Use first and last day of month
-        
-        start_bh_cum = bh_vals[0]    # cumulative PNL at month start (relative to init_cash)
-        end_bh_cum = bh_vals[-1]    # cumulative PNL at month end (relative to init_cash)
+        intraday_m = sum(_parse_eq_value(p["INTRADAY"]) for _, p in items)
+        strategy_m = sum(_parse_eq_value(p["STRATEGY"]) for _, p in items)
 
-        trades_m     = sum(len(p["TRADES"]) for _, p in items)
-        ndays_m      = len(set(days_m))
+        # BUYNHOLD entries are now per-day deltas. Sum them to get the month's B&H delta.
+        bh_per_day = [_parse_eq_value(p["BUYNHOLD"]) for _, p in items]
+        one_time_bh_m = sum(bh_per_day)
 
-        # convert cumulative PNLs to absolute capital values
-        start_bh_abs = params.init_cash + start_bh_cum
-        final_bh_abs = params.init_cash + end_bh_cum
+        trades_m = sum(len(p["TRADES"]) for _, p in items)
+        ndays_m = len(set(days_m))
 
-        # month B&H delta (final - start)
-        one_time_bh_m = final_bh_abs - start_bh_abs
+        # start and final absolute B&H capitals (carry forward rolling_bh)
+        start_bh = rolling_bh
+        final_bh = start_bh + one_time_bh_m
 
-        start_bh, start_strat, start_intr = rolling_bh, rolling_strategy, rolling_intraday
-        final_bh = final_bh_abs
+        start_strat = rolling_strategy
+        start_intr = rolling_intraday
         final_strat = start_strat + strategy_m
         final_intr = start_intr + intraday_m
 
@@ -642,7 +490,7 @@ def rolling_monthly_summary(df, sim_results):
     return {"final_bh": rolling_bh, "final_strategy": rolling_strategy, "final_intraday": rolling_intraday}
 
 
-#######################################################################################################
+##############################################
 
 
 def aggregate_performance(df: pd.DataFrame,
@@ -688,10 +536,10 @@ def aggregate_performance(df: pd.DataFrame,
     intraday_sum = sum(intraday_per_day)
     intraday_final = params.init_cash + intraday_sum
 
-    # BUYNHOLD entries are cumulative (value - init_cash). Use the last day's value as the canonical B&H gain.
-    one_time_bh_gain = _parse_eq_value(perf_list[-1]["BUYNHOLD"])
+    # BUYNHOLD entries are per-day deltas. Sum them (same aggregation method used for STRATEGY and INTRADAY)
+    bh_per_day = [_parse_eq_value(perf_day["BUYNHOLD"]) for perf_day in perf_list]
+    one_time_bh_gain = sum(bh_per_day)
     one_time_bh_final = params.init_cash + one_time_bh_gain
-
 
     # print totals (use canonical all-in B&H)
     print(f"\nOne-Time B&H gain: {one_time_bh_gain:.3f} | final: {one_time_bh_final:.3f} | PnL%: {pct(one_time_bh_gain):.2f}%")
