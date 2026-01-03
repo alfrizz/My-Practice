@@ -148,8 +148,11 @@ def fees_for_one_share(price: float,
 
 
 def reset_globals(start_price: float = None):
-    """Reset module-level global variables used by simulate_trading/_format_perf.
-    If start_price is provided, initialize the one-time buy&hold position using that price.
+    """
+    Reset module-level simulation state.
+
+    Reinitializes globals used by the simulator and optionally seeds the
+    carried buy-and-hold position using a canonical start price.
     """
     global _sell_intr_posamnt, _last_pnl, _last_cash, _bh_leftover, _last_bh_final, _bh_shares, _last_position
 
@@ -171,10 +174,10 @@ def reset_globals(start_price: float = None):
 
 def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start):
     """
-    Minimal intraday: buy integer shares at first ask after sess_start (including buy fee),
-    sell at last bid before sess_end (including sell fee). Carry leftover cash forward.
-    Lazy-init a single carried buy&hold position (integer shares + leftover) on first call,
-    then compute the position value at end_price on every call.
+    Compute intraday integer-share simulation and B&H totals for one day.
+
+    Returns the updated intraday capital, a formatted intraday summary line,
+    and a formatted buy-and-hold summary line.
     """
     global _bh_shares, _bh_leftover, _last_bh_final
     _round = lambda x: round(float(x), 3)
@@ -209,9 +212,7 @@ def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start):
     # compute proceeds/value using stored integer shares and leftover
     proceeds  = _bh_shares * (bid_sell - fee_sell)
     final_cap = _bh_leftover + proceeds
-    
-    # one_time_bh_gain = final_cap - params.init_cash
-    
+        
     # per-day B&H delta (today's total_cap minus yesterday's total_cap)
     per_day_bh_gain = final_cap - _last_bh_final
     _last_bh_final = final_cap
@@ -228,14 +229,12 @@ def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start):
 ############################################
 
 
-def _format_perf(
-    df,
-    trades,
-    sess_start,
-):
+def _format_perf(df, trades, sess_start):
     """
-    Build performance summary (buy and hold, intraday buy/sell, trades, strategy deltas).
-    Uses compute_intraday_gain and compute_buy_hold_gain for consistent integer-share logic.
+    Build per-day performance summaries.
+
+    Produces formatted strings for INTRADAY, TRADES, STRATEGY, and BUYNHOLD
+    using helper functions to ensure consistent integer-share and fee logic.
     """
     global _sell_intr_posamnt, _last_pnl
 
@@ -415,6 +414,11 @@ def simulate_trading(
 
 
 def _parse_eq_value(s: str) -> float:
+    """
+    Parse a formatted performance line and return the numeric PNL value.
+
+    Extracts the trailing 'PNL=' value from a performance string or returns 0.0.
+    """
     return float(s.rsplit("PNL=", 1)[-1].strip()) if s else 0.0
 
 
@@ -423,9 +427,10 @@ def _parse_eq_value(s: str) -> float:
 
 def rolling_monthly_summary(df, sim_results):
     """
-    Rolling monthly summary:
-      - Treat per-day BUYNHOLD entries as deltas (daily B&H PnL).
-      - Strategy and Intraday are summed per-month and carried forward independently.
+    Produce a rolling monthly performance report.
+
+    Aggregates per-day deltas for INTRADAY, STRATEGY, and BUYNHOLD, carries
+    each metric forward independently, and prints monthly summaries.
     """
     month_map = defaultdict(list)
     for k in sorted(sim_results):
@@ -454,13 +459,10 @@ def rolling_monthly_summary(df, sim_results):
         start_m = df_m.loc[df_m.index.normalize() == min(days_m), "ask"].iloc[0]
         end_m   = df_m.loc[df_m.index.normalize() == max(days_m), "bid"].iloc[-1]
 
-        # intraday and strategy are per-day deltas (sum them)
+        # intraday, strategy and buynhold are per-day deltas (sum them)
         intraday_m = sum(_parse_eq_value(p["INTRADAY"]) for _, p in items)
         strategy_m = sum(_parse_eq_value(p["STRATEGY"]) for _, p in items)
-
-        # BUYNHOLD entries are now per-day deltas. Sum them to get the month's B&H delta.
-        bh_per_day = [_parse_eq_value(p["BUYNHOLD"]) for _, p in items]
-        one_time_bh_m = sum(bh_per_day)
+        one_time_bh_m = sum(_parse_eq_value(p["BUYNHOLD"]) for _, p in items)
 
         trades_m = sum(len(p["TRADES"]) for _, p in items)
         ndays_m = len(set(days_m))
@@ -496,16 +498,13 @@ def rolling_monthly_summary(df, sim_results):
 def aggregate_performance(df: pd.DataFrame,
                           perf_list: list = None,
                           sim_results: dict = None,
-                          sess_start: time   = params.sess_start_reg,
-                          monthy_summary: bool = True,
-                          ) -> None:
+                          sess_start: time = params.sess_start_reg,
+                          monthy_summary: bool = True) -> None:
     """
-    Aggregate and print summary.
+    Compute and display overall performance metrics.
 
-    Usage:
-      - Old: aggregate_performance(df, perf_list=perf_list)
-      - New: aggregate_performance(df, sim_results=sim_results)
-             (this will build perf_list internally and call rolling_monthly_summary)
+    Aggregates per-day performance into totals, prints summary statistics,
+    and optionally calls the rolling monthly summary.
     """
     dates_all = [d for d in sim_results]
     perf_list = [sim_results[date][2] for date in sorted(dates_all)]
@@ -527,7 +526,7 @@ def aggregate_performance(df: pd.DataFrame,
     print(f"Trades Count: {trades_count}")
     print(f"Initial capital: {params.init_cash:.3f}")
 
-    # strategy: always parsed from perf_list
+     # BUYNHOLD, STRATEGY and INTRADAY entries are per-day deltas. Sum them, always parsed from perf_list
     strategy_per_day = [_parse_eq_value(perf_day["STRATEGY"]) for perf_day in perf_list]
     strategy_sum = sum(strategy_per_day)
     strategy_final = params.init_cash + strategy_sum
@@ -536,7 +535,6 @@ def aggregate_performance(df: pd.DataFrame,
     intraday_sum = sum(intraday_per_day)
     intraday_final = params.init_cash + intraday_sum
 
-    # BUYNHOLD entries are per-day deltas. Sum them (same aggregation method used for STRATEGY and INTRADAY)
     bh_per_day = [_parse_eq_value(perf_day["BUYNHOLD"]) for perf_day in perf_list]
     one_time_bh_gain = sum(bh_per_day)
     one_time_bh_final = params.init_cash + one_time_bh_gain
