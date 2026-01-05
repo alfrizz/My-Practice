@@ -79,14 +79,12 @@ def generate_actions(
                 if rsi[i] > rsi_thresh or close[i] > vwap_arr[i]:
                     df.at[df.index[i], "action"] = 1  # buy action
                     buy_weight[i] = (signal[i] - sign_thr) / sign_thr
-                    # buy_weight[i]  = 0.0 if (not np.isfinite(sign_thr) or sign_thr == 0) else (signal[i] - sign_thr) / sign_thr
     
             else: # signal[i] < sign_thr   # possible SELL  
                 if close[i] < trail_arr[i] or close[i] < atr_arr[i]:
                     df.at[df.index[i], "action"] = -1  # sell action
                     trail_arr[i] = close[i] * (1.0 - stop_frac) if reset_peak else trail_arr[i]
                     sell_weight[i] = (sign_thr - signal[i]) / sign_thr
-                    # sell_weight[i] = 0.0 if (not np.isfinite(sign_thr) or sign_thr == 0) else (sign_thr - signal[i]) / sign_thr
         
     df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
     df["atr_stop_price"] = pd.Series(atr_arr, index=df.index)

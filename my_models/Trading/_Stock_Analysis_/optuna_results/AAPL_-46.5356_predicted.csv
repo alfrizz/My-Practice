@@ -1,0 +1,4 @@
+trial,col_signal,sign_thresh,reset_peak,rsi_thresh,atr_mult,vwap_atr_mult,invest_frac,buy_factor,sell_factor,trailstop_pct,sess_start,avg_daily_pnl
+2,ema_9,ema_21,1,57,8.82311,-5.0346,0.01508,0.32841,0.04691,0.26434,14:30:00,-46.53557
+0,ema_9,ema_21,1,63,8.55515,-2.49124,0.01009,0.14537,0.06401,0.39635,13:30:00,-64.14273
+1,ema_9,ema_21,0,57,6.73097,-3.50583,0.01786,0.11776,0.04448,0.26252,13:30:00,-106.45198
