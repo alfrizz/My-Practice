@@ -63,7 +63,8 @@ def generate_actions(
     vwap_arr = np.full(len(df), np.nan, dtype=float)
     buy_weight = np.zeros(len(df), dtype=float)
     sell_weight = np.zeros(len(df), dtype=float)
-    stop_frac = float(trailstop_pct) / 100.0
+    # stop_frac = float(trailstop_pct) / 100
+    stop_frac = trailstop_pct/100 if trailstop_pct > 1 else trailstop_pct
 
     # iterate rows and compute actions + trailing stop + atr stop
     for i in range(len(df)):
