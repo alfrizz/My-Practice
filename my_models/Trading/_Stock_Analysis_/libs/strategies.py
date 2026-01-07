@@ -30,7 +30,7 @@ def generate_actions(
     col_rsi: str,
     col_vwap: str,
     reset_peak: bool,
-    rsi_thresh: int,
+    rsi_min_thresh: int,
     trailstop_pct: float,
     atr_mult: float,
     vwap_atr_mult: float,    
@@ -38,13 +38,9 @@ def generate_actions(
     sess_start: time = params.sess_start_reg,
 ) -> pd.DataFrame:
     """
-    Generate discrete trade actions (1=Buy, -1=Sell, 0=NotInTrade, 2=InTrade), a trailing-stop series,
-    and an ATR-based stop series.
-    - Row-by-row generator: seeds entries, updates a running peak, computes a trailing
-      stop as `trail = peak * (1 - stop_frac)`, and issues sells when signal < threshold
-      and bid < trail (only during session).
-    - Also computes `atr_stop_price = peak - atr_mult * atr` for optional ATR-based exits.
-    - Supports scalar or per-row `sign_thresh`. 
+    Generate per-row discrete trade actions (1=Buy, -1=Sell, 0=Hold) 
+    plus three stop series (trailing stop, ATR stop, VWAP-based stop) 
+    and buy/sell weights.
     """
     df = df.copy()
     df["action"] = 0  # not in trade by default
@@ -77,7 +73,7 @@ def generate_actions(
 
         if df.index.time[i] >= sess_start:               
             if signal[i] >= sign_thr:   # possible BUY        
-                if rsi[i] > rsi_thresh or close[i] > vwap_arr[i]:
+                if rsi[i] > rsi_min_thresh or close[i] > vwap_arr[i]:
                     df.at[df.index[i], "action"] = 1  # buy action
                     buy_weight[i] = (signal[i] - sign_thr) / sign_thr
     
@@ -95,7 +91,88 @@ def generate_actions(
       
     return df
 
+
+##########################################
+
+
+def generate_actions_slope(
+    df: pd.DataFrame,
+    col_signal: str,
+    sign_thresh: str,
+    col_atr: str,
+    col_rsi: str,
+    col_vwap: str,
+    reset_peak: bool,
+    rsi_min_thresh: int,
+    rsi_max_thresh: float,
+    trailstop_pct: float,
+    atr_mult: float,
+    vwap_atr_mult: float,    
+    col_close: str   = "close",
+    sess_start: time = params.sess_start_reg,
+) -> pd.DataFrame:
+    """
+    Generate per-row discrete trade actions (1=Buy, -1=Sell, 0=Hold) 
+    plus three stop series (trailing stop, ATR stop, VWAP-based stop) 
+    and buy/sell weights.
+    """
+    df = df.copy()
+    df["action"] = 0  # not in trade by default
+
+    signal = df[col_signal].to_numpy(dtype=float)
+    close = df[col_close].to_numpy(dtype=float)
+    atr = df[col_atr].to_numpy(dtype=float)
+    rsi = df[col_rsi].to_numpy(dtype=float)
+    vwap = df[col_vwap].to_numpy(dtype=float)
     
+    sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh # the threshold field can be string or numeric
+    is_series = np.ndim(sign_thresh) != 0 # the threshold can be a constant or a series
+
+    trail_arr = np.full(len(df), np.nan, dtype=float)
+    atr_arr = np.full(len(df), np.nan, dtype=float)
+    vwap_arr = np.full(len(df), np.nan, dtype=float)
+    buy_weight = np.zeros(len(df), dtype=float)
+    sell_weight = np.zeros(len(df), dtype=float)
+    stop_frac = trailstop_pct/100 if trailstop_pct > 1 else trailstop_pct
+
+    # iterate rows and compute actions + trailing stop + atr stop
+    for i in range(len(df)):
+        sign_thr = float(sign_thresh[i]) if is_series else float(sign_thresh)
+        # compute a single candidate peak and its trail value once per row
+        peak = max(close[i], trail_arr[i - 1] / (1.0 - stop_frac) if i>0 else close[i])
+        trail_arr[i] = peak * (1.0 - stop_frac) # running trail 
+        atr_arr[i]   = peak - atr_mult * atr[i] # running atr (ATR decreses it: to exit a trade, require a smaller close price in volatile markets)
+        vwap_arr[i]  = vwap[i] + vwap_atr_mult * atr[i] # running vwap (ATR increses it: to enter a trade, require a larger close price in volatile markets)
+
+        if df.index.time[i] >= sess_start:
+            # BUY: require signal >= threshold AND either (RSI above rsi_min_thresh but below rsi_max_thresh)
+            # or price above VWAP reference or positive signal slope
+            if signal[i] >= sign_thr:
+                if ((rsi[i] > rsi_min_thresh and rsi[i] < rsi_max_thresh) or \
+                    close[i] > vwap_arr[i]) and \
+                signal[i] - signal[i-1] > 0: # increasing slope
+                    df.at[df.index[i], "action"] = 1
+                    buy_weight[i] = (signal[i] - sign_thr) / sign_thr
+
+            # SELL: hard ATR or trailing stop, or simple signal reversal as soft exit
+            else:
+                if (close[i] < atr_arr[i] or \
+                    close[i] < trail_arr[i]) and \
+                signal[i] - signal[i-1] < 0: # decreasing slope
+                    df.at[df.index[i], "action"] = -1
+                    trail_arr[i] = close[i] * (1.0 - stop_frac) if reset_peak else trail_arr[i]
+                    sell_weight[i] = (sign_thr - signal[i]) / sign_thr
+
+        
+    df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
+    df["atr_stop_price"] = pd.Series(atr_arr, index=df.index)
+    df["vwap_stop_price"] = pd.Series(vwap_arr, index=df.index)
+    df["buy_weight"] = buy_weight
+    df["sell_weight"] = sell_weight
+      
+    return df
+
+
 #######################################################################################################
 
 
@@ -329,7 +406,6 @@ def simulate_trading(
 
     df = df.sort_index().copy()
     updated_results = {}
-    
     position = int(_last_position)
     cash = _last_cash
     buy_cost = sell_cost = 0.0
@@ -343,13 +419,14 @@ def simulate_trading(
         action = "Hold"
         shares_qty = 0
         buy_fee = sell_fee = buy_cost = sell_cost = 0.0
-
+        
+        per_share_buy_fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"]
+        shares_max = math.floor(cash * invest_frac / (ask + per_share_buy_fee))
+        per_share_sell_fee = fees_for_one_share(price=bid, side="sell")["total_per_share_billed"]
+        
         # BUY branch
-        if row["action"] == 1:  # buy
-            action = "Buy"
-            per_share_buy_fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"] 
-            # limit to allocation target and to the number of affordable shares
-            shares_max = min(int(cash // (ask + per_share_buy_fee)), math.ceil((cash * invest_frac) / (ask + per_share_buy_fee)))
+        if shares_max > 0 and row["action"] == 1:  # buy
+            action = "Buy" 
             # buy: interpolate weight toward full allocation, compute affordable shares, clamp to [0, shares_max]
             shares_qty = min(shares_max, max(0, math.ceil(shares_max * (row["buy_weight"] * (1.0 - buy_factor) + buy_factor))))
             position += shares_qty
@@ -360,7 +437,6 @@ def simulate_trading(
         # SELL branch
         if position > 0 and row["action"] == -1:
             action = "Sell"
-            per_share_sell_fee = fees_for_one_share(price=bid, side="sell")["total_per_share_billed"]
             # sell: interpolate weight toward full position, compute shares to sell, clamp to [0, position]
             shares_qty = min(position, max(0, math.ceil(position * (row["sell_weight"] * (1.0 - sell_factor) + sell_factor))))
             position -= shares_qty
