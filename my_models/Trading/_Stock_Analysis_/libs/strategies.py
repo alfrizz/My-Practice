@@ -248,7 +248,7 @@ def reset_globals(start_price: float = None):
 #######################################################################################################
 
 
-def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start):
+def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start, sess_end=params.sess_afthour):
     """
     Compute intraday integer-share simulation and B&H totals for one day.
 
@@ -257,7 +257,7 @@ def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start):
     """
     global _bh_shares, _bh_leftover, _last_bh_final
     _round = lambda x: round(float(x), 3)
-    mask = (df.index.time >= sess_start) & (df.index.time <= params.sess_end)
+    mask = (df.index.time >= sess_start) & (df.index.time <= sess_end)
 
     ask_buy  = float(df.loc[mask, "ask"].iloc[0])
     bid_sell = float(df.loc[mask, "bid"].iloc[-1])
