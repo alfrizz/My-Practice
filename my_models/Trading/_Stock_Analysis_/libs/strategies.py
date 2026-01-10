@@ -198,7 +198,7 @@ def fees_for_one_share(price: float,
         # round UP to nearest cent, cap at $8.30
         finra_total_trade = min(math.ceil(finra_taf_per_share * 100) / 100, 8.30)
         finra_billed = finra_total_trade
-    else:
+    else: # 'buy'
         finra_billed = 0.0
 
     # CAT fee is per trade, not per share
@@ -386,21 +386,12 @@ def _format_perf(df, trades, sess_start):
 def simulate_trading(
     day,
     df,
-    invest_frac: float = 0.1,   # fraction of cash available to allocate per buy signal (0..1)
     buy_factor: float  = 0.0,    # interpolation factor for buys: 0 => use buy_weight as-is; 1 => use full shares_max (0..1)
     sell_factor: float = 0.0,   # interpolation factor for sells: 0 => use sell_weight as-is; 1 => sell full position (0..1)
     sess_start: time   = params.sess_start_reg,
 ) -> dict:
     """
-    Simulate intraday trading using discrete actions produced by generate_tradact_elab.
-    Behavior
-    - Iterates rows (intraday bars) in chronological order and executes only actions present in `df["action"]`.
-    - Maintains carried state across calls using globals `_last_position` and `_last_cash`.
-    - For BUY actions: computes an affordable `shares_max` from `cash`, `invest_frac`, `ask`, and per-share buy fee,
-      then sizes the order by interpolating between the generator's `buy_weight` and full allocation using `buy_factor`.
-    - For SELL actions: sizes the order by interpolating between the generator's `sell_weight` and full position using `sell_factor`.
-    - Ensures executed shares do not exceed affordability (`shares_max`) or holdings (`position`) and skips zero-sized trades.
-    - Records each executed trade and snapshots Position, Cash, Pnl, Shares, Action for every bar.
+    Simulate intraday trading using discrete actions produced by generate_trade function
     """
     global _last_position, _last_cash
 
@@ -421,7 +412,7 @@ def simulate_trading(
         buy_fee = sell_fee = buy_cost = sell_cost = 0.0
         
         per_share_buy_fee = fees_for_one_share(price=ask, side="buy")["total_per_share_billed"]
-        shares_max = math.floor(cash * invest_frac / (ask + per_share_buy_fee))
+        shares_max = math.floor(cash / (ask + per_share_buy_fee))
         per_share_sell_fee = fees_for_one_share(price=bid, side="sell")["total_per_share_billed"]
         
         # BUY branch

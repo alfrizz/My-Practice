@@ -1,5 +1,6 @@
 Django==5.2.4
 Scrapy==2.13.3
+alpaca-py==0.43.2
 anywidget==0.9.21
 captum==0.8.0
 colorama==0.4.6

@@ -207,22 +207,23 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 
 #########################################################################################################
  
-# Params => trad_comb={'col_signal': 'ema_9', 'sign_thresh': 'ema_21'}, reset_peak=True, rsi_thresh=80.00000, atr_mult=12.31932, vwap_atr_mult=0.07398, invest_frac=0.00780, buy_factor=0.01460, sell_factor=0.51657, trailstop_pct=17.14596, sess_start=13:30:00
-# Trial 314: 100%|██████████| 225/225 [00:33<00:00,  6.65it/s]
-# [Results] mean_pnl:55.0834   mean_excess:54.6429    improv:12406.07%     
-# best trias is:314 with best_val:54.6429
+# Params => trad_comb={'col_signal': 'ema_9', 'sign_thresh': 'ema_21'}, reset_peak=False, rsi_min_thresh=100.00000, rsi_max_thresh=150.00000, atr_mult=17.02052, vwap_atr_mult=9.97954, buy_factor=0.43169, sell_factor=0.36978, trailstop_pct=27.14304, sess_start=14:30:00
+# Trial 307: 100%|██████████| 225/225 [00:33<00:00,  6.76it/s]
+# [Results] mean_pnl:5.6771 mean_excess:56.3098 improv:-234.72%
+# Action counts: {'Buy': 558, 'Sell': 683, 'Hold': 119359}
+# Best trial is: 307 with best_val: 56.3098
 
 if ticker == 'AAPL':
     col_signal_tick     = 'ema_9'
     sign_thresh_tick    = 'ema_21'
-    reset_peak_tick     = True
-    rsi_min_thresh_tick = 80.000
-    rsi_max_thresh_tick = 300.000
-    atr_mult_tick       = 12.31932
-    vwap_atr_mult_tick  = 0.07398
-    invest_frac_tick    = 0.00780
-    buy_factor_tick     = 0.01460
-    sell_factor_tick    = 0.51657
-    trailstop_pct_tick  = 17.14596
-    sess_start_tick     = sess_start_pred
+    reset_peak_tick     = False
+    rsi_min_thresh_tick = 100.000
+    rsi_max_thresh_tick = 209.000
+    atr_mult_tick       = 17.79459
+    vwap_atr_mult_tick  = 4.57036
+    invest_frac_tick    = 0.01614
+    buy_factor_tick     = 0.52189
+    sell_factor_tick    = 0.57211
+    trailstop_pct_tick  = 1.28766
+    sess_start_tick     = sess_start_reg
     features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']
