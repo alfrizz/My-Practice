@@ -95,197 +95,6 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
 ###########################################
 
 
-# def standard_indicators(
-#     df: pd.DataFrame,
-#     *,
-#     inds_windows: Optional[Dict[str, List[int]]] = None,
-#     macd_windows: Optional[Dict[str, int]] = None,
-# ) -> pd.DataFrame:
-#     """
-#     Compute a compact set of canonical OHLCV indicators on a continuous series.
-
-#     - `inds_windows` maps variable indicators to lists of integer inds_windows, e.g.
-#       {"sma":[9,21], "ema":[9], "atr":[14], "bb":[20], "rsi":[6]}.
-#     - MACD uses fixed integers in `macd_defaults` (classic 12/26/9 by default).
-#     - Preserves an input 'vwap' from alpaca and adds a
-#       reproducible 'vwap_ohlc_close_session' computed from close*volume per session.
-#     - Output column naming is simple: sma_9, ema_21, atr_14, macd_line, etc.
-#     """
-#     if macd_defaults is None: 
-#         macd_defaults = {"fast": 12, "slow": 26, "signal": 9}
-#     # --- defaults and normalization (caller supplies lists for variable windows) ---
-#     default_windows: Dict[str, List[int]] = {
-#         "sma": [], "ema": [], "atr": [], "bb": [], "rsi": [],
-#         "roc": [], "vol_spike": [], "obv_roll": [], "ret_std": [],
-#     }
-#     merged = dict(default_windows)
-#     if inds_windows:
-#         merged.update(inds_windows)
-
-#     # convert entries to sorted unique lists (assumes list-like input)
-#     def to_list(x):
-#         return sorted({int(i) for i in x}) if x else []
-
-#     sma_ws = to_list(merged.get("sma"))
-#     ema_ws = to_list(merged.get("ema"))
-#     atr_ws = to_list(merged.get("atr"))
-#     bb_ws = to_list(merged.get("bb"))
-#     rsi_ws = to_list(merged.get("rsi"))
-#     roc_ws = to_list(merged.get("roc"))
-#     vol_ws = to_list(merged.get("vol_spike"))
-#     obv_roll_ws = to_list(merged.get("obv_roll"))
-#     ret_std_ws = to_list(merged.get("ret_std"))
-
-#     macd_fast = int(macd_defaults["fast"])
-#     macd_slow = int(macd_defaults["slow"])
-#     macd_signal = int(macd_defaults["signal"])
-
-#     df = df.copy()
-#     df.index = pd.to_datetime(df.index, utc=True)   # accepts tz-aware or naive
-#     df.index = df.index.tz_convert("UTC").tz_localize(None)
-#     df = df.sort_index()
-
-#     o, h, l, c, v = df["open"], df["high"], df["low"], df["close"], df["volume"]
-#     EPS = 1e-9
-#     def safe_div(a, b):
-#         with np.errstate(divide="ignore", invalid="ignore"):
-#             return a / (b + EPS)
-
-#     # --- progress bar: dynamic total (windows + single-shot groups) ---
-#     total_windows = sum(len(ws) for ws in (sma_ws, ema_ws, atr_ws, bb_ws, rsi_ws, roc_ws, vol_ws, obv_roll_ws, ret_std_ws))
-#     single_shot = ("returns", "geometry", "macd", "obv", "rolling_extrema", "vwap")
-#     pbar = tqdm(total=total_windows + len(single_shot), desc="Indicators", unit="task")
-
-#     new = {}
-
-#     # returns
-#     pbar.set_description("ret/log_ret")
-#     new["ret"] = c.pct_change()
-#     new["log_ret"] = np.log(c + EPS).diff()
-#     pbar.update(1)
-
-#     # SMA
-#     for w in sma_ws:
-#         pbar.set_description(f"SMA {w}")
-#         s = c.rolling(w, min_periods=1).mean()
-#         new[f"sma_{w}"] = s
-#         new[f"sma_pct_{w}"] = safe_div(c - s, s)
-#         pbar.update(1)
-
-#     # EMA
-#     for w in ema_ws:
-#         pbar.set_description(f"EMA {w}")
-#         new[f"ema_{w}"] = c.ewm(span=w, adjust=False).mean()
-#         pbar.update(1)
-
-#     # ROC
-#     for w in roc_ws:
-#         pbar.set_description(f"ROC {w}")
-#         new[f"roc_{w}"] = c.pct_change(w)
-#         pbar.update(1)
-
-#     # geometry
-#     pbar.set_description("geometry")
-#     new["body"] = c - o
-#     new["body_pct"] = safe_div(c - o, o)
-#     new["upper_shad"] = h - np.maximum(o, c)
-#     new["lower_shad"] = np.minimum(o, c) - l
-#     new["range_pct"] = safe_div(h - l, c)
-#     pbar.update(1)
-
-#     # RSI
-#     for w in rsi_ws:
-#         pbar.set_description(f"RSI {w}")
-#         new[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=c, window=w).rsi()
-#         pbar.update(1)
-
-#     # MACD (single-shot)
-#     pbar.set_description(f"MACD {macd_fast}/{macd_slow}/{macd_signal}")
-#     macd = ta.trend.MACD(close=c, window_fast=macd_fast, window_slow=macd_slow, window_sign=macd_signal)
-#     new["macd_line"] = macd.macd()
-#     new["macd_signal"] = macd.macd_signal()
-#     new["macd_diff"] = macd.macd_diff()
-#     pbar.update(1)
-
-#     # ATR
-#     for w in atr_ws:
-#         pbar.set_description(f"ATR {w}")
-#         atr_s = ta.volatility.AverageTrueRange(high=h, low=l, close=c, window=w).average_true_range()
-#         new[f"atr_{w}"] = atr_s
-#         new[f"atr_pct_{w}"] = safe_div(atr_s, c)
-#         pbar.update(1)
-
-#     # Bollinger Bands
-#     for w in bb_ws:
-#         pbar.set_description(f"BB {w}")
-#         bb = ta.volatility.BollingerBands(close=c, window=w, window_dev=2)
-#         new[f"bb_lband_{w}"] = bb.bollinger_lband()
-#         new[f"bb_hband_{w}"] = bb.bollinger_hband()
-#         new[f"bb_w_{w}"] = safe_div(new[f"bb_hband_{w}"] - new[f"bb_lband_{w}"], bb.bollinger_mavg())
-#         pbar.update(1)
-
-#     # ADX/DI (use ATR windows)
-#     for w in atr_ws:
-#         pbar.set_description(f"ADX {w}")
-#         adx = ta.trend.ADXIndicator(high=h, low=l, close=c, window=w)
-#         new[f"plus_di_{w}"] = adx.adx_pos()
-#         new[f"minus_di_{w}"] = adx.adx_neg()
-#         new[f"adx_{w}"] = adx.adx()
-#         pbar.update(1)
-
-#     # OBV
-#     pbar.set_description("OBV")
-#     new["obv"] = ta.volume.OnBalanceVolumeIndicator(close=c, volume=v).on_balance_volume()
-#     pbar.update(1)
-
-#     # vol_spike
-#     for w in vol_ws:
-#         pbar.set_description(f"Vol {w}")
-#         vol_roll = v.rolling(w, min_periods=w).mean().fillna(EPS)
-#         new[f"vol_spike_{w}"] = safe_div(v, vol_roll)
-#         pbar.update(1)
-
-#     # rolling extrema & distances (use largest SMA if present)
-#     pbar.set_description("rolling extrema")
-#     long_w = max(sma_ws) if sma_ws else None
-#     if long_w:
-#         new[f"rolling_max_close_{long_w}"] = c.rolling(long_w, min_periods=long_w).max()
-#         new[f"rolling_min_close_{long_w}"] = c.rolling(long_w, min_periods=long_w).min()
-#         new[f"dist_high_{long_w}"] = safe_div(new[f"rolling_max_close_{long_w}"] - c, c)
-#         new[f"dist_low_{long_w}"] = safe_div(c - new[f"rolling_min_close_{long_w}"], c)
-#     pbar.update(1)
-
-#     # OBV-derived percent changes
-#     for w in obv_roll_ws:
-#         pbar.set_description(f"OBV pct {w}")
-#         new[f"obv_diff_{w}"] = new["obv"].diff(w)
-#         denom = c.rolling(w, min_periods=w).mean().abs().fillna(EPS).replace(0.0, EPS)
-#         with np.errstate(divide="ignore", invalid="ignore"):
-#             pct = new[f"obv_diff_{w}"].to_numpy(dtype=float) / denom.to_numpy(dtype=float)
-#         new[f"obv_pct_{w}"] = pd.Series(np.where(np.isnan(pct), np.nan, pct), index=df.index)
-#         pbar.update(1)
-
-#     # ret_std
-#     for w in ret_std_ws:
-#         pbar.set_description(f"ret_std {w}")
-#         new[f"ret_std_{w}"] = new["ret"].rolling(w, min_periods=w).std()
-#         pbar.update(1)
-
-#     # VWAP handling
-#     pbar.set_description("vwap")
-#     pv = (c * v).groupby(df.index.date).cumsum()
-#     vol_cum = v.groupby(df.index.date).cumsum().replace(0, np.nan)
-#     new["vwap_ohlc_close_session"] = (pv / vol_cum).reindex(df.index)
-#     pbar.update(1)
-
-#     pbar.set_description("finalizing")
-#     pbar.close()
-
-#     return pd.concat([df, pd.DataFrame(new, index=df.index)], axis=1)
-
-
-
-
 def standard_indicators(
     df: pd.DataFrame,
     *,
@@ -620,224 +429,224 @@ def standard_indicators(
 ##########################################################################################################
 
 
-# def engineered_indicators(
-#     df: pd.DataFrame,
-#     rsi_low: float = 30.0,
-#     rsi_high: float = 70.0,
-#     adx_thr: float = 20.0,
-#     mult_w: int =7,
-#     eps: float = 1e-9,
-#     fillna_zero: bool = True,
-#     small_factor: float = 1e-3,
-#     ratio_clip_abs: float = 1e6,
-#     z_std_floor_factor: float = 1e-3
-# ) -> pd.DataFrame:
-#     """
-#     Build engineered signals from base indicators (uses only past/present values).
-#     - Works with canonical columns from standard_indicators and their windowed copies.
-#     - Detects relevant columns robustly (e.g. 'sma_14', 'sma_60', 'macd_diff', 'macd_diff_30').
-#     - Uses safe denominators and std floors to ensure finite outputs.
-#     Returns DataFrame of engineered columns (float, NaNs filled per fillna_zero).
-#     """
-#     out = pd.DataFrame(index=df.index)
-#     produced: List[str] = []
+def engineered_indicators(
+    df: pd.DataFrame,
+    rsi_low: float = 30.0,
+    rsi_high: float = 70.0,
+    adx_thr: float = 20.0,
+    mult_w: int =7,
+    eps: float = 1e-9,
+    fillna_zero: bool = True,
+    small_factor: float = 1e-3,
+    ratio_clip_abs: float = 1e6,
+    z_std_floor_factor: float = 1e-3
+) -> pd.DataFrame:
+    """
+    Build engineered signals from base indicators (uses only past/present values).
+    - Works with canonical columns from standard_indicators and their windowed copies.
+    - Detects relevant columns robustly (e.g. 'sma_14', 'sma_60', 'macd_diff', 'macd_diff_30').
+    - Uses safe denominators and std floors to ensure finite outputs.
+    Returns DataFrame of engineered columns (float, NaNs filled per fillna_zero).
+    """
+    out = pd.DataFrame(index=df.index)
+    produced: List[str] = []
 
-#     def _find(prefix: str) -> Optional[str]:
-#         # find first column that startswith prefix (prefer exact canonical name before windowed)
-#         if prefix in df.columns:
-#             return prefix
-#         for c in df.columns:
-#             if c.startswith(prefix):
-#                 return c
-#         return None
+    def _find(prefix: str) -> Optional[str]:
+        # find first column that startswith prefix (prefer exact canonical name before windowed)
+        if prefix in df.columns:
+            return prefix
+        for c in df.columns:
+            if c.startswith(prefix):
+                return c
+        return None
 
-#     def _std_floor(series: pd.Series, window: int):
-#         rstd = series.rolling(window, min_periods=1).std()
-#         arr = series.to_numpy(dtype=float)
-#         finite = arr[np.isfinite(arr)]
-#         global_std = float(np.nanstd(finite)) if finite.size else eps
-#         floor = max(eps, abs(global_std) * z_std_floor_factor)
-#         return rstd.fillna(floor).replace(0.0, floor)
+    def _std_floor(series: pd.Series, window: int):
+        rstd = series.rolling(window, min_periods=1).std()
+        arr = series.to_numpy(dtype=float)
+        finite = arr[np.isfinite(arr)]
+        global_std = float(np.nanstd(finite)) if finite.size else eps
+        floor = max(eps, abs(global_std) * z_std_floor_factor)
+        return rstd.fillna(floor).replace(0.0, floor)
 
-#     # helpers for column detection
-#     close = df.get("close", pd.Series(index=df.index, dtype=float)).astype(float)
+    # helpers for column detection
+    close = df.get("close", pd.Series(index=df.index, dtype=float)).astype(float)
 
-#     # robust SMA detection: pick two smallest numeric windows if available
-#     sma_cols = sorted([c for c in df.columns if re.match(r"^sma_\d+$", c)],
-#                       key=lambda c: int(re.search(r"_(\d+)$", c).group(1)))
-#     sma_s = sma_cols[0] if sma_cols else None
-#     sma_l = sma_cols[1] if len(sma_cols) > 1 else None
+    # robust SMA detection: pick two smallest numeric windows if available
+    sma_cols = sorted([c for c in df.columns if re.match(r"^sma_\d+$", c)],
+                      key=lambda c: int(re.search(r"_(\d+)$", c).group(1)))
+    sma_s = sma_cols[0] if sma_cols else None
+    sma_l = sma_cols[1] if len(sma_cols) > 1 else None
 
 
-#     # find other columns (prefer canonical names, fallback to first matching windowed)
-#     macd_diff = _find("macd_diff")
-#     bb_l = _find("bb_lband")
-#     bb_h = _find("bb_hband")
-#     bb_w = _find("bb_w")
-#     rsi_col = _find("rsi")
-#     plus_di = _find("plus_di")
-#     minus_di = _find("minus_di")
-#     adx_col = _find("adx")
-#     obv_diff = _find("obv_diff")
-#     obv_sma = _find("obv_sma")
-#     vwap_dev = _find("vwap_dev") or _find("vwap")
-#     atr_pct = _find("atr_pct")
+    # find other columns (prefer canonical names, fallback to first matching windowed)
+    macd_diff = _find("macd_diff")
+    bb_l = _find("bb_lband")
+    bb_h = _find("bb_hband")
+    bb_w = _find("bb_w")
+    rsi_col = _find("rsi")
+    plus_di = _find("plus_di")
+    minus_di = _find("minus_di")
+    adx_col = _find("adx")
+    obv_diff = _find("obv_diff")
+    obv_sma = _find("obv_sma")
+    vwap_dev = _find("vwap_dev") or _find("vwap")
+    atr_pct = _find("atr_pct")
 
-#     # eng_ma
-#     if sma_s and sma_l and sma_s in df.columns and sma_l in df.columns:
-#         out["eng_ma"] = (df[sma_s].astype(float) - df[sma_l].astype(float)) / (df[sma_l].astype(float) + eps)
-#         produced.append("eng_ma")
+    # eng_ma
+    if sma_s and sma_l and sma_s in df.columns and sma_l in df.columns:
+        out["eng_ma"] = (df[sma_s].astype(float) - df[sma_l].astype(float)) / (df[sma_l].astype(float) + eps)
+        produced.append("eng_ma")
 
-#     # eng_macd
-#     if macd_diff and sma_l and macd_diff in df.columns and sma_l in df.columns:
-#         out["eng_macd"] = df[macd_diff].astype(float) / (df[sma_l].astype(float) + eps)
-#         produced.append("eng_macd")
+    # eng_macd
+    if macd_diff and sma_l and macd_diff in df.columns and sma_l in df.columns:
+        out["eng_macd"] = df[macd_diff].astype(float) / (df[sma_l].astype(float) + eps)
+        produced.append("eng_macd")
 
-#     # eng_bb / mid
-#     if bb_l and bb_h and bb_w and bb_l in df.columns and bb_h in df.columns and bb_w in df.columns:
-#         lo = df[bb_l].astype(float); hi = df[bb_h].astype(float); bw = df[bb_w].astype(float)
-#         dev = np.where(close < lo, lo - close, np.where(close > hi, close - hi, 0.0))
-#         out["eng_bb"] = pd.Series(dev, index=df.index) / (bw + eps)
-#         out["eng_bb_mid"] = ((lo + hi) / 2 - close) / (close + eps)
-#         produced.extend(["eng_bb", "eng_bb_mid"])
+    # eng_bb / mid
+    if bb_l and bb_h and bb_w and bb_l in df.columns and bb_h in df.columns and bb_w in df.columns:
+        lo = df[bb_l].astype(float); hi = df[bb_h].astype(float); bw = df[bb_w].astype(float)
+        dev = np.where(close < lo, lo - close, np.where(close > hi, close - hi, 0.0))
+        out["eng_bb"] = pd.Series(dev, index=df.index) / (bw + eps)
+        out["eng_bb_mid"] = ((lo + hi) / 2 - close) / (close + eps)
+        produced.extend(["eng_bb", "eng_bb_mid"])
 
-#     # eng_rsi
-#     if rsi_col and rsi_col in df.columns:
-#         rv = df[rsi_col].astype(float)
-#         low_d = np.clip((rsi_low - rv), 0, None) / 100.0
-#         high_d = np.clip((rv - rsi_high), 0, None) / 100.0
-#         out["eng_rsi"] = np.where(rv < rsi_low, low_d, np.where(rv > rsi_high, high_d, 0.0))
-#         produced.append("eng_rsi")
+    # eng_rsi
+    if rsi_col and rsi_col in df.columns:
+        rv = df[rsi_col].astype(float)
+        low_d = np.clip((rsi_low - rv), 0, None) / 100.0
+        high_d = np.clip((rv - rsi_high), 0, None) / 100.0
+        out["eng_rsi"] = np.where(rv < rsi_low, low_d, np.where(rv > rsi_high, high_d, 0.0))
+        produced.append("eng_rsi")
 
-#     # eng_adx
-#     if plus_di and minus_di and adx_col and plus_di in df.columns and minus_di in df.columns and adx_col in df.columns:
-#         di_diff = df[plus_di].astype(float) - df[minus_di].astype(float)
-#         diff_abs = di_diff.abs() / 100.0
-#         ex = np.clip((df[adx_col].astype(float) - adx_thr) / 100.0, 0, None)
-#         out["eng_adx"] = np.sign(di_diff) * diff_abs * ex
-#         produced.append("eng_adx")
+    # eng_adx
+    if plus_di and minus_di and adx_col and plus_di in df.columns and minus_di in df.columns and adx_col in df.columns:
+        di_diff = df[plus_di].astype(float) - df[minus_di].astype(float)
+        diff_abs = di_diff.abs() / 100.0
+        ex = np.clip((df[adx_col].astype(float) - adx_thr) / 100.0, 0, None)
+        out["eng_adx"] = np.sign(di_diff) * diff_abs * ex
+        produced.append("eng_adx")
 
-#     # eng_obv (safe denom + winsorized numerator)
-#     if obv_diff and obv_sma and obv_diff in df.columns and obv_sma in df.columns:
-#         num = df[obv_diff].astype(float).to_numpy(dtype=float)
-#         try:
-#             finite = num[np.isfinite(num)]
-#             lo_cut = np.nanpercentile(finite, 0.5) if finite.size else np.nan
-#             hi_cut = np.nanpercentile(finite, 99.5) if finite.size else np.nan
-#             num_clipped = np.copy(num)
-#             mask_num = np.isnan(num_clipped)
-#             num_clipped = np.clip(num_clipped, lo_cut, hi_cut)
-#             num_clipped[mask_num] = np.nan
-#         except Exception:
-#             num_clipped = num
+    # eng_obv (safe denom + winsorized numerator)
+    if obv_diff and obv_sma and obv_diff in df.columns and obv_sma in df.columns:
+        num = df[obv_diff].astype(float).to_numpy(dtype=float)
+        try:
+            finite = num[np.isfinite(num)]
+            lo_cut = np.nanpercentile(finite, 0.5) if finite.size else np.nan
+            hi_cut = np.nanpercentile(finite, 99.5) if finite.size else np.nan
+            num_clipped = np.copy(num)
+            mask_num = np.isnan(num_clipped)
+            num_clipped = np.clip(num_clipped, lo_cut, hi_cut)
+            num_clipped[mask_num] = np.nan
+        except Exception:
+            num_clipped = num
 
-#         den_s = df[obv_sma].rolling(window=mult_w, min_periods=mult_w).median().ffill().fillna(0.0)
-#         den_arr = den_s.to_numpy(dtype=float)
-#         den_floor = np.maximum(np.abs(den_arr) * small_factor, eps)
-#         finite_nonzero = np.isfinite(den_arr) & (np.abs(den_arr) > 0.0)
-#         den_safe = np.where(finite_nonzero, np.sign(den_arr) * np.maximum(np.abs(den_arr), den_floor), den_floor)
+        den_s = df[obv_sma].rolling(window=mult_w, min_periods=mult_w).median().ffill().fillna(0.0)
+        den_arr = den_s.to_numpy(dtype=float)
+        den_floor = np.maximum(np.abs(den_arr) * small_factor, eps)
+        finite_nonzero = np.isfinite(den_arr) & (np.abs(den_arr) > 0.0)
+        den_safe = np.where(finite_nonzero, np.sign(den_arr) * np.maximum(np.abs(den_arr), den_floor), den_floor)
 
-#         with np.errstate(divide='ignore', invalid='ignore'):
-#             ratio = num_clipped / den_safe
-#         ratio = np.where(np.isnan(num_clipped), np.nan, np.clip(ratio, -ratio_clip_abs, ratio_clip_abs))
-#         out["eng_obv"] = pd.Series(ratio, index=df.index).astype(float)
-#         produced.append("eng_obv")
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = num_clipped / den_safe
+        ratio = np.where(np.isnan(num_clipped), np.nan, np.clip(ratio, -ratio_clip_abs, ratio_clip_abs))
+        out["eng_obv"] = pd.Series(ratio, index=df.index).astype(float)
+        produced.append("eng_obv")
 
-#     # eng_atr_div, z_eng_atr
-#     if atr_pct and atr_pct in df.columns:
-#         ratio = df[atr_pct].astype(float)
-#         rm = ratio.rolling(mult_w, min_periods=mult_w).mean()
-#         out["eng_atr_div"] = (ratio - rm) * 10_000
-#         std_r = ratio.rolling(mult_w, min_periods=mult_w).std()
-#         global_std = np.nanstd(ratio.to_numpy(dtype=float))
-#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-#         std_eff = std_r.fillna(std_floor).replace(0.0, std_floor)
-#         out["z_eng_atr"] = (ratio - rm) / (std_eff + eps)
-#         produced.extend(["eng_atr_div", "z_eng_atr"])
+    # eng_atr_div, z_eng_atr
+    if atr_pct and atr_pct in df.columns:
+        ratio = df[atr_pct].astype(float)
+        rm = ratio.rolling(mult_w, min_periods=mult_w).mean()
+        out["eng_atr_div"] = (ratio - rm) * 10_000
+        std_r = ratio.rolling(mult_w, min_periods=mult_w).std()
+        global_std = np.nanstd(ratio.to_numpy(dtype=float))
+        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+        std_eff = std_r.fillna(std_floor).replace(0.0, std_floor)
+        out["z_eng_atr"] = (ratio - rm) / (std_eff + eps)
+        produced.extend(["eng_atr_div", "z_eng_atr"])
 
-#     # eng_sma distances
-#     if sma_s and sma_s in df.columns:
-#         out["eng_sma_short"] = (df[sma_s].astype(float) - close) / (close + eps)
-#         produced.append("eng_sma_short")
-#     if sma_l and sma_l in df.columns:
-#         out["eng_sma_long"] = (df[sma_l].astype(float) - close) / (close + eps)
-#         produced.append("eng_sma_long")
+    # eng_sma distances
+    if sma_s and sma_s in df.columns:
+        out["eng_sma_short"] = (df[sma_s].astype(float) - close) / (close + eps)
+        produced.append("eng_sma_short")
+    if sma_l and sma_l in df.columns:
+        out["eng_sma_long"] = (df[sma_l].astype(float) - close) / (close + eps)
+        produced.append("eng_sma_long")
 
-#     # eng_vwap and z — prefer canonical vwap_dev_pct if present
-#     vwap_col = _find("vwap_dev_pct") or _find("vwap")
-#     if vwap_col and vwap_col in df.columns:
-#         if vwap_col == "vwap_dev_pct":
-#             eng_vwap_pct = df[vwap_col].astype(float)
-#         else:
-#             vwap_base = df[vwap_col].astype(float)
-#             eng_vwap_pct = 100.0 * (vwap_base - close) / (close + eps)
-#         out["eng_vwap"] = eng_vwap_pct
-#         znum = eng_vwap_pct
-#         zm = znum.rolling(mult_w, min_periods=mult_w).mean()
-#         zs = znum.rolling(mult_w, min_periods=mult_w).std()
-#         arr = znum.to_numpy(dtype=float)
-#         finite = arr[np.isfinite(arr)]
-#         global_std = float(np.nanstd(finite)) if finite.size else eps
-#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-#         zs_eff = zs.fillna(std_floor).replace(0.0, std_floor)
-#         out["z_vwap_dev"] = (znum - zm) / (zs_eff + eps)
-#         produced.extend(["eng_vwap", "z_vwap_dev"])
+    # eng_vwap and z — prefer canonical vwap_dev_pct if present
+    vwap_col = _find("vwap_dev_pct") or _find("vwap")
+    if vwap_col and vwap_col in df.columns:
+        if vwap_col == "vwap_dev_pct":
+            eng_vwap_pct = df[vwap_col].astype(float)
+        else:
+            vwap_base = df[vwap_col].astype(float)
+            eng_vwap_pct = 100.0 * (vwap_base - close) / (close + eps)
+        out["eng_vwap"] = eng_vwap_pct
+        znum = eng_vwap_pct
+        zm = znum.rolling(mult_w, min_periods=mult_w).mean()
+        zs = znum.rolling(mult_w, min_periods=mult_w).std()
+        arr = znum.to_numpy(dtype=float)
+        finite = arr[np.isfinite(arr)]
+        global_std = float(np.nanstd(finite)) if finite.size else eps
+        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+        zs_eff = zs.fillna(std_floor).replace(0.0, std_floor)
+        out["z_vwap_dev"] = (znum - zm) / (zs_eff + eps)
+        produced.extend(["eng_vwap", "z_vwap_dev"])
 
-#     # z_bb_w
-#     if bb_w and bb_w in df.columns:
-#         x = df[bb_w].astype(float)
-#         xm = x.rolling(mult_w, min_periods=mult_w).mean()
-#         xs = x.rolling(mult_w, min_periods=mult_w).std()
-#         global_std = np.nanstd(x.to_numpy(dtype=float))
-#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-#         xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
-#         out["z_bb_w"] = (x - xm) / (xs_eff + eps)
-#         produced.append("z_bb_w")
+    # z_bb_w
+    if bb_w and bb_w in df.columns:
+        x = df[bb_w].astype(float)
+        xm = x.rolling(mult_w, min_periods=mult_w).mean()
+        xs = x.rolling(mult_w, min_periods=mult_w).std()
+        global_std = np.nanstd(x.to_numpy(dtype=float))
+        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+        xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
+        out["z_bb_w"] = (x - xm) / (xs_eff + eps)
+        produced.append("z_bb_w")
 
-#     # strict z of raw OBV (prefer this for scale-free ML input)
-#     if "obv" in df.columns:
-#         x = df["obv"].astype(float)
-#         xm = x.rolling(mult_w, min_periods=mult_w).mean()
-#         xs = x.rolling(mult_w, min_periods=mult_w).std()
-#         arr = x.to_numpy(dtype=float)
-#         finite = arr[np.isfinite(arr)]
-#         global_std = float(np.nanstd(finite)) if finite.size else eps
-#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-#         xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
-#         out["z_obv"] = (x - xm) / (xs_eff + eps)
-#         produced.append("z_obv")
+    # strict z of raw OBV (prefer this for scale-free ML input)
+    if "obv" in df.columns:
+        x = df["obv"].astype(float)
+        xm = x.rolling(mult_w, min_periods=mult_w).mean()
+        xs = x.rolling(mult_w, min_periods=mult_w).std()
+        arr = x.to_numpy(dtype=float)
+        finite = arr[np.isfinite(arr)]
+        global_std = float(np.nanstd(finite)) if finite.size else eps
+        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+        xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
+        out["z_obv"] = (x - xm) / (xs_eff + eps)
+        produced.append("z_obv")
 
-#     # momentum aggregates: detect available ret_{H} columns (use any found in df)
-#     ret_cols = [c for c in df.columns if re.match(r"^ret_(\d+)$", c)]
-#     horizons = sorted({int(re.search(r"^ret_(\d+)$", c).group(1)) for c in ret_cols}) if ret_cols else [1, 5, 15, 60]
-#     for H in horizons:
-#         ret_col = f"ret_{H}"
-#         if ret_col in df.columns:
-#             out[f"mom_sum_{H}"] = df[ret_col].rolling(H, min_periods=H).sum()
-#             out[f"mom_std_{H}"] = df[ret_col].rolling(H, min_periods=H).std()
-#             produced.extend([f"mom_sum_{H}", f"mom_std_{H}"])
+    # momentum aggregates: detect available ret_{H} columns (use any found in df)
+    ret_cols = [c for c in df.columns if re.match(r"^ret_(\d+)$", c)]
+    horizons = sorted({int(re.search(r"^ret_(\d+)$", c).group(1)) for c in ret_cols}) if ret_cols else [1, 5, 15, 60]
+    for H in horizons:
+        ret_col = f"ret_{H}"
+        if ret_col in df.columns:
+            out[f"mom_sum_{H}"] = df[ret_col].rolling(H, min_periods=H).sum()
+            out[f"mom_std_{H}"] = df[ret_col].rolling(H, min_periods=H).std()
+            produced.extend([f"mom_sum_{H}", f"mom_std_{H}"])
 
-#     # ema cross flags: find sma numeric windows used for ema names
-#     try:
-#         s_w = int(re.search(r"_(\d+)$", sma_s).group(1)) if sma_s else None
-#         l_w = int(re.search(r"_(\d+)$", sma_l).group(1)) if sma_l else None
-#     except Exception:
-#         s_w = l_w = None
-#     s_ema_col = f"ema_{s_w}" if s_w else None
-#     l_ema_col = f"ema_{l_w}" if l_w else None
-#     if s_ema_col in df.columns and l_ema_col in df.columns:
-#         out["eng_ema_cross_up"] = (df[s_ema_col].astype(float) > df[l_ema_col].astype(float)).astype(float)
-#         out["eng_ema_cross_down"] = (df[s_ema_col].astype(float) < df[l_ema_col].astype(float)).astype(float)
-#         produced.extend(["eng_ema_cross_up", "eng_ema_cross_down"])
+    # ema cross flags: find sma numeric windows used for ema names
+    try:
+        s_w = int(re.search(r"_(\d+)$", sma_s).group(1)) if sma_s else None
+        l_w = int(re.search(r"_(\d+)$", sma_l).group(1)) if sma_l else None
+    except Exception:
+        s_w = l_w = None
+    s_ema_col = f"ema_{s_w}" if s_w else None
+    l_ema_col = f"ema_{l_w}" if l_w else None
+    if s_ema_col in df.columns and l_ema_col in df.columns:
+        out["eng_ema_cross_up"] = (df[s_ema_col].astype(float) > df[l_ema_col].astype(float)).astype(float)
+        out["eng_ema_cross_down"] = (df[s_ema_col].astype(float) < df[l_ema_col].astype(float)).astype(float)
+        produced.extend(["eng_ema_cross_up", "eng_ema_cross_down"])
 
-#     # finalize: ensure order, types and optional fillna
-#     produced = [p for p in produced if p in out.columns]
-#     for col in produced:
-#         out[col] = out[col].astype(float)
-#         if fillna_zero:
-#             out[col] = out[col].fillna(0.0)
+    # finalize: ensure order, types and optional fillna
+    produced = [p for p in produced if p in out.columns]
+    for col in produced:
+        out[col] = out[col].astype(float)
+        if fillna_zero:
+            out[col] = out[col].fillna(0.0)
 
-#     return out[produced].copy()
+    return out[produced].copy()
 
 
 ##########################################################################################################

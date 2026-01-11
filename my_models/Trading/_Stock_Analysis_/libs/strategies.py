@@ -460,8 +460,12 @@ def compute_intraday_bh(prev_cap: float, df: pd.DataFrame):
     _round = lambda x: round(float(x), 3)
     mask = (df.index.time >= params.sess_start_reg) & (df.index.time <= params.sess_end)
 
-    ask_buy  = float(df.loc[mask]["ask"].iat[0])
-    bid_sell = float(df.loc[mask]["bid"].iat[-1])
+    if not mask.any(): # use whatever bars exist (even if outside the mask window)
+        ask_buy  = float(df["ask"].iloc[0])
+        bid_sell = float(df["bid"].iloc[-1])
+    else:
+        ask_buy  = float(df.loc[mask, "ask"].iloc[0])
+        bid_sell = float(df.loc[mask, "bid"].iloc[-1])
 
     fee_buy  = fees_for_one_share(price=ask_buy, side="buy")["total_per_share_billed"]
     fee_sell = fees_for_one_share(price=bid_sell, side="sell")["total_per_share_billed"]
@@ -841,8 +845,8 @@ def aggregate_performance(df: pd.DataFrame,
     x2 = np.arange(len(names2)) + len(names1)
 
     width = 0.6
-    bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", label="Absolute")
-    bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", label="Relative")
+    bars1 = ax1.bar(x1, list(primary.values()), width, color="#4C72B0", alpha=0.9, label="Absolute")
+    bars2 = ax2.bar(x2, list(secondary.values()), width, color="#C44E52", alpha=0.9, label="Relative")
 
     all_names = names1 + names2
     ax1.set_xticks(np.concatenate([x1, x2]))
@@ -866,7 +870,7 @@ def aggregate_performance(df: pd.DataFrame,
 
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(handles1 + handles2, labels1 + labels2, loc="upper right")
+    ax1.legend(handles1 + handles2, labels1 + labels2, loc="center right")
 
     plt.tight_layout()
     plt.show()
