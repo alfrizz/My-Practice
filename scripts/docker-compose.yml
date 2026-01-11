@@ -24,6 +24,10 @@ services:
 
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
 
+    environment:
+      - ALPACA_KEY_live=${ALPACA_KEY_live}
+      - ALPACA_SECRET_live=${ALPACA_SECRET_live}
+
     command:
       - jupyter
       - lab

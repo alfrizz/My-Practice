@@ -17,29 +17,23 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
+
+
 #########################################################################################################
 
 
-def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1):
+def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1, dst_transition_dates=None):
     """
-    Detects forward and reverse splits in the DataFrame and adjusts the price
-    columns (plus volume) accordingly.
-    
-    Parameters:
-      df (pd.DataFrame): DataFrame with at least the columns:
-          ['open', 'high', 'low', 'close', 'ask', 'bid', 'volume']
-      forward_threshold (float): Triggers a forward split check if current_close / prev_close < threshold.
-      reverse_threshold (float): Triggers a reverse split check if current_close / prev_close > threshold.
-      tol (float): Tolerance to check the "roundness" of the candidate split factor.
-      
-    Returns:
-      df_adj (pd.DataFrame): The adjusted DataFrame.
-      split_events (list): List of detected split events as (event timestamp, candidate_factor, split_type).
+    Detects forward and reverse splits and adjusts price columns and volume.
+    Minimal addition: accepts dst_transition_dates (iterable of dates) and skips
+    candidate split events that fall on those dates to avoid DST artifacts.
     """
     df_adj = df.copy()
     split_events = []
     price_columns = ['open', 'high', 'low', 'close', 'ask', 'bid']
-    
+    dst_transition_dates = set(dst_transition_dates or [])
+    print(f"Executing [detect_and_adjust_splits]...")
+
     for i in range(1, len(df_adj)):
         prev_close = df_adj.iloc[i-1]['close']
         curr_close = df_adj.iloc[i]['close']
@@ -52,11 +46,15 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
                 expected_ratio = 1.0 / candidate_factor
                 if abs(ratio - expected_ratio) < tol:
                     event_time = df_adj.index[i]
+                    # skip if event falls on a DST transition date
+                    if event_time.date() in dst_transition_dates:
+                        print(f"Skipping forward-split candidate at {event_time} due to DST transition")
+                        continue
                     print(f"Detected forward split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
                     split_events.append((event_time, candidate_factor, 'forward'))
                     df_adj.loc[:df_adj.index[i-1], price_columns] /= candidate_factor
-                    df_adj.loc[:df_adj.index[i-1], 'volume'] *= candidate_factor * vol_fact # additonal manual volume factor necessary in some cases (?)
-        
+                    df_adj.loc[:df_adj.index[i-1], 'volume'] *= candidate_factor * vol_fact
+
         # Detect reverse split (price jump)
         elif ratio > reverse_threshold:
             candidate_factor = round(ratio)
@@ -64,166 +62,100 @@ def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol
                 expected_ratio = candidate_factor
                 if abs(ratio - expected_ratio) < tol:
                     event_time = df_adj.index[i]
+                    # skip if event falls on a DST transition date
+                    if event_time.date() in dst_transition_dates:
+                        print(f"Skipping reverse-split candidate at {event_time} due to DST transition")
+                        continue
                     print(f"Detected reverse split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
                     split_events.append((event_time, candidate_factor, 'reverse'))
                     df_adj.loc[:df_adj.index[i-1], price_columns] *= candidate_factor
                     df_adj.loc[:df_adj.index[i-1], 'volume'] /= candidate_factor
-                    
+
     return df_adj, split_events
 
 
 ##################
 
 
-def process_splits(folder, ticker, bidask_spread_pct):
-    """
-    Processes the intraday CSV file for the given ticker from the specified folder.
-    
-    It looks for the unique CSV file in 'folder' whose name starts with '{ticker}_'.
-    Then, it checks if the processed file already exists in 'dfs training/{ticker}_base.csv'.
-      - If it exists, the function reads it, plots its data, and returns the DataFrame.
-      - Otherwise, it reads the intraday CSV, keeps only necessary columns,
-        creates the 'ask' and 'bid' columns using the provided bidask_spread_pct,
-        plots the original data, detects and adjusts splits (also adjusting volume),
-        plots the adjusted data if splits are detected, saves the resulting DataFrame, and returns it.
-    
-    Parameters:
-      folder (str): The folder where the intraday CSV file is stored (e.g. "Intraday stocks").
-      ticker (str): The ticker symbol used to locate the file and name the output.
-      +    bidasktoclose_pct (percent): The one‐way per‐leg spread in percent.
-      
-    Returns:
-      pd.DataFrame: The processed DataFrame.
-    """
+def process_splits(ticker):
+    """Load intraday CSV, localize timestamps to US/Eastern, 
+    detect & adjust corporate splits, and return the adjusted DataFrame."""
+    print(f"[process_splits] Loading original alpaca csv")
+    df = pd.read_csv(params.alpaca_csv, index_col=0, parse_dates=True)
 
-    # Find the unique intraday CSV file using glob.
-    pattern = os.path.join(folder, f"{ticker}_*.csv")
-    matching_files = glob.glob(pattern)
-    if not matching_files:
-        raise FileNotFoundError(f"No file found matching pattern: {pattern}")
-    if len(matching_files) > 1:
-        print(f"Warning: More than one file found for pattern {pattern}. Using the first one.")
-    intraday_csv = matching_files[0]
-    print(f"Reading data from {intraday_csv}")
-
-    # Read the intraday CSV, using the 'datetime' column for dates.
-    df = pd.read_csv(intraday_csv, index_col=0, parse_dates=["datetime"])
-    df = df[['open', 'high', 'low', 'close', 'volume']]
+    df.index = pd.to_datetime(df.index)
     
-    # Create 'ask' and 'bid' columns using the given spread 
+    # Create ask/bid from close using configured spread
     df['ask'] = round(df['close'] * (1 + params.bidask_spread_pct/100), 4)
     df['bid'] = round(df['close'] * (1 - params.bidask_spread_pct/100), 4)
-    
-    # Plot the original data.
+
     print("Plotting original data...")
     plots.plot_close_volume(df, title="Before Adjusting Splits: Close Price and Volume")
-    
-    # Detect and adjust splits.
-    df_adjusted, split_events = detect_and_adjust_splits(df=df)
-    
+
+    # Minimal: if you don't want to compute DST transition dates here, pass an empty set
+    transitions = set()
+    df_adjusted, split_events = detect_and_adjust_splits(df=df, dst_transition_dates=transitions)
+
     if split_events:
         print("Splits detected. Plotting adjusted data...")
         plots.plot_close_volume(df_adjusted, title="After Adjusting Splits: Close Price and Volume")
     else:
         print("No splits detected.")
-  
+
     return df_adjusted
 
-    
-#########################################################################################################
+
+##########################################################################################################
 
 
-def is_dst_for_day(day, tz_str="US/Eastern"):
+def prepare_interpolate_data(df: pd.DataFrame, tz_str: str = "US/Eastern") -> pd.DataFrame:
     """
-    Given a day (as a Timestamp or string), determine if that day is in DST for the specified timezone.
-    We use noon on that day (to avoid ambiguity) and return True if DST is in effect.
+    Normalize intraday timestamps to a consistent timezone and fill missing 1-minute bars.
+
+    - Interprets df.index as timezone-aware and converts it to tz_str.
+    - Drops exact duplicate rows once (prints count and timestamps).
+    - Builds a per-day tz-aware 1-minute index and linearly interpolates missing bars.
+    - Returns a DataFrame indexed by tz-aware 1-minute timestamps.
     """
-    tz = pytz.timezone(tz_str)
-    dt = pd.Timestamp(day).replace(hour=12, minute=0, second=0, microsecond=0)
-    # Localize if naive.
-    if dt.tzinfo is None:
-        dt = tz.localize(dt)
-    else:
-        dt = dt.astimezone(tz)
-    return bool(dt.dst())
-
-
-
-def prepare_interpolate_data(
-    df,
-    sess_premark,           # str or datetime.time: grid lower‐bound each day
-    sess_end,               # str or datetime.time: official session close
-    red_pretr_win=1,        # legacy argument (unused)
-    tz_str="US/Eastern"     # timezone name for DST logic
-) -> pd.DataFrame:
-    """
-    Exactly your old per‐day interpolation, but applied in one pass over
-    the full multi‐day DataFrame. Steps:
-
-    0) Clone input so we never mutate the caller’s df.
-    1) Cast all columns to float64 (your “working” series).
-    2) Shift each day’s timestamps forward 1h if that calendar day is in DST.
-    3) For each calendar day:
-       a) Build a 1-minute index from min(raw, sess_premark)
-          through max(raw, sess_end).
-       b) Reindex the day’s bars to that grid and linearly interpolate
-          forward & backward.
-    4) Concatenate all per-day frames, sort by timestamp, and drop
-       duplicate timestamps (printing how many were removed).
-    5) Finally, keep only the bars whose time lies between
-       sess_premark and sess_end .
-    """
-
-    # 0) Clone
+    print(['executing prepare_interpolate_data'])
     df = df.copy()
+    df[df.columns] = df[df.columns].astype(np.float64)
 
-    # 1) Cast all columns to float64 for numeric ops
-    all_cols = df.columns.tolist()
-    df[all_cols] = df[all_cols].astype(np.float64)
+    # normalize: convert index to datetimes (keep naive index for storage)
+    print('normalize data...')
+    idx = pd.to_datetime(df.index)
+    # subtract 1h for standard-time (winter) timestamps, leave DST unchanged
+    _e = idx.tz_localize(tz_str, ambiguous="infer", nonexistent="shift_forward") if idx.tz is None else idx.tz_convert(tz_str)
+    df.index = idx - pd.to_timedelta((_e.map(lambda t: t.dst()) == pd.Timedelta(0)).astype(int), unit="h")
 
-    # 2) DST adjustment: shift each day +1h if in DST
-    ts = df.index.to_series()
-    for day, grp in df.groupby(df.index.normalize()):
-        add = pd.Timedelta(hours=1) if is_dst_for_day(day, tz_str) else pd.Timedelta(0)
-        ts.loc[grp.index] = grp.index + add
-    df.index = ts.sort_values()
+    # single, early duplicate drop with clear audit print
+    dup_mask = df.index.duplicated(keep=False)
+    if dup_mask.any():
+        dup_times = df.index[dup_mask].unique()
+        print(
+            "prepare_interpolate_data: dropping",
+            int(dup_mask.sum()),
+            "exact duplicate rows at:",
+            ", ".join(t.strftime("%Y-%m-%d %H:%M:%S") for t in dup_times),
+        )
+        df = df[~df.index.duplicated(keep="first")]
+
     df.sort_index(inplace=True)
 
-    # 3) Loop per calendar day to build & fill a minute grid
-    filled_days = []
+    # per-day 1-min grid and linear interpolation where needed (naive index)
+    print('interpolate data...')
+    filled = []
     for day, grp in df.groupby(df.index.normalize()):
-        day_str = day.strftime("%Y-%m-%d")
-
-        # a) grid bounds: earliest bar vs shifted start → latest bar vs close
-        grid_start  = pd.Timestamp(f"{day_str} {sess_premark}")
-        session_end = pd.Timestamp(f"{day_str} {sess_end}")
-
-        idx_start = min(grp.index.min(), grid_start)
-        idx_end   = max(grp.index.max(), session_end)
-
-        # b) reindex on a full 1-min range and interpolate
+        idx_start = grp.index.min()
+        idx_end = grp.index.max()
         full_idx = pd.date_range(start=idx_start, end=idx_end, freq="1min")
-        day_filled = grp.reindex(full_idx).interpolate(
-            method="linear", limit_direction="both"
-        )
-        filled_days.append(day_filled)
+        day_filled = grp.reindex(full_idx).interpolate(method="linear", limit_direction="both")
+        filled.append(day_filled)
 
-    # 4) Concatenate all days, sort, and drop duplicates
-    df_out = pd.concat(filled_days).sort_index()
-    before = len(df_out)
-    df_out = df_out[~df_out.index.duplicated(keep="first")]
-    removed = before - len(df_out)
-    print(f"prepare_interpolate_data: removed {removed} duplicate timestamps.")
+    df_out = pd.concat(filled).sort_index()
 
-    # 5) Slice to only [sess_premark, sess_end] each day
-    df_out = df_out.between_time(sess_premark, sess_end)
-
-    # 6) drop any calendar day whose close is perfectly flat (to avoid to get extra days as saturdays)
-    df_out = (
-        df_out.groupby(df_out.index.normalize())
-          .filter(lambda grp: grp['close'].nunique() > 1)
-    )
-
+    # drop flat days if desired (keeps original behavior)
+    df_out = df_out.groupby(df_out.index.normalize()).filter(lambda g: g['close'].nunique() > 1)
     return df_out
 
 

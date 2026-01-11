@@ -173,6 +173,207 @@ def generate_actions_slope(
     return df
 
 
+##########################################
+
+
+# def generate_actions_alpaca(
+#     df: pd.DataFrame,
+#     col_signal: str,
+#     sign_thresh: str,
+#     col_atr: str,
+#     col_adx: str,
+#     col_rsi: str,
+#     col_vwap: str,
+#     col_vol_spike: str,
+#     reset_peak: bool,
+#     rsi_min_thresh: int,
+#     rsi_max_thresh: float,
+#     adx_thresh: float,
+#     vol_thresh: float,
+#     trailstop_pct: float,
+#     atr_mult: float,
+#     vwap_atr_mult: float,    
+#     col_close: str   = "close",
+#     sess_start: time = params.sess_start_reg,
+# ) -> pd.DataFrame:
+#     """
+#     Generate per-row discrete trade actions (1=Buy, -1=Sell, 0=Hold) 
+#     plus three stop series (trailing stop, ATR stop, VWAP-based stop) 
+#     and buy/sell weights.
+#     """
+#     df = df.copy()
+#     df["action"] = 0  # not in trade by default
+
+#     signal      = df[col_signal].to_numpy(dtype=float)
+#     close       = df[col_close].to_numpy(dtype=float)
+#     atr         = df[col_atr].to_numpy(dtype=float)
+#     adx         = df[col_adx].to_numpy(dtype=float)
+#     rsi         = df[col_rsi].to_numpy(dtype=float)
+#     vwap        = df[col_vwap].to_numpy(dtype=float)
+#     vol_spike   = df[col_vol_spike].to_numpy(dtype=float)
+
+#     sign_slope  = np.gradient(signal)
+#     sign_thresh = df[sign_thresh].to_numpy() if isinstance(sign_thresh, str) else sign_thresh # the threshold field can be string or numeric
+#     is_series   = np.ndim(sign_thresh) != 0 # the threshold can be a constant or a series
+
+#     trail_arr   = np.full(len(df), np.nan, dtype=float)
+#     atr_arr     = np.full(len(df), np.nan, dtype=float)
+#     vwap_arr    = np.full(len(df), np.nan, dtype=float)
+    
+#     buy_weight  = np.zeros(len(df), dtype=float)
+#     sell_weight = np.zeros(len(df), dtype=float)
+#     stop_frac   = trailstop_pct/100 if trailstop_pct > 1 else trailstop_pct
+
+#     # iterate rows and compute actions + trailing stop + atr stop
+#     for i in range(len(df)):
+#         sign_thr = float(sign_thresh[i]) if is_series else float(sign_thresh)
+#         # compute a single candidate peak and its trail value once per row
+#         peak = max(close[i], trail_arr[i - 1] / (1.0 - stop_frac) if i>0 else close[i])
+#         trail_arr[i] = peak * (1.0 - stop_frac) # running trail 
+#         atr_arr[i]   = peak - atr_mult * atr[i] # running atr (ATR decreses it: to exit a trade, require a smaller close price in volatile markets)
+#         vwap_arr[i]  = vwap[i] + vwap_atr_mult * atr[i] # running vwap (ATR increses it: to enter a trade, require a larger close price in volatile markets)
+
+#         if df.index.time[i] >= sess_start:
+#             # BUY conditions
+#             if signal[i] >= sign_thr \
+#             and adx[i] >= adx_thresh \
+#             and vol_spike[i] >= vol_thresh \
+#             and slope[i] > 0 \
+#             and ((rsi[i] > rsi_min_thresh and rsi[i] < rsi_max_thresh) \
+#                  or close[i] > vwap_arr[i]): 
+#             df.at[df.index[i], "action"] = 1 
+#             buy_weight[i] = (signal[i] - sign_thr) / sign_thr
+
+#             # SELL conditions
+#             elif signal[i] < sign_thr \
+#             and (close[i] < atr_arr[i] \
+#                  or close[i] < trail_arr[i] \
+#                  or slope[i] < 0): 
+#                     df.at[df.index[i], "action"] = -1
+#                     trail_arr[i] = close[i] * (1.0 - stop_frac) if reset_peak else trail_arr[i]
+#                     sell_weight[i] = (sign_thr - signal[i]) / sign_thr
+
+        
+#     df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
+#     df["atr_stop_price"] = pd.Series(atr_arr, index=df.index)
+#     df["vwap_stop_price"] = pd.Series(vwap_arr, index=df.index)
+#     df["buy_weight"] = buy_weight
+#     df["sell_weight"] = sell_weight
+      
+#     return df
+
+
+
+def generate_actions_alpaca(
+    df: pd.DataFrame,
+    col_signal: str,
+    sign_thresh,                # float, int, or column name
+    col_atr: str,
+    col_adx: str,
+    col_rsi: str,
+    col_vwap: str,
+    col_vol_spike: str,
+    reset_peak: bool,
+    rsi_min_thresh: float,
+    rsi_max_thresh: float,
+    adx_thresh: float,
+    vol_thresh: float,
+    trailstop_pct: float,  
+    atr_mult: float,
+    vwap_atr_mult: float,
+    col_close: str   = "close",
+    sess_start: time = None,    # pass a time; if None, no session filter
+) -> pd.DataFrame:
+    """
+    Generate per-row discrete trade actions (1=Buy, -1=Sell, 0=Hold)
+    plus three stop series (trailing stop, ATR stop, VWAP-based stop)
+    and buy/sell weights.
+
+    Notes:
+    - sign_thresh can be a scalar or a column name in df.
+    - trailstop_pct is always a percentage (e.g., 1.0 => 1%).
+    - VWAP stop is treated as an entry filter (price above vwap + k*ATR).
+    """
+    df = df.copy()
+    df["action"] = 0
+
+    signal    = df[col_signal].to_numpy(dtype=float)
+    close     = df[col_close].to_numpy(dtype=float)
+    atr       = df[col_atr].to_numpy(dtype=float)
+    adx       = df[col_adx].to_numpy(dtype=float)
+    rsi       = df[col_rsi].to_numpy(dtype=float)
+    vwap      = df[col_vwap].to_numpy(dtype=float)
+    vol_spike = df[col_vol_spike].to_numpy(dtype=float)
+
+    slope     = np.gradient(signal)
+    if isinstance(sign_thresh, str):
+        sign_thresh_arr = df[sign_thresh].to_numpy(dtype=float)
+        is_series = True
+    else:
+        sign_thresh_arr = float(sign_thresh)
+        is_series = False
+
+    # clamp to [0, 100] and convert to fraction
+    trailstop_pct = max(0.0, min(100.0, trailstop_pct))
+    stop_frac = trailstop_pct / 100.0
+    EPS = 1e-12
+
+    trail_arr = np.full(len(df), np.nan, dtype=float)
+    atr_arr   = np.full(len(df), np.nan, dtype=float)
+    vwap_arr  = np.full(len(df), np.nan, dtype=float)
+    buy_weight  = np.zeros(len(df), dtype=float)
+    sell_weight = np.zeros(len(df), dtype=float)
+
+    for i in range(len(df)):
+        # session gate
+        if sess_start and df.index[i].time() < sess_start:
+            continue
+
+        sign_thr = float(sign_thresh_arr[i]) if is_series else float(sign_thresh_arr)
+
+        # compute peak from prior info
+        prev_peak = np.nan if i == 0 else trail_arr[i-1] / (1.0 - stop_frac)
+        base_peak = close[i] if np.isnan(prev_peak) else max(close[i], prev_peak)
+        peak = base_peak
+
+        trail_arr[i] = peak * (1.0 - stop_frac)                # trailing stop
+        atr_arr[i]   = peak - atr_mult * atr[i]                # ATR-based stop
+        vwap_arr[i]  = vwap[i] + vwap_atr_mult * atr[i]        # VWAP+ATR entry bar
+
+        # BUY conditions
+        if (
+            signal[i] >= sign_thr and
+            adx[i] >= adx_thresh and
+            vol_spike[i] >= vol_thresh and
+            slope[i] > 0 and
+            ((rsi_min_thresh < rsi[i] < rsi_max_thresh) or (close[i] > vwap_arr[i]))
+        ):
+            df.at[df.index[i], "action"] = 1
+            buy_weight[i] = max((signal[i] - sign_thr) / max(sign_thr, EPS), 0.0)
+
+        # SELL conditions
+        elif (
+            signal[i] < sign_thr and
+            (
+                close[i] < atr_arr[i] or
+                close[i] < trail_arr[i] or
+                slope[i] < 0
+            )
+        ):
+            df.at[df.index[i], "action"] = -1
+            sell_weight[i] = max((sign_thr - signal[i]) / max(sign_thr, EPS), 0.0)
+            if reset_peak:
+                trail_arr[i] = close[i] * (1.0 - stop_frac)
+
+    df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
+    df["atr_stop_price"]   = pd.Series(atr_arr, index=df.index)
+    df["vwap_stop_price"]  = pd.Series(vwap_arr, index=df.index)
+    df["buy_weight"]       = buy_weight
+    df["sell_weight"]      = sell_weight
+
+    return df
+
+    
 #######################################################################################################
 
 
@@ -248,7 +449,7 @@ def reset_globals(start_price: float = None):
 #######################################################################################################
 
 
-def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start, sess_end=params.sess_afthour):
+def compute_intraday_bh(prev_cap: float, df: pd.DataFrame):
     """
     Compute intraday integer-share simulation and B&H totals for one day.
 
@@ -257,10 +458,11 @@ def compute_intraday_bh(prev_cap: float, df: pd.DataFrame, sess_start, sess_end=
     """
     global _bh_shares, _bh_leftover, _last_bh_final
     _round = lambda x: round(float(x), 3)
-    mask = (df.index.time >= sess_start) & (df.index.time <= sess_end)
+    mask = (df.index.time >= params.sess_start_reg) & (df.index.time <= params.sess_end)
 
-    ask_buy  = float(df.loc[mask, "ask"].iloc[0])
-    bid_sell = float(df.loc[mask, "bid"].iloc[-1])
+    ask_buy  = float(df.loc[mask]["ask"].iat[0])
+    bid_sell = float(df.loc[mask]["bid"].iat[-1])
+
     fee_buy  = fees_for_one_share(price=ask_buy, side="buy")["total_per_share_billed"]
     fee_sell = fees_for_one_share(price=bid_sell, side="sell")["total_per_share_billed"]
 
@@ -366,7 +568,6 @@ def _format_perf(df, trades, sess_start):
     new_cap, intraday_line, buynhold_line = compute_intraday_bh(
        prev_cap=_sell_intr_posamnt, 
         df=df, 
-        sess_start=sess_start
     )
     
     _sell_intr_posamnt = new_cap

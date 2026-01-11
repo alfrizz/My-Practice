@@ -22,7 +22,7 @@ label_col  = "signal"
 shares_per_trade = 1
 init_cash = 100000
 
-month_to_check = '2024-01'
+month_to_check = '2026-01'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -30,7 +30,6 @@ extra_windows = [30, 45, 60] #  to produce additional smoothed/rolling copies of
 
 createCSVbase = False # set to True to regenerate the 'base' csv
 createCSVsign = False # set to True to regenerate the 'sign' csv
-since_year = 2009
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
@@ -45,17 +44,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #########################################################################################################
 
 
-stocks_folder  = "intraday_stocks" 
 optuna_folder = "optuna_results" 
 models_folder = "trainings" 
 log_file = Path(models_folder) / "training_diagnostics.txt"
 
 save_path  = Path("dfs")
+alpaca_csv = save_path / f"{ticker}_0_alpaca.csv"
 base_csv = save_path / f"{ticker}_1_base.csv"
 sign_csv = save_path / f"{ticker}_2_sign.csv"
-feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
-indunsc_test_csv = save_path / f"{ticker}_4_indunsc_test.csv"
-indunsc_trainval_csv = save_path / f"{ticker}_4_indunsc_trainval.csv"
+indunsc_csv = save_path / f"{ticker}_3_indunsc.csv"
+feat_all_csv = save_path / f"{ticker}_4_feat_all.csv"
 test_csv = save_path / f"{ticker}_5_test.csv"
 trainval_csv = save_path / f"{ticker}_5_trainval.csv"
 
@@ -154,13 +152,15 @@ hparams = {
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
 # Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
 # Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
-# After-Hours	           ~4:00 PM – 7:00 PM	             21:00 – 00:00
+# After-Hours	           ~4:00 PM – 8:00 PM	             21:00 – 01:00
 
-sess_premark     = datetime.strptime('09:00' , '%H:%M').time()  
-sess_end         = datetime.strptime('21:00' , '%H:%M').time() 
-sess_start_reg   = datetime.strptime('14:30', '%H:%M').time()  
+sess_start_reg   = datetime.strptime('13:30', '%H:%M').time()  
 sess_start_pred  = dt.time(*divmod((sess_start_reg.hour * 60 + sess_start_reg.minute) - hparams["LOOK_BACK"], 60))
 sess_start_shift = dt.time(*divmod((sess_start_reg.hour * 60 + sess_start_reg.minute) - 2*hparams["LOOK_BACK"], 60))
+
+sess_premark     = datetime.strptime('08:00' , '%H:%M').time()  
+sess_end         = datetime.strptime('20:00' , '%H:%M').time() 
+sess_afthour     = datetime.strptime('00:00' , '%H:%M').time() 
 
 
 #########################################################################################################
@@ -206,24 +206,21 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 
 
 #########################################################################################################
- 
-# Params => trad_comb={'col_signal': 'ema_9', 'sign_thresh': 'ema_21'}, reset_peak=False, rsi_min_thresh=100.00000, rsi_max_thresh=150.00000, atr_mult=17.02052, vwap_atr_mult=9.97954, buy_factor=0.43169, sell_factor=0.36978, trailstop_pct=27.14304, sess_start=14:30:00
-# Trial 307: 100%|██████████| 225/225 [00:33<00:00,  6.76it/s]
-# [Results] mean_pnl:5.6771 mean_excess:56.3098 improv:-234.72%
-# Action counts: {'Buy': 558, 'Sell': 683, 'Hold': 119359}
-# Best trial is: 307 with best_val: 56.3098
+#  Params => trad_comb={'col_signal': 'ema_9', 'sign_thresh': 'ema_21'}, reset_peak=True, rsi_min_thresh=23.00000, rsi_max_thresh=138.00000, atr_mult=5.93608, vwap_atr_mult=-9.46166, buy_factor=0.31001, sell_factor=0.03939, trailstop_pct=1.17346, sess_start=14:30:00
+# [Results] mean_pnl:-13.8471 mean_excess:-14.2876 improv:-3343.84%
+# Action counts: {'Buy': 4765, 'Sell': 848, 'Hold': 130062}
+# Best trial is: 0 with best_val: -14.2876
 
 if ticker == 'AAPL':
     col_signal_tick     = 'ema_9'
     sign_thresh_tick    = 'ema_21'
-    reset_peak_tick     = False
-    rsi_min_thresh_tick = 100.000
-    rsi_max_thresh_tick = 209.000
-    atr_mult_tick       = 17.79459
-    vwap_atr_mult_tick  = 4.57036
-    invest_frac_tick    = 0.01614
-    buy_factor_tick     = 0.52189
-    sell_factor_tick    = 0.57211
-    trailstop_pct_tick  = 1.28766
-    sess_start_tick     = sess_start_reg
+    reset_peak_tick     = True
+    rsi_min_thresh_tick = 97.0
+    rsi_max_thresh_tick = 200.0
+    atr_mult_tick       = 29.992467171498532
+    vwap_atr_mult_tick  = 6.057578894402728
+    buy_factor_tick     = 0.9631047059199058
+    sell_factor_tick    = 0.9999951228172558
+    trailstop_pct_tick  = 72.32342318831293    
+    sess_start_tick     = sess_start_pred
     features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']

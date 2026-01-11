@@ -392,7 +392,8 @@ def plot_trades(
     df,
     *,
     col_close: str = "close",
-    start_plot: "datetime.time" = None,
+    # start_plot: "datetime.time" = None,
+    # end_plot: "datetime.time" = None,
     features: list[str] = None,
     col_signal1: str = None,
     col_signal2: str = None,
@@ -403,10 +404,9 @@ def plot_trades(
     autoscale: bool = False,
     extra_hover_fields: list[str] = None,
 ):
-    df = df.copy()
-    if start_plot is not None:
-        df = df.loc[df.index.time >= start_plot]
 
+    df = df.copy()
+    df.index = pd.to_datetime(df.index).floor("min")
     fig = go.Figure()
 
     def _arr_for(x):
@@ -553,7 +553,7 @@ def plot_trades(
 
     # normalize and build masks robustly
     act_series = df.get("Action", df.get("action", pd.Series("", index=df.index))).astype(str).str.strip().str.lower()
-    shares_num = pd.to_numeric(df.get("Shares", 0), errors="coerce").fillna(0).astype(float)
+    shares_num = pd.to_numeric(df.get("Shares", pd.Series(0.0, index=df.index)), errors="coerce").fillna(0).astype(float)
     buy_mask  = act_series.str.startswith("buy", na=False) & (shares_num != 0)
     sell_mask = act_series.str.startswith("sell", na=False) & (shares_num != 0)
 
@@ -581,9 +581,12 @@ def plot_trades(
             showlegend=True,
         ))
 
-    # adding a dotted line identifying the session start
-    x_v = df.index[0].normalize() + pd.Timedelta(hours=params.sess_start_tick.hour, minutes=params.sess_start_tick.minute, seconds=params.sess_start_tick.second)
-    fig.add_vline(x=x_v, line=dict(color="black", dash="dot", width=1), opacity=0.6)
+    # minimal: two vertical lines at regular session start and session end (same base day)
+    base = df.index[0].normalize()
+    fig.add_vline(x=base + pd.Timedelta(hours=params.sess_start_reg.hour, minutes=params.sess_start_reg.minute),
+                  line=dict(color="black", dash="dot", width=1), opacity=0.6)
+    fig.add_vline(x=base + pd.Timedelta(hours=params.sess_end.hour, minutes=params.sess_end.minute),
+                  line=dict(color="black", dash="dot", width=1), opacity=0.6)
 
     fig.update_layout(
         hovermode="x unified",
