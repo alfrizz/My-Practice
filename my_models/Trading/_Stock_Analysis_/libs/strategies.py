@@ -511,7 +511,7 @@ def compute_intraday_bh(prev_cap: float, df: pd.DataFrame):
 ############################################
 
 
-def _format_perf(df, trades, sess_start):
+def _format_perf(df, trades):
     """
     Build per-day performance summaries.
 
@@ -593,7 +593,6 @@ def simulate_trading(
     df,
     buy_factor: float  = 0.0,    # interpolation factor for buys: 0 => use buy_weight as-is; 1 => use full shares_max (0..1)
     sell_factor: float = 0.0,   # interpolation factor for sells: 0 => use sell_weight as-is; 1 => sell full position (0..1)
-    sess_start: time   = params.sess_start_reg,
 ) -> dict:
     """
     Simulate intraday trading using discrete actions produced by generate_trade function
@@ -670,7 +669,6 @@ def simulate_trading(
     df_sim, perf = _format_perf(
         df=df_sim,
         trades=trades,
-        sess_start=sess_start,
     )
 
     # Persist end-of-day state
@@ -769,7 +767,6 @@ def rolling_monthly_summary(df, sim_results):
 def aggregate_performance(df: pd.DataFrame,
                           perf_list: list = None,
                           sim_results: dict = None,
-                          sess_start: time = params.sess_start_reg,
                           monthy_summary: bool = True) -> None:
     """
     Compute and display overall performance metrics.

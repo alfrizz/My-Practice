@@ -1,4 +1,4 @@
-from libs import params, trades
+from libs import params
 
 from typing import Sequence, List, Tuple, Optional, Union, Dict
 
@@ -392,17 +392,12 @@ def plot_trades(
     df,
     *,
     col_close: str = "close",
-    # start_plot: "datetime.time" = None,
-    # end_plot: "datetime.time" = None,
     features: list[str] = None,
     col_signal1: str = None,
     col_signal2: str = None,
     sign_thresh: float = None,
     axis_sig_thresh: str = "first",
-    trades: list[tuple] = None,
-    performance_stats: dict = None,
     autoscale: bool = False,
-    extra_hover_fields: list[str] = None,
 ):
 
     df = df.copy()
@@ -455,13 +450,13 @@ def plot_trades(
             hovertemplate="Pred: %{y:.3f}<extra></extra>",
         ))
 
-    # features: scale for plot, but hover shows original (via per-trace customdata)
-    if features is None:
-        features = sorted([c for c in df.columns if c not in {
-            "action", col_signal1, col_signal2, col_close, sign_thresh,
-            "Position", "Cash", "Pnl", "Action", "TradedAmount",
-            "signal_raw", "trailstop_price",
-        }])
+    # # features: scale for plot, but hover shows original (via per-trace customdata)
+    # if features is None:
+    #     features = sorted([c for c in df.columns if c not in {
+    #         "action", col_signal1, col_signal2, col_close, sign_thresh,
+    #         "Position", "Cash", "Pnl", "Action", "TradedAmount",
+    #         "signal_raw", "trailstop_price",
+    #     }])
 
     if autoscale:
         rmin, rmax = df[col_close].min(), df[col_close].max()
@@ -551,13 +546,10 @@ def plot_trades(
         showlegend=True,
     ))
 
-    # normalize and build masks robustly
-    act_series = df.get("Action", df.get("action", pd.Series("", index=df.index))).astype(str).str.strip().str.lower()
-    shares_num = pd.to_numeric(df.get("Shares", pd.Series(0.0, index=df.index)), errors="coerce").fillna(0).astype(float)
-    buy_mask  = act_series.str.startswith("buy", na=False) & (shares_num != 0)
-    sell_mask = act_series.str.startswith("sell", na=False) & (shares_num != 0)
+    buy_mask = df["Action"] == "Buy"
+    sell_mask = df["Action"] == "Sell"
 
-    def _sizes(shares_arr):
+    def _sizes(shares_arr): # sell and buy markers sizes proportional to the shares number
         return np.clip(np.nan_to_num(np.abs(shares_arr), nan=0.0) * 0.3 + 6, 6, 18)
 
     if buy_mask.any():
@@ -928,6 +920,28 @@ def save_results_callback(study, trial):
 
         _last_best_value = best_rounded
         _last_csv_path = out_path
+
+
+################################
+
+
+def short_log_callback(study, trial):
+    if trial.value is None:
+        return
+
+    mean_excess  = trial.value                     # mean_pnl - mean_bh
+    mean_pnl     = trial.user_attrs.get("mean_pnl", float("nan"))
+    mean_bh      = trial.user_attrs.get("mean_bh_pnls", float("nan"))
+    action_counts= trial.user_attrs.get("action_counts", {})
+
+    pct_improv = (mean_pnl - mean_bh) / abs(mean_bh) * 100 
+
+    print(
+        f"[Results] mean_pnl:{mean_pnl:.4f} mean_bh:{mean_bh:.4f} "
+        f"mean_excess:{mean_excess:.4f} improv_vs_bh:{pct_improv:.2f}%\n"
+        f"Action counts: {action_counts}\n"
+        f"Best trial is: {study.best_trial.number} with best_val: {study.best_value:.4f}"
+    )
 
 
 ####################################################################################################################

@@ -22,7 +22,7 @@ label_col  = "signal"
 shares_per_trade = 1
 init_cash = 100000
 
-month_to_check = '2018-01'
+month_to_check = '2022-01'
 sel_val_rmse = 0.10347
 
 smooth_sign_win = 15 # smoothing of the continuous target signal
@@ -51,8 +51,8 @@ log_file = Path(models_folder) / "training_diagnostics.txt"
 save_path  = Path("dfs")
 alpaca_csv = save_path / f"{ticker}_0_alpaca.csv"
 base_csv = save_path / f"{ticker}_1_base.csv"
-sign_csv = save_path / f"{ticker}_2_sign.csv"
-indunsc_csv = save_path / f"{ticker}_3_indunsc.csv"
+indunsc_csv = save_path / f"{ticker}_2_indunsc.csv"
+sign_csv = save_path / f"{ticker}_3_sign.csv"
 feat_all_csv = save_path / f"{ticker}_4_feat_all.csv"
 test_csv = save_path / f"{ticker}_5_test.csv"
 trainval_csv = save_path / f"{ticker}_5_trainval.csv"
@@ -206,29 +206,60 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 
 
 #########################################################################################################
-# Params => tc_id=tc_ema_21_50; reset_peak=False; rsi_min_thresh=23; rsi_max_thresh=72; vol_thresh=1.6880273943236903; adx_thresh=20.417302700034558; atr_mult=0.6664929101729394; vwap_atr_mult=1.5903241444505545; buy_factor=0.040487359817501956; sell_factor=0.9810403804111957; trailstop_pct=6.530013244922085; sess_start=08:00:00
-# Trial 2: 100%|██████████| 364/364 [00:24<00:00, 14.67it/s]
-# [Results] mean_pnl:-58.2095 mean_excess:-53.3051 improv:986.88%
-# Action counts: {'Buy': 8781, 'Sell': 3215, 'Hold': 322818}
-# Best trial is: 1 with best_val: -29.4695
+# Params => tc_id=tc_ema_21_50; reset_peak=False; rsi_min_thresh=36; rsi_max_thresh=63; vol_thresh=4.792337693948495; adx_thresh=35.4613512679662; atr_mult=2.1082213436587214; vwap_atr_mult=-4.991044535157611; buy_factor=0.9862755372912152; sell_factor=0.0006975427281712354; trailstop_pct=8.893346370633799; sess_start=08:00:00
+# Trial 1878: 100%|██████████| 364/364 [00:36<00:00,  9.84it/s]
+# [Results] mean_pnl:86.3430 mean_excess:91.2474 improv:-1960.52%
+# Action counts: {'Buy': 208, 'Sell': 118514, 'Hold': 216092}
+# Best trial is: 1878 with best_val: 91.2474
 
 if ticker == 'AAPL':
-    col_signal_tick     = 'ema_21'
-    sign_thresh_tick    = 'ema_50'
+    # min_prof_thr_tick   = 0.5  # minimum % gain to accept a swing
+    # max_down_prop_tick  = 0.25 # base retracement threshold (fraction of move)
+    # gain_tightfact_tick = 0.02 # tighter retracement for larger gains
+    # tau_time_tick       = 60.0 # minutes half-life for temporal decay
+    # tau_dur_tick        = 60.0 # minutes half-life for duration boost
+    # thresh_mode_tick    = "median_nonzero"
+    # thresh_window_tick  = 7    # rolling window (bars) for rolling modes
+    # col_signal_tick     = 'ema_9'
+    # sign_thresh_tick    = 'ema_21'
+    # col_atr_tick        = "atr_14"
+    # col_adx_tick        = "adx_14"
+    # col_vol_spike_tick  = 'vol_spike_14'
+    # col_rsi_tick        = "rsi_6"
+    # col_vwap_tick       = "vwap_ohlc_close_session"
+    # reset_peak_tick     = False
+    # rsi_min_thresh_tick = 36
+    # rsi_max_thresh_tick = 63
+    # vol_thresh_tick     = 4.792337693948495
+    # adx_thresh_tick     = 35.4613512679662
+    # atr_mult_tick       = 2.1082213436587214
+    # vwap_atr_mult_tick  = -4.991044535157611
+    # buy_factor_tick     = 0.9862755372912152
+    # sell_factor_tick    = 0.0006975427281712354
+    # trailstop_pct_tick  = 8.893346370633799 
+    min_prof_thr_tick   = 0.10793969867338143  # minimum % gain to accept a swing
+    max_down_prop_tick  = 0.3111564451111338   # base retracement threshold (fraction of move)
+    gain_tightfact_tick = 0.02304060785274687  # tighter retracement for larger gains
+    tau_time_tick       = 531.7958126071431    # minutes half-life for temporal decay
+    tau_dur_tick        = 510.1403461829883    # minutes half-life for duration boost
+    thresh_mode_tick    = "median_nonzero"
+    thresh_window_tick  = 7                    # rolling window (bars) for rolling modes
+    col_signal_tick     = 'ema_9'
+    sign_thresh_tick    = 'ema_21'
     col_atr_tick        = "atr_14"
     col_adx_tick        = "adx_14"
     col_vol_spike_tick  = 'vol_spike_14'
     col_rsi_tick        = "rsi_6"
     col_vwap_tick       = "vwap_ohlc_close_session"
     reset_peak_tick     = False
-    rsi_min_thresh_tick = 23
-    rsi_max_thresh_tick = 72
-    vol_thresh_tick     = 1.6880273943236903
-    adx_thresh_tick     = 20.417302700034558
-    atr_mult_tick       = 0.6664929101729394
-    vwap_atr_mult_tick  = 1.5903241444505545
-    buy_factor_tick     = 0.040487359817501956
-    sell_factor_tick    = 0.9810403804111957
-    trailstop_pct_tick  = 6.530013244922085  
+    rsi_min_thresh_tick = 26
+    rsi_max_thresh_tick = 43
+    vol_thresh_tick     = 1.6068182237266366
+    adx_thresh_tick     = 17.754197354951703
+    atr_mult_tick       = 5.394179205319159
+    vwap_atr_mult_tick  = -4.459095574686781
+    buy_factor_tick     = 0.27182961472178646
+    sell_factor_tick    = 0.3770809163036939
+    trailstop_pct_tick  = 7.301574488995097
     sess_start_tick     = sess_premark
     features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']
