@@ -6,29 +6,23 @@ import pandas as pd
 import numpy  as np
 import datetime
 
-import gc
 import re
-import textwrap
 import math
 import os
-import json
-import glob
 
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.transforms import blended_transform_factory
 import plotly.graph_objects as go
-from IPython.display import display, update_display, HTML, Javascript
+from IPython.display import display
 import seaborn as sns
 sns.set_style("white")
 
-from collections import defaultdict
 from tqdm.auto import tqdm
-import optuna
-from optuna.trial import TrialState
-import torch
+
 
 ###############################################################################
+
 
 def plot_close_volume(df, title="Close Price and Volume"):
     """
@@ -38,8 +32,10 @@ def plot_close_volume(df, title="Close Price and Volume"):
     ax = df[['close', 'volume']].plot(secondary_y=['volume'], figsize=(10, 5), title=title, alpha=0.7)
     ax.set_xlabel("Date")
     plt.show()
+
     
 #################################################################################
+
 
 class LiveRMSEPlot:
     """
@@ -450,14 +446,6 @@ def plot_trades(
             hovertemplate="Pred: %{y:.3f}<extra></extra>",
         ))
 
-    # # features: scale for plot, but hover shows original (via per-trace customdata)
-    # if features is None:
-    #     features = sorted([c for c in df.columns if c not in {
-    #         "action", col_signal1, col_signal2, col_close, sign_thresh,
-    #         "Position", "Cash", "Pnl", "Action", "TradedAmount",
-    #         "signal_raw", "trailstop_price",
-    #     }])
-
     if autoscale:
         rmin, rmax = df[col_close].min(), df[col_close].max()
         span = (rmax - rmin) or 1.0
@@ -723,225 +711,6 @@ def plot_dual_histograms(
 
     plt.tight_layout()
     plt.show()
-
-
-#########################################################################################################
-
-
-def make_live_plot_callback(fig, ax, line, handle):
-    """
-    Build an Optuna callback that will update *this* fig/ax/line/handle.
-    Returns: callback(study, frozen_trial)
-    """
-    def live_plot_callback(study, _trial):
-        # only use fully completed trials, sorted by index
-        complete = sorted(
-            (t for t in study.trials if t.state == TrialState.COMPLETE),
-            key=lambda t: t.number
-        )
-        if not complete:
-            return
-
-        xs = [t.number for t in complete]
-        ys = [t.value  for t in complete]
-
-        # update line data
-        line.set_data(xs, ys)
-
-        # recompute axis limits + small padding
-        x_min, x_max = xs[0], xs[-1]
-        x_pad = max(1, (x_max - x_min) * 0.05)
-        ax.set_xlim(x_min - x_pad, x_max + x_pad)
-
-        y_min, y_max = min(ys), max(ys)
-        y_pad = (y_max - y_min) * 0.1 or 0.1
-        ax.set_ylim(y_min - y_pad, y_max + y_pad)
-
-        # re-draw in place
-        update_display(fig, display_id=handle.display_id)
-
-        # free all of the Figure’s memory on disk/UI
-        plt.close(fig)
-
-    return live_plot_callback
-
-
-#############################################
-
-
-def plot_callback(study, trial):
-    """
-    Live-update a small Matplotlib line chart of trial.value vs. trial.number.
-    `state` lives across calls and holds the figure, axes and data lists.
-    """
-    if trial.state != TrialState.COMPLETE:
-        return    # skip pruned or errored trials
-        
-    # 1) Initialize a single persistent state dict
-    if not hasattr(plot_callback, "state"):
-        plot_callback.state = {
-            "initialized": False,
-            "fig": None, "ax": None, "line": None, "handle": None,
-            "x": [], "y": []
-        }
-    state = plot_callback.state
-
-    # 2) Skip pruned or errored trials
-    if trial.value is None:
-        return state
-
-    # 3) One-time figure setup
-    if not state["initialized"]:
-        import matplotlib.pyplot as plt
-        plt.ioff()
-        fig, ax = plt.subplots(figsize=(7, 3))
-        line, = ax.plot([], [], "bo-", markersize=3, linewidth=1)
-        ax.set(xlabel="Trial #", ylabel="Avg Daily P&L", title="Optuna Progress")
-        ax.grid(True)
-        handle = display(fig, display_id=True)
-        state.update(fig=fig, ax=ax, line=line, handle=handle, initialized=True)
-
-    # 4) Append new point and redraw
-    state["x"].append(trial.number)
-    state["y"].append(float(trial.value))
-    state["line"].set_data(state["x"], state["y"])
-    state["ax"].relim()
-    state["ax"].autoscale_view()
-    state["handle"].update(state["fig"])
-
-    # 5) Close the figure to free memory—but keep the display alive
-    import matplotlib.pyplot as plt
-    plt.close(state["fig"])
-
-    return state
-
-##########################
-
-def save_best_trial_callback(study, trial):
-    # only act when this trial just became the study’s best
-    if study.best_trial != trial:
-        return
-
-    best_value  = trial.value
-    best_params = trial.params
-
-    # scan the folder for existing JSONs for this ticker
-    pattern = os.path.join(params.optuna_folder, f"{params.ticker}_*_target.json")
-    files   = glob.glob(pattern)
-
-    # extract the float values out of the filenames
-    existing = []
-    # regex matches: <TICKER>_<float>_target.json
-    rx = re.compile(rf'^{re.escape(params.ticker)}_(?P<val>-?\d+(?:\.\d+)?)_target\.json$')
-    for fn in files:
-        name = os.path.basename(fn)
-        m = rx.match(name)
-        if not m:
-            continue
-        try:
-            existing.append(float(m.group("val")))
-        except ValueError:
-            continue
-
-    # only save if our new best_value beats all on disk
-    max_existing = max(existing) if existing else float("-inf")
-    if best_value <= max_existing:
-        return
-
-    # dump to a new file
-    fname = f"{params.ticker}_{best_value:.4f}_target.json"
-    path  = os.path.join(params.optuna_folder, fname)
-    with open(path, "w") as fp:
-        json.dump(
-            {"value":  best_value,
-             "params": best_params},
-            fp,
-            indent=2
-        )
-
-########################## 
-
-
-# in-memory accumulator for completed trial results
-_results: list[dict] = []
-
-# track last written best value and path so we only write/replace when best changes
-_last_best_value: float | None = None
-_last_csv_path: str | None = None
-
-def save_results_callback(study, trial):
-    """
-    Optuna callback that accumulates completed trials and writes a single CSV
-    named "{ticker}_{best_rounded}_predicted.csv" only when the study best value
-    (rounded to 4 decimals) changes. Behavior:
-      - skip non-complete trials
-      - expand 'tc_id' into 'col_signal' and 'sign_thresh' when a mapping exists
-      - append every completed trial to the in-memory _results list
-      - sort results by avg_daily_pnl and write the CSV only when the rounded
-        best value differs from the last written one (previous file is removed)
-    This function makes the minimal changes required to avoid NameError when
-    the trading_combinations mapping lives in the notebook's __main__ module.
-    """
-    # only process fully completed trials
-    if trial.state != TrialState.COMPLETE:
-        return
-
-    # build entry: expand tc_id into its combo fields when mapping is available
-    entry = {"trial": trial.number}
-    tc_map = globals().get("trading_combinations") or getattr(__import__("__main__"), "trading_combinations", None)
-    for k, v in trial.params.items():
-        if k == "tc_id" and tc_map and v in tc_map:
-            combo = tc_map[v]
-            entry["col_signal"] = combo.get("col_signal")
-            entry["sign_thresh"] = combo.get("sign_thresh")
-        else:
-            entry[k] = round(v, 5) if isinstance(v, (int, float)) else v
-
-    entry["avg_daily_pnl"] = round(trial.value, 5)
-    _results.append(entry)
-
-    # build sorted DataFrame of all completed trials so far
-    df = pd.DataFrame(_results).sort_values("avg_daily_pnl", ascending=False)
-
-    # write CSV only when the rounded best value changes; keep exactly one file
-    global _last_best_value, _last_csv_path
-    best_val = getattr(study, "best_value", None)
-    if best_val is None:
-        return
-
-    best_rounded = round(float(best_val), 4)
-    if _last_best_value is None or best_rounded != _last_best_value:
-        if _last_csv_path and os.path.exists(_last_csv_path):
-            os.remove(_last_csv_path)
-
-        csv_name = f"{params.ticker}_{best_rounded}_predicted.csv"
-        out_path = os.path.join(params.optuna_folder, csv_name)
-        df.to_csv(out_path, index=False)
-
-        _last_best_value = best_rounded
-        _last_csv_path = out_path
-
-
-################################
-
-
-def short_log_callback(study, trial):
-    if trial.value is None:
-        return
-
-    mean_excess  = trial.value                     # mean_pnl - mean_bh
-    mean_pnl     = trial.user_attrs.get("mean_pnl", float("nan"))
-    mean_bh      = trial.user_attrs.get("mean_bh_pnls", float("nan"))
-    action_counts= trial.user_attrs.get("action_counts", {})
-
-    pct_improv = (mean_pnl - mean_bh) / abs(mean_bh) * 100 
-
-    print(
-        f"[Results] mean_pnl:{mean_pnl:.4f} mean_bh:{mean_bh:.4f} "
-        f"mean_excess:{mean_excess:.4f} improv_vs_bh:{pct_improv:.2f}%\n"
-        f"Action counts: {action_counts}\n"
-        f"Best trial is: {study.best_trial.number} with best_val: {study.best_value:.4f}"
-    )
 
 
 ####################################################################################################################
