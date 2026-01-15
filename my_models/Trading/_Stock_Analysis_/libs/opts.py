@@ -276,53 +276,6 @@ def short_log_callback(study, trial):
 #############################################################################
 
 
-# def plot_callback(study, trial):
-#     """
-#     Live-update a small Matplotlib line chart of trial.value vs. trial.number.
-#     `state` lives across calls and holds the figure, axes and data lists.
-#     """
-#     if trial.state != TrialState.COMPLETE:
-#         return    # skip pruned or errored trials
-        
-#     # 1) Initialize a single persistent state dict
-#     if not hasattr(plot_callback, "state"):
-#         plot_callback.state = {
-#             "initialized": False,
-#             "fig": None, "ax": None, "line": None, "handle": None,
-#             "x": [], "y": []
-#         }
-#     state = plot_callback.state
-
-#     # 2) Skip pruned or errored trials
-#     if trial.value is None:
-#         return state
-
-#     # 3) One-time figure setup
-#     if not state["initialized"]:
-#         import matplotlib.pyplot as plt
-#         plt.ioff()
-#         fig, ax = plt.subplots(figsize=(7, 3))
-#         line, = ax.plot([], [], "bo-", markersize=3, linewidth=1)
-#         ax.set(xlabel="Trial #", ylabel="Avg Daily P&L", title="Optuna Progress")
-#         ax.grid(True)
-#         handle = display(fig, display_id=True)
-#         state.update(fig=fig, ax=ax, line=line, handle=handle, initialized=True)
-
-#     # 4) Append new point and redraw
-#     state["x"].append(trial.number)
-#     state["y"].append(float(trial.value))
-#     state["line"].set_data(state["x"], state["y"])
-#     state["ax"].relim()
-#     state["ax"].autoscale_view()
-#     state["handle"].update(state["fig"])
-
-#     # 5) Close the figure to free memory—but keep the display alive
-#     import matplotlib.pyplot as plt
-#     plt.close(state["fig"])
-
-#     return state
-
-
 def plot_callback(study, trial):
     """
     Live-update Matplotlib line chart of trial.value vs trial.number.
