@@ -81,13 +81,15 @@ def add_session_centered_time_features(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(index=df.index)
 
     # centered phases in (-1,1], then map to [0,1] and cast float32
-    out["minute_time"] = (((_single_centered_phase_np(minutes, sess_start_min, 1440.0)) + 1.0) / 2.0).astype(np.float32)
-    out["hour_time"]   = (((_single_centered_phase_np(hour_idx, sess_start_hr, 24.0)) + 1.0) / 2.0).astype(np.float32)
-    out["dow_time"]         = (((_single_centered_phase_np(dow, 0.0, 7.0)) + 1.0) / 2.0).astype(np.float32)
-    out["month_time"]       = (((_single_centered_phase_np(month0, 0.0, 12.0)) + 1.0) / 2.0).astype(np.float32)
-    out["day_of_year_time"] = (((_single_centered_phase_np(doy, 0.0, 365.0)) + 1.0) / 2.0).astype(np.float32)
-    out["week_of_year_time"] = (((_single_centered_phase_np(week0, 0.0, 52.0)) + 1.0) / 2.0).astype(np.float32)
-    out["in_sess_time"] = ((df.index.time >= params.sess_start_reg) & (df.index.time < params.sess_end)).astype(np.float32)
+    out["time_minute"] = (((_single_centered_phase_np(minutes, sess_start_min, 1440.0)) + 1.0) / 2.0).astype(np.float32)
+    out["time_hour"]   = (((_single_centered_phase_np(hour_idx, sess_start_hr, 24.0)) + 1.0) / 2.0).astype(np.float32)
+    out["time_dow"]         = (((_single_centered_phase_np(dow, 0.0, 7.0)) + 1.0) / 2.0).astype(np.float32)
+    out["time_month"]       = (((_single_centered_phase_np(month0, 0.0, 12.0)) + 1.0) / 2.0).astype(np.float32)
+    out["time_day_of_year"] = (((_single_centered_phase_np(doy, 0.0, 365.0)) + 1.0) / 2.0).astype(np.float32)
+    out["time_week_of_year"] = (((_single_centered_phase_np(week0, 0.0, 52.0)) + 1.0) / 2.0).astype(np.float32)
+    out["time_in_sess"] = ((df.index.time >= params.sess_start_reg) & (df.index.time < params.sess_end)).astype(np.float32)
+    out["time_premark"] = (df.index.time < params.sess_start_reg).astype(np.float32)
+    out["time_afthour"] = (df.index.time >= params.sess_end).astype(np.float32)
 
     return out
 
@@ -305,8 +307,8 @@ def standard_indicators(
     pbar.set_description("rolling_extrema")
     long_w = max(sma_ws) if sma_ws else None
     if long_w:
-        new[f"rolling_max_close_{long_w}"] = c.rolling(long_w, min_periods=long_w).max()
-        new[f"rolling_min_close_{long_w}"] = c.rolling(long_w, min_periods=long_w).min()
+        new[f"rolling_max_close_{long_w}"] = c.rolling(long_w, min_periods=1).max()
+        new[f"rolling_min_close_{long_w}"] = c.rolling(long_w, min_periods=1).min()
         new[f"dist_high_{long_w}"] = safe_div(new[f"rolling_max_close_{long_w}"] - c, c)
         new[f"dist_low_{long_w}"] = safe_div(c - new[f"rolling_min_close_{long_w}"], c)
     pbar.update(1)
@@ -405,12 +407,6 @@ def standard_indicators(
         psar_series = psar_ind.psar()
         new["psar"] = psar_series
 
-        # Compat: derive direction if the method is absent
-        if hasattr(psar_ind, "psar_direction"):
-            new["psar_dir"] = psar_ind.psar_direction()
-        else:
-            new["psar_dir"] = pd.Series(np.where(c > psar_series, 1, -1), index=df.index)
-
         pbar.update(1)
 
     # VWAP session (daily)
@@ -429,712 +425,472 @@ def standard_indicators(
 ##########################################################################################################
 
 
-def engineered_indicators(
+# def engineered_indicators(
+#     df: pd.DataFrame,
+#     rsi_low: float = 30.0,
+#     rsi_high: float = 70.0,
+#     adx_thr: float = 20.0,
+#     mult_w: int =7,
+#     eps: float = 1e-9,
+#     fillna_zero: bool = True,
+#     small_factor: float = 1e-3,
+#     ratio_clip_abs: float = 1e6,
+#     z_std_floor_factor: float = 1e-3
+# ) -> pd.DataFrame:
+#     """
+#     Build engineered signals from base indicators (uses only past/present values).
+#     - Works with canonical columns from standard_indicators and their windowed copies.
+#     - Detects relevant columns robustly (e.g. 'sma_14', 'sma_60', 'macd_diff', 'macd_diff_30').
+#     - Uses safe denominators and std floors to ensure finite outputs.
+#     Returns DataFrame of engineered columns (float, NaNs filled per fillna_zero).
+#     """
+#     out = pd.DataFrame(index=df.index)
+#     produced: List[str] = []
+
+#     def _find(prefix: str) -> Optional[str]:
+#         # find first column that startswith prefix (prefer exact canonical name before windowed)
+#         if prefix in df.columns:
+#             return prefix
+#         for c in df.columns:
+#             if c.startswith(prefix):
+#                 return c
+#         return None
+
+#     def _std_floor(series: pd.Series, window: int):
+#         rstd = series.rolling(window, min_periods=1).std()
+#         arr = series.to_numpy(dtype=float)
+#         finite = arr[np.isfinite(arr)]
+#         global_std = float(np.nanstd(finite)) if finite.size else eps
+#         floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         return rstd.fillna(floor).replace(0.0, floor)
+
+#     # helpers for column detection
+#     close = df.get("close", pd.Series(index=df.index, dtype=float)).astype(float)
+
+#     # robust SMA detection: pick two smallest numeric windows if available
+#     sma_cols = sorted([c for c in df.columns if re.match(r"^sma_\d+$", c)],
+#                       key=lambda c: int(re.search(r"_(\d+)$", c).group(1)))
+#     sma_s = sma_cols[0] if sma_cols else None
+#     sma_l = sma_cols[1] if len(sma_cols) > 1 else None
+
+
+#     # find other columns (prefer canonical names, fallback to first matching windowed)
+#     macd_diff = _find("macd_diff")
+#     bb_l = _find("bb_lband")
+#     bb_h = _find("bb_hband")
+#     bb_w = _find("bb_w")
+#     rsi_col = _find("rsi")
+#     plus_di = _find("plus_di")
+#     minus_di = _find("minus_di")
+#     adx_col = _find("adx")
+#     obv_diff = _find("obv_diff")
+#     obv_sma = _find("obv_sma")
+#     vwap_dev = _find("vwap_dev") or _find("vwap")
+#     atr_pct = _find("atr_pct")
+
+#     # eng_ma
+#     if sma_s and sma_l and sma_s in df.columns and sma_l in df.columns:
+#         out["eng_ma"] = (df[sma_s].astype(float) - df[sma_l].astype(float)) / (df[sma_l].astype(float) + eps)
+#         produced.append("eng_ma")
+
+#     # eng_macd
+#     if macd_diff and sma_l and macd_diff in df.columns and sma_l in df.columns:
+#         out["eng_macd"] = df[macd_diff].astype(float) / (df[sma_l].astype(float) + eps)
+#         produced.append("eng_macd")
+
+#     # eng_bb / mid
+#     if bb_l and bb_h and bb_w and bb_l in df.columns and bb_h in df.columns and bb_w in df.columns:
+#         lo = df[bb_l].astype(float); hi = df[bb_h].astype(float); bw = df[bb_w].astype(float)
+#         dev = np.where(close < lo, lo - close, np.where(close > hi, close - hi, 0.0))
+#         out["eng_bb"] = pd.Series(dev, index=df.index) / (bw + eps)
+#         out["eng_bb_mid"] = ((lo + hi) / 2 - close) / (close + eps)
+#         produced.extend(["eng_bb", "eng_bb_mid"])
+
+#     # eng_rsi
+#     if rsi_col and rsi_col in df.columns:
+#         rv = df[rsi_col].astype(float)
+#         low_d = np.clip((rsi_low - rv), 0, None) / 100.0
+#         high_d = np.clip((rv - rsi_high), 0, None) / 100.0
+#         out["eng_rsi"] = np.where(rv < rsi_low, low_d, np.where(rv > rsi_high, high_d, 0.0))
+#         produced.append("eng_rsi")
+
+#     # eng_adx
+#     if plus_di and minus_di and adx_col and plus_di in df.columns and minus_di in df.columns and adx_col in df.columns:
+#         di_diff = df[plus_di].astype(float) - df[minus_di].astype(float)
+#         diff_abs = di_diff.abs() / 100.0
+#         ex = np.clip((df[adx_col].astype(float) - adx_thr) / 100.0, 0, None)
+#         out["eng_adx"] = np.sign(di_diff) * diff_abs * ex
+#         produced.append("eng_adx")
+
+#     # eng_obv (safe denom + winsorized numerator)
+#     if obv_diff and obv_sma and obv_diff in df.columns and obv_sma in df.columns:
+#         num = df[obv_diff].astype(float).to_numpy(dtype=float)
+#         try:
+#             finite = num[np.isfinite(num)]
+#             lo_cut = np.nanpercentile(finite, 0.5) if finite.size else np.nan
+#             hi_cut = np.nanpercentile(finite, 99.5) if finite.size else np.nan
+#             num_clipped = np.copy(num)
+#             mask_num = np.isnan(num_clipped)
+#             num_clipped = np.clip(num_clipped, lo_cut, hi_cut)
+#             num_clipped[mask_num] = np.nan
+#         except Exception:
+#             num_clipped = num
+
+#         den_s = df[obv_sma].rolling(window=mult_w, min_periods=mult_w).median().ffill().fillna(0.0)
+#         den_arr = den_s.to_numpy(dtype=float)
+#         den_floor = np.maximum(np.abs(den_arr) * small_factor, eps)
+#         finite_nonzero = np.isfinite(den_arr) & (np.abs(den_arr) > 0.0)
+#         den_safe = np.where(finite_nonzero, np.sign(den_arr) * np.maximum(np.abs(den_arr), den_floor), den_floor)
+
+#         with np.errstate(divide='ignore', invalid='ignore'):
+#             ratio = num_clipped / den_safe
+#         ratio = np.where(np.isnan(num_clipped), np.nan, np.clip(ratio, -ratio_clip_abs, ratio_clip_abs))
+#         out["eng_obv"] = pd.Series(ratio, index=df.index).astype(float)
+#         produced.append("eng_obv")
+
+#     # eng_atr_div, z_eng_atr
+#     if atr_pct and atr_pct in df.columns:
+#         ratio = df[atr_pct].astype(float)
+#         rm = ratio.rolling(mult_w, min_periods=mult_w).mean()
+#         out["eng_atr_div"] = (ratio - rm) * 10_000
+#         std_r = ratio.rolling(mult_w, min_periods=mult_w).std()
+#         global_std = np.nanstd(ratio.to_numpy(dtype=float))
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         std_eff = std_r.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_eng_atr"] = (ratio - rm) / (std_eff + eps)
+#         produced.extend(["eng_atr_div", "z_eng_atr"])
+
+#     # eng_sma distances
+#     if sma_s and sma_s in df.columns:
+#         out["eng_sma_short"] = (df[sma_s].astype(float) - close) / (close + eps)
+#         produced.append("eng_sma_short")
+#     if sma_l and sma_l in df.columns:
+#         out["eng_sma_long"] = (df[sma_l].astype(float) - close) / (close + eps)
+#         produced.append("eng_sma_long")
+
+#     # eng_vwap and z — prefer canonical vwap_dev_pct if present
+#     vwap_col = _find("vwap_dev_pct") or _find("vwap")
+#     if vwap_col and vwap_col in df.columns:
+#         if vwap_col == "vwap_dev_pct":
+#             eng_vwap_pct = df[vwap_col].astype(float)
+#         else:
+#             vwap_base = df[vwap_col].astype(float)
+#             eng_vwap_pct = 100.0 * (vwap_base - close) / (close + eps)
+#         out["eng_vwap"] = eng_vwap_pct
+#         znum = eng_vwap_pct
+#         zm = znum.rolling(mult_w, min_periods=mult_w).mean()
+#         zs = znum.rolling(mult_w, min_periods=mult_w).std()
+#         arr = znum.to_numpy(dtype=float)
+#         finite = arr[np.isfinite(arr)]
+#         global_std = float(np.nanstd(finite)) if finite.size else eps
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         zs_eff = zs.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_vwap_dev"] = (znum - zm) / (zs_eff + eps)
+#         produced.extend(["eng_vwap", "z_vwap_dev"])
+
+#     # z_bb_w
+#     if bb_w and bb_w in df.columns:
+#         x = df[bb_w].astype(float)
+#         xm = x.rolling(mult_w, min_periods=mult_w).mean()
+#         xs = x.rolling(mult_w, min_periods=mult_w).std()
+#         global_std = np.nanstd(x.to_numpy(dtype=float))
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_bb_w"] = (x - xm) / (xs_eff + eps)
+#         produced.append("z_bb_w")
+
+#     # strict z of raw OBV (prefer this for scale-free ML input)
+#     if "obv" in df.columns:
+#         x = df["obv"].astype(float)
+#         xm = x.rolling(mult_w, min_periods=mult_w).mean()
+#         xs = x.rolling(mult_w, min_periods=mult_w).std()
+#         arr = x.to_numpy(dtype=float)
+#         finite = arr[np.isfinite(arr)]
+#         global_std = float(np.nanstd(finite)) if finite.size else eps
+#         std_floor = max(eps, abs(global_std) * z_std_floor_factor)
+#         xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
+#         out["z_obv"] = (x - xm) / (xs_eff + eps)
+#         produced.append("z_obv")
+
+#     # momentum aggregates: detect available ret_{H} columns (use any found in df)
+#     ret_cols = [c for c in df.columns if re.match(r"^ret_(\d+)$", c)]
+#     horizons = sorted({int(re.search(r"^ret_(\d+)$", c).group(1)) for c in ret_cols}) if ret_cols else [1, 5, 15, 60]
+#     for H in horizons:
+#         ret_col = f"ret_{H}"
+#         if ret_col in df.columns:
+#             out[f"mom_sum_{H}"] = df[ret_col].rolling(H, min_periods=H).sum()
+#             out[f"mom_std_{H}"] = df[ret_col].rolling(H, min_periods=H).std()
+#             produced.extend([f"mom_sum_{H}", f"mom_std_{H}"])
+
+#     # ema cross flags: find sma numeric windows used for ema names
+#     try:
+#         s_w = int(re.search(r"_(\d+)$", sma_s).group(1)) if sma_s else None
+#         l_w = int(re.search(r"_(\d+)$", sma_l).group(1)) if sma_l else None
+#     except Exception:
+#         s_w = l_w = None
+#     s_ema_col = f"ema_{s_w}" if s_w else None
+#     l_ema_col = f"ema_{l_w}" if l_w else None
+#     if s_ema_col in df.columns and l_ema_col in df.columns:
+#         out["eng_ema_cross_up"] = (df[s_ema_col].astype(float) > df[l_ema_col].astype(float)).astype(float)
+#         out["eng_ema_cross_down"] = (df[s_ema_col].astype(float) < df[l_ema_col].astype(float)).astype(float)
+#         produced.extend(["eng_ema_cross_up", "eng_ema_cross_down"])
+
+#     # finalize: ensure order, types and optional fillna
+#     produced = [p for p in produced if p in out.columns]
+#     for col in produced:
+#         out[col] = out[col].astype(float)
+#         if fillna_zero:
+#             out[col] = out[col].fillna(0.0)
+
+#     return out[produced].copy()
+
+
+########################################################################################################## 
+
+
+def flag_indicators(
     df: pd.DataFrame,
-    rsi_low: float = 30.0,
-    rsi_high: float = 70.0,
-    adx_thr: float = 20.0,
-    mult_w: int =7,
-    eps: float = 1e-9,
-    fillna_zero: bool = True,
-    small_factor: float = 1e-3,
-    ratio_clip_abs: float = 1e6,
-    z_std_floor_factor: float = 1e-3
-) -> pd.DataFrame:
-    """
-    Build engineered signals from base indicators (uses only past/present values).
-    - Works with canonical columns from standard_indicators and their windowed copies.
-    - Detects relevant columns robustly (e.g. 'sma_14', 'sma_60', 'macd_diff', 'macd_diff_30').
-    - Uses safe denominators and std floors to ensure finite outputs.
-    Returns DataFrame of engineered columns (float, NaNs filled per fillna_zero).
-    """
-    out = pd.DataFrame(index=df.index)
-    produced: List[str] = []
-
-    def _find(prefix: str) -> Optional[str]:
-        # find first column that startswith prefix (prefer exact canonical name before windowed)
-        if prefix in df.columns:
-            return prefix
-        for c in df.columns:
-            if c.startswith(prefix):
-                return c
-        return None
-
-    def _std_floor(series: pd.Series, window: int):
-        rstd = series.rolling(window, min_periods=1).std()
-        arr = series.to_numpy(dtype=float)
-        finite = arr[np.isfinite(arr)]
-        global_std = float(np.nanstd(finite)) if finite.size else eps
-        floor = max(eps, abs(global_std) * z_std_floor_factor)
-        return rstd.fillna(floor).replace(0.0, floor)
-
-    # helpers for column detection
-    close = df.get("close", pd.Series(index=df.index, dtype=float)).astype(float)
-
-    # robust SMA detection: pick two smallest numeric windows if available
-    sma_cols = sorted([c for c in df.columns if re.match(r"^sma_\d+$", c)],
-                      key=lambda c: int(re.search(r"_(\d+)$", c).group(1)))
-    sma_s = sma_cols[0] if sma_cols else None
-    sma_l = sma_cols[1] if len(sma_cols) > 1 else None
-
-
-    # find other columns (prefer canonical names, fallback to first matching windowed)
-    macd_diff = _find("macd_diff")
-    bb_l = _find("bb_lband")
-    bb_h = _find("bb_hband")
-    bb_w = _find("bb_w")
-    rsi_col = _find("rsi")
-    plus_di = _find("plus_di")
-    minus_di = _find("minus_di")
-    adx_col = _find("adx")
-    obv_diff = _find("obv_diff")
-    obv_sma = _find("obv_sma")
-    vwap_dev = _find("vwap_dev") or _find("vwap")
-    atr_pct = _find("atr_pct")
-
-    # eng_ma
-    if sma_s and sma_l and sma_s in df.columns and sma_l in df.columns:
-        out["eng_ma"] = (df[sma_s].astype(float) - df[sma_l].astype(float)) / (df[sma_l].astype(float) + eps)
-        produced.append("eng_ma")
-
-    # eng_macd
-    if macd_diff and sma_l and macd_diff in df.columns and sma_l in df.columns:
-        out["eng_macd"] = df[macd_diff].astype(float) / (df[sma_l].astype(float) + eps)
-        produced.append("eng_macd")
-
-    # eng_bb / mid
-    if bb_l and bb_h and bb_w and bb_l in df.columns and bb_h in df.columns and bb_w in df.columns:
-        lo = df[bb_l].astype(float); hi = df[bb_h].astype(float); bw = df[bb_w].astype(float)
-        dev = np.where(close < lo, lo - close, np.where(close > hi, close - hi, 0.0))
-        out["eng_bb"] = pd.Series(dev, index=df.index) / (bw + eps)
-        out["eng_bb_mid"] = ((lo + hi) / 2 - close) / (close + eps)
-        produced.extend(["eng_bb", "eng_bb_mid"])
-
-    # eng_rsi
-    if rsi_col and rsi_col in df.columns:
-        rv = df[rsi_col].astype(float)
-        low_d = np.clip((rsi_low - rv), 0, None) / 100.0
-        high_d = np.clip((rv - rsi_high), 0, None) / 100.0
-        out["eng_rsi"] = np.where(rv < rsi_low, low_d, np.where(rv > rsi_high, high_d, 0.0))
-        produced.append("eng_rsi")
-
-    # eng_adx
-    if plus_di and minus_di and adx_col and plus_di in df.columns and minus_di in df.columns and adx_col in df.columns:
-        di_diff = df[plus_di].astype(float) - df[minus_di].astype(float)
-        diff_abs = di_diff.abs() / 100.0
-        ex = np.clip((df[adx_col].astype(float) - adx_thr) / 100.0, 0, None)
-        out["eng_adx"] = np.sign(di_diff) * diff_abs * ex
-        produced.append("eng_adx")
-
-    # eng_obv (safe denom + winsorized numerator)
-    if obv_diff and obv_sma and obv_diff in df.columns and obv_sma in df.columns:
-        num = df[obv_diff].astype(float).to_numpy(dtype=float)
-        try:
-            finite = num[np.isfinite(num)]
-            lo_cut = np.nanpercentile(finite, 0.5) if finite.size else np.nan
-            hi_cut = np.nanpercentile(finite, 99.5) if finite.size else np.nan
-            num_clipped = np.copy(num)
-            mask_num = np.isnan(num_clipped)
-            num_clipped = np.clip(num_clipped, lo_cut, hi_cut)
-            num_clipped[mask_num] = np.nan
-        except Exception:
-            num_clipped = num
-
-        den_s = df[obv_sma].rolling(window=mult_w, min_periods=mult_w).median().ffill().fillna(0.0)
-        den_arr = den_s.to_numpy(dtype=float)
-        den_floor = np.maximum(np.abs(den_arr) * small_factor, eps)
-        finite_nonzero = np.isfinite(den_arr) & (np.abs(den_arr) > 0.0)
-        den_safe = np.where(finite_nonzero, np.sign(den_arr) * np.maximum(np.abs(den_arr), den_floor), den_floor)
-
-        with np.errstate(divide='ignore', invalid='ignore'):
-            ratio = num_clipped / den_safe
-        ratio = np.where(np.isnan(num_clipped), np.nan, np.clip(ratio, -ratio_clip_abs, ratio_clip_abs))
-        out["eng_obv"] = pd.Series(ratio, index=df.index).astype(float)
-        produced.append("eng_obv")
-
-    # eng_atr_div, z_eng_atr
-    if atr_pct and atr_pct in df.columns:
-        ratio = df[atr_pct].astype(float)
-        rm = ratio.rolling(mult_w, min_periods=mult_w).mean()
-        out["eng_atr_div"] = (ratio - rm) * 10_000
-        std_r = ratio.rolling(mult_w, min_periods=mult_w).std()
-        global_std = np.nanstd(ratio.to_numpy(dtype=float))
-        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-        std_eff = std_r.fillna(std_floor).replace(0.0, std_floor)
-        out["z_eng_atr"] = (ratio - rm) / (std_eff + eps)
-        produced.extend(["eng_atr_div", "z_eng_atr"])
-
-    # eng_sma distances
-    if sma_s and sma_s in df.columns:
-        out["eng_sma_short"] = (df[sma_s].astype(float) - close) / (close + eps)
-        produced.append("eng_sma_short")
-    if sma_l and sma_l in df.columns:
-        out["eng_sma_long"] = (df[sma_l].astype(float) - close) / (close + eps)
-        produced.append("eng_sma_long")
-
-    # eng_vwap and z — prefer canonical vwap_dev_pct if present
-    vwap_col = _find("vwap_dev_pct") or _find("vwap")
-    if vwap_col and vwap_col in df.columns:
-        if vwap_col == "vwap_dev_pct":
-            eng_vwap_pct = df[vwap_col].astype(float)
-        else:
-            vwap_base = df[vwap_col].astype(float)
-            eng_vwap_pct = 100.0 * (vwap_base - close) / (close + eps)
-        out["eng_vwap"] = eng_vwap_pct
-        znum = eng_vwap_pct
-        zm = znum.rolling(mult_w, min_periods=mult_w).mean()
-        zs = znum.rolling(mult_w, min_periods=mult_w).std()
-        arr = znum.to_numpy(dtype=float)
-        finite = arr[np.isfinite(arr)]
-        global_std = float(np.nanstd(finite)) if finite.size else eps
-        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-        zs_eff = zs.fillna(std_floor).replace(0.0, std_floor)
-        out["z_vwap_dev"] = (znum - zm) / (zs_eff + eps)
-        produced.extend(["eng_vwap", "z_vwap_dev"])
-
-    # z_bb_w
-    if bb_w and bb_w in df.columns:
-        x = df[bb_w].astype(float)
-        xm = x.rolling(mult_w, min_periods=mult_w).mean()
-        xs = x.rolling(mult_w, min_periods=mult_w).std()
-        global_std = np.nanstd(x.to_numpy(dtype=float))
-        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-        xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
-        out["z_bb_w"] = (x - xm) / (xs_eff + eps)
-        produced.append("z_bb_w")
-
-    # strict z of raw OBV (prefer this for scale-free ML input)
-    if "obv" in df.columns:
-        x = df["obv"].astype(float)
-        xm = x.rolling(mult_w, min_periods=mult_w).mean()
-        xs = x.rolling(mult_w, min_periods=mult_w).std()
-        arr = x.to_numpy(dtype=float)
-        finite = arr[np.isfinite(arr)]
-        global_std = float(np.nanstd(finite)) if finite.size else eps
-        std_floor = max(eps, abs(global_std) * z_std_floor_factor)
-        xs_eff = xs.fillna(std_floor).replace(0.0, std_floor)
-        out["z_obv"] = (x - xm) / (xs_eff + eps)
-        produced.append("z_obv")
-
-    # momentum aggregates: detect available ret_{H} columns (use any found in df)
-    ret_cols = [c for c in df.columns if re.match(r"^ret_(\d+)$", c)]
-    horizons = sorted({int(re.search(r"^ret_(\d+)$", c).group(1)) for c in ret_cols}) if ret_cols else [1, 5, 15, 60]
-    for H in horizons:
-        ret_col = f"ret_{H}"
-        if ret_col in df.columns:
-            out[f"mom_sum_{H}"] = df[ret_col].rolling(H, min_periods=H).sum()
-            out[f"mom_std_{H}"] = df[ret_col].rolling(H, min_periods=H).std()
-            produced.extend([f"mom_sum_{H}", f"mom_std_{H}"])
-
-    # ema cross flags: find sma numeric windows used for ema names
-    try:
-        s_w = int(re.search(r"_(\d+)$", sma_s).group(1)) if sma_s else None
-        l_w = int(re.search(r"_(\d+)$", sma_l).group(1)) if sma_l else None
-    except Exception:
-        s_w = l_w = None
-    s_ema_col = f"ema_{s_w}" if s_w else None
-    l_ema_col = f"ema_{l_w}" if l_w else None
-    if s_ema_col in df.columns and l_ema_col in df.columns:
-        out["eng_ema_cross_up"] = (df[s_ema_col].astype(float) > df[l_ema_col].astype(float)).astype(float)
-        out["eng_ema_cross_down"] = (df[s_ema_col].astype(float) < df[l_ema_col].astype(float)).astype(float)
-        produced.extend(["eng_ema_cross_up", "eng_ema_cross_down"])
-
-    # finalize: ensure order, types and optional fillna
-    produced = [p for p in produced if p in out.columns]
-    for col in produced:
-        out[col] = out[col].astype(float)
-        if fillna_zero:
-            out[col] = out[col].fillna(0.0)
-
-    return out[produced].copy()
-
-
-##########################################################################################################
-
-
-def prune_and_diag(
-    df_unsc: pd.DataFrame,
     train_prop: float = 0.7,
-    pct_shift_thresh: float = 0.16,
-    frac_outside_thresh: float = 0.06,
-    ks_pval_thresh: float = 1e-6,
+    pct_shift_thresh: float = 0.16,     # relative median shift threshold
+    frac_outside_thresh: float = 0.06,  # fraction outside train 1–99% range
     min_train_samples: int = 50,
-    conc_bins: int = 80,
-    min_failures = 1,
-) -> Tuple[pd.DataFrame, List[str], pd.DataFrame]:
+    na_rate_thresh: float = 0.4,        # flag if >40% NaN in train or overall
+    const_tol: float = 1e-12,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Prune numeric features and return diagnostics.
+    Inspect numeric features and flag simple issues.
 
-    Summary
-    - Split rows contiguously into TRAIN / VAL / TEST by `train_prop`.
-    - For each numeric column (except the supervised label column if `params.label_col`
-      exists in the calling scope) compute TRAIN percentiles (q01,q25,q75,q99 with
-      tiny-tail fallback), medians, relative median shifts, fraction of VAL/TEST
-      outside TRAIN tails, optional KS p-value (TRAIN vs TEST), and a simple spread
-      score derived from a histogram over [q01,q99].
-    - Drop rule: mark feature DROP when any of:
-        * relative median shift in VAL or TEST > pct_shift_thresh
-        * fraction of VAL or TEST outside TRAIN tails > frac_outside_thresh
-        * TRAIN is effectively constant
-        * KS p-value < ks_pval_thresh AND (pct_shift_fail OR frac_out_fail)
-    - Returns (df_pruned, to_drop, diag). `diag` contains per-feature diagnostics.
-    - Minimal safety: skip pruning for features with too few TRAIN non-null samples.
+    Returns (df_out, diag):
+      - diag: one row per numeric feature with status in {FEW_TRAIN, CONST, HIGH_NA, DRIFT, OK}
+      - df_out: copy of input where every feature flagged DRIFT is replaced by "<feature>_DRIFT"
+              (original column dropped and duplicate named "<feature>_DRIFT" kept).
+    Notes:
+      - Splits df into contiguous train/val/test slices (no shuffling).
+      - This function only flags and reorganizes columns; it does not compute RZ.
     """
-    # small constants
-    zero_tol = 1e-8
-    denom_eps = 1e-6
-    const_eps = 1e-12
-    tail_min_count = 3
+    if len(df) == 0:
+        return df.copy(), pd.DataFrame()
 
-    if len(df_unsc) == 0:
-        return df_unsc.copy(), [], pd.DataFrame()
+    # contiguous train/val/test split
+    n_tr = int(len(df) * train_prop)
+    n_val = (len(df) - n_tr) // 2
+    tr = df.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
+    vl = df.iloc[n_tr:n_tr + n_val].replace([np.inf, -np.inf], np.nan)
+    te = df.iloc[n_tr + n_val:].replace([np.inf, -np.inf], np.nan)
 
-    # split
-    n_tr = int(len(df_unsc) * train_prop)
-    n_val = (len(df_unsc) - n_tr) // 2
-    tr = df_unsc.iloc[:n_tr].replace([np.inf, -np.inf], np.nan)
-    vl = df_unsc.iloc[n_tr:n_tr + n_val].replace([np.inf, -np.inf], np.nan)
-    te = df_unsc.iloc[n_tr + n_val:].replace([np.inf, -np.inf], np.nan)
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
 
-    numeric_cols = [c for c in df_unsc.columns
-                    if pd.api.types.is_numeric_dtype(df_unsc[c]) and c not in params.label_col]
-
-    rows = []
-
-    def safe_denom(arr: np.ndarray) -> float:
-        if len(arr) == 0:
-            return denom_eps
+    def robust_scale(arr: np.ndarray) -> float:
+        """Robust denominator for relative shifts: max(|med|, MAD, std, tiny)."""
+        if arr.size == 0:
+            return 1e-6
         med = float(np.nanmedian(arr))
         mad = float(np.nanmedian(np.abs(arr - med)))
         std = float(np.nanstd(arr))
-        return max(abs(med), mad, std, denom_eps)
+        return max(abs(med), mad, std, 1e-6)
 
     def frac_outside(s: pd.Series, q01, q99) -> float:
-        if len(s) == 0 or np.isnan(q01) or np.isnan(q99):
-            return 0.0
         s2 = s.dropna()
-        if len(s2) == 0:
+        if len(s2) == 0 or np.isnan(q01) or np.isnan(q99):
             return 0.0
-        return float(((s2 < q01).sum() + (s2 > q99).sum()) / len(s2))
+        return float(((s2 < q01) | (s2 > q99)).mean())
 
-    # skip-prune threshold for tiny TRAIN samples
-    min_non_na_train = max(5, int(0.01 * max(1, len(tr))))
-
-    for feat in tqdm(numeric_cols, desc="prune_and_diag", unit="feat"):
+    rows = []
+    # iterate with progress bar for visibility
+    for feat in tqdm(numeric_cols, desc="Flagging indicators", unit="feat"):
         tr_s = tr[feat].dropna()
         vl_s = vl[feat].dropna()
         te_s = te[feat].dropna()
 
-        if tr_s.shape[0] < min_non_na_train:
+        na_rate_train = float(tr[feat].isna().mean())
+        na_rate_all = float(df[feat].isna().mean())
+
+        # Priority 1: too few train samples
+        if len(tr_s) < min_train_samples:
             rows.append({
-                "feature": feat, "q01": np.nan, "q25": np.nan, "q75": np.nan, "q99": np.nan,
-                "full_span": np.nan, "iqr": np.nan, "med_tr": np.nan, "med_val": np.nan, "med_te": np.nan,
-                "pct_shift_val": np.nan, "pct_shift_te": np.nan, "abs_shift_val": np.nan, "abs_shift_te": np.nan,
-                "frac_val_out": np.nan, "frac_te_out": np.nan, "ks_p": np.nan,
-                "nan_mask_train": tr[feat].isna().any(), "const_on_train": False,
-                "status": "OK", "reason": "too_few_train", "score": 0.0,
-                "mode_frac": 0.0, "zero_frac": 0.0, "top_bin_share": 0.0,
+                "feature": feat, "status": "FEW_TRAIN", "reason": "too_few_train",
+                "pct_shift_val": np.nan, "pct_shift_te": np.nan,
+                "frac_val_out": np.nan, "frac_te_out": np.nan,
+                "na_rate_train": na_rate_train, "na_rate_all": na_rate_all
             })
             continue
 
-        # medians and denom
-        med_tr = float(np.nanmedian(tr_s)) if len(tr_s) else np.nan
+        # Priority 2: constant on train
+        const_fail = (tr_s.max() - tr_s.min()) < const_tol
+        if const_fail:
+            rows.append({
+                "feature": feat, "status": "CONST", "reason": "constant_train",
+                "pct_shift_val": np.nan, "pct_shift_te": np.nan,
+                "frac_val_out": np.nan, "frac_te_out": np.nan,
+                "na_rate_train": na_rate_train, "na_rate_all": na_rate_all
+            })
+            continue
+
+        # Compute drift stats (median shifts relative to robust scale)
+        med_tr = float(np.nanmedian(tr_s))
         med_val = float(np.nanmedian(vl_s)) if len(vl_s) else np.nan
         med_te = float(np.nanmedian(te_s)) if len(te_s) else np.nan
-        denom = safe_denom(tr_s.to_numpy()) if len(tr_s) else denom_eps
+        denom = robust_scale(tr_s.to_numpy())
 
-        pct_shift_val = abs(med_val - med_tr) / denom if not np.isnan(med_tr) else 0.0
-        pct_shift_te = abs(med_te - med_tr) / denom if not np.isnan(med_tr) else 0.0
-        abs_shift_val = abs(med_val - med_tr)
-        abs_shift_te = abs(med_te - med_tr)
+        pct_shift_val = abs(med_val - med_tr) / denom if not np.isnan(med_val) else 0.0
+        pct_shift_te = abs(med_te - med_tr) / denom if not np.isnan(med_te) else 0.0
 
-        # percentiles with tiny-tail fallback
-        q01 = np.nanpercentile(tr_s, 1) if len(tr_s) else np.nan
-        q25 = np.nanpercentile(tr_s, 25) if len(tr_s) else np.nan
-        q75 = np.nanpercentile(tr_s, 75) if len(tr_s) else np.nan
-        q99 = np.nanpercentile(tr_s, 99) if len(tr_s) else np.nan
-        if len(tr_s):
-            if (tr_s <= q01).sum() < tail_min_count:
-                q01 = np.nanpercentile(tr_s, 5)
-            if (tr_s >= q99).sum() < tail_min_count:
-                q99 = np.nanpercentile(tr_s, 95)
+        # train tails (fallback to 5/95 if too few tail samples)
+        q01 = np.nanpercentile(tr_s, 1)
+        q99 = np.nanpercentile(tr_s, 99)
+        if (tr_s <= q01).sum() < 3:
+            q01 = np.nanpercentile(tr_s, 5)
+        if (tr_s >= q99).sum() < 3:
+            q99 = np.nanpercentile(tr_s, 95)
 
-        full_span = q99 - q01 if not (np.isnan(q99) or np.isnan(q01)) else np.nan
-        iqr = q75 - q25 if not (np.isnan(q75) or np.isnan(q25)) else np.nan
-
-        # simple diagnostics
-        mode_frac = 0.0
-        zero_frac = 0.0
-        top_bin_share = 0.0
-        spread_score = 0.0
-
-        if len(tr_s) > 0:
-            mode_frac = float(tr_s.value_counts(normalize=True).iloc[0])
-            zero_frac = float(((tr_s.abs() <= zero_tol)).sum()) / len(tr_s)
-
-            if not (np.isnan(q01) or np.isnan(q99) or q99 <= q01):
-                edges = np.linspace(q01, q99, conc_bins + 1)
-                h, _ = np.histogram(tr_s, bins=edges)
-                total = h.sum()
-                p = h / total if total > 0 else np.zeros_like(h)
-                top_bin_share = float(p.max()) if p.size else 0.0
-                p_nz = p[p > 0]
-                if p_nz.size:
-                    entropy = -float((p_nz * np.log(p_nz)).sum())
-                    max_entropy = np.log(len(p)) if len(p) > 0 else 1.0
-                    spread_score = float(np.clip(entropy / max_entropy, 0.0, 1.0))
-                else:
-                    spread_score = 0.0
-            else:
-                top_bin_share = 1.0 if tr_s.nunique() == 1 else 0.0
-                spread_score = 0.0 if top_bin_share == 1.0 else 1.0
-
-        # failure tests
-        pct_shift_fail = (pct_shift_val > pct_shift_thresh) or (pct_shift_te > pct_shift_thresh)
         frac_val_out = frac_outside(vl_s, q01, q99)
         frac_te_out = frac_outside(te_s, q01, q99)
-        frac_out_fail = (frac_val_out > frac_outside_thresh) or (frac_te_out > frac_outside_thresh)
 
-        ks_p = np.nan
-        ks_fail = False
-        try:
-            if len(tr_s) >= min_train_samples and len(te_s) >= min_train_samples:
-                _, ks_p = ks_2samp(tr_s, te_s)
-                ks_fail = (ks_p < ks_pval_thresh)
-        except Exception:
-            ks_p = np.nan
-            ks_fail = False
+        drift_fail = (
+            (pct_shift_val > pct_shift_thresh) or (pct_shift_te > pct_shift_thresh)
+            or (frac_val_out > frac_outside_thresh) or (frac_te_out > frac_outside_thresh)
+        )
+        high_na = (na_rate_train > na_rate_thresh) or (na_rate_all > na_rate_thresh)
 
-        const_on_train = False
-        if len(tr_s) and np.isfinite(tr_s.min()) and np.isfinite(tr_s.max()):
-            const_tol = max(const_eps, denom * 1e-12)
-            const_on_train = (abs(tr_s.max() - tr_s.min()) < const_tol)
-        const_fail = const_on_train
-
-        ks_support = ks_fail and (pct_shift_fail or frac_out_fail)
-        
-        # voting: require at least two failing signals to drop
-        vote = int(pct_shift_fail) + int(frac_out_fail) + int(const_fail) + int(ks_support)
-        drop_flag = (vote >= min_failures)
-        
-        drop_reasons: List[str] = []
-        if pct_shift_fail:
-            drop_reasons.append(f"pct_shift_val={pct_shift_val:.3f};te={pct_shift_te:.3f}")
-        if frac_out_fail:
-            drop_reasons.append(f"frac_out_val={frac_val_out:.3f};te={frac_te_out:.3f}")
-        if ks_support:
-            drop_reasons.append(f"ks_p={ks_p:.4g}")
-        if const_fail:
-            drop_reasons.append("constant_on_train")
-        
-        status = "DROP" if drop_flag else "OK"
-        reason = "; ".join(drop_reasons)
+        if high_na:
+            status = "HIGH_NA"
+            reason = f"na_train={na_rate_train:.2f}; na_all={na_rate_all:.2f}"
+        elif drift_fail:
+            status = "DRIFT"
+            reason = (
+                f"pct_shift_val={pct_shift_val:.3f},te={pct_shift_te:.3f}; "
+                f"frac_out_val={frac_val_out:.3f},te={frac_te_out:.3f}"
+            )
+        else:
+            status = "OK"
+            reason = ""
 
         rows.append({
             "feature": feat,
-            "q01": q01, "q25": q25, "q75": q75, "q99": q99,
-            "full_span": full_span, "iqr": iqr,
-            "med_tr": med_tr, "med_val": med_val, "med_te": med_te,
-            "pct_shift_val": pct_shift_val, "pct_shift_te": pct_shift_te,
-            "abs_shift_val": abs_shift_val, "abs_shift_te": abs_shift_te,
-            "frac_val_out": frac_val_out, "frac_te_out": frac_te_out,
-            "ks_p": ks_p,
-            "nan_mask_train": tr[feat].isna().any(),
-            "const_on_train": const_on_train,
             "status": status,
             "reason": reason,
-            "score": spread_score,
-            "mode_frac": float(mode_frac),
-            "zero_frac": float(zero_frac),
-            "top_bin_share": float(top_bin_share),
+            "pct_shift_val": pct_shift_val,
+            "pct_shift_te": pct_shift_te,
+            "frac_val_out": frac_val_out,
+            "frac_te_out": frac_te_out,
+            "na_rate_train": na_rate_train,
+            "na_rate_all": na_rate_all,
         })
 
-    diag = pd.DataFrame(rows).set_index("feature").sort_values(["status"], ascending=[True])
-    to_drop = diag[diag["status"] == "DROP"].index.tolist()
-    df_pruned = df_unsc.drop(columns=to_drop, errors="ignore")
-    return df_pruned, to_drop, diag
+    diag = pd.DataFrame(rows)
 
-    
-############################################################################ 
+    # Build output df: replace DRIFT originals with <feature>_DRIFT and drop originals
+    df_out = df.copy()
+    drift_feats = diag.loc[diag["status"] == "DRIFT", "feature"].astype(str).tolist()
+    for feat in tqdm(drift_feats, desc="Marking DRIFT columns", unit="feat"):
+        if feat in df_out.columns:
+            # create duplicate named "<feat>_DRIFT"
+            df_out[f"{feat}_DRIFT"] = df_out[feat].copy()
+            # drop original column
+            df_out.drop(columns=[feat], inplace=True)
 
-
-def assign_percentiles_from_diag(
-    diag: pd.DataFrame,
-    custom_range: Tuple[float, float],
-    standard_range: Tuple[float, float],
-    base_range: Tuple[float, float],
-    narrow_thresh: float
-) -> pd.DataFrame:
-    """
-    Assign final percentile pairs from diagnostics.
-
-    Inputs
-      - diag: DataFrame indexed by feature containing at least these columns:
-          score, zero_frac, mode_frac, frac_in, top_bin_share
-      - custom_range: percentile pair assigned to "kept_narrow" features (e.g. (30,70))
-      - standard_range: percentile pair assigned to all other features by default
-      - base_range: percentile pair assigned to features with names ending in '_time' and to the target signal
-
-    Behavior
-      - zero_mass := (zero_frac >= 0.05) and (mode_frac >= 0.05)
-      - center_dom := (frac_in >= 0.60) and (top_bin_share >= 0.35)
-      - excluded_local := zero_mass OR center_dom  -> assigned "excluded"
-      - kept_narrow := not excluded_local AND score > 0 -> assigned custom_range
-      - otherwise -> assigned standard_range
-      - features ending with '_time' and target signal get base_range regardless of other rules
-    Output
-      - copy of diag with added columns: low_pct, high_pct, assigned_reason
-    """
-    out = diag.copy()
-
-    # ensure ranges are valid numeric tuples
-    def _norm_range(r):
-        if not (isinstance(r, (tuple, list)) and len(r) >= 2):
-            raise ValueError(f"percentile range must be a tuple (low, high), got {r!r}")
-        lo, hi = float(r[0]), float(r[1])
-        if not (0.0 <= lo <= 100.0 and 0.0 <= hi <= 100.0 and lo < hi):
-            raise ValueError(f"invalid percentile range {r!r}, must satisfy 0 <= low < high <= 100")
-        return lo, hi
-
-    custom_lo, custom_hi = _norm_range(custom_range)
-    standard_lo, standard_hi = _norm_range(standard_range)
-    base_lo, base_hi = _norm_range(base_range)
-
-    low_list, high_list, reason_list = [], [], []
-
-    for feat, r in out.iterrows():
-        # feature-level diagnostics
-        mode_frac = r.get("mode_frac", 0.0)
-        zero_frac = r.get("zero_frac", 0.0)
-        frac_in = r.get("frac_in", 0.0)
-        top_bin = r.get("top_bin_share", 0.0)
-        score = r.get("score", 0.0)
-
-        # time features override everything
-        if str(feat).endswith("_time"):
-            lo, hi = base_lo, base_hi
-            assigned = "time_feature"
-        elif str(feat) == str(params.label_col):
-            lo, hi = base_lo, base_hi
-            assigned = "target_signal"
-        else:
-            zero_mass_flag = (zero_frac >= 0.05) and (mode_frac >= 0.05)
-            center_dom_flag = (frac_in >= 0.60) and (top_bin >= 0.35)
-            excluded_local = bool(zero_mass_flag or center_dom_flag)
-
-            if excluded_local:
-                lo, hi = standard_lo, standard_hi
-                assigned = "excluded"
-            elif top_bin > narrow_thresh:
-                lo, hi = custom_lo, custom_hi
-                assigned = "kept_narrow"
-            else:
-                lo, hi = standard_lo, standard_hi
-                assigned = ""
-
-        low_list.append(lo)
-        high_list.append(hi)
-        reason_list.append(assigned)
-
-    out["low_pct"] = low_list
-    out["high_pct"] = high_list
-    out["assigned_reason"] = reason_list
-    return out
+    return df_out, diag
 
 
-#########################################################################################################
+########################################################################################################## 
 
-
-def scaling_with_percentiles(
+ 
+def apply_rz_to_drifts(
     df: pd.DataFrame,
     diag: pd.DataFrame,
-    train_prop: float = 0.7,
-    val_prop: float = 0.15,
-    winsorize: bool = True,
-    max_abs_cutpoint: float = 1e12,
+    rz_window: int = 60,
+    min_periods: Optional[int] = None,
+    eps: float = 1e-6,
 ) -> pd.DataFrame:
     """
-    Scale numeric features to [0,1] using TRAIN-based winsorize + MinMax with per-feature percentiles.
+    Convert selected DRIFT features to rolling robust z-scores and drop all _DRIFT columns.
 
-    Key rules (strict)
-    - Percentile pairs must be provided by `diag` (as low_pct/high_pct or pct_pair). Missing pairs cause
-      a ValueError to surface (fail-fast) so the caller is forced to supply diagnostics for all features.
-    - The scaler uses the exact percentiles from diag. There is NO implicit fallback to other percentiles.
-    - If diag gives (0.0, 100.0) exactly for a feature, that is interpreted as "no winsorize requested" and
-      the scaler will skip clipping for that feature.
-    - If TRAIN-computed cutpoints for a requested (non-0/100) pair are invalid (non-finite, hi <= lo, or
-      absurd magnitude), the scaler will silently treat that feature as "no clipping" (safety), but it will
-      not substitute alternate percentiles. The feature remains scaled by MinMax from the unclipped TRAIN data.
-    - NaNs and non-numeric columns (including label_col) are preserved unchanged.
-    - Splitting is contiguous: first rows = TRAIN, next = VAL, final = TEST.
-
-    Inputs
-      - df: full DataFrame (indexed by timestamp), numeric features + label_col
-      - label_col: name of the label column to exclude from scaling
-      - diag: diagnostics DataFrame indexed by feature and containing either:
-          * "low_pct" and "high_pct" columns; or
-          * "pct_pair" column with (low_pct, high_pct) tuples.
-      - train_prop, val_prop: contiguous TRAIN/VAL/TEST split fractions (train_prop + val_prop < 1)
-      - winsorize: whether to apply TRAIN-based clipping before MinMax (subject to diag)
-      - max_abs_cutpoint: numeric threshold to consider a cutpoint insane (safety)
-
-    Output
-      - DataFrame with same index and columns, numeric features scaled to [0,1]
+    Steps:
+      - For each feature flagged DRIFT in diag, look for <feature>_DRIFT in df.
+      - If the feature matches the patterns (EMA/SMA/MACD/ATR/PSAR/VWAP/slopes/extrema), create <feature>_RZ
+        using rolling median/MAD, then drop <feature>_DRIFT.
+      - If it does not match, simply drop <feature>_DRIFT.
+    Returns a new DataFrame.
     """
-    # copy and basic clean
-    df = df.copy()
-    df.index = pd.to_datetime(df.index)
-    df = df.replace([np.inf, -np.inf], np.nan)
+    df_out = df.copy()
+    if min_periods is None:
+        min_periods = max(1, rz_window // 3)
 
-    # select numeric features and exclude label
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    feat_cols = [c for c in numeric_cols if c != params.label_col]
-    df[numeric_cols] = df[numeric_cols].astype(np.float64, copy=False)
+    def is_rz_feature(name: str) -> bool:
+        # pattern matches for selected level-like indicators
+        for pat in ("macd_line", "macd_signal", "macd_diff", "psar", "vwap_ohlc_close_session"):
+            if name.startswith(pat) or name == pat:
+                return True
+        for prefix in ("ema_", "sma_", "atr_", "rolling_max_close", "rolling_min_close",
+                       "roll_vwap", "vwap", "slope_close"):
+            if name.startswith(prefix):
+                return True
+        return False
 
-    if not feat_cols:
-        return df
+    drift_feats = diag.loc[diag["status"] == "DRIFT", "feature"].astype(str).tolist()
 
-    # contiguous train/val/test split indices
-    N = len(df)
-    n_tr = int(N * train_prop)
-    n_val = int(N * val_prop)
-    if n_tr + n_val >= N:
-        raise ValueError("train_prop + val_prop must sum < 1.0")
-    tr_slice = slice(0, n_tr)
-    val_slice = slice(n_tr, n_tr + n_val)
-    te_slice = slice(n_tr + n_val, N)
-    df_tr = df.iloc[tr_slice].copy()
-
-    # normalize diag to ensure pct_pair exists
-    if not isinstance(diag, pd.DataFrame):
-        raise ValueError("diag must be a pandas DataFrame indexed by feature")
-    diag_local = diag.copy()
-    if "low_pct" in diag_local.columns and "high_pct" in diag_local.columns:
-        diag_local["pct_pair"] = list(zip(diag_local["low_pct"].astype(float), diag_local["high_pct"].astype(float)))
-
-    # strict sourcing of percentiles: require them for every feature
-    pct_low_map: Dict[str, float] = {}
-    pct_high_map: Dict[str, float] = {}
-    missing = []
-    for c in feat_cols:
-        if c not in diag_local.index:
-            missing.append(c)
+    for feat in tqdm(drift_feats, desc="Applying RZ to DRIFTs", unit="feat"):
+        drift_col = f"{feat}_DRIFT"
+        if drift_col not in df_out.columns:
             continue
-        pair = diag_local.at[c, "pct_pair"] if "pct_pair" in diag_local.columns else None
-        if not (isinstance(pair, (tuple, list)) and len(pair) >= 2):
-            missing.append(c)
-            continue
-        lo, hi = float(pair[0]), float(pair[1])
-        pct_low_map[c] = lo
-        pct_high_map[c] = hi
 
-    if missing:
-        raise ValueError(f"scaling_with_percentiles requires percentiles in diag for all features; missing: {missing}")
+        if is_rz_feature(feat):
+            s = df_out[drift_col].astype('float32')
+            if feat == "vwap_ohlc_close_session": # only indicator calculated per session, to be normalized by the close price
+                s = ((s.astype(float) / df_out["close_raw"].astype(float)) - 1.0).astype('float32')
+            med = s.rolling(window=rz_window, min_periods=min_periods).median()
+            mad = (s - med).abs().rolling(window=rz_window, min_periods=min_periods).median()
+            mad_safe = mad.replace(0, np.nan).fillna(eps)
+            df_out[f"{feat}_RZ"] = (s - med) / mad_safe
 
-    # detect exact full-range request -> skip winsorize for those features
-    skip_wins: Dict[str, bool] = {c: (pct_low_map[c] <= 0.0 and pct_high_map[c] >= 100.0) for c in feat_cols}
+        # always drop the _DRIFT column
+        df_out.drop(columns=[drift_col], inplace=True)
 
-    # compute TRAIN cutpoints per-feature exactly as requested; validate but DO NOT fallback
-    clip_low: Dict[str, float] = {}
-    clip_high: Dict[str, float] = {}
-    if winsorize:
-        for c in feat_cols:
-            if skip_wins.get(c, False):
-                clip_low[c] = np.nan
-                clip_high[c] = np.nan
-                continue
-            arr = df_tr[c].to_numpy(dtype=float)
-            lo_cut = np.nanpercentile(arr, pct_low_map[c]) if arr.size else np.nan
-            hi_cut = np.nanpercentile(arr, pct_high_map[c]) if arr.size else np.nan
-            valid = (
-                np.isfinite(lo_cut)
-                and np.isfinite(hi_cut)
-                and (hi_cut > lo_cut)
-                and (abs(lo_cut) < max_abs_cutpoint)
-                and (abs(hi_cut) < max_abs_cutpoint)
-            )
-            if not valid:
-                # safety: mark as no clipping (do NOT substitute alternate percentiles)
-                clip_low[c] = np.nan
-                clip_high[c] = np.nan
-                skip_wins[c] = True
-            else:
-                clip_low[c] = float(lo_cut)
-                clip_high[c] = float(hi_cut)
+    return df_out
+    
+########################################################################################################## 
 
-    # helper to apply clipping on numpy array (respects skip_wins and invalid cutpoints)
-    def apply_clip_array(arr: np.ndarray, c: str) -> np.ndarray:
-        if not winsorize or skip_wins.get(c, False):
-            return arr
-        low = clip_low.get(c, np.nan); high = clip_high.get(c, np.nan)
-        if (not np.isfinite(low)) or (not np.isfinite(high)):
-            return arr
-        a = np.copy(arr)
-        mask = np.isnan(a)
-        a = np.clip(a, low, high)
-        a[mask] = np.nan
-        return a
 
-    # compute clipped TRAIN min/max and spans (safe defaults if data missing)
-    col_min: Dict[str, float] = {}
-    col_max: Dict[str, float] = {}
-    span: Dict[str, float] = {}
-    for c in feat_cols:
-        col = df_tr[c].to_numpy(dtype=float)
-        colc = apply_clip_array(col, c) if winsorize else col
-        if np.any(~np.isnan(colc)):
-            mn = np.nanmin(colc); mx = np.nanmax(colc)
-            col_min[c] = float(mn) if np.isfinite(mn) else np.nan
-            col_max[c] = float(mx) if np.isfinite(mx) else np.nan
-            sp = (col_max[c] - col_min[c]) if (np.isfinite(col_min[c]) and np.isfinite(col_max[c])) else 0.0
-            span[c] = float(sp) if sp != 0.0 else 1.0
-        else:
-            col_min[c] = np.nan
-            col_max[c] = np.nan
-            span[c] = 1.0
+def scale_features(
+    df: pd.DataFrame,
+    train_prop: float = 0.7,
+    p_lo=1.0, 
+    p_hi=99.0,
+    include_rz: bool = False,  # False: skip *_RZ columns
+    eps: float = 1e-12,        # tiny to avoid divide-by-zero if max==min
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Train-based MinMax scaling to [0,1] on numeric columns.
+    - Fits per-feature min/max on the train slice (first train_prop of rows).
+    - Scales the full series with those train min/max.
+    - No clipping; purely linear rescale.
+    - Optionally skip *_RZ columns (they’re already standardized).
+    Returns (df_scaled, stats_df with min/max).
+    """
+    df_out = df.copy()
+    
+    n_tr = int(len(df_out) * train_prop)
+    train = df_out.iloc[:n_tr]
 
-    # transform helper for a block (preserves NaNs)
-    def transform_block(block: pd.DataFrame) -> pd.DataFrame:
-        out = block.copy()
-        for c in feat_cols:
-            arr = out[c].to_numpy(dtype=float)
-            arrc = apply_clip_array(arr, c) if winsorize else arr
-            mn = col_min[c]; sp = span[c]
-            res = (arrc - mn) / sp
-            res = np.where(np.isnan(arrc), np.nan, np.clip(res, 0.0, 1.0))
-            out[c] = res
-        return out[feat_cols].astype(np.float32)
+    num_cols = [c for c in df_out.columns if pd.api.types.is_numeric_dtype(df_out[c]) and c != "close_raw"]
+    if not include_rz:
+        num_cols = [c for c in num_cols if not c.endswith("_RZ")]
 
-    # apply transforms day-by-day for each split (with progress over days)
-    def transform_split(split_df: pd.DataFrame, desc: str) -> pd.DataFrame:
-        parts = []
-        days = split_df.index.normalize().unique()
-        for _, block in tqdm(split_df.groupby(split_df.index.normalize()),
-                              desc=desc, unit="day", total=len(days)):
-            parts.append(transform_block(block))
-        if not parts:
-            return pd.DataFrame(columns=feat_cols, index=split_df.index)
-        return pd.concat(parts).reindex(split_df.index)
+    stats_rows = []
+    for c in tqdm(num_cols, desc="MinMax p1/p99", unit="feat"):
+        tr = train[c].replace([np.inf, -np.inf], np.nan).astype(float)
+        lo = np.nanpercentile(tr, p_lo)
+        hi = np.nanpercentile(tr, p_hi)
+        span = hi - lo if np.isfinite(hi - lo) and (hi - lo) != 0 else eps
 
-    tr_scaled = transform_split(df.iloc[tr_slice], "scale train days")
-    v_scaled = transform_split(df.iloc[val_slice], "scale val days")
-    te_scaled = transform_split(df.iloc[te_slice], "scale test days")
+        stats_rows.append({"feature": c, "min": lo, "max": hi})
 
-    df_out = df.copy()  # single output copy
+        s = df_out[c].astype(float).clip(lo, hi)
+        df_out[c] = (s - lo) / span
 
-    # assign scaled blocks (they are DataFrames with the same index and feat_cols)
-    # use get_indexer once for efficiency
-    col_idx = df_out.columns.get_indexer(feat_cols)
-    df_out.iloc[tr_slice, col_idx] = tr_scaled.to_numpy()
-    df_out.iloc[val_slice, col_idx] = v_scaled.to_numpy()
-    df_out.iloc[te_slice, col_idx] = te_scaled.to_numpy()
-
-    # free intermediates and force garbage collection
-    del tr_scaled, v_scaled, te_scaled, df_tr
-    gc.collect()
-
-    return df_out.sort_index()
-
+    stats = pd.DataFrame(stats_rows).set_index("feature")
+    return df_out, stats
+ 
 
 #########################################################################################################
 

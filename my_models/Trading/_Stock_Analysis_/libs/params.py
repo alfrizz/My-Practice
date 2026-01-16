@@ -209,31 +209,30 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 
 if ticker == 'AAPL':
     
-    min_prof_thr_tick   = 0.028079027373973872   # minimum % gain to accept a swing
-    max_down_prop_tick  = 0.017422336473970464   # base retracement threshold (fraction of move)
-    gain_tightfact_tick = 0.04716548458388223    # tighter retracement for larger gains
-    tau_time_tick       = 13.003650040241217     # minutes half-life for temporal decay
-    tau_dur_tick        = 18.99173890661863      # minutes half-life for duration boost
+    min_prof_thr_tick   = 0.013690524705087784   # minimum % gain to accept a swing
+    max_down_prop_tick  = 0.0017051801523185084  # base retracement threshold (fraction of move)
+    gain_tightfact_tick = 0.05220789983193748    # tighter retracement for larger gains
+    tau_time_tick       = 11.005172827395096     # minutes half-life for temporal decay
+    tau_dur_tick        = 9.883077705090075      # minutes half-life for duration boost
     thresh_mode_tick    = "median_nonzero"
     thresh_window_tick  = None                   # rolling window (bars) for rolling modes
     
-    col_signal_tick     = 'ema_21'
-    sign_thresh_tick    = 'ema_50'
+    col_signal_tick     = 'ema_9' # 'signal_raw' for target 
+    sign_thresh_tick    = 'ema_21' # 'signal_thresh' for target
     col_atr_tick        = "atr_14"
     col_adx_tick        = "adx_14"
-    col_vol_spike_tick  = 'vol_spike_14'
     col_rsi_tick        = "rsi_6"
     col_vwap_tick       = "vwap_ohlc_close_session"
     
     reset_peak_tick     = False
-    rsi_min_thresh_tick = 3
-    rsi_max_thresh_tick = 64
-    vol_thresh_tick     = 0.1329096236077884
-    adx_thresh_tick     = 10.469832254375964
-    atr_mult_tick       = 0.6731452132957847
-    vwap_atr_mult_tick  = -3.188959026687927
-    buy_factor_tick     = 0.1047726214913476
-    sell_factor_tick    = 0.07028684915542763
-    trailstop_pct_tick  = 13.423169155245464
+    rsi_min_thresh_tick = 46
+    rsi_max_thresh_tick = 61
+    vol_thresh_tick     = 3.7994162168510055
+    adx_thresh_tick     = 44.97256457408656
+    atr_mult_tick       = 0.3831216691971262
+    vwap_atr_mult_tick  = 0.8215585687994682
+    buy_factor_tick     = 0.05046407599093629
+    sell_factor_tick    = 0.44597486479017523
+    trailstop_pct_tick  = 17.575801628534688
 
     features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']

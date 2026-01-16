@@ -450,26 +450,27 @@ def plot_trades(
         rmin, rmax = df[col_close].min(), df[col_close].max()
         span = (rmax - rmin) or 1.0
 
-    for feat in sorted(features):
-        if feat in df:
-            y_orig = df[feat].astype(float)
-            if autoscale:
-                a, b = y_orig.min(), y_orig.max()
-                y_scaled = ((y_orig - a) / ((b - a) or 1e-9)) * span + rmin
-                fig.add_trace(go.Scatter(
-                    x=df.index, y=y_scaled,
-                    mode="lines", line=dict(width=1),
-                    name=feat, yaxis="y2", visible="legendonly",
-                    customdata=y_orig.to_numpy(),  # original values
-                    hovertemplate=f"{feat}: %{{customdata:.3f}}<extra></extra>",
-                ))
-            else:
-                fig.add_trace(go.Scatter(
-                    x=df.index, y=y_orig,
-                    mode="lines", line=dict(width=1),
-                    name=feat, yaxis="y2", visible="legendonly",
-                    hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>",
-                ))
+    if features:
+        for feat in sorted(features):
+            if feat in df:
+                y_orig = df[feat].astype(float)
+                if autoscale:
+                    a, b = y_orig.min(), y_orig.max()
+                    y_scaled = ((y_orig - a) / ((b - a) or 1e-9)) * span + rmin
+                    fig.add_trace(go.Scatter(
+                        x=df.index, y=y_scaled,
+                        mode="lines", line=dict(width=1),
+                        name=feat, yaxis="y2", visible="legendonly",
+                        customdata=y_orig.to_numpy(),  # original values
+                        hovertemplate=f"{feat}: %{{customdata:.3f}}<extra></extra>",
+                    ))
+                else:
+                    fig.add_trace(go.Scatter(
+                        x=df.index, y=y_orig,
+                        mode="lines", line=dict(width=1),
+                        name=feat, yaxis="y2", visible="legendonly",
+                        hovertemplate=f"{feat}: %{{y:.3f}}<extra></extra>",
+                    ))
 
     # base customdata
     bid_arr  = df.get("bid",  pd.Series(np.nan, index=df.index)).to_numpy()
@@ -534,32 +535,33 @@ def plot_trades(
         showlegend=True,
     ))
 
-    buy_mask = df["Action"] == "Buy"
-    sell_mask = df["Action"] == "Sell"
-
-    def _sizes(shares_arr): # sell and buy markers sizes proportional to the shares number
-        return np.clip(np.nan_to_num(np.abs(shares_arr), nan=0.0) * 0.3 + 6, 6, 18)
-
-    if buy_mask.any():
-        fig.add_trace(go.Scatter(
-            x=df.index[buy_mask],
-            y=df.loc[buy_mask, col_close],
-            mode="markers",
-            marker=dict(color="green", size=_sizes(shar_arr[buy_mask]), opacity=0.9),
-            name="Buy",
-            hoverinfo="skip",
-            showlegend=True,
-        ))
-    if sell_mask.any():
-        fig.add_trace(go.Scatter(
-            x=df.index[sell_mask], 
-            y=df.loc[sell_mask, col_close],
-            mode="markers",
-            marker=dict(color="red", size=_sizes(shar_arr[sell_mask]), opacity=0.9),
-            name="Sell",
-            hoverinfo="skip",
-            showlegend=True,
-        ))
+    if "Action" in df.columns:
+        buy_mask = df["Action"] == "Buy"
+        sell_mask = df["Action"] == "Sell"
+    
+        def _sizes(shares_arr): # sell and buy markers sizes proportional to the shares number
+            return np.clip(np.nan_to_num(np.abs(shares_arr), nan=0.0) * 0.3 + 6, 6, 18)
+    
+        if buy_mask.any():
+            fig.add_trace(go.Scatter(
+                x=df.index[buy_mask],
+                y=df.loc[buy_mask, col_close],
+                mode="markers",
+                marker=dict(color="green", size=_sizes(shar_arr[buy_mask]), opacity=0.9),
+                name="Buy",
+                hoverinfo="skip",
+                showlegend=True,
+            ))
+        if sell_mask.any():
+            fig.add_trace(go.Scatter(
+                x=df.index[sell_mask], 
+                y=df.loc[sell_mask, col_close],
+                mode="markers",
+                marker=dict(color="red", size=_sizes(shar_arr[sell_mask]), opacity=0.9),
+                name="Sell",
+                hoverinfo="skip",
+                showlegend=True,
+            ))
 
     # minimal: two vertical lines at regular session start and session end (same base day)
     base = df.index[0].normalize()
@@ -608,10 +610,11 @@ def plot_dual_histograms(
       6) Show a tqdm progress bar per feature.
     """
     # 1) identify all feat_… columns present in both DataFrames
-    feat_cols = [
-        col for col in df_before.columns
-        if col in df_after.columns
-    ]
+    # feat_cols = [
+    #     col for col in df_before.columns
+    #     if col in df_after.columns
+    # ]
+    feat_cols = sorted(set(df_before.columns) | set(df_after.columns))
     if not feat_cols:
         raise ValueError("No overlapping features columns found in the two DataFrames.")
 
@@ -633,8 +636,21 @@ def plot_dual_histograms(
     for ax, feat in tqdm(zip(axes, feat_cols),
                          total=len(feat_cols),
                          desc="Plotting features"):
-        before = dfb[feat].dropna()
-        after  = dfa[feat].dropna()
+        # before = dfb[feat].dropna()
+        # after  = dfa[feat].dropna()
+
+        before = dfb[feat].dropna() if feat in dfb.columns else pd.Series(dtype=float)
+        after  = dfa[feat].dropna() if feat in dfa.columns else pd.Series(dtype=float)
+
+        # --- tiny special-case: no "before" data (time features) -> draw orange on main axes nicely
+        if before.empty and not after.empty:
+            edges = np.linspace(*np.quantile(after, clip_pct), bins + 1)
+            ax.hist(after, bins=edges, color="C1", alpha=0.6, edgecolor="C1")
+            ax.set_xlim(np.quantile(after, clip_pct))
+            ax.xaxis.set_major_formatter(plt.FormatStrFormatter('%.1f')); from matplotlib.ticker import MaxNLocator
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.set_title(feat, color="black")
+            continue
 
         # numeric & high-cardinality: dual overlaid histograms
         if pd.api.types.is_numeric_dtype(before) and before.nunique() > 10:

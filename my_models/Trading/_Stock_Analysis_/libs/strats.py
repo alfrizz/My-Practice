@@ -184,12 +184,12 @@ def generate_actions_alpaca(
     col_adx: str,
     col_rsi: str,
     col_vwap: str,
-    col_vol_spike: str,
+    # col_vol_spike: str,
     reset_peak: bool,
     rsi_min_thresh: float,
     rsi_max_thresh: float,
     adx_thresh: float,
-    vol_thresh: float,
+    # vol_thresh: float,
     trailstop_pct: float,  
     atr_mult: float,
     vwap_atr_mult: float,
@@ -215,7 +215,7 @@ def generate_actions_alpaca(
     adx       = df[col_adx].to_numpy(dtype=float)
     rsi       = df[col_rsi].to_numpy(dtype=float)
     vwap      = df[col_vwap].to_numpy(dtype=float)
-    vol_spike = df[col_vol_spike].to_numpy(dtype=float)
+    # vol_spike = df[col_vol_spike].to_numpy(dtype=float)
 
     slope     = np.gradient(signal)
     if isinstance(sign_thresh, str):
@@ -256,7 +256,7 @@ def generate_actions_alpaca(
         if (
             signal[i] >= sign_thr and
             adx[i] >= adx_thresh and
-            vol_spike[i] >= vol_thresh and
+            # vol_spike[i] >= vol_thresh and
             slope[i] > 0 and
             ((rsi_min_thresh < rsi[i] < rsi_max_thresh) or (close[i] > vwap_arr[i]))
         ):
@@ -779,7 +779,9 @@ def aggregate_performance(df: pd.DataFrame,
 
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(handles1 + handles2, labels1 + labels2, loc="center right")
+    fig.subplots_adjust(right=0.75)
+    ax1.legend(handles1 + handles2, labels1 + labels2,
+       loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.)
 
     plt.tight_layout()
     plt.show()
