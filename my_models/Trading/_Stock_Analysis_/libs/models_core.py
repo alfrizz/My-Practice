@@ -38,10 +38,166 @@ import matplotlib.pyplot as plt
 #########################################################################################################
 
 
+# def build_tensors(
+#     df: pd.DataFrame,
+#     look_back   = None,
+#     sess_start = None,
+#     *,
+#     device     = torch.device("cpu"),
+#     tmp_dir    = "/tmp/X_buf.dat",
+#     thresh_gb  = params.thresh_gb,
+# ) -> tuple[
+#     torch.Tensor,  # X         shape=(N, look_back, F)
+#     torch.Tensor,  # y_sig     shape=(N,)
+#     torch.Tensor,  # y_ret     shape=(N,)
+#     torch.Tensor,  # raw_close shape=(N,)
+#     np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
+# ]:
+#     """
+#     Build sliding-window tensors for an LSTM trading model (RAM-only, simple).
+
+#     Behavior (complete)
+#     - Select feature columns = df.columns minus params.label_col and "close_raw".
+#     - First pass (per calendar day): extract per-day arrays (feats_np, sig_np, close_np),
+#       compute per-bar log-returns safely, compute window-end timestamps aligned to
+#       window ends (ends_np = index[look_back - 1:]) and a boolean mask for sess_start.
+#       Record payloads only for days with mask.sum() > 0 and accumulate N_total.
+#     - Allocate in-RAM numpy buffers sized by N_total and initialize to NaN/NaT so
+#       unwritten slots are detectable.
+#     - Second pass (parallel): produce sliding windows with
+#       sliding_window_view(feats_np, window_shape=look_back, axis=0) which yields
+#       (T - look_back + 1, look_back, F). Write wins[mask] into X_buf; writes are
+#       guarded to accept dst layout (m, look_back, F) or (m, F, look_back) by transposing
+#       when necessary. Progress updates happen on the main thread.
+#     - Return CPU torch tensors (do not move to GPU here). Keep naming/variables unchanged.
+#     """
+#     # 1) Prepare DataFrame & feature list
+#     df = df.copy()
+#     feature_cols = [c for c in df.columns if c not in (params.label_col, "close_raw")]
+#     F = len(feature_cols)
+
+#     # session start -> seconds
+#     cutoff_sec = sess_start.hour * 3600 + sess_start.minute * 60
+
+#     # 2) First pass: per-day payloads and N_total
+#     day_groups = df.groupby(df.index.normalize(), sort=False)
+#     payloads = []
+#     N_total = 0
+
+#     for _, day_df in tqdm(day_groups, desc="Preparing days"):
+#         day_df = day_df.sort_index()
+#         T = len(day_df)
+#         if T <= look_back:
+#             continue
+
+#         feats_np = day_df[feature_cols].to_numpy(np.float32)      # (T, F)
+#         sig_np   = day_df[params.label_col].to_numpy(np.float32)  # (T,)
+#         close_np = day_df["close_raw"].to_numpy(np.float32)       # (T,)
+
+#         # safe log-returns; replace non-finite with 0
+#         ret_full = np.empty_like(close_np, np.float32)
+#         ret_full[0] = 0.0
+#         with np.errstate(divide="ignore", invalid="ignore"):
+#             ret_full[1:] = np.log(close_np[1:] / close_np[:-1])
+#         bad = ~np.isfinite(ret_full)
+#         if bad.any():
+#             ret_full[bad] = 0.0
+
+#         # window-end alignment: window [i : i+look_back] ends at i+look_back-1
+#         ends_np = day_df.index.to_numpy()[look_back - 1:]        # (T - look_back + 1,)
+#         secs = (ends_np - ends_np.astype("datetime64[D]")) / np.timedelta64(1, "s")
+#         mask = secs >= cutoff_sec                                # (T - look_back + 1,)
+
+#         m = int(mask.sum())
+#         if m == 0:
+#             continue
+
+#         sig_end   = sig_np[look_back - 1:]
+#         ret_end   = ret_full[look_back - 1:]
+#         close_end = close_np[look_back - 1:]
+#         payloads.append((feats_np, sig_end, ret_end, close_end, ends_np, mask, N_total))
+#         N_total += m
+
+#     # sanity and prints
+#     assert N_total == sum(int(p[5].sum()) for p in payloads), "N_total mismatch after payload accumulation"
+#     print("N_total:", N_total, "look_back:", look_back, "F:", F)
+#     est_bytes = int(N_total) * int(look_back) * int(F) * 4
+#     est_gb = est_bytes / (1024**3)
+#     print(f"Estimated X_buf size: {est_bytes/1e9:.2f} GB — {'using memmap' if est_gb > thresh_gb else 'using RAM (in-memory)'} (thresh {thresh_gb} GiB)")
+
+#     # 3) Allocate RAM buffers or memmap and initialize to NaN/NaT
+#     if est_gb > thresh_gb:
+#         print('initializing mmap...')
+#         X_buf = np.memmap(tmp_dir, dtype=np.float32, mode="w+", shape=(N_total, look_back, F)); X_buf[:] = np.nan; X_buf.flush()
+#     else:
+#         X_buf = np.full((N_total, look_back, F), np.nan, dtype=np.float32)
+
+#     y_buf = np.full((N_total,), np.nan, dtype=np.float32)
+#     r_buf = np.full((N_total,), np.nan, dtype=np.float32)
+#     c_buf = np.full((N_total,), np.nan, dtype=np.float32)
+#     t_buf = np.full((N_total,), np.datetime64("NaT"), dtype="datetime64[ns]")
+
+#     # 4) Second pass: build windows and write
+#     pbar = tqdm(total=len(payloads), desc="Writing days")
+
+#     def _write_np(payload):
+#         feats_np, sig_end, ret_end, close_end, ends_np, mask, offset = payload
+    
+#         wins = np.lib.stride_tricks.sliding_window_view(feats_np, window_shape=look_back, axis=0)
+#         assert wins.shape[0] == len(ends_np), "wins vs ends_np length mismatch"
+#         assert mask.shape[0] == wins.shape[0], "mask length mismatch"
+    
+#         m = int(mask.sum())
+#         if m == 0:
+#             return None
+    
+#         wins_sel = wins[mask]               # usually (m, look_back, F)
+#         dst = X_buf[offset : offset + m]    # expected (m, look_back, F)
+    
+#         # Short, explicit, no try/except: accept exact match or swapped feature/time axes
+#         if dst.shape == wins_sel.shape:
+#             dst[:] = wins_sel
+#         elif dst.shape == (wins_sel.shape[0], wins_sel.shape[2], wins_sel.shape[1]):
+#             dst[:] = wins_sel.transpose(0, 2, 1)
+#         else:
+#             raise ValueError(f"Axis mismatch writing wins -> X_buf: dst={dst.shape}, wins={wins_sel.shape}")
+    
+#         y_buf[offset : offset + m] = sig_end[mask]
+#         r_buf[offset : offset + m] = ret_end[mask]
+#         c_buf[offset : offset + m] = close_end[mask]
+#         t_buf[offset : offset + m] = ends_np[mask]
+    
+#         return None
+
+#     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as exe:
+#         for _ in exe.map(_write_np, payloads):
+#             pbar.update(1)
+#     pbar.close()
+
+#     # 5) Wrap buffers as CPU torch tensors (do not move to GPU here)
+#     X         = torch.from_numpy(X_buf)
+#     y_sig     = torch.from_numpy(y_buf)
+#     y_ret     = torch.from_numpy(r_buf)
+#     raw_close = torch.from_numpy(c_buf)
+#     end_times = t_buf.copy()
+
+#     # 6) Light cleanup
+#     gc.collect()
+#     if device.type == "cuda":
+#         torch.cuda.empty_cache()
+    
+#     # Defensive: fail if any target entries are non-finite
+#     if not np.isfinite(y_buf).all():
+#         bad_idx = np.where(~np.isfinite(y_buf))[0]
+#         raise RuntimeError(f"build_tensors: non-finite y_sig at positions {bad_idx[:16].tolist()} (total {len(bad_idx)})")
+
+#     return X, y_sig, y_ret, raw_close, end_times
+
+
 def build_tensors(
-    df: pd.DataFrame,
-    look_back   = None,
-    sess_start = None,
+    df,
+    look_back,
+    features_cols,
     *,
     device     = torch.device("cpu"),
     tmp_dir    = "/tmp/X_buf.dat",
@@ -49,37 +205,22 @@ def build_tensors(
 ) -> tuple[
     torch.Tensor,  # X         shape=(N, look_back, F)
     torch.Tensor,  # y_sig     shape=(N,)
-    torch.Tensor,  # y_ret     shape=(N,)
     torch.Tensor,  # raw_close shape=(N,)
     np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
 ]:
     """
-    Build sliding-window tensors for an LSTM trading model (RAM-only, simple).
+    Build sliding-window tensors for an LSTM trading model.
 
-    Behavior (complete)
-    - Select feature columns = df.columns minus params.label_col and "close_raw".
-    - First pass (per calendar day): extract per-day arrays (feats_np, sig_np, close_np),
-      compute per-bar log-returns safely, compute window-end timestamps aligned to
-      window ends (ends_np = index[look_back - 1:]) and a boolean mask for sess_start.
-      Record payloads only for days with mask.sum() > 0 and accumulate N_total.
-    - Allocate in-RAM numpy buffers sized by N_total and initialize to NaN/NaT so
-      unwritten slots are detectable.
-    - Second pass (parallel): produce sliding windows with
-      sliding_window_view(feats_np, window_shape=look_back, axis=0) which yields
-      (T - look_back + 1, look_back, F). Write wins[mask] into X_buf; writes are
-      guarded to accept dst layout (m, look_back, F) or (m, F, look_back) by transposing
-      when necessary. Progress updates happen on the main thread.
-    - Return CPU torch tensors (do not move to GPU here). Keep naming/variables unchanged.
+    - Two-pass per-day builder:
+        1) scan each day to collect per-day arrays and compute total windows (N_total);
+        2) allocate buffers (RAM or memmap) sized to N_total and write sliding windows in parallel.
+    - Produces X (N, look_back, F), y_sig, raw_close and end_times.
+    - Windows are aligned to their end positions (index[look_back-1:]) and all window-ends are kept.
     """
-    # 1) Prepare DataFrame & feature list
-    df = df.copy()
-    feature_cols = [c for c in df.columns if c not in (params.label_col, "close_raw")]
-    F = len(feature_cols)
+    # number of features
+    F = len(features_cols)
 
-    # session start -> seconds
-    cutoff_sec = sess_start.hour * 3600 + sess_start.minute * 60
-
-    # 2) First pass: per-day payloads and N_total
+    # 1) First pass: collect per-day payloads and compute N_total
     day_groups = df.groupby(df.index.normalize(), sort=False)
     payloads = []
     N_total = 0
@@ -88,47 +229,39 @@ def build_tensors(
         day_df = day_df.sort_index()
         T = len(day_df)
         if T <= look_back:
-            continue
+            continue  # not enough bars to form a single window
 
-        feats_np = day_df[feature_cols].to_numpy(np.float32)      # (T, F)
-        sig_np   = day_df[params.label_col].to_numpy(np.float32)  # (T,)
-        close_np = day_df["close_raw"].to_numpy(np.float32)       # (T,)
+        # per-day arrays
+        feats_np = np.ascontiguousarray(day_df[features_cols].to_numpy(np.float32))  # (T, F) C-contiguous
+        sig_np   = day_df["signal_raw"].to_numpy(np.float32)   # (T,)
+        close_np = day_df["close_raw"].to_numpy(np.float32)        # (T,)
 
-        # safe log-returns; replace non-finite with 0
-        ret_full = np.empty_like(close_np, np.float32)
-        ret_full[0] = 0.0
-        with np.errstate(divide="ignore", invalid="ignore"):
-            ret_full[1:] = np.log(close_np[1:] / close_np[:-1])
-        bad = ~np.isfinite(ret_full)
-        if bad.any():
-            ret_full[bad] = 0.0
-
-        # window-end alignment: window [i : i+look_back] ends at i+look_back-1
-        ends_np = day_df.index.to_numpy()[look_back - 1:]        # (T - look_back + 1,)
-        secs = (ends_np - ends_np.astype("datetime64[D]")) / np.timedelta64(1, "s")
-        mask = secs >= cutoff_sec                                # (T - look_back + 1,)
-
-        m = int(mask.sum())
+        # window-end alignment: windows end at indices look_back-1 .. T-1
+        ends_np = day_df.index.to_numpy()[look_back - 1:]           # (T - look_back + 1,)
+        m = len(ends_np)                                            # number of windows for this day
         if m == 0:
             continue
 
+        # end-aligned slices
         sig_end   = sig_np[look_back - 1:]
-        ret_end   = ret_full[look_back - 1:]
         close_end = close_np[look_back - 1:]
-        payloads.append((feats_np, sig_end, ret_end, close_end, ends_np, mask, N_total))
+
+        # payload: per-day arrays and write offset (no mask)
+        payloads.append((feats_np, sig_end, close_end, ends_np, N_total))
         N_total += m
 
-    # sanity and prints
-    assert N_total == sum(int(p[5].sum()) for p in payloads), "N_total mismatch after payload accumulation"
+    # summary and size estimate
     print("N_total:", N_total, "look_back:", look_back, "F:", F)
     est_bytes = int(N_total) * int(look_back) * int(F) * 4
     est_gb = est_bytes / (1024**3)
     print(f"Estimated X_buf size: {est_bytes/1e9:.2f} GB — {'using memmap' if est_gb > thresh_gb else 'using RAM (in-memory)'} (thresh {thresh_gb} GiB)")
 
-    # 3) Allocate RAM buffers or memmap and initialize to NaN/NaT
+    # 3) Allocate buffers (memmap if large) and initialize to NaN/NaT
     if est_gb > thresh_gb:
         print('initializing mmap...')
-        X_buf = np.memmap(tmp_dir, dtype=np.float32, mode="w+", shape=(N_total, look_back, F)); X_buf[:] = np.nan; X_buf.flush()
+        X_buf = np.memmap(tmp_dir, dtype=np.float32, mode="w+", shape=(N_total, look_back, F))
+        X_buf[:] = np.nan
+        X_buf.flush()
     else:
         X_buf = np.full((N_total, look_back, F), np.nan, dtype=np.float32)
 
@@ -137,36 +270,25 @@ def build_tensors(
     c_buf = np.full((N_total,), np.nan, dtype=np.float32)
     t_buf = np.full((N_total,), np.datetime64("NaT"), dtype="datetime64[ns]")
 
-    # 4) Second pass: build windows and write
+    # 4) Second pass: build sliding windows and write contiguous blocks
     pbar = tqdm(total=len(payloads), desc="Writing days")
 
     def _write_np(payload):
-        feats_np, sig_end, ret_end, close_end, ends_np, mask, offset = payload
-    
-        wins = np.lib.stride_tricks.sliding_window_view(feats_np, window_shape=look_back, axis=0)
-        assert wins.shape[0] == len(ends_np), "wins vs ends_np length mismatch"
-        assert mask.shape[0] == wins.shape[0], "mask length mismatch"
-    
-        m = int(mask.sum())
-        if m == 0:
+        feats_np, sig_end, close_end, ends_np, offset = payload
+
+        # build explicit windows with canonical layout (m, look_back, F)
+        m = feats_np.shape[0] - look_back + 1
+        if m <= 0:
             return None
-    
-        wins_sel = wins[mask]               # usually (m, look_back, F)
-        dst = X_buf[offset : offset + m]    # expected (m, look_back, F)
-    
-        # Short, explicit, no try/except: accept exact match or swapped feature/time axes
-        if dst.shape == wins_sel.shape:
-            dst[:] = wins_sel
-        elif dst.shape == (wins_sel.shape[0], wins_sel.shape[2], wins_sel.shape[1]):
-            dst[:] = wins_sel.transpose(0, 2, 1)
-        else:
-            raise ValueError(f"Axis mismatch writing wins -> X_buf: dst={dst.shape}, wins={wins_sel.shape}")
-    
-        y_buf[offset : offset + m] = sig_end[mask]
-        r_buf[offset : offset + m] = ret_end[mask]
-        c_buf[offset : offset + m] = close_end[mask]
-        t_buf[offset : offset + m] = ends_np[mask]
-    
+        wins = np.stack([feats_np[i : i + look_back] for i in range(m)], axis=0)  # (m, look_back, F)
+        dst = X_buf[offset : offset + m]
+        dst[:] = wins
+
+        # write targets and end-times (contiguous slices)
+        y_buf[offset : offset + m] = sig_end[:m]
+        c_buf[offset : offset + m] = close_end[:m]
+        t_buf[offset : offset + m] = ends_np[:m]
+
         return None
 
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as exe:
@@ -177,30 +299,114 @@ def build_tensors(
     # 5) Wrap buffers as CPU torch tensors (do not move to GPU here)
     X         = torch.from_numpy(X_buf)
     y_sig     = torch.from_numpy(y_buf)
-    y_ret     = torch.from_numpy(r_buf)
     raw_close = torch.from_numpy(c_buf)
     end_times = t_buf.copy()
 
-    # 6) Light cleanup
+    # 6) Light cleanup and non-finite reporting
     gc.collect()
-    if device.type == "cuda":
-        torch.cuda.empty_cache()
-    
-    # Defensive: fail if any target entries are non-finite
     if not np.isfinite(y_buf).all():
         bad_idx = np.where(~np.isfinite(y_buf))[0]
-        raise RuntimeError(f"build_tensors: non-finite y_sig at positions {bad_idx[:16].tolist()} (total {len(bad_idx)})")
+        print(f"build_tensors: non-finite y_sig at positions {bad_idx[:16].tolist()} (total {len(bad_idx)})")
 
-    return X, y_sig, y_ret, raw_close, end_times
+    return X, y_sig, raw_close, end_times
+
 
 
 #########################################################################################################
 
 
+# def chronological_split(
+#     X:           torch.Tensor,
+#     y_sig:       torch.Tensor,
+#     y_ret:       torch.Tensor,
+#     raw_close:   torch.Tensor,
+#     end_times:   np.ndarray,      # (N,), dtype datetime64[ns]
+#     *,
+#     train_batch: int,
+#     device       = torch.device("cpu")
+# ) -> Tuple[
+#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],          
+#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],          
+#     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],  
+#     list,                                                    
+#     torch.Tensor, torch.Tensor, torch.Tensor                  
+# ]:
+#     """
+#     Split flattened windows into train/val/test sets by calendar day,
+#     returning raw_close for every split so downstream __getitem__
+#     always has a tensor.
+
+#     Functionality:
+#       1) Normalize end_times to per-day bins and count windows per calendar day.
+#       2) Compute how many days go to train/val/test (train rounded to full batches).
+#       3) Build cumulative window‐count array, then derive slice indices i_tr, i_val.
+#       4) Slice X, y_sig, y_ret, raw_close into:
+#          - train  quadruple (X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr)
+#          - val    quadruple (X_val, y_sig_val, y_ret_val, raw_close_val)
+#          - test   quadruple (X_te,  y_sig_te,  y_ret_te,  raw_close_te)
+#       5) Build per-window day‐id tensors for each split for GPU collation.
+#       6) Return the three splits, samples_per_day list, and day_id_tr/val/te.
+#     """
+#     # 1) Count windows per normalized calendar day
+#     dates_norm = pd.to_datetime(end_times).normalize().values
+#     days, counts = np.unique(dates_norm, return_counts=True)
+#     samples_per_day = counts.tolist()
+
+#     # Sanity check total windows matches tensor length
+#     total = sum(samples_per_day)
+#     if total != X.size(0):
+#         raise ValueError(f"Window count mismatch {total} vs {X.size(0)}")
+
+#     # 2) Determine day‐level cut points for train/val/test
+#     D             = len(samples_per_day)
+#     orig_tr_days  = int(D * params.train_prop)
+#     full_batches  = (orig_tr_days + train_batch - 1) // train_batch
+#     tr_days       = min(D, full_batches * train_batch)
+#     cut_train = max(0, tr_days - 1)
+#     cut_val = min(D - 1, int(D * (params.train_prop + params.val_prop)))
+    
+#     # build cumsum then compute i_tr/i_val safely
+#     cumsum = np.concatenate([[0], np.cumsum(counts)])
+#     i_tr = int(cumsum[min(tr_days, D)])
+#     i_val = int(cumsum[min(cut_val + 1, D)])
+#     # sanity
+#     assert 0 <= i_tr <= i_val <= X.size(0)
+
+#     # 4) Slice into train/val/test (each gets raw_close slice)
+#     X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr  = (
+#         X[:i_tr],    y_sig[:i_tr],   y_ret[:i_tr],   raw_close[:i_tr]
+#     )
+#     X_val, y_sig_val, y_ret_val, raw_close_val = (
+#         X[i_tr:i_val], y_sig[i_tr:i_val], y_ret[i_tr:i_val], raw_close[i_tr:i_val]
+#     )
+#     X_te,  y_sig_te,  y_ret_te,  raw_close_te  = (
+#         X[i_val:],    y_sig[i_val:],   y_ret[i_val:],   raw_close[i_val:]
+#     )
+
+#     # 5) Build per-window day_id tensors for grouping
+#     def make_day_ids(start_day: int, end_day: int) -> torch.Tensor:
+#         # repeat each day index by its window count
+#         day_counts = samples_per_day[start_day : end_day + 1]
+#         day_idxs   = torch.arange(start_day, end_day + 1, dtype=torch.long)
+#         return day_idxs.repeat_interleave(torch.tensor(day_counts, dtype=torch.long))
+
+#     day_id_tr  = make_day_ids(0,          cut_train)
+#     day_id_val = make_day_ids(cut_train+1, cut_val)
+#     day_id_te  = make_day_ids(cut_val+1,  D - 1)
+
+#     # 6) Return splits as 4-tuples + metadata
+#     return (
+#         (X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr),
+#         (X_val, y_sig_val, y_ret_val, raw_close_val),
+#         (X_te,  y_sig_te,  y_ret_te,  raw_close_te),
+#         samples_per_day,
+#         day_id_tr, day_id_val, day_id_te
+#     )
+
+
 def chronological_split(
     X:           torch.Tensor,
     y_sig:       torch.Tensor,
-    y_ret:       torch.Tensor,
     raw_close:   torch.Tensor,
     end_times:   np.ndarray,      # (N,), dtype datetime64[ns]
     *,
@@ -222,10 +428,7 @@ def chronological_split(
       1) Normalize end_times to per-day bins and count windows per calendar day.
       2) Compute how many days go to train/val/test (train rounded to full batches).
       3) Build cumulative window‐count array, then derive slice indices i_tr, i_val.
-      4) Slice X, y_sig, y_ret, raw_close into:
-         - train  quadruple (X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr)
-         - val    quadruple (X_val, y_sig_val, y_ret_val, raw_close_val)
-         - test   quadruple (X_te,  y_sig_te,  y_ret_te,  raw_close_te)
+      4) Slice X, y_sig, raw_close
       5) Build per-window day‐id tensors for each split for GPU collation.
       6) Return the three splits, samples_per_day list, and day_id_tr/val/te.
     """
@@ -244,8 +447,8 @@ def chronological_split(
     orig_tr_days  = int(D * params.train_prop)
     full_batches  = (orig_tr_days + train_batch - 1) // train_batch
     tr_days       = min(D, full_batches * train_batch)
-    cut_train = max(0, tr_days - 1)
-    cut_val = min(D - 1, int(D * (params.train_prop + params.val_prop)))
+    cut_train     = max(0, tr_days - 1)
+    cut_val       = min(D - 1, int(D * (params.train_prop + params.val_prop)))
     
     # build cumsum then compute i_tr/i_val safely
     cumsum = np.concatenate([[0], np.cumsum(counts)])
@@ -255,14 +458,14 @@ def chronological_split(
     assert 0 <= i_tr <= i_val <= X.size(0)
 
     # 4) Slice into train/val/test (each gets raw_close slice)
-    X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr  = (
-        X[:i_tr],    y_sig[:i_tr],   y_ret[:i_tr],   raw_close[:i_tr]
+    X_tr,  y_sig_tr, raw_close_tr  = (
+        X[:i_tr],    y_sig[:i_tr],   raw_close[:i_tr]
     )
-    X_val, y_sig_val, y_ret_val, raw_close_val = (
-        X[i_tr:i_val], y_sig[i_tr:i_val], y_ret[i_tr:i_val], raw_close[i_tr:i_val]
+    X_val, y_sig_val, raw_close_val = (
+        X[i_tr:i_val], y_sig[i_tr:i_val], raw_close[i_tr:i_val]
     )
-    X_te,  y_sig_te,  y_ret_te,  raw_close_te  = (
-        X[i_val:],    y_sig[i_val:],   y_ret[i_val:],   raw_close[i_val:]
+    X_te,  y_sig_te,  raw_close_te  = (
+        X[i_val:],    y_sig[i_val:],   raw_close[i_val:]
     )
 
     # 5) Build per-window day_id tensors for grouping
@@ -276,17 +479,91 @@ def chronological_split(
     day_id_val = make_day_ids(cut_train+1, cut_val)
     day_id_te  = make_day_ids(cut_val+1,  D - 1)
 
-    # 6) Return splits as 4-tuples + metadata
+    # 6) Return splits as tuples + metadata
     return (
-        (X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr),
-        (X_val, y_sig_val, y_ret_val, raw_close_val),
-        (X_te,  y_sig_te,  y_ret_te,  raw_close_te),
+        (X_tr,  y_sig_tr,  raw_close_tr),
+        (X_val, y_sig_val, raw_close_val),
+        (X_te,  y_sig_te,  raw_close_te),
         samples_per_day,
         day_id_tr, day_id_val, day_id_te
-    )
+    ) 
 
-
+    
 #########################################################################################################
+
+
+# class DayWindowDataset(Dataset):
+#     """
+#     Return per-day tensors for the requested calendar day index.
+    
+#     Functionality
+#     - Slices the precomputed sliding-window buffers for the day defined by idx and
+#       returns the day's windows and labels without an extra leading day dimension.
+#     - Produces per-day shapes that pad_collate expects:
+#       - x        -> Tensor[W, T, F]       windows for that calendar day
+#       - y_sig    -> Tensor[W]             per-window scalar targets
+#       - y_ret    -> Tensor[W]             per-window returns
+#       # - y_ret_ter-> LongTensor[W]         ternary labels computed from return_thresh
+#       - rc       -> Tensor[W]             raw_close slice aligned to windows
+#       - wd       -> int                   weekday index for the day
+#       - end_ts   -> numpy.datetime64      timestamp of last window for the day
+#     """
+#     def __init__(
+#         self,
+#         X:               torch.Tensor,   # (N_windows, look_back, F)
+#         y_signal:        torch.Tensor,   # (N_windows,)
+#         # y_return:        torch.Tensor,   # (N_windows,)
+#         raw_close:       torch.Tensor,   # (N_windows,)
+#         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
+#         # return_thresh:   float
+#     ):
+#         # self.return_thresh = return_thresh
+
+#         # 1) Store all buffers (raw_close always provided now)
+#         self.X         = X
+#         self.y_signal  = y_signal
+#         # self.y_return  = y_return
+#         self.raw_close = raw_close
+#         self.end_times = end_times   # numpy.datetime64[ns]
+
+#         # 2) Group windows by calendar day
+#         days64 = end_times.astype("datetime64[D]")       # e.g. 2025-09-25
+#         days, counts = np.unique(days64, return_counts=True)
+#         boundaries = np.concatenate(([0], np.cumsum(counts)))
+
+#         # 3) Build start/end indices and weekday tensor
+#         self.start   = torch.tensor(boundaries[:-1], dtype=torch.long)
+#         self.end     = torch.tensor(boundaries[1:],  dtype=torch.long)
+#         weekdays     = pd.to_datetime(days).dayofweek
+#         self.weekday = torch.tensor(weekdays, dtype=torch.long)
+
+#     def __len__(self):
+#         return len(self.start)
+
+#     def __getitem__(self, idx: int):
+#         # Determine slice indices for this day
+#         s = self.start[idx].item()
+#         e = self.end[idx].item()
+    
+#         # 4) Slice out windows (no leading day dim)
+#         x     = self.X[s:e]           # (W, look_back, F)
+#         y_sig = self.y_signal[s:e]    # (W,)
+    
+#         # True returns + ternary label
+#         # y_ret     = self.y_return[s:e]                     # (W,)
+#         # y_ret_ter = torch.ones_like(y_ret, dtype=torch.long)
+#         # y_ret_ter[y_ret >  self.return_thresh] = 2
+#         # y_ret_ter[y_ret < -self.return_thresh] = 0
+    
+#         # Extract raw_close slice (length W, no leading dim)
+#         rc = self.raw_close[s:e]   # (W,)
+    
+#         # Weekday index and last-window timestamp
+#         wd     = int(self.weekday[idx].item())
+#         end_ts = self.end_times[e - 1]  # numpy.datetime64[ns]
+    
+#         # Return the tuple with simplified shapes
+#         return x, y_sig, y_ret, y_ret_ter, rc, wd, end_ts
 
 
 class DayWindowDataset(Dataset):
@@ -299,8 +576,6 @@ class DayWindowDataset(Dataset):
     - Produces per-day shapes that pad_collate expects:
       - x        -> Tensor[W, T, F]       windows for that calendar day
       - y_sig    -> Tensor[W]             per-window scalar targets
-      - y_ret    -> Tensor[W]             per-window returns
-      - y_ret_ter-> LongTensor[W]         ternary labels computed from return_thresh
       - rc       -> Tensor[W]             raw_close slice aligned to windows
       - wd       -> int                   weekday index for the day
       - end_ts   -> numpy.datetime64      timestamp of last window for the day
@@ -309,17 +584,14 @@ class DayWindowDataset(Dataset):
         self,
         X:               torch.Tensor,   # (N_windows, look_back, F)
         y_signal:        torch.Tensor,   # (N_windows,)
-        y_return:        torch.Tensor,   # (N_windows,)
         raw_close:       torch.Tensor,   # (N_windows,)
         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
-        return_thresh:   float
     ):
-        self.return_thresh = return_thresh
+        # self.return_thresh = return_thresh
 
         # 1) Store all buffers (raw_close always provided now)
         self.X         = X
         self.y_signal  = y_signal
-        self.y_return  = y_return
         self.raw_close = raw_close
         self.end_times = end_times   # numpy.datetime64[ns]
 
@@ -346,12 +618,6 @@ class DayWindowDataset(Dataset):
         x     = self.X[s:e]           # (W, look_back, F)
         y_sig = self.y_signal[s:e]    # (W,)
     
-        # True returns + ternary label
-        y_ret     = self.y_return[s:e]                     # (W,)
-        y_ret_ter = torch.ones_like(y_ret, dtype=torch.long)
-        y_ret_ter[y_ret >  self.return_thresh] = 2
-        y_ret_ter[y_ret < -self.return_thresh] = 0
-    
         # Extract raw_close slice (length W, no leading dim)
         rc = self.raw_close[s:e]   # (W,)
     
@@ -360,10 +626,66 @@ class DayWindowDataset(Dataset):
         end_ts = self.end_times[e - 1]  # numpy.datetime64[ns]
     
         # Return the tuple with simplified shapes
-        return x, y_sig, y_ret, y_ret_ter, rc, wd, end_ts
+        return x, y_sig, rc, wd, end_ts
 
-
+        
 ######################
+
+
+# def pad_collate(batch):
+#     """
+#     Pad and flatten a batch of per-day examples into canonical per-window tensors.
+
+#     Args
+#     - batch: iterable of DayWindowDataset items, 
+#       where x is expected to be per-day windows shaped (W, T, F).
+
+#     Returns
+#     - x_flat     Tensor[N, T, F]    flattened windows (N = B * W_max)
+#     - ysig_flat  Tensor[N]          flattened per-window scalar targets
+#     - yret_flat  Tensor[N]          flattened per-window returns
+#     - yter_flat  LongTensor[N]      flattened per-window ternary labels
+#     - rc_flat    Tensor[N]          flattened per-window raw_close values
+#     - wd_per_day list[int]          per-day weekday ints (length B)
+#     - ts_list    list               per-day end timestamps 
+#     - lengths    list[int]          true window counts per day 
+#     """
+#     # Unpack tuple structure
+#     x_list, ysig_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
+
+#     xs      = list(x_list)        # expect (W, T, F)
+#     ysig    = list(ysig_list)     # expect (W,)
+#     yrets   = list(yret_list)
+#     yter    = list(yter_list)
+#     rc_seq  = list(rc_list)       # expect (W,)
+
+#     lengths = [seq.size(0) for seq in xs]  # per-day window counts W_i
+
+#     # Pad per-day along the window axis -> shapes (B, W_max, ...)
+#     x_pad    = pad_sequence(xs,   batch_first=True)  # (B, W_max, T, F)
+#     ysig_pad = pad_sequence(ysig,   batch_first=True) # (B, W_max)
+#     yret_pad = pad_sequence(yrets, batch_first=True)  # (B, W_max)
+#     yter_pad = pad_sequence(yter, batch_first=True)   # (B, W_max)
+#     rc_pad   = pad_sequence(rc_seq, batch_first=True) # (B, W_max)
+
+#     # Weekday per-day (B,)
+#     wd_tensor = torch.tensor(wd_list, dtype=torch.long)
+
+#     # Flatten first two dims to canonical per-window shapes (N = B * W_max)
+#     B, W_max = ysig_pad.shape[0], ysig_pad.shape[1]
+#     T = x_pad.shape[2]
+#     F = x_pad.shape[3]
+
+#     x_flat    = x_pad.contiguous().view(B * W_max, T, F)   # (N, T, F)
+#     ysig_flat = ysig_pad.contiguous().view(B * W_max)      # (N,)
+#     yret_flat = yret_pad.contiguous().view(B * W_max)      # (N,)
+#     yter_flat = yter_pad.contiguous().view(B * W_max)      # (N,)
+#     rc_flat   = rc_pad.contiguous().view(B * W_max)        # (N,)
+
+#     # Keep per-day weekday vector (B,) for state resets; callers use lengths to align windows
+#     wd_per_day = wd_tensor.tolist()  # list[int] length B
+
+#     return x_flat, ysig_flat, yret_flat, yter_flat, rc_flat, wd_per_day, list(ts_list), lengths
 
 
 def pad_collate(batch):
@@ -377,20 +699,16 @@ def pad_collate(batch):
     Returns
     - x_flat     Tensor[N, T, F]    flattened windows (N = B * W_max)
     - ysig_flat  Tensor[N]          flattened per-window scalar targets
-    - yret_flat  Tensor[N]          flattened per-window returns
-    - yter_flat  LongTensor[N]      flattened per-window ternary labels
     - rc_flat    Tensor[N]          flattened per-window raw_close values
     - wd_per_day list[int]          per-day weekday ints (length B)
     - ts_list    list               per-day end timestamps 
     - lengths    list[int]          true window counts per day 
     """
     # Unpack tuple structure
-    x_list, ysig_list, yret_list, yter_list, rc_list, wd_list, ts_list = zip(*batch)
+    x_list, ysig_list, rc_list, wd_list, ts_list = zip(*batch)
 
     xs      = list(x_list)        # expect (W, T, F)
     ysig    = list(ysig_list)     # expect (W,)
-    yrets   = list(yret_list)
-    yter    = list(yter_list)
     rc_seq  = list(rc_list)       # expect (W,)
 
     lengths = [seq.size(0) for seq in xs]  # per-day window counts W_i
@@ -398,8 +716,6 @@ def pad_collate(batch):
     # Pad per-day along the window axis -> shapes (B, W_max, ...)
     x_pad    = pad_sequence(xs,   batch_first=True)  # (B, W_max, T, F)
     ysig_pad = pad_sequence(ysig,   batch_first=True) # (B, W_max)
-    yret_pad = pad_sequence(yrets, batch_first=True)  # (B, W_max)
-    yter_pad = pad_sequence(yter, batch_first=True)   # (B, W_max)
     rc_pad   = pad_sequence(rc_seq, batch_first=True) # (B, W_max)
 
     # Weekday per-day (B,)
@@ -412,26 +728,96 @@ def pad_collate(batch):
 
     x_flat    = x_pad.contiguous().view(B * W_max, T, F)   # (N, T, F)
     ysig_flat = ysig_pad.contiguous().view(B * W_max)      # (N,)
-    yret_flat = yret_pad.contiguous().view(B * W_max)      # (N,)
-    yter_flat = yter_pad.contiguous().view(B * W_max)      # (N,)
     rc_flat   = rc_pad.contiguous().view(B * W_max)        # (N,)
 
     # Keep per-day weekday vector (B,) for state resets; callers use lengths to align windows
     wd_per_day = wd_tensor.tolist()  # list[int] length B
 
-    return x_flat, ysig_flat, yret_flat, yter_flat, rc_flat, wd_per_day, list(ts_list), lengths
+    return x_flat, ysig_flat, rc_flat, wd_per_day, list(ts_list), lengths
+
     
 ###############
 
 
+# def split_to_day_datasets(
+#     X_tr, y_sig_tr, y_ret_tr, raw_close_tr, end_times_tr,
+#     X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val,
+#     X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
+#     *,
+#     # return_thresh:         float,
+#     train_batch:           int = 32,
+#     train_workers:         int = 0,
+#     train_prefetch_factor: int = 1
+# ) -> tuple[DataLoader, DataLoader, DataLoader]:
+#     """
+#     Instantiate DayWindowDataset for train/val/test and wrap into DataLoaders.
+
+#     Functionality:
+#       1) Build three DayWindowDataset objects, each receiving raw_close tensor:
+#          - train set gets raw_close_tr
+#          - val   set gets raw_close_val
+#          - test  set gets raw_close_te
+#       2) Wrap each dataset in a DataLoader using pad_collate:
+#          - train: batch_size=train_batch, num_workers=train_workers, prefetch_factor.
+#          - val & test: batch_size=1, num_workers=0.
+#       This ensures __getitem__ always sees a real raw_close tensor, never None.
+#     """
+#     splits = [
+#         ("train", X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr,  end_times_tr),
+#         ("val",   X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val),
+#         ("test",  X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te),
+#     ]
+
+#     datasets = {}
+#     for name, Xd, ys, yr, rc, et in tqdm(splits, desc="Creating DayWindowDatasets", unit="split"):
+#         datasets[name] = DayWindowDataset(
+#             X             = Xd,
+#             y_signal      = ys,
+#             raw_close     = rc,  
+#             end_times     = et,
+#         )
+
+#     # Train loader: padded multi-day batches
+#     train_loader = DataLoader(
+#         datasets["train"],
+#         batch_size           = train_batch,
+#         shuffle              = False,
+#         drop_last            = False,
+#         collate_fn           = pad_collate,
+#         num_workers          = train_workers,
+#         pin_memory           = True,
+#         persistent_workers   = (train_workers > 0),
+#         prefetch_factor      = (train_prefetch_factor if train_workers > 0 else None),
+#     )
+
+#     # Validation loader: single-day batches
+#     val_loader = DataLoader(
+#         datasets["val"],
+#         batch_size = 1,
+#         shuffle    = False,
+#         collate_fn = pad_collate,
+#         num_workers= 0,
+#         pin_memory = True,
+#     )
+
+#     # Test loader: single-day batches
+#     test_loader = DataLoader(
+#         datasets["test"],
+#         batch_size = 1,
+#         shuffle    = False,
+#         collate_fn = pad_collate,
+#         num_workers= 0,
+#         pin_memory = True,
+#     )
+
+#     return train_loader, val_loader, test_loader
+
+
 def split_to_day_datasets(
-    X_tr, y_sig_tr, y_ret_tr, raw_close_tr, end_times_tr,
-    X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val,
-    X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
+    X_tr, y_sig_tr, raw_close_tr, end_times_tr,
+    X_val, y_sig_val, raw_close_val, end_times_val,
+    X_te,  y_sig_te,  raw_close_te,  end_times_te,
     *,
-    sess_start:            time,
-    # signal_thresh:         float,
-    return_thresh:         float,
     train_batch:           int = 32,
     train_workers:         int = 0,
     train_prefetch_factor: int = 1
@@ -450,21 +836,18 @@ def split_to_day_datasets(
       This ensures __getitem__ always sees a real raw_close tensor, never None.
     """
     splits = [
-        ("train", X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr,  end_times_tr),
-        ("val",   X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val),
-        ("test",  X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te),
+        ("train", X_tr,  y_sig_tr,  raw_close_tr,  end_times_tr),
+        ("val",   X_val, y_sig_val, raw_close_val, end_times_val),
+        ("test",  X_te,  y_sig_te,  raw_close_te,  end_times_te),
     ]
 
     datasets = {}
-    for name, Xd, ys, yr, rc, et in tqdm(splits, desc="Creating DayWindowDatasets", unit="split"):
+    for name, Xd, ys, rc, et in tqdm(splits, desc="Creating DayWindowDatasets", unit="split"):
         datasets[name] = DayWindowDataset(
             X             = Xd,
             y_signal      = ys,
-            y_return      = yr,
             raw_close     = rc,  
             end_times     = et,
-            # signal_thresh = signal_thresh,
-            return_thresh = return_thresh
         )
 
     # Train loader: padded multi-day batches
@@ -502,48 +885,116 @@ def split_to_day_datasets(
 
     return train_loader, val_loader, test_loader
 
-
+    
 #########################################################################################################
+
+
+# def model_core_pipeline(
+#     df,                          # feature‐enriched DataFrame
+#     look_back: int,              # how many ticks per window
+#     train_batch: int,            # batch size for training
+#     train_workers: int,          # DataLoader worker count
+#     prefetch_factor: int,        # DataLoader prefetch_factor
+#     features_cols: list,         # Kept features columns
+# ) -> tuple:
+#     """
+#     Build DataLoaders end‐to‐end from raw df.
+
+#     Steps & parameters:
+#       1) build_tensors(df, look_back)
+#       2) chronological_split(..., train_prop, val_prop, train_batch)
+#       3) carve end_times into train/val/test
+#       4) split_to_day_datasets(...)
+#       cleans up all intermediate arrays before returning.
+#     """
+#     # 1) slide‐window tensorization
+#     X, y_sig, y_ret, raw_close, end_times = build_tensors(
+#         df            = df,
+#         look_back     = look_back,
+#         features_cols = features_cols
+#     )
+
+#     # 2) split into train/val/test by calendar day
+#     (train_split, val_split, test_split,
+#      samples_per_day,
+#      day_id_tr, day_id_val, day_id_te) = chronological_split(
+#          X, y_sig, y_ret, raw_close,
+#          end_times   = end_times,
+#          train_batch = train_batch
+#     )
+#     X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr  = train_split
+#     X_val, y_sig_val, y_ret_val, raw_close_val = val_split
+#     X_te,  y_sig_te,  y_ret_te,  raw_close_te  = test_split
+
+#     # 3) carve end_times in the same proportions
+#     n_tr  = day_id_tr .shape[0]
+#     n_val = day_id_val.shape[0]
+#     i_tr, i_val = n_tr, n_tr + n_val
+
+#     end_times_tr  = end_times[:i_tr]
+#     end_times_val = end_times[i_tr:i_val]
+#     end_times_te  = end_times[i_val:]
+
+#     # 4) DataLoader construction
+#     train_loader, val_loader, test_loader = split_to_day_datasets(
+#         # train split
+#         X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr,  end_times_tr,
+#         # val split
+#         X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val,
+#         # test split
+#         X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
+
+#         # return_thresh         = return_thresh,
+#         train_batch           = train_batch,
+#         train_workers         = train_workers,
+#         train_prefetch_factor = prefetch_factor
+#     )
+
+#     # clean up large intermediates to free memory
+#     del X, y_sig, y_ret, raw_close, end_times
+#     del X_tr, y_sig_tr, y_ret_tr, raw_close_tr
+#     del X_val, y_sig_val, y_ret_val, raw_close_val
+#     del X_te, y_sig_te, y_ret_te, raw_close_te
+
+#     return train_loader, val_loader, test_loader, end_times_tr, end_times_val, end_times_te
 
 
 def model_core_pipeline(
     df,                          # feature‐enriched DataFrame
     look_back: int,              # how many ticks per window
-    sess_start: time,            # session‐start cutoff for windows
     train_batch: int,            # batch size for training
     train_workers: int,          # DataLoader worker count
     prefetch_factor: int,        # DataLoader prefetch_factor
-    # signal_thresh: float,        # y_signal threshold
-    return_thresh: float         # y_return threshold
+    features_cols: list,         # Kept features columns
 ) -> tuple:
     """
     Build DataLoaders end‐to‐end from raw df.
 
     Steps & parameters:
-      1) build_tensors(df, look_back, sess_start)
+      1) build_tensors(df, look_back)
       2) chronological_split(..., train_prop, val_prop, train_batch)
       3) carve end_times into train/val/test
       4) split_to_day_datasets(...)
       cleans up all intermediate arrays before returning.
     """
     # 1) slide‐window tensorization
-    X, y_sig, y_ret, raw_close, end_times = build_tensors(
-        df         = df,
-        look_back  = look_back,
-        sess_start = sess_start
+    X, y_sig, raw_close, end_times = build_tensors(
+        df            = df,
+        look_back     = look_back,
+        features_cols = features_cols
     )
 
     # 2) split into train/val/test by calendar day
     (train_split, val_split, test_split,
      samples_per_day,
      day_id_tr, day_id_val, day_id_te) = chronological_split(
-         X, y_sig, y_ret, raw_close,
+         X, y_sig, raw_close,
          end_times   = end_times,
          train_batch = train_batch
     )
-    X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr  = train_split
-    X_val, y_sig_val, y_ret_val, raw_close_val = val_split
-    X_te,  y_sig_te,  y_ret_te,  raw_close_te  = test_split
+    X_tr,  y_sig_tr,  raw_close_tr  = train_split
+    X_val, y_sig_val, raw_close_val = val_split
+    X_te,  y_sig_te,  raw_close_te  = test_split
 
     # 3) carve end_times in the same proportions
     n_tr  = day_id_tr .shape[0]
@@ -557,29 +1008,26 @@ def model_core_pipeline(
     # 4) DataLoader construction
     train_loader, val_loader, test_loader = split_to_day_datasets(
         # train split
-        X_tr,  y_sig_tr,  y_ret_tr,  raw_close_tr,  end_times_tr,
+        X_tr,  y_sig_tr,  raw_close_tr,  end_times_tr,
         # val split
-        X_val, y_sig_val, y_ret_val, raw_close_val, end_times_val,
+        X_val, y_sig_val, raw_close_val, end_times_val,
         # test split
-        X_te,  y_sig_te,  y_ret_te,  raw_close_te,  end_times_te,
+        X_te,  y_sig_te,  raw_close_te,  end_times_te,
 
-        sess_start            = sess_start,
-        # signal_thresh         = signal_thresh,
-        return_thresh         = return_thresh,
         train_batch           = train_batch,
         train_workers         = train_workers,
         train_prefetch_factor = prefetch_factor
     )
 
     # clean up large intermediates to free memory
-    del X, y_sig, y_ret, raw_close, end_times
-    del X_tr, y_sig_tr, y_ret_tr, raw_close_tr
-    del X_val, y_sig_val, y_ret_val, raw_close_val
-    del X_te, y_sig_te, y_ret_te, raw_close_te
+    del X, y_sig, raw_close, end_times
+    del X_tr, y_sig_tr, raw_close_tr
+    del X_val, y_sig_val, raw_close_val
+    del X_te, y_sig_te, raw_close_te
 
     return train_loader, val_loader, test_loader, end_times_tr, end_times_val, end_times_te
 
-    
+
 #################################################
 
 
@@ -983,7 +1431,7 @@ def collect_or_run_forward_micro_snapshot(model, train_loader=None, params=None,
     elems = list(selected) if hasattr(selected, "__iter__") and not isinstance(selected, (str, bytes, dict)) else [selected]
 
     x_batch = elems[0]
-    seq_lengths = elems[6] if len(elems) > 6 else None
+    seq_lengths = elems[-1]
 
     # Move inputs to device
     x_batch = x_batch.to(device)

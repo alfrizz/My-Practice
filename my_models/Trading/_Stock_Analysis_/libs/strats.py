@@ -255,9 +255,9 @@ def generate_actions_alpaca(
         # BUY conditions
         if (
             signal[i] >= sign_thr and
+            slope[i] > 0 and
             adx[i] >= adx_thresh and
             # vol_spike[i] >= vol_thresh and
-            slope[i] > 0 and
             ((rsi_min_thresh < rsi[i] < rsi_max_thresh) or (close[i] > vwap_arr[i]))
         ):
             df.at[df.index[i], "action"] = 1
@@ -266,10 +266,10 @@ def generate_actions_alpaca(
         # SELL conditions
         elif (
             signal[i] < sign_thr and
+            slope[i] < 0 and
             (
                 close[i] < atr_arr[i] or
-                close[i] < trail_arr[i] or
-                slope[i] < 0
+                close[i] < trail_arr[i]
             )
         ):
             df.at[df.index[i], "action"] = -1

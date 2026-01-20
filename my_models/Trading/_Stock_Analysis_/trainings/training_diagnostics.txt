@@ -1058,3 +1058,498 @@ FEAT_TOP=dist_low_30:9.25e-01,dist_low_28:8.13e-01,dist_low_60:7.94e-01,dist_hig
 E48 | OPTS[2:1.6e-04,1.6e-04|cnts=[51, 1]] | GN[head_flat=0.074,input_proj=0.022,transformer=0.014,feature_proj=0.014,ln_flat=0.002,ln_proj=0.001,attn_pool=0.001,TOT=0.080] | GD[1.3e-03,7.8e-03,5.2e-02] | UR[2.3e-07,1.0e-03] | lr=1.6e-04 | TR[0.0928,0.0607,0.1823,BASE_RMSE=0.0928,DELTA_RMSE=nan] | VAL[0.1042,0.0731,0.1602,BASE_RMSE=0.1042] | BASE_LOSS=8.6159e-03,DELTA_LOSS=0.0000e+00,DELTA_RATIO=0.000e+00,BASE_RMSE=0.09282,DELTA_RMSE=nan | SCHED_PCT=53.3% | SR=0.056 | SL=0.00,HR=0.000 | FMB=0.0000 | T=32.0s,TP=46456.8seg/s | chk=0 | GPU=5.14GiB | 
 G/U=head_flat.2.bias:3.6e-02/1.0e-03,input_proj.weight:2.1e-02/4.1e-07,feature_proj.weight:1.3e-02/3.9e-07,0.self_attn.in_proj_weight:7.8e-03/1.0e-07,input_proj.bias:6.1e-03/9.8e-06,head_flat.0.bias:5.4e-03/1.2e-06,self_attn.out_proj.weight:4.8e-03/1.6e-07,feature_proj.bias:4.2e-03/9.7e-07,0.linear2.weight:4.1e-03/1.2e-07,2.linear2.weight:4.0e-03/1.2e-07,1.self_attn.in_proj_weight:3.4e-03/5.0e-08,2.self_attn.in_proj_weight:3.1e-03/4.8e-08,1.linear2.weight:2.9e-03/9.3e-08,0.linear1.weight:2.8e-03/4.6e-08,self_attn.out_proj.bias:2.5e-03/1.0e-05,0.self_attn.in_proj_bias:1.8e-03/6.5e-07,2.linear1.weight:1.7e-03/2.8e-08,1.linear1.weight:1.5e-03/2.5e-08,0.norm1.bias:1.5e-03/5.6e-06,ln_flat.bias:1.3e-03/3.5e-06,ln_proj.bias:1.3e-03/3.7e-06,2.norm2.bias:1.2e-03/3.8e-06,0.linear2.bias:1.2e-03/5.8e-07,0.norm2.bias:1.2e-03/5.9e-06,ln_flat.weight:1.1e-03/2.2e-08,2.norm1.bias:1.0e-03/4.1e-06,2.linear2.bias:1.0e-03/4.6e-07,1.norm1.bias:9.5e-04/4.7e-06,1.norm2.bias:9.3e-04/4.4e-06,1.linear2.bias:8.6e-04/4.1e-07,attn_pool.weight:8.1e-04/2.3e-07,0.norm1.weight:8.0e-04/1.6e-08,ln_proj.weight:6.6e-04/1.3e-08,2.norm2.weight:6.6e-04/1.3e-08,1.self_attn.in_proj_bias:6.4e-04/4.5e-08,0.norm2.weight:5.8e-04/1.1e-08,2.self_attn.in_proj_bias:5.8e-04/2.9e-07,2.norm1.weight:4.9e-04/9.8e-09,0.linear1.bias:4.3e-04/5.8e-08,1.norm1.weight:3.9e-04/7.7e-09,1.norm2.weight:3.5e-04/7.0e-09,1.linear1.bias:2.8e-04/3.7e-08,2.linear1.bias:2.7e-04/3.7e-08,attn_pool.bias:1.8e-09/4.9e-11 | 
 FEAT_TOP=dist_low_30:9.26e-01,dist_low_28:8.15e-01,dist_low_60:7.94e-01,dist_high_28:7.66e-01,dist_high_30:6.82e-01,rsi:6.36e-01,z_obv:6.22e-01,vwap_dev_pct_60:6.15e-01,vol_spike_60:6.05e-01,ret_std_z_90:6.03e-01,dist_high_60:6.02e-01,z_vwap_dev_30:5.56e-01,volume_z_90:5.43e-01,eng_bb_mid:5.29e-01,z_vwap_dev:5.28e-01,adx_60:5.17e-01,obv_diff_14:5.02e-01,plus_di_30:5.00e-01,obv_pct_30:4.94e-01,roc_14:4.89e-01,in_sess_time:4.62e-01,plus_di_90:4.61e-01,rsi_30:4.54e-01,adx:4.37e-01,z_vwap_dev_60:4.35e-01,sma_pct_90:4.31e-01,vwap_dev_pct_z_60:4.10e-01,obv_diff_60:3.85e-01,vwap_dev_pct_z_90:3.63e-01,vwap_dev_pct_90:3.62e-01,atr_z_90:3.55e-01,minute_time:3.55e-01,roc_28:3.54e-01,eng_rsi:3.53e-01,obv_diff_30:3.48e-01,bb_w_z_30:3.48e-01,obv_sma_60:3.46e-01,hour_time:3.25e-01,z_bb_w:3.23e-01,vol_z_90:3.03e-01,z_vwap_dev_90:3.03e-01,eng_ma:3.01e-01,sma_pct_60:2.93e-01,adx_90:2.90e-01,plus_di:2.87e-01,vol_z_60:2.75e-01,eng_vwap:2.74e-01,volume_z_30:2.73e-01,vol_spike_90:2.65e-01,bb_w_z_60:2.58e-01,minus_di:2.55e-01,body_pct:2.31e-01,vwap_dev_pct_z_30:2.11e-01,vwap_dev_pct_30:1.88e-01,obv_pct_14:1.83e-01,volume_z_60:1.50e-01,ret_std_z_30:1.50e-01,sma_pct_28:1.27e-01,eng_macd:1.23e-01,sma_pct_14:9.45e-02,ret:7.79e-02
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2026-01-20T12:06:43.909184Z
+
+SINGLE RUN DIAGNOSTIC FORMAT (explanatory)
+    BATCH_SHAPE B=7216 groups=1 seq_len_full=20 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)
+    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable
+    -> B: number of batch samples used to build windows (snapshot.B)
+    -> groups: number of logical groups used when flattening windows (snapshot.groups)
+    -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)
+    -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)
+    -> activation_mb: estimated activation footprint in MB computed from GPU allocation delta (snapshot.activation_mb)
+    -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)
+    -> collector_ms: total wall-clock ms spent by the collector including sampling, CPU work and device synchronizations (snapshot.collector_ms)
+    -> cpu_copy_bytes: bytes copied to host for predictions shown human-readable in the log (snapshot.cpu_copy_bytes)
+    -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)
+    -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)
+    -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)
+    -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)
+    -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)
+    -> pred_extra_ms: estimated CPU-side post-forward ms = collector_ms - full_forward_ms - summed per-seg time (snapshot.pred_extra_ms)
+    -> gpu_allocated_bytes: raw GPU bytes allocated after forward (snapshot.gpu_allocated_bytes)
+    -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)
+    -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)
+    -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)
+    -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)
+    -> mean_seg_len: average per-segment time-series length in timesteps computed as sum_seg_lens / num_segments (snapshot.mean_seg_len)
+    -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)
+    -> sum_seg_lens: sum of non-empty segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)
+    -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)
+    -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)
+    -> total_params / trainable_params: canonical parameter counts stamped by init_log (snapshot.total_params, snapshot.trainable_params)
+    -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)
+    -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)
+    -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)
+    -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)
+
+PER-EPOCH LOG FORMAT (explanatory):
+  E{ep:02d}                : epoch number formatted with two digits
+  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts
+  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)
+  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum
+  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)
+  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation
+  TR[...metrics...]       : training metrics reported for the epoch (rmse, mae, r2, etc.; see TR composition in code)
+  VAL[...metrics...]      : validation metrics reported for the epoch (rmse, mae, r2, etc.; see VAL composition in code)
+  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_tot_preds/model.last_val_targs (trend calibration)
+  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults 0.00/0.000 when missing)
+  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB)
+  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec inferred from sampled forward)
+  chk={val}               : checkpoint marker token printed as chk in the line (implementation-specific; integerized when boolean)
+  GPU={GiB:.2f}GiB        : optional GPU memory high-water printed in GiB when CUDA available (torch.cuda.max_memory_allocated / (1024**3))
+  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy (separate visual marker outside numeric chk token)
+  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio where ratio = curr / baseline_observed_on_first_epoch
+  G/U=name:grad/update_ratio,... : parameter buckets printed sorted by descending gradient norm; every short-name bucket is emitted in compact form
+      - format for each token is short_name:{g:.3e}/{u:.1e} where g is the gradient norm and u is the lr-scaled update ratio
+      - short_name uses the last 1–3 name segments (see short_name logic); entries are deduped by short_name keeping the highest-g representative
+      - the G/U list is printed every epoch (values change per epoch) and contains both large and very small gradients in scientific notation
+
+BASELINES:
+  TRAIN mean RMSE        = 0.03479
+  TRAIN persistence RMSE = 0.00759
+  VAL   mean RMSE        = 0.03155
+  VAL   persistence RMSE = 0.00777
+
+HYPERPARAMS:
+  USE_CONV = False
+  CONV_K = 3
+  CONV_DILATION = 1
+  CONV_CHANNELS = 64
+  USE_TCN = False
+  TCN_LAYERS = 1
+  TCN_KERNEL = 3
+  TCN_CHANNELS = 64
+  USE_SHORT_LSTM = False
+  SHORT_UNITS = 64
+  DROPOUT_SHORT = 0.1
+  USE_TRANSFORMER = True
+  TRANSFORMER_D_MODEL = 64
+  TRANSFORMER_LAYERS = 3
+  TRANSFORMER_HEADS = 4
+  TRANSFORMER_FF_MULT = 4
+  DROPOUT_TRANS = 0.03
+  USE_LONG_LSTM = False
+  LONG_UNITS = 64
+  DROPOUT_LONG = 0.1
+  FLATTEN_MODE = attn
+  PRED_HIDDEN = 96
+  ALPHA_SMOOTH = 0
+  WARMUP_STEPS = 3
+  USE_HUBER = False
+  HUBER_DELTA = 0.1
+  USE_DELTA = False
+  LAMBDA_DELTA = 0.1
+  MAX_EPOCHS = 90
+  EARLY_STOP_PATIENCE = 9
+  WEIGHT_DECAY = 3e-06
+  CLIPNORM = 3
+  ONECYCLE_MAX_LR = 0.0003
+  HEAD_LR_PCT = 1
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 100
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 16
+  VAL_BATCH = 1
+  TRAIN_WORKERS = 8
+  TRAIN_PREFETCH_FACTOR = 4
+  LOOK_BACK = 60
+  MICRO_SAMPLE_K = 16
+
+DEBUG_OPT GROUPS=1 LRS=['3.0e-05'] COUNTS=[52] | MODEL_STATIC: total_params=171,465 trainable=171,465 frozen=0 | param_bytes=669.8KB
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2026-01-20T12:11:17.133113Z
+
+SINGLE RUN DIAGNOSTIC FORMAT (explanatory)
+    BATCH_SHAPE B=7216 groups=1 seq_len_full=20 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)
+    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable
+    -> B: number of batch samples used to build windows (snapshot.B)
+    -> groups: number of logical groups used when flattening windows (snapshot.groups)
+    -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)
+    -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)
+    -> activation_mb: estimated activation footprint in MB computed from GPU allocation delta (snapshot.activation_mb)
+    -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)
+    -> collector_ms: total wall-clock ms spent by the collector including sampling, CPU work and device synchronizations (snapshot.collector_ms)
+    -> cpu_copy_bytes: bytes copied to host for predictions shown human-readable in the log (snapshot.cpu_copy_bytes)
+    -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)
+    -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)
+    -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)
+    -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)
+    -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)
+    -> pred_extra_ms: estimated CPU-side post-forward ms = collector_ms - full_forward_ms - summed per-seg time (snapshot.pred_extra_ms)
+    -> gpu_allocated_bytes: raw GPU bytes allocated after forward (snapshot.gpu_allocated_bytes)
+    -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)
+    -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)
+    -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)
+    -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)
+    -> mean_seg_len: average per-segment time-series length in timesteps computed as sum_seg_lens / num_segments (snapshot.mean_seg_len)
+    -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)
+    -> sum_seg_lens: sum of non-empty segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)
+    -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)
+    -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)
+    -> total_params / trainable_params: canonical parameter counts stamped by init_log (snapshot.total_params, snapshot.trainable_params)
+    -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)
+    -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)
+    -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)
+    -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)
+
+PER-EPOCH LOG FORMAT (explanatory):
+  E{ep:02d}                : epoch number formatted with two digits
+  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts
+  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)
+  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum
+  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)
+  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation
+  TR[...metrics...]       : training metrics reported for the epoch (rmse, mae, r2, etc.; see TR composition in code)
+  VAL[...metrics...]      : validation metrics reported for the epoch (rmse, mae, r2, etc.; see VAL composition in code)
+  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_tot_preds/model.last_val_targs (trend calibration)
+  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults 0.00/0.000 when missing)
+  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB)
+  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec inferred from sampled forward)
+  chk={val}               : checkpoint marker token printed as chk in the line (implementation-specific; integerized when boolean)
+  GPU={GiB:.2f}GiB        : optional GPU memory high-water printed in GiB when CUDA available (torch.cuda.max_memory_allocated / (1024**3))
+  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy (separate visual marker outside numeric chk token)
+  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio where ratio = curr / baseline_observed_on_first_epoch
+  G/U=name:grad/update_ratio,... : parameter buckets printed sorted by descending gradient norm; every short-name bucket is emitted in compact form
+      - format for each token is short_name:{g:.3e}/{u:.1e} where g is the gradient norm and u is the lr-scaled update ratio
+      - short_name uses the last 1–3 name segments (see short_name logic); entries are deduped by short_name keeping the highest-g representative
+      - the G/U list is printed every epoch (values change per epoch) and contains both large and very small gradients in scientific notation
+
+BASELINES:
+  TRAIN mean RMSE        = 0.03479
+  TRAIN persistence RMSE = 0.00759
+  VAL   mean RMSE        = 0.03155
+  VAL   persistence RMSE = 0.00777
+
+HYPERPARAMS:
+  USE_CONV = False
+  CONV_K = 3
+  CONV_DILATION = 1
+  CONV_CHANNELS = 64
+  USE_TCN = False
+  TCN_LAYERS = 1
+  TCN_KERNEL = 3
+  TCN_CHANNELS = 64
+  USE_SHORT_LSTM = False
+  SHORT_UNITS = 64
+  DROPOUT_SHORT = 0.1
+  USE_TRANSFORMER = True
+  TRANSFORMER_D_MODEL = 64
+  TRANSFORMER_LAYERS = 3
+  TRANSFORMER_HEADS = 4
+  TRANSFORMER_FF_MULT = 4
+  DROPOUT_TRANS = 0.03
+  USE_LONG_LSTM = False
+  LONG_UNITS = 64
+  DROPOUT_LONG = 0.1
+  FLATTEN_MODE = attn
+  PRED_HIDDEN = 96
+  ALPHA_SMOOTH = 0
+  WARMUP_STEPS = 3
+  USE_HUBER = False
+  HUBER_DELTA = 0.1
+  USE_DELTA = False
+  LAMBDA_DELTA = 0.1
+  MAX_EPOCHS = 90
+  EARLY_STOP_PATIENCE = 9
+  WEIGHT_DECAY = 3e-06
+  CLIPNORM = 3
+  ONECYCLE_MAX_LR = 0.0003
+  HEAD_LR_PCT = 1
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 100
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 16
+  VAL_BATCH = 1
+  TRAIN_WORKERS = 8
+  TRAIN_PREFETCH_FACTOR = 4
+  LOOK_BACK = 60
+  MICRO_SAMPLE_K = 16
+
+DEBUG_OPT GROUPS=1 LRS=['3.0e-05'] COUNTS=[52] | MODEL_STATIC: total_params=171,465 trainable=171,465 frozen=0 | param_bytes=669.8KB
+BATCH_SHAPE B=14416 groups=1 seq_len_full=60 feat=93
+MICRODETAIL ms: B=14416 activation_mb=5376 backward_ms=314.80 collector_ms=14882.29 cpu_copy_bytes=28.2KB dataloader_ms=13655.16 device_syncs_count=2 env={'python': '3.12.3', 'torch': '2.7.0a0+ecf3bae40a.nv25.02', 'cuda': '12.8', 'device_name': 'NVIDIA GeForce RTX 5080 Laptop GPU'} expected_segments=14416 feat_dim=93 full_forward_ms=133.75 gpu_allocated_bytes=7545.12MB gpu_peak_mb=8483 gpu_reserved_bytes=11684.00MB gpu_reserved_mb=11684 grads={'backbone': True, 'head': True} group_nonzero_counts=[52] groups=1 mean_seg_len=0.07 num_segments=14415 out_bytes=28.2KB out_dtype=torch.float16 out_numel=14415 out_shape=(14415, 1) param_bytes=669.8KB per_segment_p50_ms=36.51 per_segment_p90_ms=56.85 pred_extra_ms=14092.60 raw_reg_shape=(14415, 1) segments_per_sec=107773.32 seq_len_full=60 sum_seg_lens=960 total_params=171465 trainable_params=171465 windows_bytes=306.84MB
+
+E01 | OPTS[1:3.0e-05|cnts=[52]] | GN[input_proj=nan,feature_proj=nan,transformer=nan,ln_proj=nan,ln_flat=nan,head_flat=nan,attn_pool=nan,TOT=nan] | GD[nan,nan,nan] | UR[nan,nan] | lr=3.0e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[nan,nan,nan,BASE_RMSE=nan] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=0.2% | SR=nan | SL=0.00,HR=0.000 | FMB=0.0000 | T=30.7s,TP=5631.5seg/s | chk=0 | GPU=8.28GiB | 
+G/U=input_proj.weight:nan/nan,input_proj.bias:nan/nan,feature_proj.weight:nan/nan,feature_proj.bias:nan/nan,0.self_attn.in_proj_weight:nan/nan,0.self_attn.in_proj_bias:nan/nan,self_attn.out_proj.weight:nan/nan,self_attn.out_proj.bias:nan/nan,0.linear1.weight:nan/nan,0.linear1.bias:nan/nan,0.linear2.weight:nan/nan,0.linear2.bias:nan/nan,0.norm1.weight:nan/nan,0.norm1.bias:nan/nan,0.norm2.weight:nan/nan,0.norm2.bias:nan/nan,1.self_attn.in_proj_weight:nan/nan,1.self_attn.in_proj_bias:nan/nan,1.linear1.weight:nan/nan,1.linear1.bias:nan/nan,1.linear2.weight:nan/nan,1.linear2.bias:nan/nan,1.norm1.weight:nan/nan,1.norm1.bias:nan/nan,1.norm2.weight:nan/nan,1.norm2.bias:nan/nan,2.self_attn.in_proj_weight:nan/nan,2.self_attn.in_proj_bias:nan/nan,2.linear1.weight:nan/nan,2.linear1.bias:nan/nan,2.linear2.weight:nan/nan,2.linear2.bias:nan/nan,2.norm1.weight:nan/nan,2.norm1.bias:nan/nan,2.norm2.weight:nan/nan,2.norm2.bias:nan/nan,ln_proj.weight:nan/nan,ln_proj.bias:nan/nan,ln_flat.weight:nan/nan,ln_flat.bias:nan/nan,head_flat.0.bias:nan/nan,head_flat.2.bias:nan/nan,attn_pool.weight:nan/nan,attn_pool.bias:nan/nan | 
+FEAT_TOP=volume:nan,trade_count:nan,ret:nan,sma_pct_5:nan,sma_pct_9:nan,sma_pct_21:nan,sma_pct_50:nan,sma_pct_100:nan,sma_pct_200:nan,roc_5:nan,roc_10:nan,roc_21:nan,body_pct:nan,upper_shad:nan,lower_shad:nan,range_pct:nan,rsi_6:nan,rsi_14:nan,rsi_21:nan,atr_pct_7:nan,atr_pct_14:nan,atr_pct_28:nan,plus_di_7:nan,minus_di_7:nan,adx_7:nan,plus_di_14:nan,minus_di_14:nan,adx_14:nan,plus_di_28:nan,minus_di_28:nan,adx_28:nan,bb_w_20_3p0:nan,bb_w_50_2p0:nan,vol_spike_7:nan,vol_spike_14:nan,vol_spike_28:nan,dist_high_200:nan,dist_low_200:nan,obv_diff_7:nan,obv_diff_21:nan,ret_std_21:nan,ret_std_63:nan,stoch_k_14_3_3:nan,stoch_d_14_3_3:nan,stoch_k_9_3_3:nan,stoch_d_9_3_3:nan,cci_14:nan,cci_20:nan,mfi_14:nan,mfi_20:nan,cmf_14:nan,cmf_20:nan,donch_w_20:nan,donch_w_55:nan,kc_w_20_20_1.5:nan,vwap_RZ:nan,sma_5_RZ:nan,sma_9_RZ:nan,sma_21_RZ:nan,sma_50_RZ:nan,sma_100_RZ:nan,sma_200_RZ:nan,ema_3_RZ:nan,ema_5_RZ:nan,ema_8_RZ:nan,ema_13_RZ:nan,ema_21_RZ:nan,ema_50_RZ:nan,macd_line_6_13_5_RZ:nan,macd_signal_6_13_5_RZ:nan,macd_diff_6_13_5_RZ:nan,macd_line_12_26_9_RZ:nan,macd_signal_12_26_9_RZ:nan,macd_diff_12_26_9_RZ:nan,atr_7_RZ:nan,atr_14_RZ:nan,atr_28_RZ:nan,rolling_max_close_200_RZ:nan,rolling_min_close_200_RZ:nan,roll_vwap_20_RZ:nan,roll_vwap_50_RZ:nan,slope_close_20_RZ:nan,slope_close_50_RZ:nan,psar_RZ:nan,vwap_ohlc_close_session_RZ:nan,time_hour:nan,time_dow:nan,time_month:nan,time_day_of_year:nan,time_week_of_year:nan,time_in_sess:nan,time_premark:nan,time_afthour:nan
+
+E02 | OPTS[1:3.1e-05|cnts=[52]] | GN[input_proj=nan,feature_proj=nan,transformer=nan,ln_proj=nan,ln_flat=nan,head_flat=nan,attn_pool=nan,TOT=nan] | GD[nan,nan,nan] | UR[nan,nan] | lr=3.1e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[nan,nan,nan,BASE_RMSE=nan] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=0.4% | SR=nan | SL=0.00,HR=0.000 | FMB=0.0000 | T=36.1s,TP=4788.8seg/s | chk=0 | GPU=10.55GiB | 
+G/U=input_proj.weight:nan/nan,input_proj.bias:nan/nan,feature_proj.weight:nan/nan,feature_proj.bias:nan/nan,0.self_attn.in_proj_weight:nan/nan,0.self_attn.in_proj_bias:nan/nan,self_attn.out_proj.weight:nan/nan,self_attn.out_proj.bias:nan/nan,0.linear1.weight:nan/nan,0.linear1.bias:nan/nan,0.linear2.weight:nan/nan,0.linear2.bias:nan/nan,0.norm1.weight:nan/nan,0.norm1.bias:nan/nan,0.norm2.weight:nan/nan,0.norm2.bias:nan/nan,1.self_attn.in_proj_weight:nan/nan,1.self_attn.in_proj_bias:nan/nan,1.linear1.weight:nan/nan,1.linear1.bias:nan/nan,1.linear2.weight:nan/nan,1.linear2.bias:nan/nan,1.norm1.weight:nan/nan,1.norm1.bias:nan/nan,1.norm2.weight:nan/nan,1.norm2.bias:nan/nan,2.self_attn.in_proj_weight:nan/nan,2.self_attn.in_proj_bias:nan/nan,2.linear1.weight:nan/nan,2.linear1.bias:nan/nan,2.linear2.weight:nan/nan,2.linear2.bias:nan/nan,2.norm1.weight:nan/nan,2.norm1.bias:nan/nan,2.norm2.weight:nan/nan,2.norm2.bias:nan/nan,ln_proj.weight:nan/nan,ln_proj.bias:nan/nan,ln_flat.weight:nan/nan,ln_flat.bias:nan/nan,head_flat.0.bias:nan/nan,head_flat.2.bias:nan/nan,attn_pool.weight:nan/nan,attn_pool.bias:nan/nan | 
+FEAT_TOP=volume:nan,trade_count:nan,ret:nan,sma_pct_5:nan,sma_pct_9:nan,sma_pct_21:nan,sma_pct_50:nan,sma_pct_100:nan,sma_pct_200:nan,roc_5:nan,roc_10:nan,roc_21:nan,body_pct:nan,upper_shad:nan,lower_shad:nan,range_pct:nan,rsi_6:nan,rsi_14:nan,rsi_21:nan,atr_pct_7:nan,atr_pct_14:nan,atr_pct_28:nan,plus_di_7:nan,minus_di_7:nan,adx_7:nan,plus_di_14:nan,minus_di_14:nan,adx_14:nan,plus_di_28:nan,minus_di_28:nan,adx_28:nan,bb_w_20_3p0:nan,bb_w_50_2p0:nan,vol_spike_7:nan,vol_spike_14:nan,vol_spike_28:nan,dist_high_200:nan,dist_low_200:nan,obv_diff_7:nan,obv_diff_21:nan,ret_std_21:nan,ret_std_63:nan,stoch_k_14_3_3:nan,stoch_d_14_3_3:nan,stoch_k_9_3_3:nan,stoch_d_9_3_3:nan,cci_14:nan,cci_20:nan,mfi_14:nan,mfi_20:nan,cmf_14:nan,cmf_20:nan,donch_w_20:nan,donch_w_55:nan,kc_w_20_20_1.5:nan,vwap_RZ:nan,sma_5_RZ:nan,sma_9_RZ:nan,sma_21_RZ:nan,sma_50_RZ:nan,sma_100_RZ:nan,sma_200_RZ:nan,ema_3_RZ:nan,ema_5_RZ:nan,ema_8_RZ:nan,ema_13_RZ:nan,ema_21_RZ:nan,ema_50_RZ:nan,macd_line_6_13_5_RZ:nan,macd_signal_6_13_5_RZ:nan,macd_diff_6_13_5_RZ:nan,macd_line_12_26_9_RZ:nan,macd_signal_12_26_9_RZ:nan,macd_diff_12_26_9_RZ:nan,atr_7_RZ:nan,atr_14_RZ:nan,atr_28_RZ:nan,rolling_max_close_200_RZ:nan,rolling_min_close_200_RZ:nan,roll_vwap_20_RZ:nan,roll_vwap_50_RZ:nan,slope_close_20_RZ:nan,slope_close_50_RZ:nan,psar_RZ:nan,vwap_ohlc_close_session_RZ:nan,time_hour:nan,time_dow:nan,time_month:nan,time_day_of_year:nan,time_week_of_year:nan,time_in_sess:nan,time_premark:nan,time_afthour:nan
+
+E03 | OPTS[1:3.2e-05|cnts=[52]] | GN[input_proj=nan,feature_proj=nan,transformer=nan,ln_proj=nan,ln_flat=nan,head_flat=nan,attn_pool=nan,TOT=nan] | GD[nan,nan,nan] | UR[nan,nan] | lr=3.2e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[nan,nan,nan,BASE_RMSE=nan] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=0.6% | SR=nan | SL=0.00,HR=0.000 | FMB=0.0000 | T=37.1s,TP=4661.3seg/s | chk=0 | GPU=10.55GiB | 
+G/U=input_proj.weight:nan/nan,input_proj.bias:nan/nan,feature_proj.weight:nan/nan,feature_proj.bias:nan/nan,0.self_attn.in_proj_weight:nan/nan,0.self_attn.in_proj_bias:nan/nan,self_attn.out_proj.weight:nan/nan,self_attn.out_proj.bias:nan/nan,0.linear1.weight:nan/nan,0.linear1.bias:nan/nan,0.linear2.weight:nan/nan,0.linear2.bias:nan/nan,0.norm1.weight:nan/nan,0.norm1.bias:nan/nan,0.norm2.weight:nan/nan,0.norm2.bias:nan/nan,1.self_attn.in_proj_weight:nan/nan,1.self_attn.in_proj_bias:nan/nan,1.linear1.weight:nan/nan,1.linear1.bias:nan/nan,1.linear2.weight:nan/nan,1.linear2.bias:nan/nan,1.norm1.weight:nan/nan,1.norm1.bias:nan/nan,1.norm2.weight:nan/nan,1.norm2.bias:nan/nan,2.self_attn.in_proj_weight:nan/nan,2.self_attn.in_proj_bias:nan/nan,2.linear1.weight:nan/nan,2.linear1.bias:nan/nan,2.linear2.weight:nan/nan,2.linear2.bias:nan/nan,2.norm1.weight:nan/nan,2.norm1.bias:nan/nan,2.norm2.weight:nan/nan,2.norm2.bias:nan/nan,ln_proj.weight:nan/nan,ln_proj.bias:nan/nan,ln_flat.weight:nan/nan,ln_flat.bias:nan/nan,head_flat.0.bias:nan/nan,head_flat.2.bias:nan/nan,attn_pool.weight:nan/nan,attn_pool.bias:nan/nan | 
+FEAT_TOP=volume:nan,trade_count:nan,ret:nan,sma_pct_5:nan,sma_pct_9:nan,sma_pct_21:nan,sma_pct_50:nan,sma_pct_100:nan,sma_pct_200:nan,roc_5:nan,roc_10:nan,roc_21:nan,body_pct:nan,upper_shad:nan,lower_shad:nan,range_pct:nan,rsi_6:nan,rsi_14:nan,rsi_21:nan,atr_pct_7:nan,atr_pct_14:nan,atr_pct_28:nan,plus_di_7:nan,minus_di_7:nan,adx_7:nan,plus_di_14:nan,minus_di_14:nan,adx_14:nan,plus_di_28:nan,minus_di_28:nan,adx_28:nan,bb_w_20_3p0:nan,bb_w_50_2p0:nan,vol_spike_7:nan,vol_spike_14:nan,vol_spike_28:nan,dist_high_200:nan,dist_low_200:nan,obv_diff_7:nan,obv_diff_21:nan,ret_std_21:nan,ret_std_63:nan,stoch_k_14_3_3:nan,stoch_d_14_3_3:nan,stoch_k_9_3_3:nan,stoch_d_9_3_3:nan,cci_14:nan,cci_20:nan,mfi_14:nan,mfi_20:nan,cmf_14:nan,cmf_20:nan,donch_w_20:nan,donch_w_55:nan,kc_w_20_20_1.5:nan,vwap_RZ:nan,sma_5_RZ:nan,sma_9_RZ:nan,sma_21_RZ:nan,sma_50_RZ:nan,sma_100_RZ:nan,sma_200_RZ:nan,ema_3_RZ:nan,ema_5_RZ:nan,ema_8_RZ:nan,ema_13_RZ:nan,ema_21_RZ:nan,ema_50_RZ:nan,macd_line_6_13_5_RZ:nan,macd_signal_6_13_5_RZ:nan,macd_diff_6_13_5_RZ:nan,macd_line_12_26_9_RZ:nan,macd_signal_12_26_9_RZ:nan,macd_diff_12_26_9_RZ:nan,atr_7_RZ:nan,atr_14_RZ:nan,atr_28_RZ:nan,rolling_max_close_200_RZ:nan,rolling_min_close_200_RZ:nan,roll_vwap_20_RZ:nan,roll_vwap_50_RZ:nan,slope_close_20_RZ:nan,slope_close_50_RZ:nan,psar_RZ:nan,vwap_ohlc_close_session_RZ:nan,time_hour:nan,time_dow:nan,time_month:nan,time_day_of_year:nan,time_week_of_year:nan,time_in_sess:nan,time_premark:nan,time_afthour:nan
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2026-01-20T12:17:30.876626Z
+
+SINGLE RUN DIAGNOSTIC FORMAT (explanatory)
+    BATCH_SHAPE B=7216 groups=1 seq_len_full=20 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)
+    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable
+    -> B: number of batch samples used to build windows (snapshot.B)
+    -> groups: number of logical groups used when flattening windows (snapshot.groups)
+    -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)
+    -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)
+    -> activation_mb: estimated activation footprint in MB computed from GPU allocation delta (snapshot.activation_mb)
+    -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)
+    -> collector_ms: total wall-clock ms spent by the collector including sampling, CPU work and device synchronizations (snapshot.collector_ms)
+    -> cpu_copy_bytes: bytes copied to host for predictions shown human-readable in the log (snapshot.cpu_copy_bytes)
+    -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)
+    -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)
+    -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)
+    -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)
+    -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)
+    -> pred_extra_ms: estimated CPU-side post-forward ms = collector_ms - full_forward_ms - summed per-seg time (snapshot.pred_extra_ms)
+    -> gpu_allocated_bytes: raw GPU bytes allocated after forward (snapshot.gpu_allocated_bytes)
+    -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)
+    -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)
+    -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)
+    -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)
+    -> mean_seg_len: average per-segment time-series length in timesteps computed as sum_seg_lens / num_segments (snapshot.mean_seg_len)
+    -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)
+    -> sum_seg_lens: sum of non-empty segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)
+    -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)
+    -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)
+    -> total_params / trainable_params: canonical parameter counts stamped by init_log (snapshot.total_params, snapshot.trainable_params)
+    -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)
+    -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)
+    -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)
+    -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)
+
+PER-EPOCH LOG FORMAT (explanatory):
+  E{ep:02d}                : epoch number formatted with two digits
+  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts
+  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)
+  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum
+  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)
+  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation
+  TR[...metrics...]       : training metrics reported for the epoch (rmse, mae, r2, etc.; see TR composition in code)
+  VAL[...metrics...]      : validation metrics reported for the epoch (rmse, mae, r2, etc.; see VAL composition in code)
+  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_tot_preds/model.last_val_targs (trend calibration)
+  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults 0.00/0.000 when missing)
+  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB)
+  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec inferred from sampled forward)
+  chk={val}               : checkpoint marker token printed as chk in the line (implementation-specific; integerized when boolean)
+  GPU={GiB:.2f}GiB        : optional GPU memory high-water printed in GiB when CUDA available (torch.cuda.max_memory_allocated / (1024**3))
+  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy (separate visual marker outside numeric chk token)
+  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio where ratio = curr / baseline_observed_on_first_epoch
+  G/U=name:grad/update_ratio,... : parameter buckets printed sorted by descending gradient norm; every short-name bucket is emitted in compact form
+      - format for each token is short_name:{g:.3e}/{u:.1e} where g is the gradient norm and u is the lr-scaled update ratio
+      - short_name uses the last 1–3 name segments (see short_name logic); entries are deduped by short_name keeping the highest-g representative
+      - the G/U list is printed every epoch (values change per epoch) and contains both large and very small gradients in scientific notation
+
+BASELINES:
+  TRAIN mean RMSE        = 0.03479
+  TRAIN persistence RMSE = 0.00759
+  VAL   mean RMSE        = 0.03155
+  VAL   persistence RMSE = 0.00777
+
+HYPERPARAMS:
+  USE_CONV = False
+  CONV_K = 3
+  CONV_DILATION = 1
+  CONV_CHANNELS = 64
+  USE_TCN = False
+  TCN_LAYERS = 1
+  TCN_KERNEL = 3
+  TCN_CHANNELS = 64
+  USE_SHORT_LSTM = False
+  SHORT_UNITS = 64
+  DROPOUT_SHORT = 0.1
+  USE_TRANSFORMER = True
+  TRANSFORMER_D_MODEL = 64
+  TRANSFORMER_LAYERS = 3
+  TRANSFORMER_HEADS = 4
+  TRANSFORMER_FF_MULT = 4
+  DROPOUT_TRANS = 0.03
+  USE_LONG_LSTM = False
+  LONG_UNITS = 64
+  DROPOUT_LONG = 0.1
+  FLATTEN_MODE = attn
+  PRED_HIDDEN = 96
+  ALPHA_SMOOTH = 0
+  WARMUP_STEPS = 3
+  USE_HUBER = False
+  HUBER_DELTA = 0.1
+  USE_DELTA = False
+  LAMBDA_DELTA = 0.1
+  MAX_EPOCHS = 90
+  EARLY_STOP_PATIENCE = 9
+  WEIGHT_DECAY = 3e-06
+  CLIPNORM = 3
+  ONECYCLE_MAX_LR = 0.0003
+  HEAD_LR_PCT = 1
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 100
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 16
+  VAL_BATCH = 1
+  TRAIN_WORKERS = 8
+  TRAIN_PREFETCH_FACTOR = 4
+  LOOK_BACK = 60
+  MICRO_SAMPLE_K = 16
+
+DEBUG_OPT GROUPS=1 LRS=['3.0e-05'] COUNTS=[52] | MODEL_STATIC: total_params=171,465 trainable=171,465 frozen=0 | param_bytes=669.8KB
+BATCH_SHAPE B=14416 groups=1 seq_len_full=60 feat=93
+MICRODETAIL ms: B=14416 activation_mb=5378 backward_ms=302.63 collector_ms=9149.54 cpu_copy_bytes=28.2KB dataloader_ms=8287.91 device_syncs_count=2 env={'python': '3.12.3', 'torch': '2.7.0a0+ecf3bae40a.nv25.02', 'cuda': '12.8', 'device_name': 'NVIDIA GeForce RTX 5080 Laptop GPU'} expected_segments=14416 feat_dim=93 full_forward_ms=227.70 gpu_allocated_bytes=6623.90MB gpu_peak_mb=7562 gpu_reserved_bytes=10706.00MB gpu_reserved_mb=10706 grads={'backbone': True, 'head': True} group_nonzero_counts=[52] groups=1 mean_seg_len=0.07 num_segments=14415 out_bytes=28.2KB out_dtype=torch.float16 out_numel=14415 out_shape=(14415, 1) param_bytes=669.8KB per_segment_p50_ms=5.37 per_segment_p90_ms=13.91 pred_extra_ms=8770.42 raw_reg_shape=(14415, 1) segments_per_sec=63306.78 seq_len_full=60 sum_seg_lens=960 total_params=171465 trainable_params=171465 windows_bytes=306.84MB
+
+E01 | OPTS[1:3.0e-05|cnts=[52]] | GN[input_proj=nan,feature_proj=nan,transformer=nan,ln_proj=nan,ln_flat=nan,head_flat=nan,attn_pool=nan,TOT=nan] | GD[nan,nan,nan] | UR[nan,nan] | lr=3.0e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[nan,nan,nan,BASE_RMSE=nan] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=0.2% | SR=nan | SL=0.00,HR=0.000 | FMB=0.0000 | T=46.9s,TP=3680.9seg/s | chk=0 | GPU=7.38GiB | 
+G/U=input_proj.weight:nan/nan,input_proj.bias:nan/nan,feature_proj.weight:nan/nan,feature_proj.bias:nan/nan,0.self_attn.in_proj_weight:nan/nan,0.self_attn.in_proj_bias:nan/nan,self_attn.out_proj.weight:nan/nan,self_attn.out_proj.bias:nan/nan,0.linear1.weight:nan/nan,0.linear1.bias:nan/nan,0.linear2.weight:nan/nan,0.linear2.bias:nan/nan,0.norm1.weight:nan/nan,0.norm1.bias:nan/nan,0.norm2.weight:nan/nan,0.norm2.bias:nan/nan,1.self_attn.in_proj_weight:nan/nan,1.self_attn.in_proj_bias:nan/nan,1.linear1.weight:nan/nan,1.linear1.bias:nan/nan,1.linear2.weight:nan/nan,1.linear2.bias:nan/nan,1.norm1.weight:nan/nan,1.norm1.bias:nan/nan,1.norm2.weight:nan/nan,1.norm2.bias:nan/nan,2.self_attn.in_proj_weight:nan/nan,2.self_attn.in_proj_bias:nan/nan,2.linear1.weight:nan/nan,2.linear1.bias:nan/nan,2.linear2.weight:nan/nan,2.linear2.bias:nan/nan,2.norm1.weight:nan/nan,2.norm1.bias:nan/nan,2.norm2.weight:nan/nan,2.norm2.bias:nan/nan,ln_proj.weight:nan/nan,ln_proj.bias:nan/nan,ln_flat.weight:nan/nan,ln_flat.bias:nan/nan,head_flat.0.bias:nan/nan,head_flat.2.bias:nan/nan,attn_pool.weight:nan/nan,attn_pool.bias:nan/nan | 
+FEAT_TOP=volume:nan,trade_count:nan,ret:nan,sma_pct_5:nan,sma_pct_9:nan,sma_pct_21:nan,sma_pct_50:nan,sma_pct_100:nan,sma_pct_200:nan,roc_5:nan,roc_10:nan,roc_21:nan,body_pct:nan,upper_shad:nan,lower_shad:nan,range_pct:nan,rsi_6:nan,rsi_14:nan,rsi_21:nan,atr_pct_7:nan,atr_pct_14:nan,atr_pct_28:nan,plus_di_7:nan,minus_di_7:nan,adx_7:nan,plus_di_14:nan,minus_di_14:nan,adx_14:nan,plus_di_28:nan,minus_di_28:nan,adx_28:nan,bb_w_20_3p0:nan,bb_w_50_2p0:nan,vol_spike_7:nan,vol_spike_14:nan,vol_spike_28:nan,dist_high_200:nan,dist_low_200:nan,obv_diff_7:nan,obv_diff_21:nan,ret_std_21:nan,ret_std_63:nan,stoch_k_14_3_3:nan,stoch_d_14_3_3:nan,stoch_k_9_3_3:nan,stoch_d_9_3_3:nan,cci_14:nan,cci_20:nan,mfi_14:nan,mfi_20:nan,cmf_14:nan,cmf_20:nan,donch_w_20:nan,donch_w_55:nan,kc_w_20_20_1.5:nan,vwap_RZ:nan,sma_5_RZ:nan,sma_9_RZ:nan,sma_21_RZ:nan,sma_50_RZ:nan,sma_100_RZ:nan,sma_200_RZ:nan,ema_3_RZ:nan,ema_5_RZ:nan,ema_8_RZ:nan,ema_13_RZ:nan,ema_21_RZ:nan,ema_50_RZ:nan,macd_line_6_13_5_RZ:nan,macd_signal_6_13_5_RZ:nan,macd_diff_6_13_5_RZ:nan,macd_line_12_26_9_RZ:nan,macd_signal_12_26_9_RZ:nan,macd_diff_12_26_9_RZ:nan,atr_7_RZ:nan,atr_14_RZ:nan,atr_28_RZ:nan,rolling_max_close_200_RZ:nan,rolling_min_close_200_RZ:nan,roll_vwap_20_RZ:nan,roll_vwap_50_RZ:nan,slope_close_20_RZ:nan,slope_close_50_RZ:nan,psar_RZ:nan,vwap_ohlc_close_session_RZ:nan,time_hour:nan,time_dow:nan,time_month:nan,time_day_of_year:nan,time_week_of_year:nan,time_in_sess:nan,time_premark:nan,time_afthour:nan
+
+E02 | OPTS[1:3.1e-05|cnts=[52]] | GN[input_proj=nan,feature_proj=nan,transformer=nan,ln_proj=nan,ln_flat=nan,head_flat=nan,attn_pool=nan,TOT=nan] | GD[nan,nan,nan] | UR[nan,nan] | lr=3.1e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[nan,nan,nan,BASE_RMSE=nan] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=0.4% | SR=nan | SL=0.00,HR=0.000 | FMB=0.0000 | T=33.4s,TP=5175.4seg/s | chk=0 | GPU=9.65GiB | 
+G/U=input_proj.weight:nan/nan,input_proj.bias:nan/nan,feature_proj.weight:nan/nan,feature_proj.bias:nan/nan,0.self_attn.in_proj_weight:nan/nan,0.self_attn.in_proj_bias:nan/nan,self_attn.out_proj.weight:nan/nan,self_attn.out_proj.bias:nan/nan,0.linear1.weight:nan/nan,0.linear1.bias:nan/nan,0.linear2.weight:nan/nan,0.linear2.bias:nan/nan,0.norm1.weight:nan/nan,0.norm1.bias:nan/nan,0.norm2.weight:nan/nan,0.norm2.bias:nan/nan,1.self_attn.in_proj_weight:nan/nan,1.self_attn.in_proj_bias:nan/nan,1.linear1.weight:nan/nan,1.linear1.bias:nan/nan,1.linear2.weight:nan/nan,1.linear2.bias:nan/nan,1.norm1.weight:nan/nan,1.norm1.bias:nan/nan,1.norm2.weight:nan/nan,1.norm2.bias:nan/nan,2.self_attn.in_proj_weight:nan/nan,2.self_attn.in_proj_bias:nan/nan,2.linear1.weight:nan/nan,2.linear1.bias:nan/nan,2.linear2.weight:nan/nan,2.linear2.bias:nan/nan,2.norm1.weight:nan/nan,2.norm1.bias:nan/nan,2.norm2.weight:nan/nan,2.norm2.bias:nan/nan,ln_proj.weight:nan/nan,ln_proj.bias:nan/nan,ln_flat.weight:nan/nan,ln_flat.bias:nan/nan,head_flat.0.bias:nan/nan,head_flat.2.bias:nan/nan,attn_pool.weight:nan/nan,attn_pool.bias:nan/nan | 
+FEAT_TOP=volume:nan,trade_count:nan,ret:nan,sma_pct_5:nan,sma_pct_9:nan,sma_pct_21:nan,sma_pct_50:nan,sma_pct_100:nan,sma_pct_200:nan,roc_5:nan,roc_10:nan,roc_21:nan,body_pct:nan,upper_shad:nan,lower_shad:nan,range_pct:nan,rsi_6:nan,rsi_14:nan,rsi_21:nan,atr_pct_7:nan,atr_pct_14:nan,atr_pct_28:nan,plus_di_7:nan,minus_di_7:nan,adx_7:nan,plus_di_14:nan,minus_di_14:nan,adx_14:nan,plus_di_28:nan,minus_di_28:nan,adx_28:nan,bb_w_20_3p0:nan,bb_w_50_2p0:nan,vol_spike_7:nan,vol_spike_14:nan,vol_spike_28:nan,dist_high_200:nan,dist_low_200:nan,obv_diff_7:nan,obv_diff_21:nan,ret_std_21:nan,ret_std_63:nan,stoch_k_14_3_3:nan,stoch_d_14_3_3:nan,stoch_k_9_3_3:nan,stoch_d_9_3_3:nan,cci_14:nan,cci_20:nan,mfi_14:nan,mfi_20:nan,cmf_14:nan,cmf_20:nan,donch_w_20:nan,donch_w_55:nan,kc_w_20_20_1.5:nan,vwap_RZ:nan,sma_5_RZ:nan,sma_9_RZ:nan,sma_21_RZ:nan,sma_50_RZ:nan,sma_100_RZ:nan,sma_200_RZ:nan,ema_3_RZ:nan,ema_5_RZ:nan,ema_8_RZ:nan,ema_13_RZ:nan,ema_21_RZ:nan,ema_50_RZ:nan,macd_line_6_13_5_RZ:nan,macd_signal_6_13_5_RZ:nan,macd_diff_6_13_5_RZ:nan,macd_line_12_26_9_RZ:nan,macd_signal_12_26_9_RZ:nan,macd_diff_12_26_9_RZ:nan,atr_7_RZ:nan,atr_14_RZ:nan,atr_28_RZ:nan,rolling_max_close_200_RZ:nan,rolling_min_close_200_RZ:nan,roll_vwap_20_RZ:nan,roll_vwap_50_RZ:nan,slope_close_20_RZ:nan,slope_close_50_RZ:nan,psar_RZ:nan,vwap_ohlc_close_session_RZ:nan,time_hour:nan,time_dow:nan,time_month:nan,time_day_of_year:nan,time_week_of_year:nan,time_in_sess:nan,time_premark:nan,time_afthour:nan
+
+E03 | OPTS[1:3.2e-05|cnts=[52]] | GN[input_proj=nan,feature_proj=nan,transformer=nan,ln_proj=nan,ln_flat=nan,head_flat=nan,attn_pool=nan,TOT=nan] | GD[nan,nan,nan] | UR[nan,nan] | lr=3.2e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[nan,nan,nan,BASE_RMSE=nan] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=0.6% | SR=nan | SL=0.00,HR=0.000 | FMB=0.0000 | T=32.1s,TP=5381.7seg/s | chk=0 | GPU=9.65GiB | 
+G/U=input_proj.weight:nan/nan,input_proj.bias:nan/nan,feature_proj.weight:nan/nan,feature_proj.bias:nan/nan,0.self_attn.in_proj_weight:nan/nan,0.self_attn.in_proj_bias:nan/nan,self_attn.out_proj.weight:nan/nan,self_attn.out_proj.bias:nan/nan,0.linear1.weight:nan/nan,0.linear1.bias:nan/nan,0.linear2.weight:nan/nan,0.linear2.bias:nan/nan,0.norm1.weight:nan/nan,0.norm1.bias:nan/nan,0.norm2.weight:nan/nan,0.norm2.bias:nan/nan,1.self_attn.in_proj_weight:nan/nan,1.self_attn.in_proj_bias:nan/nan,1.linear1.weight:nan/nan,1.linear1.bias:nan/nan,1.linear2.weight:nan/nan,1.linear2.bias:nan/nan,1.norm1.weight:nan/nan,1.norm1.bias:nan/nan,1.norm2.weight:nan/nan,1.norm2.bias:nan/nan,2.self_attn.in_proj_weight:nan/nan,2.self_attn.in_proj_bias:nan/nan,2.linear1.weight:nan/nan,2.linear1.bias:nan/nan,2.linear2.weight:nan/nan,2.linear2.bias:nan/nan,2.norm1.weight:nan/nan,2.norm1.bias:nan/nan,2.norm2.weight:nan/nan,2.norm2.bias:nan/nan,ln_proj.weight:nan/nan,ln_proj.bias:nan/nan,ln_flat.weight:nan/nan,ln_flat.bias:nan/nan,head_flat.0.bias:nan/nan,head_flat.2.bias:nan/nan,attn_pool.weight:nan/nan,attn_pool.bias:nan/nan | 
+FEAT_TOP=volume:nan,trade_count:nan,ret:nan,sma_pct_5:nan,sma_pct_9:nan,sma_pct_21:nan,sma_pct_50:nan,sma_pct_100:nan,sma_pct_200:nan,roc_5:nan,roc_10:nan,roc_21:nan,body_pct:nan,upper_shad:nan,lower_shad:nan,range_pct:nan,rsi_6:nan,rsi_14:nan,rsi_21:nan,atr_pct_7:nan,atr_pct_14:nan,atr_pct_28:nan,plus_di_7:nan,minus_di_7:nan,adx_7:nan,plus_di_14:nan,minus_di_14:nan,adx_14:nan,plus_di_28:nan,minus_di_28:nan,adx_28:nan,bb_w_20_3p0:nan,bb_w_50_2p0:nan,vol_spike_7:nan,vol_spike_14:nan,vol_spike_28:nan,dist_high_200:nan,dist_low_200:nan,obv_diff_7:nan,obv_diff_21:nan,ret_std_21:nan,ret_std_63:nan,stoch_k_14_3_3:nan,stoch_d_14_3_3:nan,stoch_k_9_3_3:nan,stoch_d_9_3_3:nan,cci_14:nan,cci_20:nan,mfi_14:nan,mfi_20:nan,cmf_14:nan,cmf_20:nan,donch_w_20:nan,donch_w_55:nan,kc_w_20_20_1.5:nan,vwap_RZ:nan,sma_5_RZ:nan,sma_9_RZ:nan,sma_21_RZ:nan,sma_50_RZ:nan,sma_100_RZ:nan,sma_200_RZ:nan,ema_3_RZ:nan,ema_5_RZ:nan,ema_8_RZ:nan,ema_13_RZ:nan,ema_21_RZ:nan,ema_50_RZ:nan,macd_line_6_13_5_RZ:nan,macd_signal_6_13_5_RZ:nan,macd_diff_6_13_5_RZ:nan,macd_line_12_26_9_RZ:nan,macd_signal_12_26_9_RZ:nan,macd_diff_12_26_9_RZ:nan,atr_7_RZ:nan,atr_14_RZ:nan,atr_28_RZ:nan,rolling_max_close_200_RZ:nan,rolling_min_close_200_RZ:nan,roll_vwap_20_RZ:nan,roll_vwap_50_RZ:nan,slope_close_20_RZ:nan,slope_close_50_RZ:nan,psar_RZ:nan,vwap_ohlc_close_session_RZ:nan,time_hour:nan,time_dow:nan,time_month:nan,time_day_of_year:nan,time_week_of_year:nan,time_in_sess:nan,time_premark:nan,time_afthour:nan
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+RUN START: 2026-01-20T14:08:28.438941Z
+
+SINGLE RUN DIAGNOSTIC FORMAT (explanatory)
+    BATCH_SHAPE B=7216 groups=1 seq_len_full=20 feat=20 : canonical input geometry used to build forwarded windows (snapshot.B, snapshot.groups, snapshot.seq_len_full, snapshot.feat_dim)
+    MICRODETAIL ms: <k=v ...> : single-line deterministic dump of snapshot keys printed as key=value (sorted); human-readable units used where applicable
+    -> B: number of batch samples used to build windows (snapshot.B)
+    -> groups: number of logical groups used when flattening windows (snapshot.groups)
+    -> seq_len_full: nominal full sequence length used when padding/truncating windows (snapshot.seq_len_full)
+    -> feat / feat_dim: feature dimension used to build windows (snapshot.feat_dim)
+    -> activation_mb: estimated activation footprint in MB computed from GPU allocation delta (snapshot.activation_mb)
+    -> backward_ms: backward pass ms placeholder (snapshot.backward_ms)
+    -> collector_ms: total wall-clock ms spent by the collector including sampling, CPU work and device synchronizations (snapshot.collector_ms)
+    -> cpu_copy_bytes: bytes copied to host for predictions shown human-readable in the log (snapshot.cpu_copy_bytes)
+    -> dataloader_ms: ms spent fetching the sampled batch from the dataloader (snapshot.dataloader_ms)
+    -> device_syncs_count: number of explicit device synchronizations performed during snapshot (snapshot.device_syncs_count)
+    -> env: small dict with python/torch/cuda/device_name strings (snapshot.env)
+    -> expected_segments: nominal B * groups used to estimate workload (snapshot.expected_segments)
+    -> full_forward_ms: wall-clock ms for the sampled forward over prepared windows (snapshot.full_forward_ms)
+    -> pred_extra_ms: estimated CPU-side post-forward ms = collector_ms - full_forward_ms - summed per-seg time (snapshot.pred_extra_ms)
+    -> gpu_allocated_bytes: raw GPU bytes allocated after forward (snapshot.gpu_allocated_bytes)
+    -> gpu_peak_mb: peak GPU memory in MB (snapshot.gpu_peak_mb)
+    -> gpu_reserved_bytes / gpu_reserved_mb: reserved GPU bytes and MB (snapshot.gpu_reserved_bytes, snapshot.gpu_reserved_mb)
+    -> grads: dict {'backbone': bool, 'head': bool} indicating gradient presence by name-bucket (snapshot.grads)
+    -> group_nonzero_counts: per-optimizer-group counts of parameters with non-None .grad (snapshot.group_nonzero_counts)
+    -> mean_seg_len: average per-segment time-series length in timesteps computed as sum_seg_lens / num_segments (snapshot.mean_seg_len)
+    -> num_segments: actual number of flattened segments forwarded (snapshot.num_segments)
+    -> sum_seg_lens: sum of non-empty segment lengths used to compute mean_seg_len (snapshot.sum_seg_lens)
+    -> out_bytes / out_dtype / out_numel / out_shape: model output bytes, dtype string, element count, and tuple shape (snapshot.out_bytes, snapshot.out_dtype, snapshot.out_numel, snapshot.out_shape)
+    -> param_bytes: total parameter memory in bytes (human-readable in log; raw int in snapshot.param_bytes)
+    -> total_params / trainable_params: canonical parameter counts stamped by init_log (snapshot.total_params, snapshot.trainable_params)
+    -> per_segment_p50_ms / per_segment_p90_ms: empirical per-segment forward-ms percentiles when sampling enabled (snapshot.per_segment_p50_ms, snapshot.per_segment_p90_ms)
+    -> raw_reg_shape: the raw detached regression output shape (snapshot.raw_reg_shape)
+    -> segments_per_sec: inferred throughput = num_segments / (full_forward_ms/1000.0) (snapshot.segments_per_sec)
+    -> windows_bytes: total bytes for the windows tensor (human-readable in log; raw int in snapshot.windows_bytes)
+
+PER-EPOCH LOG FORMAT (explanatory):
+  E{ep:02d}                : epoch number formatted with two digits
+  OPTS[{groups}:{lr_main}|cnts=[c1,c2,...]] : optimizer groups count; lr_main is the representative LR (first group); cnts lists per-group parameter counts
+  GN[name:val,...,TOT=val] : per-bucket gradient L2 norms printed as short_name:curr_norm; TOT is sqrt(sum squares over reported buckets)
+  GD[med,p90,max]         : gradient-norm distribution statistics printed as median, index-based 90th-percentile, and maximum
+  UR[med,max]             : update-ratio statistics (median,max) where update_ratio = lr * grad_norm / max(weight_norm,1e-8)
+  LR_MAIN={lr:.1e} | lr={lr:.1e} : representative main LR and explicit first-group lr printed in scientific notation
+  TR[...metrics...]       : training metrics reported for the epoch (rmse, mae, r2, etc.; see TR composition in code)
+  VAL[...metrics...]      : validation metrics reported for the epoch (rmse, mae, r2, etc.; see VAL composition in code)
+  SR={slope_rmse:.3f}     : slope RMSE computed on model.last_val_tot_preds/model.last_val_targs (trend calibration)
+  SL={slip:.2f},HR={hub_max:.3f} : slip fraction and hub max indicators derived from model.last_hub (defaults 0.00/0.000 when missing)
+  FMB={val:.4f}           : first-mini-batch diagnostic metric from the first-batch snapshot if set (snapshot.FMB)
+  T={elapsed:.1f}s,TP={throughput:.1f} : epoch elapsed seconds and throughput (segments/sec inferred from sampled forward)
+  chk={val}               : checkpoint marker token printed as chk in the line (implementation-specific; integerized when boolean)
+  GPU={GiB:.2f}GiB        : optional GPU memory high-water printed in GiB when CUDA available (torch.cuda.max_memory_allocated / (1024**3))
+  *CHKPT                  : optional marker when model._last_epoch_checkpoint is truthy (separate visual marker outside numeric chk token)
+  LAYER_GN[...]           : optional small set of monitored layer norms printed as name_short:curr_norm/ratio where ratio = curr / baseline_observed_on_first_epoch
+  G/U=name:grad/update_ratio,... : parameter buckets printed sorted by descending gradient norm; every short-name bucket is emitted in compact form
+      - format for each token is short_name:{g:.3e}/{u:.1e} where g is the gradient norm and u is the lr-scaled update ratio
+      - short_name uses the last 1–3 name segments (see short_name logic); entries are deduped by short_name keeping the highest-g representative
+      - the G/U list is printed every epoch (values change per epoch) and contains both large and very small gradients in scientific notation
+
+BASELINES:
+  TRAIN mean RMSE        = 0.03479
+  TRAIN persistence RMSE = 0.00759
+  VAL   mean RMSE        = 0.03155
+  VAL   persistence RMSE = 0.00777
+
+HYPERPARAMS:
+  USE_CONV = False
+  CONV_K = 3
+  CONV_DILATION = 1
+  CONV_CHANNELS = 64
+  USE_TCN = False
+  TCN_LAYERS = 1
+  TCN_KERNEL = 3
+  TCN_CHANNELS = 64
+  USE_SHORT_LSTM = False
+  SHORT_UNITS = 64
+  DROPOUT_SHORT = 0.1
+  USE_TRANSFORMER = True
+  TRANSFORMER_D_MODEL = 64
+  TRANSFORMER_LAYERS = 3
+  TRANSFORMER_HEADS = 4
+  TRANSFORMER_FF_MULT = 4
+  DROPOUT_TRANS = 0.03
+  USE_LONG_LSTM = False
+  LONG_UNITS = 64
+  DROPOUT_LONG = 0.1
+  FLATTEN_MODE = attn
+  PRED_HIDDEN = 96
+  ALPHA_SMOOTH = 0
+  WARMUP_STEPS = 3
+  USE_HUBER = False
+  HUBER_DELTA = 0.1
+  USE_DELTA = False
+  LAMBDA_DELTA = 0.1
+  MAX_EPOCHS = 90
+  EARLY_STOP_PATIENCE = 9
+  WEIGHT_DECAY = 3e-06
+  CLIPNORM = 3
+  ONECYCLE_MAX_LR = 0.0003
+  HEAD_LR_PCT = 1
+  ONECYCLE_DIV_FACTOR = 10
+  ONECYCLE_FINAL_DIV = 100
+  ONECYCLE_PCT_START = 0.1
+  ONECYCLE_STRATEGY = cos
+  TRAIN_BATCH = 16
+  VAL_BATCH = 1
+  TRAIN_WORKERS = 8
+  TRAIN_PREFETCH_FACTOR = 4
+  LOOK_BACK = 60
+  MICRO_SAMPLE_K = 16
+
+DEBUG_OPT GROUPS=1 LRS=['3.5e-05'] COUNTS=[52] | MODEL_STATIC: total_params=171,465 trainable=171,465 frozen=0 | param_bytes=669.8KB
+BATCH_SHAPE B=14416 groups=1 seq_len_full=60 feat=93
+MICRODETAIL ms: B=14416 activation_mb=5378 backward_ms=304.62 collector_ms=10940.53 cpu_copy_bytes=28.2KB dataloader_ms=9519.83 device_syncs_count=2 env={'python': '3.12.3', 'torch': '2.7.0a0+ecf3bae40a.nv25.02', 'cuda': '12.8', 'device_name': 'NVIDIA GeForce RTX 5080 Laptop GPU'} expected_segments=14416 feat_dim=93 full_forward_ms=241.75 gpu_allocated_bytes=6624.58MB gpu_peak_mb=7562 gpu_reserved_bytes=10706.00MB gpu_reserved_mb=10706 grads={'backbone': True, 'head': True} group_nonzero_counts=[52] groups=1 mean_seg_len=0.07 num_segments=14415 out_bytes=28.2KB out_dtype=torch.float16 out_numel=14415 out_shape=(14415, 1) param_bytes=669.8KB per_segment_p50_ms=40.81 per_segment_p90_ms=63.60 pred_extra_ms=10075.22 raw_reg_shape=(14415, 1) segments_per_sec=59627.93 seq_len_full=60 sum_seg_lens=960 total_params=171465 trainable_params=171465 windows_bytes=306.84MB
+
+E01 | OPTS[1:3.5e-05|cnts=[52]] | GN[head_flat=1.726,transformer=1.305,feature_proj=0.677,input_proj=0.310,ln_proj=0.121,ln_flat=0.116,attn_pool=0.051,TOT=2.295] | GD[9.1e-02,4.5e-01,1.3e+00] | UR[3.9e-06,3.8e-02] | lr=3.5e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[0.1189,0.1104,-13.2086,BASE_RMSE=0.1189] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=0.8% | SR=0.011 | SL=0.00,HR=0.000 | FMB=0.0000 | T=50.9s,TP=3396.2seg/s | chk=0 | GPU=7.39GiB | 
+G/U=feature_proj.weight:6.6e-01/4.9e-06,2.linear2.weight:5.1e-01/3.9e-06,0.linear2.weight:4.8e-01/3.6e-06,self_attn.out_proj.weight:4.6e-01/3.4e-06,1.linear2.weight:4.5e-01/3.4e-06,0.self_attn.in_proj_weight:4.1e-01/1.4e-06,head_flat.2.bias:3.1e-01/3.8e-02,2.self_attn.in_proj_weight:3.1e-01/1.1e-06,input_proj.weight:3.0e-01/1.1e-06,1.self_attn.in_proj_weight:2.9e-01/1.0e-06,2.linear1.weight:2.1e-01/7.9e-07,0.linear1.weight:2.0e-01/7.7e-07,1.linear1.weight:1.8e-01/6.8e-07,feature_proj.bias:1.7e-01/1.2e-05,head_flat.0.bias:1.4e-01/6.2e-06,self_attn.out_proj.bias:1.3e-01/2.1e-03,ln_proj.bias:9.6e-02/1.5e-03,2.norm2.bias:9.5e-02/1.5e-03,0.norm1.bias:9.4e-02/1.5e-03,0.norm2.bias:9.3e-02/1.5e-03,0.linear2.bias:9.1e-02/1.1e-05,2.linear2.bias:8.9e-02/1.0e-05,2.norm1.bias:8.8e-02/1.4e-03,1.norm2.bias:8.5e-02/1.4e-03,ln_flat.bias:8.4e-02/1.3e-03,1.norm1.bias:8.1e-02/1.3e-03,1.linear2.bias:8.0e-02/9.4e-06,ln_flat.weight:8.0e-02/3.5e-07,0.self_attn.in_proj_bias:7.8e-02/8.8e-04,input_proj.bias:7.7e-02/1.0e-03,ln_proj.weight:7.4e-02/3.2e-07,2.norm2.weight:7.3e-02/3.2e-07,0.norm1.weight:7.1e-02/3.1e-07,0.norm2.weight:6.7e-02/2.9e-07,2.norm1.weight:6.6e-02/2.9e-07,1.norm1.weight:5.3e-02/2.3e-07,1.norm2.weight:5.3e-02/2.3e-07,attn_pool.weight:5.1e-02/3.0e-06,2.self_attn.in_proj_bias:4.6e-02/5.2e-04,1.self_attn.in_proj_bias:4.6e-02/5.2e-04,0.linear1.bias:3.2e-02/9.6e-07,2.linear1.bias:3.0e-02/9.0e-07,1.linear1.bias:2.7e-02/8.2e-07,attn_pool.bias:1.0e-08/4.9e-09 | 
+FEAT_TOP=sma_pct_200:9.88e-01,sma_100_RZ:9.59e-01,ema_21_RZ:9.42e-01,minus_di_28:9.27e-01,plus_di_28:9.25e-01,sma_pct_5:9.17e-01,sma_50_RZ:8.96e-01,ema_3_RZ:8.77e-01,rsi_14:8.51e-01,adx_7:8.47e-01,rsi_21:8.39e-01,time_hour:8.29e-01,obv_diff_21:8.23e-01,bb_w_50_2p0:8.06e-01,volume:7.89e-01,macd_line_6_13_5_RZ:7.88e-01,stoch_k_9_3_3:7.83e-01,macd_signal_6_13_5_RZ:7.80e-01,upper_shad:7.62e-01,ema_50_RZ:7.56e-01,ema_8_RZ:7.55e-01,macd_line_12_26_9_RZ:7.51e-01,time_day_of_year:7.25e-01,sma_pct_50:7.20e-01,macd_diff_6_13_5_RZ:7.16e-01,sma_5_RZ:7.13e-01,roll_vwap_20_RZ:7.06e-01,time_afthour:6.99e-01,cmf_20:6.86e-01,rolling_max_close_200_RZ:6.85e-01,donch_w_20:6.82e-01,minus_di_7:6.81e-01,time_week_of_year:6.80e-01,donch_w_55:6.74e-01,stoch_k_14_3_3:6.72e-01,macd_signal_12_26_9_RZ:6.72e-01,adx_14:6.71e-01,time_in_sess:6.69e-01,sma_21_RZ:6.54e-01,psar_RZ:6.47e-01,time_dow:6.39e-01,ema_5_RZ:6.39e-01,atr_pct_28:6.17e-01,obv_diff_7:6.05e-01,adx_28:6.04e-01,bb_w_20_3p0:5.99e-01,vol_spike_28:5.96e-01,slope_close_50_RZ:5.96e-01,atr_7_RZ:5.96e-01,sma_9_RZ:5.90e-01,slope_close_20_RZ:5.86e-01,trade_count:5.86e-01,time_month:5.83e-01,cci_14:5.73e-01,rolling_min_close_200_RZ:5.72e-01,vwap_ohlc_close_session_RZ:5.68e-01,vwap_RZ:5.57e-01,ret_std_63:5.54e-01,rsi_6:5.51e-01,plus_di_7:5.51e-01,atr_pct_7:5.45e-01,lower_shad:5.43e-01,dist_high_200:5.40e-01,sma_pct_100:5.39e-01,sma_200_RZ:5.38e-01,dist_low_200:5.32e-01,roll_vwap_50_RZ:5.23e-01,mfi_20:5.14e-01,cci_20:5.09e-01,atr_28_RZ:5.04e-01,roc_10:5.00e-01,vol_spike_14:4.97e-01,mfi_14:4.92e-01,ret:4.88e-01,ema_13_RZ:4.78e-01,time_premark:4.75e-01,stoch_d_9_3_3:4.69e-01,sma_pct_9:4.64e-01,range_pct:4.54e-01,roc_5:4.51e-01,atr_pct_14:4.35e-01,kc_w_20_20_1.5:4.22e-01,atr_14_RZ:4.15e-01,cmf_14:4.12e-01,ret_std_21:4.11e-01,sma_pct_21:4.05e-01,vol_spike_7:3.81e-01,plus_di_14:3.64e-01,minus_di_14:3.42e-01,body_pct:3.08e-01,roc_21:3.00e-01,stoch_d_14_3_3:1.98e-01,macd_diff_12_26_9_RZ:7.86e-02
+
+E02 | OPTS[1:5.0e-05|cnts=[52]] | GN[head_flat=1.428,transformer=0.968,feature_proj=0.475,input_proj=0.209,ln_proj=0.099,ln_flat=0.091,attn_pool=0.038,TOT=1.807] | GD[6.7e-02,3.2e-01,1.1e+00] | UR[4.4e-06,2.5e-02] | lr=5.0e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[0.1524,0.1455,-22.3115,BASE_RMSE=0.1524] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=1.8% | SR=0.011 | SL=0.00,HR=0.000 | FMB=0.0000 | T=30.1s,TP=5741.4seg/s | chk=1 | GPU=9.65GiB | 
+G/U=feature_proj.weight:4.6e-01/5.0e-06,2.linear2.weight:4.0e-01/4.4e-06,0.linear2.weight:3.4e-01/3.8e-06,1.linear2.weight:3.3e-01/3.7e-06,self_attn.out_proj.weight:3.2e-01/3.5e-06,0.self_attn.in_proj_weight:2.9e-01/1.5e-06,head_flat.2.bias:2.6e-01/2.5e-02,2.self_attn.in_proj_weight:2.3e-01/1.2e-06,1.self_attn.in_proj_weight:2.1e-01/1.1e-06,input_proj.weight:2.0e-01/1.1e-06,2.linear1.weight:1.6e-01/8.9e-07,0.linear1.weight:1.5e-01/8.0e-07,1.linear1.weight:1.3e-01/7.3e-07,feature_proj.bias:1.2e-01/1.2e-05,head_flat.0.bias:1.1e-01/7.3e-06,self_attn.out_proj.bias:9.0e-02/1.1e-03,ln_proj.bias:7.4e-02/9.3e-04,2.norm2.bias:7.4e-02/9.3e-04,2.linear2.bias:6.9e-02/1.2e-05,2.norm1.bias:6.8e-02/8.5e-04,0.norm1.bias:6.7e-02/8.3e-04,0.norm2.bias:6.6e-02/8.1e-04,ln_proj.weight:6.5e-02/4.1e-07,ln_flat.bias:6.5e-02/8.1e-04,0.linear2.bias:6.5e-02/1.1e-05,2.norm2.weight:6.5e-02/4.1e-07,ln_flat.weight:6.4e-02/4.0e-07,1.norm2.bias:6.3e-02/7.9e-04,1.norm1.bias:6.0e-02/7.6e-04,1.linear2.bias:5.9e-02/1.0e-05,2.norm1.weight:5.9e-02/3.7e-07,0.self_attn.in_proj_bias:5.6e-02/4.9e-04,0.norm1.weight:5.3e-02/3.3e-07,input_proj.bias:5.2e-02/5.3e-04,0.norm2.weight:5.1e-02/3.2e-07,1.norm2.weight:4.5e-02/2.9e-07,1.norm1.weight:4.4e-02/2.8e-07,attn_pool.weight:3.8e-02/3.3e-06,2.self_attn.in_proj_bias:3.5e-02/3.1e-04,1.self_attn.in_proj_bias:3.4e-02/3.0e-04,2.linear1.bias:2.3e-02/1.0e-06,0.linear1.bias:2.3e-02/1.0e-06,1.linear1.bias:2.0e-02/8.7e-07,attn_pool.bias:1.3e-08/4.8e-09 | 
+FEAT_TOP=sma_pct_200:9.88e-01,sma_100_RZ:9.59e-01,ema_21_RZ:9.44e-01,minus_di_28:9.34e-01,plus_di_28:9.30e-01,sma_pct_5:9.16e-01,sma_50_RZ:8.98e-01,ema_3_RZ:8.80e-01,adx_7:8.51e-01,rsi_14:8.50e-01,rsi_21:8.40e-01,obv_diff_21:8.25e-01,time_hour:8.22e-01,bb_w_50_2p0:8.08e-01,volume:7.88e-01,macd_line_6_13_5_RZ:7.88e-01,stoch_k_9_3_3:7.84e-01,macd_signal_6_13_5_RZ:7.81e-01,upper_shad:7.58e-01,ema_50_RZ:7.58e-01,ema_8_RZ:7.55e-01,macd_line_12_26_9_RZ:7.53e-01,time_day_of_year:7.26e-01,sma_pct_50:7.22e-01,macd_diff_6_13_5_RZ:7.18e-01,sma_5_RZ:7.13e-01,roll_vwap_20_RZ:7.08e-01,time_afthour:7.00e-01,rolling_max_close_200_RZ:6.87e-01,cmf_20:6.85e-01,minus_di_7:6.85e-01,donch_w_20:6.83e-01,time_week_of_year:6.82e-01,donch_w_55:6.76e-01,adx_14:6.76e-01,macd_signal_12_26_9_RZ:6.75e-01,stoch_k_14_3_3:6.74e-01,sma_21_RZ:6.56e-01,psar_RZ:6.48e-01,time_dow:6.43e-01,ema_5_RZ:6.40e-01,time_in_sess:6.37e-01,atr_pct_28:6.17e-01,adx_28:6.09e-01,obv_diff_7:6.05e-01,atr_7_RZ:6.01e-01,bb_w_20_3p0:6.01e-01,slope_close_50_RZ:5.99e-01,vol_spike_28:5.98e-01,sma_9_RZ:5.92e-01,slope_close_20_RZ:5.88e-01,time_month:5.86e-01,trade_count:5.81e-01,cci_14:5.72e-01,rolling_min_close_200_RZ:5.71e-01,vwap_ohlc_close_session_RZ:5.70e-01,vwap_RZ:5.59e-01,ret_std_63:5.56e-01,plus_di_7:5.55e-01,rsi_6:5.53e-01,atr_pct_7:5.46e-01,dist_high_200:5.42e-01,sma_pct_100:5.40e-01,lower_shad:5.39e-01,sma_200_RZ:5.39e-01,dist_low_200:5.30e-01,roll_vwap_50_RZ:5.26e-01,mfi_20:5.14e-01,cci_20:5.12e-01,time_premark:5.09e-01,atr_28_RZ:5.08e-01,roc_10:5.02e-01,vol_spike_14:4.99e-01,mfi_14:4.94e-01,ret:4.88e-01,ema_13_RZ:4.80e-01,stoch_d_9_3_3:4.69e-01,sma_pct_9:4.64e-01,range_pct:4.53e-01,roc_5:4.53e-01,atr_pct_14:4.35e-01,kc_w_20_20_1.5:4.24e-01,atr_14_RZ:4.19e-01,ret_std_21:4.13e-01,cmf_14:4.13e-01,sma_pct_21:4.06e-01,vol_spike_7:3.82e-01,plus_di_14:3.71e-01,minus_di_14:3.47e-01,body_pct:3.09e-01,roc_21:3.01e-01,stoch_d_14_3_3:2.00e-01,macd_diff_12_26_9_RZ:8.01e-02
+
+E03 | OPTS[1:7.6e-05|cnts=[52]] | GN[head_flat=0.309,transformer=0.186,feature_proj=0.088,input_proj=0.039,ln_proj=0.020,ln_flat=0.019,attn_pool=0.007,TOT=0.374] | GD[1.3e-02,5.9e-02,2.4e-01] | UR[1.1e-06,1.1e-02] | lr=7.6e-05 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[0.0453,0.0302,-1.0578,BASE_RMSE=0.0453] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=2.7% | SR=0.011 | SL=0.00,HR=0.000 | FMB=0.0000 | T=38.1s,TP=4535.0seg/s | chk=0 | GPU=9.65GiB | 
+G/U=feature_proj.weight:8.5e-02/1.4e-06,2.linear2.weight:8.1e-02/1.3e-06,1.linear2.weight:6.4e-02/1.1e-06,0.linear2.weight:6.4e-02/1.1e-06,self_attn.out_proj.weight:5.9e-02/9.8e-07,head_flat.2.bias:5.7e-02/1.1e-02,0.self_attn.in_proj_weight:5.2e-02/4.0e-07,2.self_attn.in_proj_weight:4.7e-02/3.6e-07,1.self_attn.in_proj_weight:4.0e-02/3.1e-07,input_proj.weight:3.8e-02/3.0e-07,2.linear1.weight:3.3e-02/2.7e-07,0.linear1.weight:2.6e-02/2.2e-07,1.linear1.weight:2.5e-02/2.1e-07,head_flat.0.bias:2.3e-02/2.3e-06,feature_proj.bias:2.1e-02/3.2e-06,self_attn.out_proj.bias:1.6e-02/2.8e-04,ln_proj.bias:1.5e-02/3.1e-04,2.norm2.bias:1.5e-02/3.1e-04,2.linear2.bias:1.4e-02/3.5e-06,2.norm1.bias:1.4e-02/2.8e-04,ln_flat.bias:1.3e-02/2.5e-04,ln_proj.weight:1.3e-02/1.3e-07,ln_flat.weight:1.3e-02/1.2e-07,2.norm2.weight:1.3e-02/1.2e-07,0.norm2.bias:1.2e-02/2.1e-04,0.norm1.bias:1.2e-02/2.1e-04,1.norm2.bias:1.2e-02/2.4e-04,0.linear2.bias:1.2e-02/3.1e-06,2.norm1.weight:1.2e-02/1.1e-07,1.linear2.bias:1.1e-02/2.9e-06,1.norm1.bias:1.1e-02/2.1e-04,0.norm1.weight:1.0e-02/9.5e-08,0.self_attn.in_proj_bias:1.0e-02/1.3e-04,0.norm2.weight:9.9e-03/9.4e-08,input_proj.bias:9.7e-03/1.4e-04,1.norm2.weight:9.2e-03/8.7e-08,1.norm1.weight:8.9e-03/8.5e-08,2.self_attn.in_proj_bias:7.0e-03/8.8e-05,attn_pool.weight:6.9e-03/8.8e-07,1.self_attn.in_proj_bias:6.3e-03/7.7e-05,2.linear1.bias:4.6e-03/3.0e-07,0.linear1.bias:4.1e-03/2.7e-07,1.linear1.bias:3.7e-03/2.5e-07,attn_pool.bias:8.4e-09/2.4e-09 | 
+FEAT_TOP=sma_pct_200:9.68e-01,sma_100_RZ:9.43e-01,minus_di_28:9.28e-01,ema_21_RZ:9.28e-01,plus_di_28:9.25e-01,sma_pct_5:8.99e-01,sma_50_RZ:8.84e-01,ema_3_RZ:8.67e-01,adx_7:8.49e-01,rsi_14:8.33e-01,rsi_21:8.25e-01,obv_diff_21:8.09e-01,bb_w_50_2p0:8.06e-01,time_hour:7.90e-01,volume:7.88e-01,macd_line_6_13_5_RZ:7.72e-01,stoch_k_9_3_3:7.69e-01,macd_signal_6_13_5_RZ:7.65e-01,upper_shad:7.50e-01,ema_50_RZ:7.42e-01,ema_8_RZ:7.39e-01,macd_line_12_26_9_RZ:7.38e-01,time_day_of_year:7.20e-01,sma_pct_50:7.04e-01,macd_diff_6_13_5_RZ:7.02e-01,sma_5_RZ:6.97e-01,roll_vwap_20_RZ:6.93e-01,time_afthour:6.89e-01,donch_w_20:6.82e-01,minus_di_7:6.82e-01,time_week_of_year:6.77e-01,adx_14:6.77e-01,donch_w_55:6.74e-01,rolling_max_close_200_RZ:6.69e-01,cmf_20:6.68e-01,macd_signal_12_26_9_RZ:6.61e-01,stoch_k_14_3_3:6.58e-01,sma_21_RZ:6.41e-01,psar_RZ:6.33e-01,ema_5_RZ:6.25e-01,time_dow:6.24e-01,adx_28:6.13e-01,atr_pct_28:6.11e-01,atr_7_RZ:6.02e-01,bb_w_20_3p0:5.99e-01,vol_spike_28:5.97e-01,obv_diff_7:5.92e-01,time_in_sess:5.87e-01,slope_close_50_RZ:5.83e-01,time_month:5.81e-01,sma_9_RZ:5.80e-01,slope_close_20_RZ:5.73e-01,trade_count:5.69e-01,vwap_ohlc_close_session_RZ:5.55e-01,rolling_min_close_200_RZ:5.55e-01,cci_14:5.55e-01,ret_std_63:5.54e-01,plus_di_7:5.52e-01,vwap_RZ:5.43e-01,dist_high_200:5.42e-01,atr_pct_7:5.42e-01,time_premark:5.42e-01,rsi_6:5.37e-01,lower_shad:5.31e-01,dist_low_200:5.24e-01,sma_200_RZ:5.22e-01,sma_pct_100:5.22e-01,roll_vwap_50_RZ:5.11e-01,atr_28_RZ:5.07e-01,mfi_20:4.97e-01,cci_20:4.95e-01,vol_spike_14:4.94e-01,roc_10:4.85e-01,mfi_14:4.77e-01,ret:4.71e-01,ema_13_RZ:4.65e-01,stoch_d_9_3_3:4.52e-01,range_pct:4.50e-01,sma_pct_9:4.49e-01,roc_5:4.39e-01,atr_pct_14:4.30e-01,kc_w_20_20_1.5:4.18e-01,atr_14_RZ:4.18e-01,ret_std_21:4.11e-01,cmf_14:3.95e-01,sma_pct_21:3.89e-01,vol_spike_7:3.77e-01,plus_di_14:3.66e-01,minus_di_14:3.41e-01,body_pct:2.92e-01,roc_21:2.83e-01,stoch_d_14_3_3:1.83e-01,macd_diff_12_26_9_RZ:6.40e-02
+CHKPT SAVED val=0.045 path=trainings/AAPL_0.04527_chp.pth
+
+E04 | OPTS[1:1.1e-04|cnts=[52]] | GN[head_flat=1.044,transformer=0.611,feature_proj=0.270,input_proj=0.121,ln_proj=0.067,ln_flat=0.064,attn_pool=0.021,TOT=1.249] | GD[4.6e-02,1.9e-01,8.0e-01] | UR[6.2e-06,7.6e-02] | lr=1.1e-04 | TR[nan,nan,nan,BASE_RMSE=nan,DELTA_RMSE=nan] | VAL[0.0891,0.0825,-6.9670,BASE_RMSE=0.0891] | BASE_LOSS=nan,DELTA_LOSS=0.0000e+00,DELTA_RATIO=nan,BASE_RMSE=nan,DELTA_RMSE=nan | SCHED_PCT=3.6% | SR=0.011 | SL=0.00,HR=0.000 | FMB=0.0000 | T=36.1s,TP=4791.1seg/s | chk=1 | GPU=9.65GiB | 
+G/U=2.linear2.weight:2.8e-01/6.6e-06,feature_proj.weight:2.6e-01/6.2e-06,1.linear2.weight:2.1e-01/5.1e-06,0.linear2.weight:2.1e-01/4.9e-06,head_flat.2.bias:1.9e-01/7.6e-02,self_attn.out_proj.weight:1.9e-01/4.5e-06,0.self_attn.in_proj_weight:1.6e-01/1.8e-06,2.self_attn.in_proj_weight:1.6e-01/1.7e-06,1.self_attn.in_proj_weight:1.3e-01/1.4e-06,input_proj.weight:1.2e-01/1.3e-06,2.linear1.weight:1.1e-01/1.3e-06,0.linear1.weight:8.3e-02/9.8e-07,1.linear1.weight:8.2e-02/9.7e-07,head_flat.0.bias:8.0e-02/1.1e-05,feature_proj.bias:6.7e-02/1.5e-05,self_attn.out_proj.bias:5.3e-02/1.1e-03,ln_proj.bias:5.1e-02/1.4e-03,2.norm2.bias:5.1e-02/1.4e-03,2.linear2.bias:4.7e-02/1.7e-05,ln_flat.bias:4.6e-02/1.2e-03,2.norm1.bias:4.6e-02/1.3e-03,ln_flat.weight:4.5e-02/6.1e-07,ln_proj.weight:4.3e-02/5.8e-07,2.norm2.weight:4.2e-02/5.8e-07,1.norm2.bias:4.1e-02/1.1e-03,0.norm2.bias:4.0e-02/8.9e-04,0.norm1.bias:3.9e-02/8.4e-04,2.norm1.weight:3.9e-02/5.3e-07,0.linear2.bias:3.9e-02/1.4e-05,1.linear2.bias:3.8e-02/1.4e-05,1.norm1.bias:3.8e-02/9.0e-04,0.self_attn.in_proj_bias:3.1e-02/5.2e-04,0.norm1.weight:3.1e-02/4.3e-07,0.norm2.weight:3.1e-02/4.2e-07,input_proj.bias:3.0e-02/5.4e-04,1.norm2.weight:2.8e-02/3.8e-07,1.norm1.weight:2.7e-02/3.7e-07,2.self_attn.in_proj_bias:2.3e-02/4.0e-04,attn_pool.weight:2.1e-02/3.9e-06,1.self_attn.in_proj_bias:2.0e-02/3.2e-04,2.linear1.bias:1.5e-02/1.4e-06,0.linear1.bias:1.3e-02/1.2e-06,1.linear1.bias:1.2e-02/1.1e-06,attn_pool.bias:9.8e-09/1.7e-09 | 
+FEAT_TOP=sma_pct_200:9.86e-01,sma_100_RZ:9.58e-01,ema_21_RZ:9.39e-01,minus_di_28:9.25e-01,plus_di_28:9.22e-01,sma_pct_5:9.13e-01,sma_50_RZ:8.96e-01,ema_3_RZ:8.80e-01,rsi_14:8.47e-01,adx_7:8.45e-01,rsi_21:8.38e-01,time_hour:8.28e-01,obv_diff_21:8.21e-01,bb_w_50_2p0:8.05e-01,volume:7.88e-01,macd_line_6_13_5_RZ:7.84e-01,stoch_k_9_3_3:7.84e-01,macd_signal_6_13_5_RZ:7.76e-01,upper_shad:7.63e-01,ema_50_RZ:7.54e-01,ema_8_RZ:7.50e-01,macd_line_12_26_9_RZ:7.50e-01,time_day_of_year:7.23e-01,sma_pct_50:7.18e-01,macd_diff_6_13_5_RZ:7.15e-01,sma_5_RZ:7.09e-01,roll_vwap_20_RZ:7.04e-01,time_afthour:7.01e-01,rolling_max_close_200_RZ:6.83e-01,minus_di_7:6.82e-01,cmf_20:6.82e-01,donch_w_20:6.82e-01,time_week_of_year:6.81e-01,stoch_k_14_3_3:6.74e-01,macd_signal_12_26_9_RZ:6.73e-01,donch_w_55:6.71e-01,adx_14:6.71e-01,time_in_sess:6.66e-01,sma_21_RZ:6.53e-01,psar_RZ:6.48e-01,time_dow:6.40e-01,ema_5_RZ:6.37e-01,atr_pct_28:6.17e-01,obv_diff_7:6.05e-01,adx_28:6.04e-01,atr_7_RZ:5.99e-01,bb_w_20_3p0:5.98e-01,vol_spike_28:5.97e-01,slope_close_50_RZ:5.96e-01,sma_9_RZ:5.94e-01,trade_count:5.88e-01,slope_close_20_RZ:5.86e-01,time_month:5.81e-01,rolling_min_close_200_RZ:5.72e-01,cci_14:5.70e-01,vwap_ohlc_close_session_RZ:5.68e-01,vwap_RZ:5.55e-01,ret_std_63:5.54e-01,rsi_6:5.51e-01,plus_di_7:5.51e-01,atr_pct_7:5.45e-01,dist_high_200:5.42e-01,lower_shad:5.42e-01,sma_pct_100:5.39e-01,sma_200_RZ:5.38e-01,dist_low_200:5.31e-01,roll_vwap_50_RZ:5.22e-01,mfi_20:5.12e-01,cci_20:5.09e-01,atr_28_RZ:5.02e-01,roc_10:5.00e-01,vol_spike_14:4.93e-01,mfi_14:4.91e-01,ret:4.85e-01,ema_13_RZ:4.76e-01,time_premark:4.73e-01,stoch_d_9_3_3:4.67e-01,sma_pct_9:4.65e-01,roc_5:4.55e-01,range_pct:4.53e-01,atr_pct_14:4.34e-01,kc_w_20_20_1.5:4.22e-01,atr_14_RZ:4.13e-01,ret_std_21:4.12e-01,cmf_14:4.09e-01,sma_pct_21:4.03e-01,vol_spike_7:3.81e-01,plus_di_14:3.64e-01,minus_di_14:3.40e-01,body_pct:3.06e-01,roc_21:2.98e-01,stoch_d_14_3_3:1.97e-01,macd_diff_12_26_9_RZ:7.69e-02

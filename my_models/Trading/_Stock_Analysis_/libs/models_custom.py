@@ -468,6 +468,60 @@ def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
 #################### 
 
 
+# def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
+#                                        y_signal: torch.Tensor,
+#                                        seq_lengths: list,
+#                                        wd_batch: torch.Tensor,
+#                                        reset_state_fn,
+#                                        model,
+#                                        prev_day=None):
+#     """
+#     Build (windows_tensor, targets_tensor, prev_day) from a flattened collate.
+
+#     Assumes:
+#       - x_batch: Tensor shape (N, T, F)  where N = sum(seq_lengths)
+#       - y_signal: Tensor shape (N,)
+#       - seq_lengths: list/tuple of per-day window counts [W0, W1, ...] summing to N
+#       - wd_batch: per-day weekday tensor (len == B)
+
+#     Behaviour:
+#       - Calls reset_state_fn once per day (using wd_batch[day_idx]) before that day's windows.
+#       - Returns windows_tensor: (N, T, F), targets_tensor: (N,)
+#       - If no windows present returns (None, None, prev_day)
+#     """
+#     device = x_batch.device
+
+#     # Quick sanity
+#     if not (isinstance(seq_lengths, (list, tuple)) and sum(seq_lengths) == x_batch.size(0)):
+#         raise RuntimeError(f"_prepare_windows_and_targets_batch expects seq_lengths summing to x_batch.size(0); got seq_lengths={seq_lengths} x_batch.shape={tuple(x_batch.shape)}")
+
+#     windows_list = []
+#     targets_list = []
+#     start = 0
+
+#     for day_idx, L in enumerate(seq_lengths):
+#         prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)  
+
+#         if L <= 0:
+#             start += L
+#             continue
+
+#         end = start + L
+#         day_windows = x_batch[start:end]     # (L, T, F)
+#         day_targets = y_signal[start:end]    # (L,)
+
+#         windows_list.append(day_windows)
+#         targets_list.append(day_targets)
+#         start = end
+
+#     if not windows_list:
+#         return None, None, prev_day
+
+#     windows_tensor = torch.cat(windows_list, dim=0).to(device).float()   # (N, T, F)
+#     targets_tensor = torch.cat(targets_list, dim=0).to(device).float()   # (N,)
+#     return windows_tensor, targets_tensor, prev_day
+
+
 def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
                                        y_signal: torch.Tensor,
                                        seq_lengths: list,
@@ -476,49 +530,41 @@ def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
                                        model,
                                        prev_day=None):
     """
-    Build (windows_tensor, targets_tensor, prev_day) from a flattened collate.
+    Prepare per-window tensors from a padded flattened collate (minimal, no format checks).
 
-    Assumes:
-      - x_batch: Tensor shape (N, T, F)  where N = sum(seq_lengths)
-      - y_signal: Tensor shape (N,)
-      - seq_lengths: list/tuple of per-day window counts [W0, W1, ...] summing to N
-      - wd_batch: per-day weekday tensor (len == B)
-
+    Assumes pad_collate produced x_batch flattened as B blocks of W_max each:
+      x_batch.shape == (B * W_max, T, F)
+      y_signal.shape == (B * W_max,)
+      seq_lengths is a sequence of length B with true window counts per day.
     Behaviour:
-      - Calls reset_state_fn once per day (using wd_batch[day_idx]) before that day's windows.
-      - Returns windows_tensor: (N, T, F), targets_tensor: (N,)
-      - If no windows present returns (None, None, prev_day)
+      - Calls reset_state_fn(model, wd_batch[day_idx], prev_day) once per day.
+      - For day i takes the first L = seq_lengths[i] entries from block
+        x_batch[i*W_max : (i+1)*W_max].
+      - Returns (windows_tensor, targets_tensor, prev_day) where windows_tensor
+        has shape (N, T, F) and targets_tensor has shape (N,), with N = sum(seq_lengths).
+      - Minimal implementation: no layout detection or format checks.
     """
     device = x_batch.device
 
-    # Quick sanity
-    if not (isinstance(seq_lengths, (list, tuple)) and sum(seq_lengths) == x_batch.size(0)):
-        raise RuntimeError(f"_prepare_windows_and_targets_batch expects seq_lengths summing to x_batch.size(0); got seq_lengths={seq_lengths} x_batch.shape={tuple(x_batch.shape)}")
+    B = len(seq_lengths)
+    W_max = x_batch.size(0) // B
 
     windows_list = []
     targets_list = []
-    start = 0
 
     for day_idx, L in enumerate(seq_lengths):
-        prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)  
-
+        prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)
         if L <= 0:
-            start += L
             continue
-
-        end = start + L
-        day_windows = x_batch[start:end]     # (L, T, F)
-        day_targets = y_signal[start:end]    # (L,)
-
-        windows_list.append(day_windows)
-        targets_list.append(day_targets)
-        start = end
+        base = day_idx * W_max
+        windows_list.append(x_batch[base : base + L])   # (L, T, F)
+        targets_list.append(y_signal[base : base + L])  # (L,)
 
     if not windows_list:
         return None, None, prev_day
 
-    windows_tensor = torch.cat(windows_list, dim=0).to(device).float()   # (N, T, F)
-    targets_tensor = torch.cat(targets_list, dim=0).to(device).float()   # (N,)
+    windows_tensor = torch.cat(windows_list, dim=0).to(device).float()
+    targets_tensor = torch.cat(targets_list, dim=0).to(device).float()
     return windows_tensor, targets_tensor, prev_day
 
 
@@ -543,7 +589,7 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
     val_base_preds, val_tot_preds, val_targs, val_lengths = [], [], [], []
 
     with torch.no_grad():
-        for x_batch, y_signal, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+        for x_batch, y_signal, rc, wd, ts_list, seq_lengths in \
                 tqdm(loader, desc="eval", leave=False):
 
             x_batch = x_batch.to(device, non_blocking=True)
@@ -644,7 +690,7 @@ def model_training_loop(
         epoch_start = datetime.utcnow().timestamp()
         epoch_samples = 0
 
-        for x_batch, y_signal, y_ret, y_ter, rc, wd, ts_list, seq_lengths in \
+        for x_batch, y_signal, rc, wd, ts_list, seq_lengths in \
                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
 
             x_batch = x_batch.to(device, non_blocking=True)

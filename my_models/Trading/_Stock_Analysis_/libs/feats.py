@@ -329,26 +329,41 @@ def standard_indicators(
         new[f"ret_std_{w}"] = new["ret"].rolling(w, min_periods=w).std()
         pbar.update(1)
 
-    # Stochastic %K/%D
+    # Stochastic %K/%D (root fix: EPS guard + min_periods=1)
     for cfg in stoch:
         k = int(cfg["k"]); d = int(cfg.get("d", 3)); smooth = int(cfg.get("smooth", 3))
         pbar.set_description(f"Stoch {k}/{d}/{smooth}")
-        st = ta.momentum.StochasticOscillator(high=h, low=l, close=c, window=k, smooth_window=smooth)
-        new[f"stoch_k_{k}_{d}_{smooth}"] = st.stoch()
-        # Approximate %D by smoothing %K with d
-        new[f"stoch_d_{k}_{d}_{smooth}"] = new[f"stoch_k_{k}_{d}_{smooth}"].rolling(d, min_periods=d).mean()
+        low_k = l.rolling(window=k, min_periods=1).min()
+        high_k = h.rolling(window=k, min_periods=1).max()
+        # guard denominator with tiny EPS to avoid divide-by-zero
+        denom = (high_k - low_k).replace(0.0, EPS)
+        sk_raw = (c - low_k) / denom
+        sk = sk_raw.rolling(window=smooth, min_periods=1).mean()
+        sd = sk.rolling(window=d, min_periods=1).mean()
+        # keep values in expected range
+        sk = sk.clip(lower=0.0, upper=1.0)
+        sd = sd.clip(lower=0.0, upper=1.0)
+        new[f"stoch_k_{k}_{d}_{smooth}"] = sk
+        new[f"stoch_d_{k}_{d}_{smooth}"] = sd
         pbar.update(1)
 
     # CCI
     for w in cci_ws:
         pbar.set_description(f"CCI {w}")
-        new[f"cci_{w}"] = ta.trend.CCIIndicator(high=h, low=l, close=c, window=w).cci()
+        tp = (h + l + c) / 3.0
+        sma = tp.rolling(window=w, min_periods=1).mean()
+        mad = (tp - sma).abs().rolling(window=w, min_periods=1).mean().replace(0.0, EPS)
+        new[f"cci_{w}"] = ((tp - sma) / (0.015 * mad)).clip(-500.0, 500.0)
         pbar.update(1)
 
     # MFI
     for w in mfi_ws:
         pbar.set_description(f"MFI {w}")
-        new[f"mfi_{w}"] = ta.volume.MFIIndicator(high=h, low=l, close=c, volume=v, window=w).money_flow_index()
+        tp = (h + l + c) / 3.0
+        mf = tp * v
+        pos = mf.where(tp.diff() > 0, 0.0).rolling(w, min_periods=1).sum()
+        neg = (-mf).where(tp.diff() < 0, 0.0).rolling(w, min_periods=1).sum().replace(0.0, EPS)
+        new[f"mfi_{w}"] = (100.0 - 100.0 / (1.0 + pos / neg)).clip(0.0, 100.0)
         pbar.update(1)
 
     # CMF
@@ -954,7 +969,7 @@ def prune_features_by_variance_and_correlation(
     dropped_corr_info: Dict[str, Tuple[str, float]] = {}
 
     # pruning loop with tqdm (progress visible)
-    for col in cols:
+    for col in tqdm(cols, desc="Pruning features", total=len(cols)):
         if col in to_drop:
             continue
         high_corr = upper.index[upper[col] > max_corr].tolist()

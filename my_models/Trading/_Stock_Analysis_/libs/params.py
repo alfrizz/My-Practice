@@ -18,7 +18,6 @@ from tqdm import tqdm
 #########################################################################################################
 
 ticker = 'AAPL'
-label_col  = "signal"
 shares_per_trade = 1
 init_cash = 100000
 
@@ -52,8 +51,8 @@ save_path  = Path("dfs")
 alpaca_csv = save_path / f"{ticker}_0_alpaca.csv"
 base_csv = save_path / f"{ticker}_1_base.csv"
 indunsc_csv = save_path / f"{ticker}_2_indunsc.csv"
-sign_csv = save_path / f"{ticker}_3_sign.csv"
-feat_all_csv = save_path / f"{ticker}_4_feat_all.csv"
+feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
+sign_csv = save_path / f"{ticker}_4_sign.csv"
 test_csv = save_path / f"{ticker}_5_test.csv"
 trainval_csv = save_path / f"{ticker}_5_trainval.csv"
 
@@ -217,22 +216,22 @@ if ticker == 'AAPL':
     thresh_mode_tick    = "median_nonzero"
     thresh_window_tick  = None                   # rolling window (bars) for rolling modes
     
-    col_signal_tick     = 'ema_9' # 'signal_raw' for target 
-    sign_thresh_tick    = 'ema_21' # 'signal_thresh' for target
     col_atr_tick        = "atr_14"
     col_adx_tick        = "adx_14"
     col_rsi_tick        = "rsi_6"
     col_vwap_tick       = "vwap_ohlc_close_session"
-    
+
+    col_signal_tick     = 'ema_5'                # 'signal_raw' for target
+    sign_thresh_tick    = 'ema_8'               # 'signal_thresh' for target
+
     reset_peak_tick     = False
-    rsi_min_thresh_tick = 46
-    rsi_max_thresh_tick = 61
-    vol_thresh_tick     = 3.7994162168510055
-    adx_thresh_tick     = 44.97256457408656
-    atr_mult_tick       = 0.3831216691971262
-    vwap_atr_mult_tick  = 0.8215585687994682
-    buy_factor_tick     = 0.05046407599093629
-    sell_factor_tick    = 0.44597486479017523
-    trailstop_pct_tick  = 17.575801628534688
+    rsi_min_thresh_tick = 18
+    rsi_max_thresh_tick = 71
+    adx_thresh_tick     = 29.949789139619778
+    atr_mult_tick       = 3.3648188932700167
+    vwap_atr_mult_tick  = 2.4036562030411543
+    buy_factor_tick     = 0.0030430313034110735
+    sell_factor_tick    = 0.03320882139573674
+    trailstop_pct_tick  = 12.600208254555001
 
     features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']

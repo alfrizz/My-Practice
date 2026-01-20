@@ -172,6 +172,7 @@ def build_signal_per_day(
     tau_dur: float = 60.0,                 # minutes half-life for duration boost
     thresh_mode: Union[str, float] = "median_nonzero",
     thresh_window: Optional[int] = None,   # rolling window (bars) for rolling modes
+    col_close: str = "close"
 ) -> pd.DataFrame:
     """
     Build a continuous long-only signal per day (no reindexing).
@@ -209,7 +210,7 @@ def build_signal_per_day(
             parts.append(day_df)
             continue
 
-        closes = day_df["close"].to_numpy()
+        closes = day_df[col_close].to_numpy()
         times  = day_df.index.to_numpy()
         n      = len(day_df)
 
@@ -256,7 +257,7 @@ def build_signal_per_day(
                             decay_time = np.exp(-mins_to_exit / tau_time)
                             dur_min = (times[sell_idx] - times[buy_idx]) / np.timedelta64(1, "m")
                             boost_dur = 1 - np.exp(-dur_min / tau_dur)
-                            score = gap * decay_time * boost_dur * 100 # scaling by a factor of 100 for better signal visibility
+                            score = gap * decay_time * boost_dur * 1000 # scaling by a factor of 1000 for better signal visibility
                             signal_raw[mask] = np.maximum(signal_raw[mask], score)
                             swing_dir[mask] = 1
                             swing_gain_pct[mask] = profit_pc
