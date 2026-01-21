@@ -18,17 +18,14 @@ from tqdm import tqdm
 #########################################################################################################
 
 ticker = 'AAPL'
-shares_per_trade = 1
 init_cash = 100000
 
 month_to_check = '2021-09'
-sel_val_rmse = 0.10347
+sel_val_rmse = 0.30414
 
-smooth_sign_win = 15 # smoothing of the continuous target signal
-extra_windows = [30, 45, 60] #  to produce additional smoothed/rolling copies of selected indicators for each window 
-
-createCSVbase = False # set to True to regenerate the 'base' csv
-createCSVsign = False # set to True to regenerate the 'sign' csv
+# shares_per_trade = 1
+# createCSVbase = False # set to True to regenerate the 'base' csv
+# createCSVsign = False # set to True to regenerate the 'sign' csv
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
@@ -52,9 +49,10 @@ alpaca_csv = save_path / f"{ticker}_0_alpaca.csv"
 base_csv = save_path / f"{ticker}_1_base.csv"
 indunsc_csv = save_path / f"{ticker}_2_indunsc.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
-sign_csv = save_path / f"{ticker}_4_sign.csv"
-test_csv = save_path / f"{ticker}_5_test.csv"
-trainval_csv = save_path / f"{ticker}_5_trainval.csv"
+sign_featall_csv = save_path / f"{ticker}_4_sign_featall.csv"
+sign_featsel_csv = save_path / f"{ticker}_5_sign_featsel.csv"
+test_csv = save_path / f"{ticker}_6_test.csv"
+trainval_csv = save_path / f"{ticker}_6_trainval.csv"
 
 
 def _human(n):
@@ -143,7 +141,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             45,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }

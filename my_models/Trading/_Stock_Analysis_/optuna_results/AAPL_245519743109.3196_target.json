@@ -1,0 +1,45 @@
+{
+    "best_params": {
+        "min_prof_thr": 0.004130634033285234,
+        "max_down_prop": 0.0029253956923388762,
+        "gain_tightfact": 0.046670611573427105,
+        "tau_time": 8.338256891272971,
+        "tau_dur": 5.944014217614677,
+        "thresh_mode": "median_nonzero",
+        "reset_peak": false,
+        "rsi_min_thresh": 3,
+        "rsi_max_thresh": 97,
+        "adx_thresh": 6.682922581116241,
+        "atr_mult": 0.1421018138659405,
+        "vwap_atr_mult": -2.4365752046307656,
+        "buy_factor": 0.002235584285964521,
+        "sell_factor": 0.010983624575393465,
+        "trailstop_pct": 11.663608838285244
+    },
+    "best_value": 245519743109.31958,
+    "importances": {},
+    "trials": [
+        {
+            "number": 0,
+            "value": 245519743109.31958,
+            "params": {
+                "min_prof_thr": 0.004130634033285234,
+                "max_down_prop": 0.0029253956923388762,
+                "gain_tightfact": 0.046670611573427105,
+                "tau_time": 8.338256891272971,
+                "tau_dur": 5.944014217614677,
+                "thresh_mode": "median_nonzero",
+                "reset_peak": false,
+                "rsi_min_thresh": 3,
+                "rsi_max_thresh": 97,
+                "adx_thresh": 6.682922581116241,
+                "atr_mult": 0.1421018138659405,
+                "vwap_atr_mult": -2.4365752046307656,
+                "buy_factor": 0.002235584285964521,
+                "sell_factor": 0.010983624575393465,
+                "trailstop_pct": 11.663608838285244
+            },
+            "state": "COMPLETE"
+        }
+    ]
+}

@@ -24,7 +24,9 @@ from captum.attr import IntegratedGradients
 from tqdm.auto import tqdm
 import ta
 from ta.volume import OnBalanceVolumeIndicator
+from ta.volatility import DonchianChannel
 from pathlib import Path
+import h5py
 
 import torch
 import torch.nn as nn
@@ -303,15 +305,27 @@ def standard_indicators(
         new[f"vol_spike_{w}"] = safe_div(v, vol_roll)
         pbar.update(1)
 
-    # rolling extrema & distances (largest SMA if present)
+    # rolling extrema & distances
     pbar.set_description("rolling_extrema")
     long_w = max(sma_ws) if sma_ws else None
     if long_w:
-        new[f"rolling_max_close_{long_w}"] = c.rolling(long_w, min_periods=1).max()
-        new[f"rolling_min_close_{long_w}"] = c.rolling(long_w, min_periods=1).min()
-        new[f"dist_high_{long_w}"] = safe_div(new[f"rolling_max_close_{long_w}"] - c, c)
-        new[f"dist_low_{long_w}"] = safe_div(c - new[f"rolling_min_close_{long_w}"], c)
+        don = DonchianChannel(high=h, low=l, close=c, window=int(long_w))
+        hband = don.donchian_channel_hband()
+        lband = don.donchian_channel_lband()
+        new[f"rolling_max_close_{long_w}"] = hband
+        new[f"rolling_min_close_{long_w}"] = lband
+        new[f"dist_high_{long_w}"] = safe_div(hband - c, c)
+        new[f"dist_low_{long_w}"] = safe_div(c - lband, c)
     pbar.update(1)
+    
+    # pbar.set_description("rolling_extrema")
+    # long_w = max(sma_ws) if sma_ws else None
+    # if long_w:
+    #     new[f"rolling_max_close_{long_w}"] = c.rolling(long_w, min_periods=1).max()
+    #     new[f"rolling_min_close_{long_w}"] = c.rolling(long_w, min_periods=1).min()
+    #     new[f"dist_high_{long_w}"] = safe_div(new[f"rolling_max_close_{long_w}"] - c, c)
+    #     new[f"dist_low_{long_w}"] = safe_div(c - new[f"rolling_min_close_{long_w}"], c)
+    # pbar.update(1)
 
     # OBV-derived percent changes
     for w in obv_roll_ws:
@@ -350,21 +364,36 @@ def standard_indicators(
     # CCI
     for w in cci_ws:
         pbar.set_description(f"CCI {w}")
-        tp = (h + l + c) / 3.0
-        sma = tp.rolling(window=w, min_periods=1).mean()
-        mad = (tp - sma).abs().rolling(window=w, min_periods=1).mean().replace(0.0, EPS)
-        new[f"cci_{w}"] = ((tp - sma) / (0.015 * mad)).clip(-500.0, 500.0)
+        cci_series = ta.trend.CCIIndicator(high=h, low=l, close=c, window=int(w)).cci()
+        # guard any rare NaNs and keep reasonable range
+        new[f"cci_{w}"] = cci_series.ffill().fillna(0.0).clip(-500.0, 500.0)
         pbar.update(1)
+    
+    # for w in cci_ws:
+    #     pbar.set_description(f"CCI {w}")
+    #     tp = (h + l + c) / 3.0
+    #     sma = tp.rolling(window=w, min_periods=1).mean()
+    #     mad = (tp - sma).abs().rolling(window=w, min_periods=1).mean().replace(0.0, EPS)
+    #     new[f"cci_{w}"] = ((tp - sma) / (0.015 * mad)).clip(-500.0, 500.0)
+    #     pbar.update(1)
 
     # MFI
     for w in mfi_ws:
         pbar.set_description(f"MFI {w}")
-        tp = (h + l + c) / 3.0
-        mf = tp * v
-        pos = mf.where(tp.diff() > 0, 0.0).rolling(w, min_periods=1).sum()
-        neg = (-mf).where(tp.diff() < 0, 0.0).rolling(w, min_periods=1).sum().replace(0.0, EPS)
-        new[f"mfi_{w}"] = (100.0 - 100.0 / (1.0 + pos / neg)).clip(0.0, 100.0)
+        mfi_series = ta.volume.MFIIndicator(high=h, low=l, close=c, volume=v, window=int(w)).money_flow_index()
+        # guard: replace exact NaNs and any infs; keep values in 0..100
+        mfi_series = mfi_series.ffill().fillna(50.0).clip(0.0, 100.0)
+        new[f"mfi_{w}"] = mfi_series
         pbar.update(1)
+
+    # for w in mfi_ws:
+    #     pbar.set_description(f"MFI {w}")
+    #     tp = (h + l + c) / 3.0
+    #     mf = tp * v
+    #     pos = mf.where(tp.diff() > 0, 0.0).rolling(w, min_periods=1).sum()
+    #     neg = (-mf).where(tp.diff() < 0, 0.0).rolling(w, min_periods=1).sum().replace(0.0, EPS)
+    #     new[f"mfi_{w}"] = (100.0 - 100.0 / (1.0 + pos / neg)).clip(0.0, 100.0)
+    #     pbar.update(1)
 
     # CMF
     for w in cmf_ws:
@@ -385,10 +414,17 @@ def standard_indicators(
     # Rolling VWAP (windowed)
     for w in roll_vwap_ws:
         pbar.set_description(f"rVWAP {w}")
-        pv = (c * v).rolling(w, min_periods=w).sum()
-        volw = v.rolling(w, min_periods=w).sum().replace(0, np.nan)
+        pv = (c * v).rolling(w, min_periods=1).sum()
+        volw = v.rolling(w, min_periods=1).sum().replace(0.0, 1e-9)
         new[f"roll_vwap_{w}"] = pv / volw
         pbar.update(1)
+        
+    # for w in roll_vwap_ws:
+    #     pbar.set_description(f"rVWAP {w}")
+    #     pv = (c * v).rolling(w, min_periods=w).sum()
+    #     volw = v.rolling(w, min_periods=w).sum().replace(0, np.nan)
+    #     new[f"roll_vwap_{w}"] = pv / volw
+    #     pbar.update(1)
 
     # Linear regression slope of close
     for w in slope_ws:
@@ -1024,21 +1060,90 @@ def prune_features_by_variance_and_correlation(
 #########################################################################################################
 
 
-def extract_windows_from_loader(loader, h5_path = str(Path(params.models_folder) / "Xy.h5")):
-    """
-    Stream (batch[0], batch[1]) from a DataLoader into an extendable HDF5 file.
-    Preserves exact per-batch logic: batch[0].detach().cpu().numpy() and
-    batch[1].detach().cpu().numpy().reshape(-1).
-    Returns (X_ds, y_ds, h5_file) where X_ds/y_ds are h5py.Dataset objects.
-    """
-    it = iter(loader)
-    b0 = next(it)                      
-    xb0, yb0 = b0[0], b0[1]
-    L, F = int(xb0.shape[1]), int(xb0.shape[2])
-    dx = xb0.detach().cpu().numpy().dtype
-    dy = yb0.detach().cpu().numpy().reshape(-1).dtype
+# def extract_windows_from_loader(loader, h5_path = str(Path(params.models_folder) / "Xy.h5")):
+#     """
+#     Stream (batch[0], batch[1]) from a DataLoader into an extendable HDF5 file.
+#     Preserves exact per-batch logic: batch[0].detach().cpu().numpy() and
+#     batch[1].detach().cpu().numpy().reshape(-1).
+#     Returns (X_ds, y_ds, h5_file) where X_ds/y_ds are h5py.Dataset objects.
+#     """
+#     it = iter(loader)
+#     b0 = next(it)                      
+#     xb0, yb0 = b0[0], b0[1]
+#     L, F = int(xb0.shape[1]), int(xb0.shape[2])
+#     dx = xb0.detach().cpu().numpy().dtype
+#     dy = yb0.detach().cpu().numpy().reshape(-1).dtype
 
-    f = h5py.File(h5_path, "w")
+#     f = h5py.File(h5_path, "w")
+#     X = f.create_dataset("X", shape=(0, L, F), maxshape=(None, L, F), dtype=dx, chunks=True)
+#     y = f.create_dataset("y", shape=(0,), maxshape=(None,), dtype=dy, chunks=True)
+
+#     def _append(ds, arr):
+#         n0 = ds.shape[0]
+#         ds.resize(n0 + arr.shape[0], axis=0)
+#         ds[n0:n0 + arr.shape[0]] = arr
+
+#     with torch.no_grad():
+#         _append(X, xb0.detach().cpu().numpy())
+#         _append(y, yb0.detach().cpu().numpy().reshape(-1))
+#         for batch in tqdm(it, desc="Extracting windows"):
+#             xb = batch[0].detach().cpu().numpy()
+#             yb = batch[1].detach().cpu().numpy().reshape(-1)
+#             _append(X, xb)
+#             _append(y, yb)
+
+#     return X, y, f
+
+
+
+# def save_windows_and_meta(loader, out_dir="trainings", features=None, h5_name="Xy.h5"):
+#     """
+#     Extract windows from a DataLoader, write HDF5, copy to disk memmaps, and save metadata.
+
+#     Returns: Path to X memmap, y memmap, and metadata JSON (all as strings/Path).
+#     """
+#     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+#     X_ds, y_ds, h5f = feats.extract_windows_from_loader(loader, h5_path=str(out / h5_name))
+#     sX, dX = X_ds.shape, X_ds.dtype
+#     sy, dy = y_ds.shape, y_ds.dtype
+#     Xm = np.memmap(out / "X_windows.dat", mode="w+", dtype=dX, shape=sX)
+#     ym = np.memmap(out / "y_windows.dat", mode="w+", dtype=dy, shape=sy)
+#     for i in tqdm(range(0, sX[0], 1024), desc="Copying HDF5→memmap"):
+#         j = min(sX[0], i + 1024)
+#         Xm[i:j] = X_ds[i:j]
+#         ym[i:j] = y_ds[i:j]
+#     Xm.flush(); ym.flush(); h5f.close()
+#     meta = {
+#         "X_path": str(out / "X_windows.dat"),
+#         "y_path": str(out / "y_windows.dat"),
+#         "X_shape": sX, "X_dtype": str(dX),
+#         "y_shape": sy, "y_dtype": str(dy),
+#         "features": list(features) if features is not None else None
+#     }
+#     json.dump(meta, open(out / "X_windows_meta.json", "w"))
+#     return str(out / "X_windows.dat"), str(out / "y_windows.dat"), out / "X_windows_meta.json"
+
+
+
+def extract_and_save_windows(loader, out_dir="trainings", features=None, h5_name="Xy.h5", chunk=1024):
+    """
+    Stream (xb,yb) from loader into HDF5, copy to disk memmaps, save metadata.
+    Returns (X_path, y_path, meta_path).
+    """
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+    h5p = out / h5_name
+    if h5p.exists(): h5p.unlink()
+    f = h5py.File(h5p, "w")
+
+    it = iter(loader)
+    b0 = next(it)                 # b0 may contain >2 items; use indexing
+    xb0 = b0[0]; yb0 = b0[1]
+    xb0_np = xb0.detach().cpu().numpy()
+    yb0_np = yb0.detach().cpu().numpy().reshape(-1)
+
+    L, F = int(xb0_np.shape[1]), int(xb0_np.shape[2])
+    dx, dy = xb0_np.dtype, yb0_np.dtype
+
     X = f.create_dataset("X", shape=(0, L, F), maxshape=(None, L, F), dtype=dx, chunks=True)
     y = f.create_dataset("y", shape=(0,), maxshape=(None,), dtype=dy, chunks=True)
 
@@ -1047,16 +1152,41 @@ def extract_windows_from_loader(loader, h5_path = str(Path(params.models_folder)
         ds.resize(n0 + arr.shape[0], axis=0)
         ds[n0:n0 + arr.shape[0]] = arr
 
-    with torch.no_grad():
-        _append(X, xb0.detach().cpu().numpy())
-        _append(y, yb0.detach().cpu().numpy().reshape(-1))
-        for batch in tqdm(it, desc="Extracting windows"):
-            xb = batch[0].detach().cpu().numpy()
-            yb = batch[1].detach().cpu().numpy().reshape(-1)
-            _append(X, xb)
-            _append(y, yb)
+    _append(X, xb0_np)
+    _append(y, yb0_np)
 
-    return X, y, f
+    for batch in tqdm(it, desc="Extracting windows"):
+        xb = batch[0].detach().cpu().numpy()
+        yb = batch[1].detach().cpu().numpy().reshape(-1)
+        _append(X, xb)
+        _append(y, yb)
+
+    # copy to memmaps
+    sX, dX = X.shape, X.dtype
+    sy, dy = y.shape, y.dtype
+    Xm = np.memmap(out / "X_windows.dat", mode="w+", dtype=dX, shape=sX)
+    ym = np.memmap(out / "y_windows.dat", mode="w+", dtype=dy, shape=sy)
+
+    N = sX[0]
+    for i in tqdm(range(0, N, chunk), desc="Copying HDF5→memmap"):
+        j = min(N, i + chunk)
+        Xm[i:j] = X[i:j]
+        ym[i:j] = y[i:j]
+
+    Xm.flush(); ym.flush(); f.close()
+
+    meta = {
+        "X_path": str(out / "X_windows.dat"),
+        "y_path": str(out / "y_windows.dat"),
+        "X_shape": sX, "X_dtype": str(dX),
+        "y_shape": sy, "y_dtype": str(dy),
+        "features": list(features) if features is not None else None
+    }
+    meta_path = out / "X_windows_meta.json"
+    json.dump(meta, open(meta_path, "w"))
+
+    return out / "X_windows.dat", out / "y_windows.dat", meta_path
+
 
 
 ######################################################################################################### 
@@ -1088,14 +1218,14 @@ def predict_windows(model, X_np, batch_size=1024, device=params.device):
 ###################################### 
 
 
-def live_display_importances(imp_series, features, label, method,
+def live_display_importances(imp_series, features, target, method,
                              batch=1, pause=0.02, threshold=None):
     """
     Incrementally display importances from a completed pd.Series.
 
     - imp_series: pd.Series indexed by feature name (values = importance)
     - features: ordered list of features to reveal (must match index names)
-    - label: target name for title
+    - target: target name for title
     - method: text for title/legend
     - batch: how many features to reveal per UI update
     - pause: sleep between updates (UI breathing)
@@ -1115,7 +1245,7 @@ def live_display_importances(imp_series, features, label, method,
             plt.axvline(threshold, color="gray", linestyle="--")
             if method.lower().startswith("corr"):
                 plt.axvline(-threshold, color="gray", linestyle="--")
-        plt.title(f"{method} Importance (partial) for {label}")
+        plt.title(f"{method} Importance (partial) for {target}")
         plt.xlabel("Importance")
         plt.tight_layout()
         display(plt.gcf())
