@@ -1067,9 +1067,9 @@ def summarize_split(name, loader, times):
     print(f" window shape  : look_back={L}, n_features={F}")
     print(f" dataloader    : batches={len(loader):3d}, batch_size={loader.batch_size}, workers={loader.num_workers}, pin_memory={loader.pin_memory}")
 
-    mean_val, rmse = mean_baseline_rmse(loader)
+    # run baseline computation with a progress bar over the loader
+    mean_val, rmse = mean_baseline_rmse(tqdm(loader, desc=f"mean_baseline {name}", leave=False))
     print(f" baselines     : baseline prediction={mean_val:.6g}, baseline RMSE = {rmse:.6g}\n")
-
 
     
 #########################################################################################################

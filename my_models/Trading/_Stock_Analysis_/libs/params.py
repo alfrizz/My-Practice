@@ -31,10 +31,10 @@ train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 feats_min_std = 0.03
-feats_max_corr = 0.997
+feats_max_corr = 0.999
 thresh_gb = 56 # use ram instead of memmap, if X_buf below this value
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda") 
 
 
 #########################################################################################################
@@ -50,9 +50,8 @@ base_csv = save_path / f"{ticker}_1_base.csv"
 indunsc_csv = save_path / f"{ticker}_2_indunsc.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
 sign_featall_csv = save_path / f"{ticker}_4_sign_featall.csv"
-sign_featsel_csv = save_path / f"{ticker}_5_sign_featsel.csv"
-test_csv = save_path / f"{ticker}_6_test.csv"
-trainval_csv = save_path / f"{ticker}_6_trainval.csv"
+test_csv = save_path / f"{ticker}_5_test.csv"
+trainval_csv = save_path / f"{ticker}_5_trainval.csv"
 
 
 def _human(n):
@@ -129,7 +128,7 @@ hparams = {
     "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
     
     "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
-    "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head (1 default)
+    "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head ([0-1])
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
     "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
@@ -141,7 +140,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             45,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
@@ -205,12 +204,12 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 #########################################################################################################
 
 if ticker == 'AAPL':
-    
-    min_prof_thr_tick   = 0.013690524705087784   # minimum % gain to accept a swing
-    max_down_prop_tick  = 0.0017051801523185084  # base retracement threshold (fraction of move)
-    gain_tightfact_tick = 0.05220789983193748    # tighter retracement for larger gains
-    tau_time_tick       = 11.005172827395096     # minutes half-life for temporal decay
-    tau_dur_tick        = 9.883077705090075      # minutes half-life for duration boost
+
+    min_prof_thr_tick   = 0.00245986446131613   # minimum % gain to accept a swing
+    max_down_prop_tick  = 0.0041145609656908525  # base retracement threshold (fraction of move)
+    gain_tightfact_tick = 0.0594101600369578     # tighter retracement for larger gains
+    tau_time_tick       = 8.000579617527153      # minutes half-life for temporal decay
+    tau_dur_tick        = 5.634526369801502      # minutes half-life for duration boost
     thresh_mode_tick    = "median_nonzero"
     thresh_window_tick  = None                   # rolling window (bars) for rolling modes
     
@@ -218,18 +217,19 @@ if ticker == 'AAPL':
     col_adx_tick        = "adx_14"
     col_rsi_tick        = "rsi_6"
     col_vwap_tick       = "vwap_ohlc_close_session"
-
-    col_signal_tick     = 'ema_5'                # 'signal_raw' for target
-    sign_thresh_tick    = 'ema_8'               # 'signal_thresh' for target
-
+    
+    col_signal_tick     = 'signal_raw'                # 'signal_raw' for target
+    sign_thresh_tick    = 'signal_thresh'                # 'signal_thresh' for target
+    
     reset_peak_tick     = False
-    rsi_min_thresh_tick = 18
-    rsi_max_thresh_tick = 71
-    adx_thresh_tick     = 29.949789139619778
-    atr_mult_tick       = 3.3648188932700167
-    vwap_atr_mult_tick  = 2.4036562030411543
-    buy_factor_tick     = 0.0030430313034110735
-    sell_factor_tick    = 0.03320882139573674
-    trailstop_pct_tick  = 12.600208254555001
+    rsi_min_thresh_tick = 0
+    rsi_max_thresh_tick = 95
+    adx_thresh_tick     = 7.577417782611593
+    atr_mult_tick       = 0.10407349500377423
+    vwap_atr_mult_tick  = 0.11168380289115962
+    buy_factor_tick     = 0.007323139245182256
+    sell_factor_tick    = 0.002947796369068403
+    trailstop_pct_tick  = 6.117895367737556
 
-    features_cols_tick  = ['dist_low_28', 'dist_low_60', 'dist_low_30', 'in_sess_time', 'dist_high_60', 'dist_high_30', 'dist_high_28', 'minute_time', 'hour_time', 'ret_std_z_90', 'adx_60', 'rsi', 'volume_z_60', 'volume_z_90', 'sma_pct_14', 'atr_z_90', 'adx_90', 'adx', 'eng_bb_mid', 'obv_diff_14', 'eng_rsi', 'volume_z_30', 'eng_vwap', 'z_obv', 'obv_diff_30', 'z_vwap_dev_60', 'plus_di', 'z_vwap_dev',  'vol_z_90', 'z_vwap_dev_90', 'sma_pct_60', 'obv_pct_30', 'bb_w_z_60', 'obv_diff_60', 'vol_z_60', 'roc_14', 'vol_spike_90', 'obv_pct_14', 'rsi_30', 'sma_pct_28', 'vwap_dev_pct_30', 'plus_di_30', 'vol_spike_60', 'vwap_dev_pct_90', 'vwap_dev_pct_60', 'plus_di_90', 'eng_macd', 'z_vwap_dev_30',  'minus_di', 'ret_std_z_30', 'sma_pct_90', 'bb_w_z_30', 'vwap_dev_pct_z_30', 'z_bb_w', 'vwap_dev_pct_z_60', 'obv_sma_60', 'body_pct', 'roc_28', 'ret', 'eng_ma', 'vwap_dev_pct_z_90']
+    features_cols_tick  = ['range_pct', 'atr_pct_7', 'atr_pct_28', 'time_afthour', 'time_premark', 'kc_w_20_20_2.0', 'bb_w_20_2p0', 'donch_w_20', 'ret_std_63', 'atr_pct_14', 'donch_w_55', 'ret_std_21', 'upper_shad', 'time_in_sess', 'dist_high_200', 'bb_w_50_2p0', 'lower_shad', 'time_hour', 'dist_low_200', 'time_week_of_year', 'trade_count', 'volume', 'atr_7_RZ', 'atr_14_RZ', 'atr_28_RZ', 'time_day_of_year', 'time_month', 'vol_spike_28', 'plus_di_28', 'stoch_k_14_3_3', 'rolling_max_close_200_RZ', 'adx_14', 'minus_di_28', 'minus_di_14', 'cci_20', 'plus_di_7', 'plus_di_14', 'adx_28', 'rsi_6', 'rolling_min_close_200_RZ', 'vol_spike_14', 'stoch_d_9_3_3', 'sma_5_RZ', 'minus_di_7', 'sma_21_RZ', 'sma_9_RZ', 'cci_14', 'sma_pct_200', 'stoch_k_9_3_3', 'cmf_14']
+    signals_cols_tick   = ['close_raw', 'signal_raw', 'signal_thresh']

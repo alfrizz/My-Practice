@@ -612,9 +612,9 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
             val_targs.extend(targets_tensor.cpu().tolist())
             val_lengths.extend([L for L in seq_lengths if L > 0])
             
-    val_base_preds = np.array(val_base_preds, dtype=float)
-    val_tot_preds = np.array(val_tot_preds, dtype=float)
-    val_targs = np.array(val_targs, dtype=float)
+    val_base_preds = np.array(val_base_preds, dtype=np.float64)
+    val_tot_preds = np.array(val_tot_preds, dtype=np.float64)
+    val_targs = np.array(val_targs, dtype=np.float64)
 
     model.bl_val_mean, model.bl_val_pers = compute_baselines(np.asarray(val_targs), val_lengths)
 
@@ -780,10 +780,10 @@ def model_training_loop(
         model.bl_tr_mean, model.bl_tr_pers = compute_baselines(np.asarray(tr_targs), tr_lengths)
         
         # Metrics & validation
-        tr_tot_metrics = _compute_metrics(np.array(tr_tot_preds, dtype=float), np.array(tr_targs, dtype=float))
-        tr_base_metrics = _compute_metrics(np.array(tr_base_preds, dtype=float), np.array(tr_targs, dtype=float))  
+        tr_tot_metrics = _compute_metrics(np.array(tr_tot_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))
+        tr_base_metrics = _compute_metrics(np.array(tr_base_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))  
         if len(tr_delta_preds) > 0:
-            tr_delta_metrics = _compute_metrics(np.array(tr_delta_preds, dtype=float), np.array(tr_delta_targs, dtype=float))
+            tr_delta_metrics = _compute_metrics(np.array(tr_delta_preds, dtype=np.float64), np.array(tr_delta_targs, dtype=np.float64))
         else:
             tr_delta_metrics = {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
         tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
