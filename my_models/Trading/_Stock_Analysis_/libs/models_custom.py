@@ -863,6 +863,96 @@ def model_training_loop(
 ######################################################################################################
 
 
+# def add_preds_and_split(
+#     df: pd.DataFrame,
+#     train_preds: np.ndarray,
+#     val_preds:   np.ndarray,
+#     test_preds:  np.ndarray,
+#     end_times_tr:  np.ndarray,
+#     end_times_val: np.ndarray,
+#     end_times_te:  np.ndarray
+# ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+#     """
+#     Add per-window predictions into a minute-bar DataFrame and return
+#     (train+val, test) subsets where pred_signal exists.
+
+#     Generic: stamps predictions onto the minute bars, aligns timezones,
+#     drops duplicate timestamps keeping the last, and returns two DataFrames.
+#   """
+#     # Validate lengths for train/val/test predictions vs their end times
+#     for name, preds, times in (
+#           ("train", train_preds, end_times_tr),
+#           ("val",   val_preds,   end_times_val),
+#           ("test",  test_preds,  end_times_te),
+#     ):
+#         # ensure each preds array matches its timestamps length
+#         if len(np.asarray(preds).ravel()) != len(np.asarray(times)):
+#             raise ValueError(f"{name} preds length != times length: {len(preds)} != {len(times)}")
+
+#     # Work on a copy of the input minute-bar DataFrame to avoid mutating caller data
+#     df = df.copy()
+#     # initialize prediction column with NaN
+#     df["pred_signal"] = np.nan
+#     # compute synthetic ask/bid from close_raw and configured spread
+#     df['ask'] = df['close_raw'] * (1 + params.bidask_spread_pct/100)
+#     df['bid'] = df['close_raw'] * (1 - params.bidask_spread_pct/100)
+
+#     # capture timezone of the minute-bar index (may be None)
+#     tz_df = getattr(df.index, "tz", None)
+
+#     # helper: build a timezone-aligned Series from preds + times
+#     def _series(preds, times):
+#         # flatten preds to 1D array
+#         arr = np.asarray(preds).ravel()
+#         # parse timestamps into DatetimeIndex
+#         idx = pd.to_datetime(times)
+#         # align timezone of parsed times to df index timezone if needed
+#         if tz_df is not None and getattr(idx, "tz", None) is None:
+#             idx = idx.tz_localize(tz_df)
+#         elif tz_df is None and getattr(idx, "tz", None) is not None:
+#             idx = idx.tz_convert(None)
+#         # build series with datetime index
+#         s = pd.Series(arr, index=pd.DatetimeIndex(idx))
+#         # if duplicate timestamps exist, keep the last value (most recent window)
+#         if s.index.has_duplicates:
+#             s = s[~s.index.duplicated(keep="last")]
+#         return s
+
+#     # build series for train, val and test (no side-effects)
+#     s_tr  = _series(train_preds, end_times_tr)
+#     s_val = _series(val_preds,   end_times_val)
+#     s_te  = _series(test_preds,  end_times_te)
+
+#     # compute total work so the progress bar reflects the whole stamping phase
+#     total = sum(len(s.index.intersection(df.index)) for s in (s_tr, s_val, s_te))
+#     if total:
+#         chunk = 1000
+#         bar_fmt = "{l_bar}{bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
+#         with tqdm(total=total, desc="Applying prediction series", leave=True, dynamic_ncols=True, bar_format=bar_fmt) as pbar:
+#             for s in (s_tr, s_val, s_te):
+#                 common = s.index.intersection(df.index)
+#                 if common.empty:
+#                     continue
+#                 common_list = list(common)
+#                 for i in range(0, len(common_list), chunk):
+#                     chunk_idx = common_list[i : i + chunk]
+#                     df.loc[chunk_idx, "pred_signal"] = s.loc[chunk_idx].values
+#                     pbar.update(len(chunk_idx))
+
+#     # compute indices for train+val and test that exist in the minute-bar index
+#     idx_trval = s_tr.index.union(s_val.index).intersection(df.index)
+#     idx_te    = s_te.index.intersection(df.index)
+
+#     # slice out rows that actually have a pred_signal and return
+#     df_trainval = df.loc[idx_trval].dropna(subset=["pred_signal"])
+#     df_test     = df.loc[idx_te].dropna(subset=["pred_signal"])
+
+#     return df_trainval, df_test
+
+
+
+
+
 def add_preds_and_split(
     df: pd.DataFrame,
     train_preds: np.ndarray,
@@ -870,82 +960,52 @@ def add_preds_and_split(
     test_preds:  np.ndarray,
     end_times_tr:  np.ndarray,
     end_times_val: np.ndarray,
-    end_times_te:  np.ndarray
+    end_times_te:  np.ndarray,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Add per-window predictions into a minute-bar DataFrame and return
-    (train+val, test) subsets where pred_signal exists.
-
-    Generic: stamps predictions onto the minute bars, aligns timezones,
-    drops duplicate timestamps keeping the last, and returns two DataFrames.
-  """
-    # Validate lengths for train/val/test predictions vs their end times
+    Stamp per-window predictions onto minute bars and return (train+val, test) rows with pred_signal.
+    Fail-fast checks: matching lengths, no duplicate prediction timestamps, and all timestamps present in df.index.
+    Adds simple synthetic bid/ask from close_raw.
+    Assumes tz-consistent or tz-naive timestamps.
+    """
+    # length checks
     for name, preds, times in (
-          ("train", train_preds, end_times_tr),
-          ("val",   val_preds,   end_times_val),
-          ("test",  test_preds,  end_times_te),
+        ("train", train_preds, end_times_tr),
+        ("val",   val_preds,   end_times_val),
+        ("test",  test_preds,  end_times_te),
     ):
-        # ensure each preds array matches its timestamps length
         if len(np.asarray(preds).ravel()) != len(np.asarray(times)):
             raise ValueError(f"{name} preds length != times length: {len(preds)} != {len(times)}")
 
-    # Work on a copy of the input minute-bar DataFrame to avoid mutating caller data
     df = df.copy()
-    # initialize prediction column with NaN
     df["pred_signal"] = np.nan
-    # compute synthetic ask/bid from close_raw and configured spread
-    df['ask'] = df['close_raw'] * (1 + params.bidask_spread_pct/100)
-    df['bid'] = df['close_raw'] * (1 - params.bidask_spread_pct/100)
+    df["ask"] = df["close_raw"] * (1 + params.bidask_spread_pct / 100.0)
+    df["bid"] = df["close_raw"] * (1 - params.bidask_spread_pct / 100.0)
 
-    # capture timezone of the minute-bar index (may be None)
-    tz_df = getattr(df.index, "tz", None)
-
-    # helper: build a timezone-aligned Series from preds + times
-    def _series(preds, times):
-        # flatten preds to 1D array
-        arr = np.asarray(preds).ravel()
-        # parse timestamps into DatetimeIndex
+    def _series(preds, times, name):
         idx = pd.to_datetime(times)
-        # align timezone of parsed times to df index timezone if needed
-        if tz_df is not None and getattr(idx, "tz", None) is None:
-            idx = idx.tz_localize(tz_df)
-        elif tz_df is None and getattr(idx, "tz", None) is not None:
-            idx = idx.tz_convert(None)
-        # build series with datetime index
-        s = pd.Series(arr, index=pd.DatetimeIndex(idx))
-        # if duplicate timestamps exist, keep the last value (most recent window)
-        if s.index.has_duplicates:
-            s = s[~s.index.duplicated(keep="last")]
-        return s
+        if pd.Index(idx).has_duplicates:
+            dup = pd.Index(idx)[pd.Index(idx).duplicated(keep=False)][:5]
+            raise ValueError(f"{name} timestamps contain duplicates, e.g. {dup.tolist()}")
+        return pd.Series(np.asarray(preds).ravel(), index=idx)
 
-    # build series for train, val and test (no side-effects)
-    s_tr  = _series(train_preds, end_times_tr)
-    s_val = _series(val_preds,   end_times_val)
-    s_te  = _series(test_preds,  end_times_te)
+    # build series and validate
+    s_tr  = _series(train_preds, end_times_tr, "train")
+    s_val = _series(val_preds,   end_times_val, "val")
+    s_te  = _series(test_preds,  end_times_te,  "test")
 
-    # compute total work so the progress bar reflects the whole stamping phase
-    total = sum(len(s.index.intersection(df.index)) for s in (s_tr, s_val, s_te))
-    if total:
-        chunk = 1000
-        bar_fmt = "{l_bar}{bar} {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
-        with tqdm(total=total, desc="Applying prediction series", leave=True, dynamic_ncols=True, bar_format=bar_fmt) as pbar:
-            for s in (s_tr, s_val, s_te):
-                common = s.index.intersection(df.index)
-                if common.empty:
-                    continue
-                common_list = list(common)
-                for i in range(0, len(common_list), chunk):
-                    chunk_idx = common_list[i : i + chunk]
-                    df.loc[chunk_idx, "pred_signal"] = s.loc[chunk_idx].values
-                    pbar.update(len(chunk_idx))
+    # stamp predictions with a simple progress bar
+    for desc, s in (("train", s_tr), ("val", s_val), ("test", s_te)):
+        missing = s.index.difference(df.index)
+        if not missing.empty:
+            raise KeyError(f"{desc} timestamps not in df.index; e.g. {missing[:5].tolist()} (total {len(missing)})")
+        for ts in tqdm(s.index, desc=f"Stamping {desc}", unit="ts"):
+            df.at[ts, "pred_signal"] = s.at[ts]
 
-    # compute indices for train+val and test that exist in the minute-bar index
-    idx_trval = s_tr.index.union(s_val.index).intersection(df.index)
-    idx_te    = s_te.index.intersection(df.index)
-
-    # slice out rows that actually have a pred_signal and return
+    # split outputs where pred_signal exists
+    idx_trval = s_tr.index.union(s_val.index)
+    idx_te    = s_te.index
     df_trainval = df.loc[idx_trval].dropna(subset=["pred_signal"])
     df_test     = df.loc[idx_te].dropna(subset=["pred_signal"])
 
     return df_trainval, df_test
-

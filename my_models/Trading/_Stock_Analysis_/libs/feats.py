@@ -891,7 +891,8 @@ def scale_features(
     n_tr = int(len(df_out) * train_prop)
     train = df_out.iloc[:n_tr]
 
-    num_cols = [c for c in df_out.columns if pd.api.types.is_numeric_dtype(df_out[c]) and c != "close_raw"]
+    # create num_cols list excluding the extra *_raw colums used for the strategy
+    num_cols = [c for c in df_out.columns if pd.api.types.is_numeric_dtype(df_out[c]) and c not in {f"{c}_raw" for c in params.strategy_cols_tick}]
     if not include_rz:
         num_cols = [c for c in num_cols if not c.endswith("_RZ")]
 

@@ -19,9 +19,9 @@ from tqdm import tqdm
 
 ticker = 'AAPL'
 init_cash = 100000
-
-month_to_check = '2021-09'
-sel_val_rmse = 0.30414
+init_df_year = 2021
+month_to_check = '2025-09'
+sel_val_rmse = 0.33972
 
 # shares_per_trade = 1
 # createCSVbase = False # set to True to regenerate the 'base' csv
@@ -98,7 +98,7 @@ hparams = {
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":       True,   # enable TransformerEncoder
     "TRANSFORMER_D_MODEL":   64,     # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":    3,      # number of encoder layers
+    "TRANSFORMER_LAYERS":    2,      # number of encoder layers
     "TRANSFORMER_HEADS":     4,      # attention heads in each layer
     "TRANSFORMER_FF_MULT":   4,      # FFN expansion factor (d_model * MULT)
     "DROPOUT_TRANS":         0.03,   # transformer dropout; ↑regularization
@@ -124,10 +124,10 @@ hparams = {
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max epochs
     "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          3e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              3,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "WEIGHT_DECAY":          2e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
+    "CLIPNORM":              2,      # max grad norm; ↑training stability, ↓gradient expressivity
     
-    "ONECYCLE_MAX_LR":       3e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       2e-4,   # peak LR in the cycle
     "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head ([0-1])
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
@@ -231,5 +231,6 @@ if ticker == 'AAPL':
     sell_factor_tick    = 0.002947796369068403
     trailstop_pct_tick  = 6.117895367737556
 
+    strategy_cols_tick  = ['close', 'atr_14', 'adx_14', 'rsi_6', 'vwap_ohlc_close_session']
     features_cols_tick  = ['range_pct', 'atr_pct_7', 'atr_pct_28', 'time_afthour', 'time_premark', 'kc_w_20_20_2.0', 'bb_w_20_2p0', 'donch_w_20', 'ret_std_63', 'atr_pct_14', 'donch_w_55', 'ret_std_21', 'upper_shad', 'time_in_sess', 'dist_high_200', 'bb_w_50_2p0', 'lower_shad', 'time_hour', 'dist_low_200', 'time_week_of_year', 'trade_count', 'volume', 'atr_7_RZ', 'atr_14_RZ', 'atr_28_RZ', 'time_day_of_year', 'time_month', 'vol_spike_28', 'plus_di_28', 'stoch_k_14_3_3', 'rolling_max_close_200_RZ', 'adx_14', 'minus_di_28', 'minus_di_14', 'cci_20', 'plus_di_7', 'plus_di_14', 'adx_28', 'rsi_6', 'rolling_min_close_200_RZ', 'vol_spike_14', 'stoch_d_9_3_3', 'sma_5_RZ', 'minus_di_7', 'sma_21_RZ', 'sma_9_RZ', 'cci_14', 'sma_pct_200', 'stoch_k_9_3_3', 'cmf_14']
     signals_cols_tick   = ['close_raw', 'signal_raw', 'signal_thresh']
