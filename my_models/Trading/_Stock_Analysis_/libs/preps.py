@@ -175,30 +175,25 @@ def prepare_interpolate_data(df: pd.DataFrame, tz_str: str = "US/Eastern") -> pd
 #     col_close: str = "close"
 # ) -> pd.DataFrame:
 #     """
-#     Build a continuous long-only signal per day (no reindexing).
+#     Generate a per-bar continuous long-only signal from intraday price series.
 
-#     For each day:
-#       - Detect swings from local minima to subsequent maxima with a dynamic retracement break.
-#       - Accept swings with profit >= min_prof_thr (%).
-#       - For all bars up to each swing's sell, compute a decayed score:
-#             gap * exp(-mins_to_exit / tau_time) * (1 - exp(-dur_min / tau_dur))
-#         and take the max over all swings per bar -> signal_raw.
-#       - Add helper columns for sizing/logic:
-#             swing_dir (1 if last swing up), swing_gain_pct, last_buy, last_sell.
-#       - Compute a per-bar threshold per `thresh_mode`, and gap_to_thresh.
+#     This function scans each trading day independently, finds up-swings
+#     (local minima → subsequent maxima) using a dynamic retracement rule,
+#     and computes a decayed, duration-weighted score for every bar that is
+#     covered by an accepted swing. It returns the original data augmented
+#     with per-bar signal columns and simple swing metadata.
 
-#     Threshold modes:
-#       - "median_nonzero": median of positive signal_raw (per-day scalar).
-#       - "p90": 90th percentile of positive signal_raw (per-day scalar).
-#       - "mean_nonzero": mean of positive signal_raw (per-day scalar).
-#       - "roll_mean": rolling mean of signal_raw with window=thresh_window.
-#       - "roll_p90": rolling 90th percentile of signal_raw with window=thresh_window.
-#       - float/constant: use the given value.
-
-#     Returns:
-#       Single DataFrame with added columns:
-#         signal_raw, signal_thresh, gap_to_thresh,
-#         swing_dir, swing_gain_pct, last_buy, last_sell
+#     Key behavior:
+#       - Detect candidate swings from local minima to later peaks.
+#       - Apply a dynamic retracement break and a minimum profit threshold
+#         to accept swings.
+#       - For each accepted swing, compute a per-bar score that decays
+#         with time-to-exit and increases with swing duration; keep the
+#         maximum score per bar across overlapping swings.
+#       - Produce helper columns useful for sizing and downstream logic:
+#         swing_dir, swing_gain_pct, last_buy, last_sell.
+#       - Compute a per-bar threshold according to `thresh_mode` and
+#         expose gap_to_thresh = signal_raw - signal_thresh.
 #     """
 #     if not isinstance(df.index, pd.DatetimeIndex):
 #         df.index = pd.to_datetime(df.index)
@@ -308,54 +303,39 @@ def prepare_interpolate_data(df: pd.DataFrame, tz_str: str = "US/Eastern") -> pd
 #         parts.append(day_df)
 
 #     return pd.concat(parts).sort_index()
-    
+
+
+
 
 def build_signal_per_day(
     df: pd.DataFrame,
     *,
-    min_prof_thr: float = 0.5,             # minimum % gain to accept a swing
-    max_down_prop: float = 0.25,           # base retracement threshold (fraction of move)
-    gain_tightfact: float = 0.02,  # tighter retracement for larger gains
-    tau_time: float = 60.0,                # minutes half-life for temporal decay
-    tau_dur: float = 60.0,                 # minutes half-life for duration boost
-    thresh_mode: Union[str, float] = "median_nonzero",
-    thresh_window: Optional[int] = None,   # rolling window (bars) for rolling modes
+    min_prof_thr: float = 0.5,
+    max_down_prop: float = 0.25,
+    gain_tightfact: float = 0.02,
+    tau_time: float = 60.0,
+    tau_dur: float = 60.0,
     col_close: str = "close"
 ) -> pd.DataFrame:
     """
-    Generate a per-bar continuous long-only signal from intraday price series.
+    Detect up-swings per trading day and produce per-bar columns:
+      - signal_raw, swing_dir, swing_gain_pct, last_buy, last_sell
 
-    This function scans each trading day independently, finds up-swings
-    (local minima → subsequent maxima) using a dynamic retracement rule,
-    and computes a decayed, duration-weighted score for every bar that is
-    covered by an accepted swing. It returns the original data augmented
-    with per-bar signal columns and simple swing metadata.
-
-    Key behavior:
-      - Detect candidate swings from local minima to later peaks.
-      - Apply a dynamic retracement break and a minimum profit threshold
-        to accept swings.
-      - For each accepted swing, compute a per-bar score that decays
-        with time-to-exit and increases with swing duration; keep the
-        maximum score per bar across overlapping swings.
-      - Produce helper columns useful for sizing and downstream logic:
-        swing_dir, swing_gain_pct, last_buy, last_sell.
-      - Compute a per-bar threshold according to `thresh_mode` and
-        expose gap_to_thresh = signal_raw - signal_thresh.
+    This is the original detection/score logic only. It does NOT compute thresholds.
     """
     if not isinstance(df.index, pd.DatetimeIndex):
+        df = df.copy()
         df.index = pd.to_datetime(df.index)
 
     parts = []
-
     for day, day_df in df.groupby(df.index.normalize()):
         if day_df.empty:
             parts.append(day_df)
             continue
 
         closes = day_df[col_close].to_numpy()
-        times  = day_df.index.to_numpy()
-        n      = len(day_df)
+        times = day_df.index.to_numpy()
+        n = len(day_df)
 
         signal_raw = np.zeros(n, dtype=float)
         swing_dir = np.zeros(n, dtype=int)
@@ -365,15 +345,13 @@ def build_signal_per_day(
 
         i = 1
         while i < n - 1:
-            # local minimum as potential buy
-            if closes[i] < closes[i-1] and closes[i] < closes[i+1]:
+            if closes[i] < closes[i - 1] and closes[i] < closes[i + 1]:
                 buy_idx = i
                 buy_price = closes[i]
                 max_so_far = buy_price
                 cand_sell_idx = None
                 j = i + 1
 
-                # walk forward to find peak and retracement break
                 while j < n:
                     price = closes[j]
                     if price > max_so_far:
@@ -387,7 +365,6 @@ def build_signal_per_day(
                             break
                     j += 1
 
-                # if a valid swing is found and meets profit threshold
                 if cand_sell_idx is not None:
                     sell_idx = cand_sell_idx
                     profit_pc = 100 * (closes[sell_idx] - buy_price) / buy_price
@@ -400,7 +377,7 @@ def build_signal_per_day(
                             decay_time = np.exp(-mins_to_exit / tau_time)
                             dur_min = (times[sell_idx] - times[buy_idx]) / np.timedelta64(1, "m")
                             boost_dur = 1 - np.exp(-dur_min / tau_dur)
-                            score = gap * decay_time * boost_dur * 1000 # scaling by a factor of 1000 for better signal visibility
+                            score = gap * decay_time * boost_dur * 1000.0
                             signal_raw[mask] = np.maximum(signal_raw[mask], score)
                             swing_dir[mask] = 1
                             swing_gain_pct[mask] = profit_pc
@@ -412,45 +389,100 @@ def build_signal_per_day(
             else:
                 i += 1
 
-        # attach computed columns
-        day_df = day_df.copy()
-        day_df["signal_raw"] = signal_raw
-        day_df["swing_dir"] = swing_dir
-        day_df["swing_gain_pct"] = swing_gain_pct
-        day_df["last_buy"] = last_buy
-        day_df["last_sell"] = last_sell
+        out = day_df.copy()
+        out["signal_raw"] = signal_raw
+        out["swing_dir"] = swing_dir
+        out["swing_gain_pct"] = swing_gain_pct
+        out["last_buy"] = last_buy
+        out["last_sell"] = last_sell
 
-        # threshold computation
-        if isinstance(thresh_mode, (int, float)):
-            thresh_series = pd.Series(float(thresh_mode), index=day_df.index)
-        elif thresh_mode == "median_nonzero":
-            nz = signal_raw[signal_raw > 0]
-            val = float(np.median(nz)) if len(nz) else 0.0
-            thresh_series = pd.Series(val, index=day_df.index)
-        elif thresh_mode == "p90":
-            nz = signal_raw[signal_raw > 0]
-            val = float(np.percentile(nz, 90)) if len(nz) else 0.0
-            thresh_series = pd.Series(val, index=day_df.index)
-        elif thresh_mode == "mean_nonzero":
-            nz = signal_raw[signal_raw > 0]
-            val = float(np.mean(nz)) if len(nz) else 0.0
-            thresh_series = pd.Series(val, index=day_df.index)
-        elif thresh_mode == "roll_mean":
-            w = thresh_window or 20
-            thresh_series = day_df["signal_raw"].rolling(window=w, min_periods=1).mean()
-        elif thresh_mode == "roll_p90":
-            w = thresh_window or 20
-            thresh_series = day_df["signal_raw"].rolling(window=w, min_periods=1) \
-                .apply(lambda x: np.percentile(x, 90), raw=False)
-        else:
-            raise ValueError(f"Unknown thresh_mode: {thresh_mode}")
-
-        day_df["signal_thresh"] = thresh_series
-        day_df["gap_to_thresh"] = day_df["signal_raw"] - day_df["signal_thresh"]
-
-        parts.append(day_df)
+        parts.append(out)
 
     return pd.concat(parts).sort_index()
+
+
+#########################################################################################################
+
+
+def apply_thresholds_per_day(
+    df: pd.DataFrame,
+    *,
+    col_signal: str = "signal_raw",
+    thresh_mode: Union[str, float] = "median_nonzero",
+    thresh_window: Optional[int] = None
+) -> pd.DataFrame:
+    """
+    Compute per-day (or per-day rolling) thresholds for `col_signal` and add:
+      - <col_signal>_thresh  (named 'signal_thresh' for compatibility)
+      - gap_to_thresh         = <col_signal> - signal_thresh
+
+    Supported scalar modes:
+      - numeric (int/float)
+      - "median_nonzero", "mean_nonzero", "p90", "p95", "p99"
+      - "median", "mean"
+
+    Supported rolling modes (per-day):
+      - "roll_mean", "roll_median", "roll_p90", "roll_p95"
+
+    Returns a new DataFrame with 'signal_thresh' and 'gap_to_thresh'.
+    """
+    if col_signal not in df.columns:
+        raise ValueError(f"DataFrame must contain '{col_signal}' column")
+
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df = df.copy()
+        df.index = pd.to_datetime(df.index)
+
+    def day_thresh(arr: np.ndarray) -> float:
+        nz = arr[arr > 0]
+        if isinstance(thresh_mode, (int, float)):
+            return float(thresh_mode)
+        if thresh_mode == "median_nonzero":
+            return float(np.median(nz)) if len(nz) else 0.0
+        if thresh_mode == "mean_nonzero":
+            return float(np.mean(nz)) if len(nz) else 0.0
+        if thresh_mode == "p90":
+            return float(np.percentile(nz, 90)) if len(nz) else 0.0
+        if thresh_mode == "p95":
+            return float(np.percentile(nz, 95)) if len(nz) else 0.0
+        if thresh_mode == "p99":
+            return float(np.percentile(nz, 99)) if len(nz) else 0.0
+        if thresh_mode == "median":
+            return float(np.median(arr))
+        if thresh_mode == "mean":
+            return float(np.mean(arr))
+        raise ValueError(f"Unknown scalar thresh_mode: {thresh_mode}")
+
+    parts = []
+    for day, day_df in df.groupby(df.index.normalize()):
+        out = day_df.copy()
+        series = out[col_signal].to_numpy()
+
+        if isinstance(thresh_mode, (int, float)) or thresh_mode in {
+            "median_nonzero", "mean_nonzero", "p90", "p95", "p99", "median", "mean"
+        }:
+            val = day_thresh(series)
+            out["signal_thresh"] = val
+        else:
+            w = thresh_window or 20
+            if thresh_mode == "roll_mean":
+                out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1).mean()
+            elif thresh_mode == "roll_median":
+                out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1) \
+                    .apply(lambda x: np.median(x), raw=False)
+            elif thresh_mode in ("roll_p90", "roll_p95"):
+                q = 90 if thresh_mode == "roll_p90" else 95
+                out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1) \
+                    .apply(lambda x: np.percentile(x, q), raw=False)
+            else:
+                raise ValueError(f"Unknown rolling thresh_mode: {thresh_mode}")
+
+        out["gap_to_thresh"] = out[col_signal] - out["signal_thresh"]
+        parts.append(out)
+
+    return pd.concat(parts).sort_index()
+
+
 
 
 #########################################################################################################

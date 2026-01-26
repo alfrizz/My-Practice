@@ -23,10 +23,6 @@ init_df_year = 2021
 month_to_check = '2025-09'
 sel_val_rmse = 0.33972
 
-# shares_per_trade = 1
-# createCSVbase = False # set to True to regenerate the 'base' csv
-# createCSVsign = False # set to True to regenerate the 'sign' csv
-
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
@@ -60,7 +56,7 @@ def _human(n):
         n /= 1024
     return f"{n:.1f}TB"
 
-def to_csv_with_progress(df, path, chunksize=100_000, index=True):
+def to_csv_with_progress(df, path, chunksize=10_000, index=True):
     with open(path, "w", newline="") as f:
         df.iloc[:0].to_csv(f, index=index, date_format="%Y-%m-%d %H:%M:%S")  # header only
         total = len(df)

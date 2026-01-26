@@ -184,12 +184,10 @@ def generate_actions_alpaca(
     col_adx: str,
     col_rsi: str,
     col_vwap: str,
-    # col_vol_spike: str,
     reset_peak: bool,
     rsi_min_thresh: float,
     rsi_max_thresh: float,
     adx_thresh: float,
-    # vol_thresh: float,
     trailstop_pct: float,  
     atr_mult: float,
     vwap_atr_mult: float,
@@ -215,13 +213,12 @@ def generate_actions_alpaca(
     adx       = df[col_adx].to_numpy(dtype=float)
     rsi       = df[col_rsi].to_numpy(dtype=float)
     vwap      = df[col_vwap].to_numpy(dtype=float)
-    # vol_spike = df[col_vol_spike].to_numpy(dtype=float)
 
     slope     = np.gradient(signal)
-    if isinstance(sign_thresh, str):
+    if isinstance(sign_thresh, str): # the threshold is a signal
         sign_thresh_arr = df[sign_thresh].to_numpy(dtype=float)
         is_series = True
-    else:
+    else: # the threshold is a constant
         sign_thresh_arr = float(sign_thresh)
         is_series = False
 
@@ -257,7 +254,6 @@ def generate_actions_alpaca(
             signal[i] >= sign_thr and
             slope[i] > 0 and
             adx[i] >= adx_thresh and
-            # vol_spike[i] >= vol_thresh and
             ((rsi_min_thresh < rsi[i] < rsi_max_thresh) or (close[i] > vwap_arr[i]))
         ):
             df.at[df.index[i], "action"] = 1
