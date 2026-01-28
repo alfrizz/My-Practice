@@ -1,3 +1,0 @@
-trial,reset_peak,rsi_min_thresh,rsi_max_thresh,adx_thresh,atr_mult,vwap_atr_mult,buy_factor,sell_factor,trailstop_pct,sign_thresh_pair,avg_daily_pnl
-1,0,32,48,54.80464,17.72748,0.6952,0.84705,0.04048,18.65844,ema_3|ema_8,74.85908
-0,0,38,51,54.46034,18.39332,0.03537,0.70088,0.04563,26.79507,ema_3|ema_8,73.06306

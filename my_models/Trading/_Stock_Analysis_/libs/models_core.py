@@ -43,6 +43,8 @@ def build_tensors(
     look_back,
     features_cols,
     *,
+    col_close  = 'close_raw',
+    col_signal = 'targ_signal',
     device     = torch.device("cpu"),
     tmp_dir    = "/tmp/X_buf.dat",
     thresh_gb  = params.thresh_gb,
@@ -77,8 +79,8 @@ def build_tensors(
 
         # per-day arrays
         feats_np = np.ascontiguousarray(day_df[features_cols].to_numpy(np.float32))  # (T, F) C-contiguous
-        sig_np   = day_df["signal_raw"].to_numpy(np.float32)   # (T,)
-        close_np = day_df["close_raw"].to_numpy(np.float32)        # (T,)
+        sig_np   = day_df[col_signal].to_numpy(np.float32)   # (T,)
+        close_np = day_df[col_close].to_numpy(np.float32)        # (T,)
 
         # window-end alignment: windows end at indices look_back-1 .. T-1
         ends_np = day_df.index.to_numpy()[look_back - 1:]           # (T - look_back + 1,)
@@ -1312,6 +1314,8 @@ def init_log(
 
 def log_epoch_feature_importance(model,
                                  feature_names: Optional[List[str]] = None,
+                                 col_close = 'close_raw',
+                                 col_signal = 'targ_signal',
                                  df = None,
                                  params = None,
                                  layer_token: Optional[str] = None,
@@ -1322,7 +1326,7 @@ def log_epoch_feature_importance(model,
     """
     Compute per-feature scores from model.feature_proj.weight and its grad.
 
-    - Prefer passing feature_names (ordered list). If None, will try df.columns, then no-op.
+    - Prefer passing feature_names (ordered list). 
     - mode controls which normalized components to use:
       - "weights": normalized column weight norms only
       - "grads": normalized column grad norms only
@@ -1330,33 +1334,10 @@ def log_epoch_feature_importance(model,
     - Normalization: use log1p followed by min-max scaling for better visual spread.
     - Returns dict: top_token, items (list of tuples), score (np.array), w_norm, g_norm, layer_token.
     """
-    # --- 1) resolve feature_names (simple checks only) ---
-    if isinstance(feature_names, (list, tuple)):
-        feature_names = list(feature_names)
-    elif feature_names is None and df is not None and hasattr(df, "columns"):
-        label_col = getattr(params, "label_col", "y") if params is not None else "y"
-        feature_names = [c for c in df.columns if c not in (label_col, "close_raw")]
-    else:
-        feature_names = feature_names or []
 
-    # --- 2) get projection parameter once --- #####################################################
-    named = dict(model.named_parameters())
-    # prefer per-raw-feature projection if present (columns align to original features)
-    p = named.get("input_proj.weight") if "input_proj.weight" in named else named.get("feature_proj.weight")
-    
-    if p is None or len(feature_names) == 0:
-        empty = np.zeros(0)
-        return {"top_token": "", "items": [], "score": empty, "w_norm": empty.copy(), "g_norm": empty.copy(), "layer_token": layer_token or ""}
-
-    # --- 3) read weights and grads on CPU and align names ---
+    # --- read weights and grads on CPU
+    p = dict(model.named_parameters()).get("feature_proj.weight")
     W = p.detach().cpu().numpy()                 # (out_dim, in_dim)
-    in_dim = int(W.shape[1])
-
-    # safer alignment: truncate or extend to exactly in_dim
-    if len(feature_names) < in_dim:
-        feature_names = list(feature_names) + [f"feat_{i}" for i in range(len(feature_names), in_dim)]
-    else:
-        feature_names = list(feature_names[:in_dim])
 
     w_norm = np.linalg.norm(W, axis=0)           # shape (in_dim,)
     if p.grad is None:
@@ -1365,7 +1346,7 @@ def log_epoch_feature_importance(model,
         G = p.grad.detach().cpu().numpy()
         g_norm = np.linalg.norm(G, axis=0)
 
-    # --- 4) normalization helper (log1p + min-max) ---
+    # --- normalization helper (log1p + min-max) ---
     def _norm_vis(arr):
         if arr.size == 0:
             return arr
@@ -1376,7 +1357,7 @@ def log_epoch_feature_importance(model,
     w_s = _norm_vis(w_norm)
     g_s = _norm_vis(g_norm) if g_norm.size else g_norm
 
-    # --- 5) build score according to mode ---
+    # --- build score according to mode ---
     if mode == "weights":
         score = w_s
     elif mode == "grads":
@@ -1384,7 +1365,7 @@ def log_epoch_feature_importance(model,
     else:
         score = alpha * w_s + (1.0 - alpha) * g_s
 
-    # --- 6) prepare items, top token and persist simple history ---
+    # --- prepare items, top token and persist simple history ---
     items = list(zip(feature_names, score, w_norm, g_norm))
     items.sort(key=lambda x: x[1], reverse=True)
     top_token = ",".join(f"{n}:{s:.2e}" for n, s, _, _ in items)
