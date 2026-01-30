@@ -414,37 +414,41 @@ def plot_trades(
         fig.add_trace(go.Scatter(
             x=df.index, y=df[col_signal1],
             mode="lines", line=dict(color="blue", dash="dot", width=2),
-            name="Target Signal", yaxis=sig_yaxis,
-            hovertemplate="Signal: %{y:.3f}<extra></extra>",
+            name=col_signal1, yaxis=sig_yaxis,
+            hovertemplate=col_signal1+": %{y:.3f}<extra></extra>",
         ))
-        
+    if col_signal2 and col_signal2 in df:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df[col_signal2],
+            mode="lines", line=dict(color="brown", dash="dot", width=2),
+            name=col_signal2, yaxis=sig_yaxis,
+            hovertemplate=col_signal2+": %{y:.3f}<extra></extra>",
+        ))
+
     if sign_thresh is not None:
-        sign_arr = _arr_for(sign_thresh)
-        if np.ndim(sign_arr) == 0:
+        # If sign_thresh is a scalar number, draw a single horizontal line.
+        if isinstance(sign_thresh, (int, float)):
+            val = float(sign_thresh)
             fig.add_trace(go.Scatter(
                 x=[df.index[0], df.index[-1]],
-                y=[float(sign_arr), float(sign_arr)],
+                y=[val, val],
                 mode="lines",
                 line=dict(color="purple", dash="dot", width=1),
-                name="Threshold", yaxis=sig_yaxis,
-                hovertemplate=f"Thresh: {float(sign_arr):.3f}<extra></extra>",
+                name=str(sign_thresh),
+                yaxis=sig_yaxis,
+                hovertemplate=f"{sign_thresh}: {val:.3f}<extra></extra>",
             ))
         else:
+            # treat sign_thresh as a column name or array-like
+            sign_arr = _arr_for(sign_thresh)
             fig.add_trace(go.Scatter(
                 x=df.index, y=sign_arr,
                 mode="lines",
                 line=dict(color="purple", dash="dot", width=1),
-                name="Threshold", yaxis=sig_yaxis,
-                hovertemplate="Thresh: %{y:.3f}<extra></extra>",
+                name=sign_thresh,
+                yaxis=sig_yaxis,
+                hovertemplate=sign_thresh+": %{y:.3f}<extra></extra>",
             ))
-            
-    if col_signal2 and col_signal2 in df:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df[col_signal2],
-            mode="lines", line=dict(color="crimson", dash="dot", width=2),
-            name="Pred Signal", yaxis=sig_yaxis,
-            hovertemplate="Pred: %{y:.3f}<extra></extra>",
-        ))
 
     if autoscale:
         rmin, rmax = df[col_close].min(), df[col_close].max()

@@ -309,7 +309,7 @@ def apply_thresholds_per_day(
         raise ValueError(f"Unknown scalar thresh_mode: {thresh_mode}")
 
     parts = []
-    for day, day_df in df.groupby(df.index.normalize()):
+    for day, day_df in tqdm(df.groupby(df.index.normalize()), desc="Thresh per day", leave=True):
         out = day_df.copy()
         series = out[col_signal].to_numpy()
 
