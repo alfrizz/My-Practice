@@ -1,71 +1,54 @@
 #!/usr/bin/env bash
+: "${HOME:=/home/alfrizz}"
+export HOME
 set -euo pipefail
 
 LOG="$HOME/scripts/sync-practice.log"
-
 LOCK="/tmp/sync-practice.lock"
-
 TARGET="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
 
-# -- Single instance lock
+# Canonical Windows PowerShell path (deterministic)
+PS_CMD='/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+
+# Ensure log exists
+mkdir -p "$(dirname "$LOG")"
+: >"$LOG"
+
+# Single-instance lock
 exec 9>"$LOCK"
 if ! flock -n 9; then
   exit 0
 fi
 
+# Ensure scripts are executable (one-shot)
+chmod u+x "$HOME/scripts/sync-practice.sh" "$HOME/scripts/entrypoint.sh" || true
 
-# --- Temp dirs for Unison
+# Unison temp dirs and cleanup
 export UNISON_TMPDIR=/tmp/unison-tmp
 export TMPDIR="$UNISON_TMPDIR"
 export UNISON_NUMBACKUPS=1
-mkdir -p "$UNISON_TMPDIR"
-export UNISON_DIR="$HOME/.unison"
-
-# ONE-TIME cleanup of any leftover Unison scratch files
+mkdir -p "$UNISON_TMPDIR" "$HOME/.unison"
 rm -rf "${UNISON_TMPDIR}/"*
-find "$HOME" "$TARGET" \
-  -type f -name '.unison.*.unison.tmp' -delete 2>/dev/null || true
+find "$HOME" "$TARGET" -type f -name '.unison.*.unison.tmp' -delete 2>/dev/null || true
 
-# --- Wait for Windows drive to be ready (up 5 minutes)
+# Wait for G: mount (up to 5 minutes)
 for i in {1..300}; do
   if mountpoint -q /mnt/g && [ -d "$TARGET" ]; then
+    echo "$(date) mount ready: $TARGET" >>"$LOG"
     break
   fi
   if (( i == 300 )); then
+    echo "$(date) mount timeout waiting for $TARGET" >>"$LOG"
     exit 1
   fi
   sleep 1
 done
 
-# — Now that /mnt/g and $TARGET are ready, record the Boot trigger
-
-# Minimal auto-recovery for corrupted Unison archives: backup and move away any zero-size or unreadable archive files
-if ls "$HOME/.unison"/ar* >/dev/null 2>&1; then
-  for a in "$HOME/.unison"/ar*; do
-    if [ ! -s "$a" ] || ! head -c 1 "$a" >/dev/null 2>&1; then
-      mv "$HOME/.unison" "$HOME/.unison-corrupt-$(date +%s)" || true
-      mkdir -p "$HOME/.unison"
-      break
-    fi
-  done
-fi
-
-# --- Run Unison
+# Start Unison in background (ignore transient manual log and runlog)
 unison \
-  -root "$HOME" \
-  -root "$TARGET" \
-  -fat \
-  -perms 0 \
-  -batch \
-  -auto \
-  -times \
-  -maxbackups 1 \
-  -confirmmerge=false \
-  -prefer newer \
-  -links false \
-  -fastcheck true \
-  -repeat 10 \
-  -silent \
+  -root "$HOME" -root "$TARGET" -fat -perms 0 -batch -auto -times \
+  -maxbackups 1 -confirmmerge=false -prefer newer -links false -fastcheck true \
+  -repeat 10 -silent \
   -ignore 'Name .*' \
   -ignore 'Path jlenv/**' \
   -ignore 'Path snap/**' \
@@ -74,5 +57,77 @@ unison \
   -ignore 'Name __pycache__' \
   -ignore 'Name *.pyc' \
   -ignore 'Name sync-practice.log' \
+  -ignore 'Name sync-practice-manual.log' \
+  -ignore 'Name sync-practice.runlog' \
   -ignore 'Name *.pth' \
-  -logfile "$LOG"
+  -ignore 'Name *.lnk' \
+  -logfile "$LOG" &
+
+chmod -R u+rwX "$HOME/scripts" || true
+
+# Docker and Jupyter handling (simple)
+MAX_DOCKER_WAIT=300
+SLEEP=2
+echo "$(date) Waiting up to ${MAX_DOCKER_WAIT}s for Docker daemon..." >>"$LOG"
+
+for _ in $(seq 1 $((MAX_DOCKER_WAIT / SLEEP))); do
+  if docker info >/dev/null 2>&1; then
+    echo "$(date) Docker available; ensuring gpu-jl is running." >>"$LOG"
+
+    if docker ps -a --format '{{.Names}}' | grep -xq gpu-jl; then
+      docker start gpu-jl >>"$LOG" 2>&1 || echo "$(date) Failed to start gpu-jl" >>"$LOG"
+    else
+      docker run -d --name gpu-jl --restart unless-stopped --gpus all -p 8888:8888 \
+        -v "/home/alfrizz/docker_tmp":/tmp:rw -v "/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice":/workspace:rw -e MAX_WAIT=0 \
+        alfrizz/gpu-jl:latest >>"$LOG" 2>&1 || echo "$(date) Failed to create gpu-jl" >>"$LOG"
+    fi
+
+    # Ensure /workspace is mounted inside container; restart once if needed
+    if docker inspect -f '{{.State.Running}}' gpu-jl >/dev/null 2>&1; then
+      if docker exec gpu-jl sh -c 'mountpoint -q /workspace' >/dev/null 2>&1; then
+        echo "$(date) /workspace is mounted inside container" >>"$LOG"
+      else
+        echo "$(date) container started before host bind; restarting gpu-jl once" >>"$LOG"
+        docker restart gpu-jl >>"$LOG" 2>&1 || echo "$(date) docker restart failed" >>"$LOG"
+        sleep 2
+      fi
+    fi
+
+    # Wait for entrypoint to detect the host mount, then wait for Jupyter and open localhost in Windows
+    for _ in $(seq 1 60); do
+      if docker logs --tail 200 gpu-jl 2>/dev/null | grep -q 'Detected host mount for /workspace'; then
+        # Wait until Jupyter responds, then open browser
+        for _ in $(seq 1 60); do
+          if curl -sSf http://localhost:8888/lab >/dev/null 2>&1; then
+
+            # Minimal, safe: wait for Windows explorer to be present before invoking Start-Process
+            for try in $(seq 1 60); do
+              if [ -x "$PS_CMD" ] && "$PS_CMD" -NoProfile -Command "if (Get-Process -Name explorer -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >/dev/null 2>&1; then
+                break
+              fi
+              sleep 2
+            done
+
+            # harmless readiness marker
+            touch /tmp/jupyter-ready
+
+            if [ -x "$PS_CMD" ]; then
+              "$PS_CMD" -NoProfile -ExecutionPolicy Bypass -Command "Start-Process 'http://localhost:8888/lab'" >>"$LOG" 2>&1 && echo "$(date) powershell invocation succeeded" >>"$LOG" || echo "$(date) powershell invocation failed" >>"$LOG"
+            else
+              echo "$(date) powershell not found at $PS_CMD" >>"$LOG"
+            fi
+
+            break
+          fi
+          sleep 2
+        done
+        break
+      fi
+      sleep 2
+    done
+
+    break
+  fi
+  sleep $SLEEP
+done
+

@@ -18,13 +18,14 @@ services:
 
     volumes:        
       - "/home/alfrizz/docker_tmp:/tmp"
-      - ${HOME}:/workspace
+      - "/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice:/workspace"
 
     working_dir: /workspace
 
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
 
     environment:
+      - MAX_WAIT=0
       - ALPACA_KEY_live=${ALPACA_KEY_live}
       - ALPACA_SECRET_live=${ALPACA_SECRET_live}
 
@@ -35,4 +36,5 @@ services:
       - --ip=0.0.0.0
       - --allow-root
       - --NotebookApp.token=
+      - --NotebookApp.notebook_dir=/workspace
 
