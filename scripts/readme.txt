@@ -75,7 +75,7 @@ options       = "metadata,uid=1000,gid=1000,umask=022"
 mountFsTab    = true
 
 [boot]
-command = su - alfrizz -c "bash -lc 'for i in {1..30}; do [ -d \"/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice\" ] && break || sleep 2; done; nohup /home/alfrizz/scripts/sync-practice.sh >> /home/alfrizz/scripts/sync-practice.log 2>&1 &'"
+command = /bin/su - alfrizz -c "/bin/bash -lc '/home/alfrizz/scripts/sync-practice.sh &'"
 
 [user]
 default = alfrizz

@@ -19,8 +19,8 @@ else
 fi
 
 # --- Wait for /workspace to be a host bind (not tmpfs) before starting Jupyter
-# Default MAX_WAIT is 300 seconds. Set MAX_WAIT=0 to wait indefinitely.
-MAX_WAIT="${MAX_WAIT:-300}"
+# Default MAX_WAIT is 30 seconds. Set MAX_WAIT=0 to wait indefinitely.
+MAX_WAIT="${MAX_WAIT:-30}"
 SLEEP=2
 ELAPSED=0
 
@@ -39,8 +39,8 @@ while true; do
   fi
 
   if [ "${MAX_WAIT:-0}" -ne 0 ] && [ $ELAPSED -ge $MAX_WAIT ]; then
-    echo "Warning: /workspace did not become a host bind after ${MAX_WAIT}s. Continuing."
-    break
+    echo "Error: /workspace did not become a host bind after ${MAX_WAIT}s. Exiting so Docker can restart the container."
+    exit 1
   fi
 
   sleep $SLEEP

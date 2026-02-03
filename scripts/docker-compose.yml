@@ -25,7 +25,7 @@ services:
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
 
     environment:
-      - MAX_WAIT=0
+      - MAX_WAIT=30
       - ALPACA_KEY_live=${ALPACA_KEY_live}
       - ALPACA_SECRET_live=${ALPACA_SECRET_live}
 
@@ -36,5 +36,6 @@ services:
       - --ip=0.0.0.0
       - --allow-root
       - --NotebookApp.token=
-      - --NotebookApp.notebook_dir=/workspace
+      - --ServerApp.root_dir=/workspace
+
 

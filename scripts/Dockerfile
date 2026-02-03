@@ -16,8 +16,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
 # 3) Don’t pre-create my_models—Docker Compose will mount it for you
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["jupyter","lab","--no-browser","--ip=0.0.0.0","--allow-root","--NotebookApp.token=","--NotebookApp.notebook_dir=/workspace"]
-
+CMD ["jupyter","lab","--no-browser","--ip=0.0.0.0","--allow-root","--ServerApp.token=","--ServerApp.root_dir=/workspace"]
 
 # after changes:
 # docker-compose up -d --build

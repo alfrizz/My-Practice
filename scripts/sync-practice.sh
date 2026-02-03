@@ -4,15 +4,17 @@ export HOME
 set -euo pipefail
 
 LOG="$HOME/scripts/sync-practice.log"
-LOCK="/tmp/sync-practice.lock"
-TARGET="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
-
-# Canonical Windows PowerShell path (deterministic)
-PS_CMD='/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 
 # Ensure log exists
 mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
+
+# Boot marker
+echo "$(date) sync-practice.sh started (pid $$)" >>"$LOG"
+
+LOCK="/tmp/sync-practice.lock"
+TARGET="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
+PS_CMD='/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 
 # Single-instance lock
 exec 9>"$LOCK"
@@ -77,20 +79,7 @@ for _ in $(seq 1 $((MAX_DOCKER_WAIT / SLEEP))); do
     if docker ps -a --format '{{.Names}}' | grep -xq gpu-jl; then
       docker start gpu-jl >>"$LOG" 2>&1 || echo "$(date) Failed to start gpu-jl" >>"$LOG"
     else
-      docker run -d --name gpu-jl --restart unless-stopped --gpus all -p 8888:8888 \
-        -v "/home/alfrizz/docker_tmp":/tmp:rw -v "/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice":/workspace:rw -e MAX_WAIT=0 \
-        alfrizz/gpu-jl:latest >>"$LOG" 2>&1 || echo "$(date) Failed to create gpu-jl" >>"$LOG"
-    fi
-
-    # Ensure /workspace is mounted inside container; restart once if needed
-    if docker inspect -f '{{.State.Running}}' gpu-jl >/dev/null 2>&1; then
-      if docker exec gpu-jl sh -c 'mountpoint -q /workspace' >/dev/null 2>&1; then
-        echo "$(date) /workspace is mounted inside container" >>"$LOG"
-      else
-        echo "$(date) container started before host bind; restarting gpu-jl once" >>"$LOG"
-        docker restart gpu-jl >>"$LOG" 2>&1 || echo "$(date) docker restart failed" >>"$LOG"
-        sleep 2
-      fi
+      docker-compose -f "$HOME/scripts/docker-compose.yml" up -d --no-deps jupyter >>"$LOG" 2>&1 || echo "$(date) Failed to create/start gpu-jl via docker-compose" >>"$LOG"
     fi
 
     # Wait for entrypoint to detect the host mount, then wait for Jupyter and open localhost in Windows
