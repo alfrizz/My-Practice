@@ -20,7 +20,6 @@ sns.set_style("white")
 import optuna
 from optuna.trial import TrialState
 from optuna.importance import get_param_importances
-# from optuna.visualization import plot_optimization_history
 from optuna.visualization.matplotlib import plot_optimization_history  # <- MPL version
 
 
@@ -66,57 +65,6 @@ def make_live_plot_callback(fig, ax, line, handle):
 
 
 ##########################################################################################
-
-
-
-# def save_best_trial_callback(study, trial):
-#     """
-#     Optuna callback that saves the trial parameters and objective value to disk
-#     when the trial becomes the study's new best.
-#     """
-
-#     if study.best_trial != trial:
-#         return
-
-#     best_value  = trial.value
-#     best_params = trial.params
-
-#     # scan the folder for existing JSONs for this ticker
-#     pattern = os.path.join(params.optuna_folder, f"{params.ticker}_*_target.json")
-#     files   = glob.glob(pattern)
-
-#     # extract the float values out of the filenames
-#     existing = []
-#     # regex matches: <TICKER>_<float>_target.json
-#     rx = re.compile(rf'^{re.escape(params.ticker)}_(?P<val>-?\d+(?:\.\d+)?)_target\.json$')
-#     for fn in files:
-#         name = os.path.basename(fn)
-#         m = rx.match(name)
-#         if not m:
-#             continue
-#         try:
-#             existing.append(float(m.group("val")))
-#         except ValueError:
-#             continue
-
-#     # only save if our new best_value beats all on disk
-#     max_existing = max(existing) if existing else float("-inf")
-#     if best_value <= max_existing:
-#         return
-
-#     # dump to a new file
-#     fname = f"{params.ticker}_{best_value:.4f}_target.json"
-#     path  = os.path.join(params.optuna_folder, fname)
-#     with open(path, "w") as fp:
-#         json.dump(
-#             {"value":  best_value,
-#              "params": best_params},
-#             fp,
-#             indent=2
-#         )
-
-
-#######################################################################
 
 
 # shared display handles
@@ -374,3 +322,74 @@ def propose_ranges_from_top(
         ranges[col] = (lo, hi)
 
     return ranges
+
+
+###################################################################################################
+
+
+class TrialAccumulator:
+    def __init__(self, trial, pbar, report_interval=50, prun_perc=80):
+        self.trial = trial
+        self.pbar = pbar
+        self.report_interval = report_interval
+        self.prun_perc = prun_perc
+
+        # owned state
+        self.daily_pnls: List[float] = []
+        self.daily_bh_pnls: List[float] = []
+        self.trial_action_counts: Dict[str, int] = {"Buy": 0, "Sell": 0, "Hold": 0}
+        self.trades_count = 0
+        self.holds_count = 0
+        self.total_bars = 0
+
+    def process(self, sim_results, step, parse_eq_value_callable, parse_sim_results=None):
+        """
+        Update accumulators from sim_results and run reporting/pruning.
+        - parse_eq_value_callable: function to parse stats eq strings (e.g., strats._parse_eq_value)
+        - parse_sim_results: optional callable(sim_results) -> (df_sim, trades, stats)
+        """
+        # unpack sim_results (default behavior matches your current code)
+        if parse_sim_results is None:
+            df_sim, trades, stats = next(iter(sim_results.values()))
+        else:
+            df_sim, trades, stats = parse_sim_results(sim_results)
+
+        # update counts
+        self.trial_action_counts["Buy"] += int((df_sim["Action"] == "Buy").sum())
+        self.trial_action_counts["Sell"] += int((df_sim["Action"] == "Sell").sum())
+        self.trial_action_counts["Hold"] += int((df_sim["Action"] == "Hold").sum())
+
+        self.trades_count += len(trades)
+        self.holds_count += int((df_sim["Action"] == "Hold").sum())
+        self.total_bars += len(df_sim)
+
+        # parse and append PnL values
+        self.daily_pnls.append(parse_eq_value_callable(stats["STRATEGY"]))
+        self.daily_bh_pnls.append(parse_eq_value_callable(stats["BUYNHOLD"]))
+
+        # report and prune
+        if step % self.report_interval == 0:
+            report_step = step // self.report_interval
+            prun_val = float(np.mean(np.array(self.daily_pnls) - np.array(self.daily_bh_pnls)))
+
+            self.trial.set_user_attr("mean_pnl", float(np.mean(self.daily_pnls)))
+            self.trial.set_user_attr("mean_bh_pnls", float(np.mean(self.daily_bh_pnls)))
+            self.trial.set_user_attr("action_counts", {k: int(v) for k, v in self.trial_action_counts.items()})
+
+            self.trial.report(prun_val, report_step)
+            if self.trial.should_prune():
+                vals = [
+                    t.intermediate_values[report_step]
+                    for t in self.trial.study.get_trials(deepcopy=False)
+                    if t.state == TrialState.COMPLETE and report_step in t.intermediate_values
+                ]
+                thr = np.percentile(vals, self.prun_perc) if vals else prun_val
+                print(f"[PRUNE] value={prun_val:.6f} thr={thr:.6f}")
+                self.pbar.close()
+                raise optuna.TrialPruned()
+
+    def finalize(self):
+        self.trial.set_user_attr("mean_pnl", float(np.mean(self.daily_pnls)))
+        self.trial.set_user_attr("mean_bh_pnls", float(np.mean(self.daily_bh_pnls)))
+        self.trial.set_user_attr("action_counts", {k: int(v) for k, v in self.trial_action_counts.items()})
+        return float(np.mean(np.array(self.daily_pnls) - np.array(self.daily_bh_pnls)))

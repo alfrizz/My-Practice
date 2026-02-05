@@ -215,7 +215,7 @@ def generate_actions_alpaca(
     vwap      = df[col_vwap].to_numpy(dtype=float)
 
     slope     = np.gradient(signal)
-    if isinstance(sign_thresh, str): # the threshold is a signal
+    if isinstance(sign_thresh, str): # the threshold is a signal (eg "ema_*" or "signal_thesh")
         sign_thresh_arr = df[sign_thresh].to_numpy(dtype=float)
         is_series = True
     else: # the threshold is a constant
@@ -280,6 +280,7 @@ def generate_actions_alpaca(
     df["sell_weight"]      = sell_weight
 
     return df
+
 
     
 #######################################################################################################

@@ -259,34 +259,105 @@ def build_signal_per_day(
 #########################################################################################################
 
 
+# def apply_thresholds_per_day(
+#     df: pd.DataFrame,
+#     *,
+#     col_signal: str,
+#     thresh_mode: Union[str, float],
+#     thresh_window: Optional[int] = None
+# ) -> pd.DataFrame:
+#     """
+#     Compute per-day (or per-day rolling) thresholds for `col_signal` and add:
+#       - <col_signal>_thresh  (named 'signal_thresh' for compatibility)
+#       - gap_to_thresh         = <col_signal> - signal_thresh
+
+#     Supported scalar modes:
+#       - numeric (int/float)
+#       - "median_nonzero", "mean_nonzero", "p90", "p95", "p99"
+#       - "median", "mean"
+
+#     Supported rolling modes (per-day):
+#       - "roll_mean", "roll_median", "roll_p90", "roll_p95"
+
+#     Returns a new DataFrame with 'signal_thresh' and 'gap_to_thresh'.
+#     """
+#     if col_signal not in df.columns:
+#         raise ValueError(f"DataFrame must contain '{col_signal}' column")
+
+#     if not isinstance(df.index, pd.DatetimeIndex):
+#         df = df.copy()
+#         df.index = pd.to_datetime(df.index)
+
+#     def day_thresh(arr: np.ndarray) -> float:
+#         nz = arr[arr > 0]
+#         if isinstance(thresh_mode, (int, float)):
+#             return float(thresh_mode)
+#         if thresh_mode == "median_nonzero":
+#             return float(np.median(nz)) if len(nz) else 0.0
+#         if thresh_mode == "mean_nonzero":
+#             return float(np.mean(nz)) if len(nz) else 0.0
+#         if thresh_mode == "p90":
+#             return float(np.percentile(nz, 90)) if len(nz) else 0.0
+#         if thresh_mode == "p95":
+#             return float(np.percentile(nz, 95)) if len(nz) else 0.0
+#         if thresh_mode == "p99":
+#             return float(np.percentile(nz, 99)) if len(nz) else 0.0
+#         if thresh_mode == "median":
+#             return float(np.median(arr))
+#         if thresh_mode == "mean":
+#             return float(np.mean(arr))
+#         raise ValueError(f"Unknown scalar thresh_mode: {thresh_mode}")
+
+#     parts = []
+#     for day, day_df in tqdm(df.groupby(df.index.normalize()), desc="Thresh per day", leave=True):
+#         out = day_df.copy()
+#         series = out[col_signal].to_numpy()
+
+#         if isinstance(thresh_mode, (int, float)) or thresh_mode in {
+#             "median_nonzero", "mean_nonzero", "p90", "p95", "p99", "median", "mean"
+#         }:
+#             val = day_thresh(series)
+#             out["signal_thresh"] = val
+#         else:
+#             w = thresh_window or 20
+#             if thresh_mode == "roll_mean":
+#                 out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1).mean()
+#             elif thresh_mode == "roll_median":
+#                 out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1) \
+#                     .apply(lambda x: np.median(x), raw=False)
+#             elif thresh_mode in ("roll_p90", "roll_p95"):
+#                 q = 90 if thresh_mode == "roll_p90" else 95
+#                 out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1) \
+#                     .apply(lambda x: np.percentile(x, q), raw=False)
+#             else:
+#                 raise ValueError(f"Unknown rolling thresh_mode: {thresh_mode}")
+
+#         out["gap_to_thresh"] = out[col_signal] - out["signal_thresh"]
+#         parts.append(out)
+
+#     return pd.concat(parts).sort_index()
+
+
 def apply_thresholds_per_day(
     df: pd.DataFrame,
     *,
-    col_signal: str = "targ_signal",
-    thresh_mode: Union[str, float] = "median_nonzero",
-    thresh_window: Optional[int] = None
+    col_signal: str,
+    thresh_mode: str,
+    thresh_window: Optional[int] = None,
+    thresh_mode_num: Optional[float] = None,
 ) -> pd.DataFrame:
     """
-    Compute per-day (or per-day rolling) thresholds for `col_signal` and add:
-      - <col_signal>_thresh  (named 'signal_thresh' for compatibility)
-      - gap_to_thresh         = <col_signal> - signal_thresh
+    Compute per-day or per-day rolling thresholds for col_signal and add:
+      - 'signal_thresh' : per-row threshold (scalar per-day or rolling series)
+      - 'gap_to_thresh'  : df[col_signal] - signal_thresh
 
-    Supported scalar modes:
-      - numeric (int/float)
-      - "median_nonzero", "mean_nonzero", "p90", "p95", "p99"
-      - "median", "mean"
-
-    Supported rolling modes (per-day):
-      - "roll_mean", "roll_median", "roll_p90", "roll_p95"
-
-    Returns a new DataFrame with 'signal_thresh' and 'gap_to_thresh'.
+    thresh_mode may be a string token or a numeric value.
+    thresh_mode_num if provided overrides thresh_mode and forces numeric mode.
+    thresh_window is used only for rolling modes.
     """
-    if col_signal not in df.columns:
-        raise ValueError(f"DataFrame must contain '{col_signal}' column")
-
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df = df.copy()
-        df.index = pd.to_datetime(df.index)
+    # explicit numeric override
+    if thresh_mode_num is not None:
+        thresh_mode = float(thresh_mode_num)
 
     def day_thresh(arr: np.ndarray) -> float:
         nz = arr[arr > 0]
@@ -308,26 +379,26 @@ def apply_thresholds_per_day(
             return float(np.mean(arr))
         raise ValueError(f"Unknown scalar thresh_mode: {thresh_mode}")
 
-    parts = []
+    parts: List[pd.DataFrame] = []
     for day, day_df in tqdm(df.groupby(df.index.normalize()), desc="Thresh per day", leave=True):
         out = day_df.copy()
         series = out[col_signal].to_numpy()
 
+        # scalar modes (including numeric)
         if isinstance(thresh_mode, (int, float)) or thresh_mode in {
             "median_nonzero", "mean_nonzero", "p90", "p95", "p99", "median", "mean"
         }:
-            val = day_thresh(series)
-            out["signal_thresh"] = val
+            out["signal_thresh"] = day_thresh(series)
         else:
-            w = thresh_window or 20
+            # rolling modes: use provided window
             if thresh_mode == "roll_mean":
-                out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1).mean()
+                out["signal_thresh"] = out[col_signal].rolling(window=thresh_window, min_periods=1).mean()
             elif thresh_mode == "roll_median":
-                out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1) \
+                out["signal_thresh"] = out[col_signal].rolling(window=thresh_window, min_periods=1) \
                     .apply(lambda x: np.median(x), raw=False)
             elif thresh_mode in ("roll_p90", "roll_p95"):
                 q = 90 if thresh_mode == "roll_p90" else 95
-                out["signal_thresh"] = out[col_signal].rolling(window=w, min_periods=1) \
+                out["signal_thresh"] = out[col_signal].rolling(window=thresh_window, min_periods=1) \
                     .apply(lambda x: np.percentile(x, q), raw=False)
             else:
                 raise ValueError(f"Unknown rolling thresh_mode: {thresh_mode}")
@@ -336,8 +407,6 @@ def apply_thresholds_per_day(
         parts.append(out)
 
     return pd.concat(parts).sort_index()
-
-
 
 
 #########################################################################################################
