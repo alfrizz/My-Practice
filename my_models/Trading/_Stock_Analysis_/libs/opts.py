@@ -259,69 +259,6 @@ def plot_callback(study, trial):
 
     import matplotlib.pyplot as plt
     plt.close(st["fig"])  # keep memory low
-    
-
-####################################################################################################################
-
-
-def propose_ranges_from_top(
-    csv_path: str,
-    top_n: int = 20,
-    spread: float = 1.0,          # how many stds around center
-    agg: str = "median",          # or "mean"
-    cat_top_k: int = 3,
-    floors: dict[str, float] | None = None,
-    ceils: dict[str, float] | None = None,
-):
-    """
-    Propose parameter search ranges from the top N Optuna trial results in a CSV.
-
-    Behavior:
-      - Loads `csv_path`, sorts by `avg_daily_pnl` if present, and keeps the top_n rows.
-      - For each column (except skipped keys), returns either:
-          * a categorical list of the top `cat_top_k` values (for object dtype), or
-          * a numeric range (lo, hi) computed as center ± spread * std,
-            where center is the median or mean depending on `agg`.
-      - Integer columns are rounded to integer bounds.
-    """
-
-    df = pd.read_csv(csv_path)
-    if "avg_daily_pnl" in df:
-        df = df.sort_values("avg_daily_pnl", ascending=False)
-    df = df.head(top_n)
-
-    skip = {"trial", "avg_daily_pnl", "col_signal", "sign_thresh"}
-    ranges = {}
-
-    for col in df.columns:
-        if col in skip:
-            continue
-
-        s = df[col].dropna()
-        if s.empty:
-            continue
-
-        # categorical/object
-        if s.dtype == object:
-            top_cats = s.value_counts().head(cat_top_k).index.tolist()
-            ranges[col] = {"categorical": top_cats}
-            continue
-
-        # numeric
-        x = s.astype(float)
-        is_int_dtype = np.issubdtype(s.dtype, np.integer)  # only true int dtype counts as int
-
-        center = x.median() if agg == "median" else x.mean()
-        spread_val = x.std(ddof=0) * spread
-        lo, hi = center - spread_val, center + spread_val
-
-        # only round if original dtype was integer
-        if is_int_dtype:
-            lo, hi = int(np.floor(lo)), int(np.ceil(hi))
-
-        ranges[col] = (lo, hi)
-
-    return ranges
 
 
 ###################################################################################################
@@ -393,3 +330,79 @@ class TrialAccumulator:
         self.trial.set_user_attr("mean_bh_pnls", float(np.mean(self.daily_bh_pnls)))
         self.trial.set_user_attr("action_counts", {k: int(v) for k, v in self.trial_action_counts.items()})
         return float(np.mean(np.array(self.daily_pnls) - np.array(self.daily_bh_pnls)))
+
+
+####################################################################################################################
+
+
+def propose_ranges_from_top(
+    csv_path: str,
+    top_n: int = 20,
+    spread: float = 1.0,
+    agg: str = "median",
+    cat_top_k: int = 3,
+    floors: dict[str, float] | None = None,
+    ceils: dict[str, float] | None = None,
+):
+    """
+    Propose parameter search ranges from the top N Optuna trial results in a CSV.
+
+    Robust handling of mixed-type columns: try numeric coercion first; if most
+    values are numeric use numeric logic, otherwise treat as categorical.
+    """
+    df = pd.read_csv(csv_path)
+    if "avg_daily_pnl" in df.columns:
+        df = df.sort_values("avg_daily_pnl", ascending=False)
+    df = df.head(top_n)
+
+    skip = {"trial", "avg_daily_pnl", "col_signal", "sign_thresh"}
+    ranges: dict = {}
+    floors = floors or {}
+    ceils = ceils or {}
+
+    for col in df.columns:
+        if col in skip:
+            continue
+
+        s = df[col].dropna()
+        if s.empty:
+            continue
+
+        # Try to coerce to numeric safely
+        coerced = pd.to_numeric(s, errors="coerce")
+        n_total = len(s)
+        n_numeric = coerced.notna().sum()
+
+        # Decide numeric vs categorical: require at least half numeric (tunable)
+        if n_numeric >= max(1, int(0.5 * n_total)):
+            # numeric column: use only the numeric values
+            x = coerced.dropna().astype(float)
+
+            if x.empty:
+                # fallback to categorical if coercion removed everything
+                top_cats = s.astype(str).value_counts().head(cat_top_k).index.tolist()
+                ranges[col] = {"categorical": top_cats}
+                continue
+
+            center = x.median() if agg == "median" else x.mean()
+            spread_val = x.std(ddof=0) * spread
+            lo, hi = float(center - spread_val), float(center + spread_val)
+
+            # apply floors/ceils if provided for this column
+            if col in floors:
+                lo = max(lo, float(floors[col]))
+            if col in ceils:
+                hi = min(hi, float(ceils[col]))
+
+            # detect if values are effectively integers (all close to ints)
+            is_int_like = np.allclose(x, np.round(x))
+            if is_int_like:
+                lo, hi = int(np.floor(lo)), int(np.ceil(hi))
+
+            ranges[col] = (lo, hi)
+        else:
+            # treat as categorical / object
+            top_cats = s.astype(str).value_counts().head(cat_top_k).index.tolist()
+            ranges[col] = {"categorical": top_cats}
+
+    return ranges

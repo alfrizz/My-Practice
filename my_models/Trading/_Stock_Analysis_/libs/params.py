@@ -20,8 +20,8 @@ from tqdm import tqdm
 ticker = 'AAPL'
 init_cash = 100000
 init_df_year = 2016
-month_to_check = '2019-04'
-sel_val_rmse = '0.16609'
+month_to_check = '2024-01'
+sel_val_rmse = '0.16573'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
@@ -199,18 +199,17 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 
 #########################################################################################################
 
-# reset_peaktrue
-# rsi_min_thresh27
-# rsi_max_thresh77
-# adx_thresh9.041451455320933
-# atr_mult30.496976781384287
-# vwap_atr_mult1.479356985551506
-# buy_factor0.5816995899082957
-# sell_factor0.00722913477916728
-# trailstop_pct30.145038630193767
-# thresh_mode"numeric"
-# thresh_mode_num0.01562252543390733
-# best_value4.376060585885491
+# rsi_min_thresh11
+# rsi_max_thresh99
+# adx_thresh47.835797099275794
+# atr_mult2.7538986506229417
+# vwap_atr_mult0.2940823186532894
+# buy_factor0.7405488744761899
+# sell_factor0.9640990033059854
+# trailstop_pct0.5794890309826235
+# thresh_mode"roll_median"
+# thresh_window100
+# best_value117.73281673306774
 
 if ticker == 'AAPL':
 
@@ -228,18 +227,17 @@ if ticker == 'AAPL':
     col_signal_tick      = "pred_signal"          # 'targ_signal' for target, 'pred_signal' for ML, eg "ema_*" for IND
     sign_thresh_tick     = "signal_thresh"        # 'signal_thresh' for target or ML, constant or eg "ema_*" for IND
     
-    reset_peak_tick      = True
-    rsi_min_thresh_tick  = 27
-    rsi_max_thresh_tick  = 77
-    adx_thresh_tick      = 9.041451455320933
-    atr_mult_tick        = 30.496976781384287
-    vwap_atr_mult_tick   = 1.479356985551506
-    buy_factor_tick      = 0.5816995899082957
-    sell_factor_tick     = 0.00722913477916728
-    trailstop_pct_tick   = 30.145038630193767
+    rsi_min_thresh_tick  = 11
+    rsi_max_thresh_tick  = 99
+    adx_thresh_tick      = 47.835797099275794
+    atr_mult_tick        = 2.7538986506229417
+    vwap_atr_mult_tick   = 0.2940823186532894
+    buy_factor_tick      = 0.7405488744761899
+    sell_factor_tick     = 0.9640990033059854
+    trailstop_pct_tick   = 0.5794890309826235
 
-    thresh_mode_tick     = "numeric"              # "median_nonzero","mean_nonzero","p90","p95","p99","median","mean","roll_mean","roll_median","roll_p90","roll_p95","numeric"
-    thresh_window_tick   = None                   # rolling window (bars) for rolling thresh_modes
+    thresh_mode_tick     = "roll_median"              # "median_nonzero","mean_nonzero","p90","p95","p99","median","mean","roll_mean","roll_median","roll_p90","roll_p95","numeric"
+    thresh_window_tick   = 100                   # rolling window (bars) for rolling thresh_modes
     thresh_mode_num_tick = 0.01562252543390733    # numeric threshold for "numeric" thresh_mode
 
     strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
