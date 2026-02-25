@@ -189,6 +189,8 @@ def build_signal_per_day(
             continue
 
         closes = day_df[col_close].to_numpy()
+        closes = np.where((~np.isfinite(closes)) | (closes == 0), 1e-12, closes) # replace with eps if NaN or zero
+
         times = day_df.index.to_numpy()
         n = len(day_df)
 

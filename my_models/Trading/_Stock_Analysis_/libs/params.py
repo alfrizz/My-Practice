@@ -12,6 +12,7 @@ import os
 import glob
 import json
 import re
+import sys
 
 from tqdm import tqdm
 
@@ -20,7 +21,7 @@ from tqdm import tqdm
 ticker = 'AAPL'
 init_cash = 100000
 init_df_year = 2016
-month_to_check = '2024-01'
+month_to_check = '2021-01'
 sel_val_rmse = '0.16573'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
@@ -50,24 +51,54 @@ pred_test_csv = save_path / f"{ticker}_5_pred_test.csv"
 pred_trainval_csv = save_path / f"{ticker}_5_pred_trainval.csv"
 
 
-def _human(n):
-    for u in ("B","KB","MB","GB"):
-        if abs(n) < 1024: return f"{n:3.1f}{u}"
-        n /= 1024
-    return f"{n:.1f}TB"
+# def _human(n):
+#     for u in ("B","KB","MB","GB"):
+#         if abs(n) < 1024: return f"{n:3.1f}{u}"
+#         n /= 1024
+#     return f"{n:.1f}TB"
 
-def to_csv_with_progress(df, path, chunksize=10_000, index=True):
+
+# def to_csv_with_progress(df, path, chunksize=10_000, index=True):
+#     with open(path, "w", newline="") as f:
+#         df.iloc[:0].to_csv(f, index=index, date_format="%Y-%m-%d %H:%M:%S")  # header only
+#         total = len(df)
+#         pbar = tqdm(total=total, desc="Saving CSV", unit="rows")
+#         for start in range(0, total, chunksize):
+#             end = start + chunksize
+#             df.iloc[start:end].to_csv(f, index=index, header=False, date_format="%Y-%m-%d %H:%M:%S")
+#             f.flush()
+#             pbar.update(min(end, total) - start)
+#             pbar.set_postfix_str(f"size={_human(f.tell())}")
+#         pbar.close()
+
+
+
+def _human(n):
+    for u in ("B","KB","MB","GB","TB"):
+        if abs(n) < 1024:
+            return f"{n:3.1f}{u}"
+        n /= 1024
+    return f"{n:.1f}PB"
+
+def to_csv_with_progress(df, path, chunksize=10_000, index=True, show_size_every=5, leave=True):
     with open(path, "w", newline="") as f:
         df.iloc[:0].to_csv(f, index=index, date_format="%Y-%m-%d %H:%M:%S")  # header only
         total = len(df)
-        pbar = tqdm(total=total, desc="Saving CSV", unit="rows")
+        pbar = tqdm(total=total, desc="Saving CSV", unit="rows", leave=leave, dynamic_ncols=True)
+        chunk_count = 0
         for start in range(0, total, chunksize):
             end = start + chunksize
             df.iloc[start:end].to_csv(f, index=index, header=False, date_format="%Y-%m-%d %H:%M:%S")
-            f.flush()
-            pbar.update(min(end, total) - start)
-            pbar.set_postfix_str(f"size={_human(f.tell())}")
+            # no per-chunk flush; update bar
+            written = min(end, total) - start
+            pbar.update(written)
+            chunk_count += 1
+            if show_size_every and (chunk_count % show_size_every == 0):
+                # use f.tell() for bytes; call infrequently to avoid overhead
+                pbar.set_postfix(size=_human(f.tell()))
+                pbar.refresh()
         pbar.close()
+
 
 
 #########################################################################################################
@@ -136,7 +167,7 @@ hparams = {
     "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
     "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             15,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             30,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
@@ -199,17 +230,17 @@ def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker
 
 #########################################################################################################
 
-# rsi_min_thresh11
-# rsi_max_thresh99
-# adx_thresh47.835797099275794
-# atr_mult2.7538986506229417
-# vwap_atr_mult0.2940823186532894
-# buy_factor0.7405488744761899
-# sell_factor0.9640990033059854
-# trailstop_pct0.5794890309826235
+# rsi_min_thresh31
+# rsi_max_thresh100
+# adx_thresh7.002976435560177
+# atr_mult0.9096852009472672
+# vwap_atr_mult1.5900548665418703
+# buy_factor0.9719112773876222
+# sell_factor0.6074313558823258
+# trailstop_pct0.3260636449258955
 # thresh_mode"roll_median"
-# thresh_window100
-# best_value117.73281673306774
+# thresh_window77
+# best_value612.4890526315789
 
 if ticker == 'AAPL':
 
@@ -219,25 +250,25 @@ if ticker == 'AAPL':
     tau_time_tick        = 5.400049943858033      # minutes half-life for temporal decay
     tau_dur_tick         = 6.357695320055652      # minutes half-life for duration boost
     
-    col_atr_tick         = "atr_14"
-    col_adx_tick         = "adx_14"
-    col_rsi_tick         = "rsi_6"
+    col_atr_tick         = "atr_21"
+    col_adx_tick         = "adx_21"
+    col_rsi_tick         = "rsi_21"
     col_vwap_tick        = "vwap_ohlc_close_session"
     
     col_signal_tick      = "pred_signal"          # 'targ_signal' for target, 'pred_signal' for ML, eg "ema_*" for IND
     sign_thresh_tick     = "signal_thresh"        # 'signal_thresh' for target or ML, constant or eg "ema_*" for IND
     
-    rsi_min_thresh_tick  = 11
-    rsi_max_thresh_tick  = 99
-    adx_thresh_tick      = 47.835797099275794
-    atr_mult_tick        = 2.7538986506229417
-    vwap_atr_mult_tick   = 0.2940823186532894
-    buy_factor_tick      = 0.7405488744761899
-    sell_factor_tick     = 0.9640990033059854
-    trailstop_pct_tick   = 0.5794890309826235
+    rsi_min_thresh_tick  = 31
+    rsi_max_thresh_tick  = 100
+    adx_thresh_tick      = 7.002976435560177
+    atr_mult_tick        = 0.9096852009472672
+    vwap_atr_mult_tick   = 1.5900548665418703
+    buy_factor_tick      = 0.9719112773876222
+    sell_factor_tick     = 0.6074313558823258
+    trailstop_pct_tick   = 0.3260636449258955
 
-    thresh_mode_tick     = "roll_median"              # "median_nonzero","mean_nonzero","p90","p95","p99","median","mean","roll_mean","roll_median","roll_p90","roll_p95","numeric"
-    thresh_window_tick   = 100                   # rolling window (bars) for rolling thresh_modes
+    thresh_mode_tick     = "roll_median"          # "median_nonzero","mean_nonzero","p90","p95","p99","median","mean","roll_mean","roll_median","roll_p90","roll_p95","numeric"
+    thresh_window_tick   = 77                    # rolling window (bars) for rolling thresh_modes
     thresh_mode_num_tick = 0.01562252543390733    # numeric threshold for "numeric" thresh_mode
 
     strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]

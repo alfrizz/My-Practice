@@ -47,10 +47,12 @@ for i in {1..300}; do
 done
 
 # Start Unison in background (ignore transient manual log and runlog)
+# repear every xxx seconds (eg 900), and copy only if size lower than yyy KB (eg 150 MB = 150*1024 KB)
 unison \
   -root "$HOME" -root "$TARGET" -fat -perms 0 -batch -auto -times \
   -maxbackups 1 -confirmmerge=false -prefer newer -links false -fastcheck true \
-  -repeat 10 -silent \
+  -repeat 900 -silent \
+  -maxsizethreshold $((150*1024)) \
   -ignore 'Name .*' \
   -ignore 'Path jlenv/**' \
   -ignore 'Path snap/**' \

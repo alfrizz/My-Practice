@@ -1,0 +1,2510 @@
+{
+    "best_params": {
+        "rsi_min_thresh": 50,
+        "rsi_max_thresh": 71,
+        "adx_thresh": 59.284368013442815,
+        "atr_mult": 7.594024796263216,
+        "vwap_atr_mult": 4.822508024012797,
+        "buy_factor": 0.9880477135512502,
+        "sell_factor": 0.5597458132126064,
+        "trailstop_pct": 1.7004403536786048,
+        "thresh_mode": "roll_mean",
+        "thresh_window": 102
+    },
+    "best_value": 121.65748863636362,
+    "importances": {
+        "thresh_window": 0.3797723233797996,
+        "rsi_min_thresh": 0.16616187944968897,
+        "vwap_atr_mult": 0.15614501142346215,
+        "adx_thresh": 0.14454680480432544,
+        "buy_factor": 0.07053289607651927,
+        "sell_factor": 0.046516038872772725,
+        "trailstop_pct": 0.028519889580315098,
+        "atr_mult": 0.007630297608144711,
+        "thresh_mode": 0.00017485880497196765
+    },
+    "trials": [
+        {
+            "number": 0,
+            "value": 4.090386363636357,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 63,
+                "adx_thresh": 6.2274743988426415,
+                "atr_mult": 1.3122894344752811,
+                "vwap_atr_mult": -1.735845166527909,
+                "buy_factor": 0.546760290610035,
+                "sell_factor": 0.1720921311326238,
+                "trailstop_pct": 5.922228723203861,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 84
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 1,
+            "value": 19.543053030303014,
+            "params": {
+                "rsi_min_thresh": 10,
+                "rsi_max_thresh": 62,
+                "adx_thresh": 58.718162435789374,
+                "atr_mult": 6.813528086595108,
+                "vwap_atr_mult": -8.68913567366402,
+                "buy_factor": 0.5878898513918611,
+                "sell_factor": 0.7482377228854665,
+                "trailstop_pct": 2.7342576045129254,
+                "thresh_mode": "roll_median",
+                "thresh_window": 48
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 2,
+            "value": -12.995178030303013,
+            "params": {
+                "rsi_min_thresh": 3,
+                "rsi_max_thresh": 55,
+                "adx_thresh": 24.413634280349402,
+                "atr_mult": 0.8868049800028053,
+                "vwap_atr_mult": 1.2989600540669972,
+                "buy_factor": 0.8126518743455301,
+                "sell_factor": 0.2660604454274083,
+                "trailstop_pct": 6.984228898524159,
+                "thresh_mode": "roll_median",
+                "thresh_window": 110
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 3,
+            "value": 35.99188636363638,
+            "params": {
+                "rsi_min_thresh": 31,
+                "rsi_max_thresh": 75,
+                "adx_thresh": 55.021142296567874,
+                "atr_mult": 0.3078176688595091,
+                "vwap_atr_mult": -8.348602432300567,
+                "buy_factor": 0.5246176097962534,
+                "sell_factor": 0.6526593808798086,
+                "trailstop_pct": 0.38453941695497684,
+                "thresh_mode": "roll_median",
+                "thresh_window": 91
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 4,
+            "value": 9.669018939393965,
+            "params": {
+                "rsi_min_thresh": 13,
+                "rsi_max_thresh": 79,
+                "adx_thresh": 33.76375523288846,
+                "atr_mult": 2.1438848571109834,
+                "vwap_atr_mult": -2.045154572661632,
+                "buy_factor": 0.6753839139608404,
+                "sell_factor": 0.9004805150546338,
+                "trailstop_pct": 5.601962562613313,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 16
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 5,
+            "value": 19.407401515151516,
+            "params": {
+                "rsi_min_thresh": 23,
+                "rsi_max_thresh": 84,
+                "adx_thresh": 54.8557048137781,
+                "atr_mult": 0.3591005789073221,
+                "vwap_atr_mult": -1.4563416891036436,
+                "buy_factor": 0.35225704079485876,
+                "sell_factor": 0.6973284526649706,
+                "trailstop_pct": 9.894192275269383,
+                "thresh_mode": "roll_median",
+                "thresh_window": 86
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 6,
+            "value": -16.139174242424236,
+            "params": {
+                "rsi_min_thresh": 4,
+                "rsi_max_thresh": 90,
+                "adx_thresh": 25.222138839619888,
+                "atr_mult": 0.3061991154573621,
+                "vwap_atr_mult": 3.7938193788089354,
+                "buy_factor": 0.11885336482922099,
+                "sell_factor": 0.8010739144976822,
+                "trailstop_pct": 0.795794737988353,
+                "thresh_mode": "roll_median",
+                "thresh_window": 39
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 7,
+            "value": -17.957772727272722,
+            "params": {
+                "rsi_min_thresh": 1,
+                "rsi_max_thresh": 69,
+                "adx_thresh": 38.52526771404363,
+                "atr_mult": 3.8569027301295313,
+                "vwap_atr_mult": 5.344699007146108,
+                "buy_factor": 0.6059791041960616,
+                "sell_factor": 0.7972667930409667,
+                "trailstop_pct": 6.205031990345154,
+                "thresh_mode": "roll_median",
+                "thresh_window": 34
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 8,
+            "value": -18.078030303030296,
+            "params": {
+                "rsi_min_thresh": 10,
+                "rsi_max_thresh": 69,
+                "adx_thresh": 12.634582794823348,
+                "atr_mult": 0.14466279340421898,
+                "vwap_atr_mult": 4.47799989801471,
+                "buy_factor": 0.8832475858119782,
+                "sell_factor": 0.8609424861433792,
+                "trailstop_pct": 7.266643592966554,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 58
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 9,
+            "value": 9.684935606060607,
+            "params": {
+                "rsi_min_thresh": 34,
+                "rsi_max_thresh": 81,
+                "adx_thresh": 69.19408213101873,
+                "atr_mult": 7.273586754183338,
+                "vwap_atr_mult": -5.080091065324099,
+                "buy_factor": 0.4598178619771414,
+                "sell_factor": 0.2677377196782972,
+                "trailstop_pct": 4.8263384532857385,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 58
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 10,
+            "value": 6.372689393939406,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 98,
+                "adx_thresh": 48.797034064528454,
+                "atr_mult": 0.12496790828104398,
+                "vwap_atr_mult": -9.928413140465253,
+                "buy_factor": 0.12374287811944112,
+                "sell_factor": 0.5465631732074278,
+                "trailstop_pct": 0.29174785797616476,
+                "thresh_mode": "roll_median",
+                "thresh_window": 105
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 11,
+            "value": 62.00468560606061,
+            "params": {
+                "rsi_min_thresh": 25,
+                "rsi_max_thresh": 53,
+                "adx_thresh": 69.01009016930277,
+                "atr_mult": 9.254179184145817,
+                "vwap_atr_mult": -9.652063805697296,
+                "buy_factor": 0.32427901062375775,
+                "sell_factor": 0.5461043693253969,
+                "trailstop_pct": 2.6032183424104156,
+                "thresh_mode": "roll_median",
+                "thresh_window": 81
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 12,
+            "value": -17.957772727272722,
+            "params": {
+                "rsi_min_thresh": 27,
+                "rsi_max_thresh": 50,
+                "adx_thresh": 68.80862361790412,
+                "atr_mult": 0.5091030337123541,
+                "vwap_atr_mult": 9.785997731317744,
+                "buy_factor": 0.31712940901466435,
+                "sell_factor": 0.49413597092849104,
+                "trailstop_pct": 2.3922506921345708,
+                "thresh_mode": "roll_median",
+                "thresh_window": 84
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 13,
+            "value": 33.43292424242426,
+            "params": {
+                "rsi_min_thresh": 34,
+                "rsi_max_thresh": 72,
+                "adx_thresh": 57.593136395236606,
+                "atr_mult": 0.6557109208745836,
+                "vwap_atr_mult": -6.884231633106032,
+                "buy_factor": 0.3281029444663318,
+                "sell_factor": 0.5662961142930081,
+                "trailstop_pct": 2.437741682336011,
+                "thresh_mode": "roll_median",
+                "thresh_window": 77
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 14,
+            "value": 15.062954545454534,
+            "params": {
+                "rsi_min_thresh": 24,
+                "rsi_max_thresh": 60,
+                "adx_thresh": 45.46218735105651,
+                "atr_mult": 0.21942084173938153,
+                "vwap_atr_mult": -5.349109149855794,
+                "buy_factor": 0.23320801277150788,
+                "sell_factor": 0.458600839441665,
+                "trailstop_pct": 3.9886488573351233,
+                "thresh_mode": "roll_median",
+                "thresh_window": 99
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 15,
+            "value": 76.45275378787879,
+            "params": {
+                "rsi_min_thresh": 34,
+                "rsi_max_thresh": 89,
+                "adx_thresh": 63.08421451051418,
+                "atr_mult": 1.990751541982032,
+                "vwap_atr_mult": -7.419162260668193,
+                "buy_factor": 0.4423138222445157,
+                "sell_factor": 0.985737022582399,
+                "trailstop_pct": 1.3146357796301533,
+                "thresh_mode": "roll_median",
+                "thresh_window": 114
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 16,
+            "value": -9.900700757575757,
+            "params": {
+                "rsi_min_thresh": 42,
+                "rsi_max_thresh": 92,
+                "adx_thresh": 65.70201290335497,
+                "atr_mult": 3.1295918353032137,
+                "vwap_atr_mult": -5.217257766784654,
+                "buy_factor": 0.0118668070079887,
+                "sell_factor": 0.9801331118324941,
+                "trailstop_pct": 1.6125805105841202,
+                "thresh_mode": "roll_median",
+                "thresh_window": 117
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 17,
+            "value": 56.32657575757575,
+            "params": {
+                "rsi_min_thresh": 18,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 63.14042256354756,
+                "atr_mult": 1.5261724202461657,
+                "vwap_atr_mult": -3.415679355953001,
+                "buy_factor": 0.4397987180717236,
+                "sell_factor": 0.06640177070263109,
+                "trailstop_pct": 3.651574760697213,
+                "thresh_mode": "roll_median",
+                "thresh_window": 120
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 18,
+            "value": 6.670128787878797,
+            "params": {
+                "rsi_min_thresh": 39,
+                "rsi_max_thresh": 87,
+                "adx_thresh": 45.60047578766757,
+                "atr_mult": 4.181540549021834,
+                "vwap_atr_mult": -8.181903458012485,
+                "buy_factor": 0.7244790121997166,
+                "sell_factor": 0.3936578478977405,
+                "trailstop_pct": 1.3961241981453985,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 75
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 19,
+            "value": 2.1408522727273054,
+            "params": {
+                "rsi_min_thresh": 20,
+                "rsi_max_thresh": 94,
+                "adx_thresh": 36.61989796473511,
+                "atr_mult": 9.089741925720753,
+                "vwap_atr_mult": -6.629007528056972,
+                "buy_factor": 0.407876574153745,
+                "sell_factor": 0.9737230100805823,
+                "trailstop_pct": 3.7260288755843387,
+                "thresh_mode": "roll_median",
+                "thresh_window": 70
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 20,
+            "value": 0.23494318181818732,
+            "params": {
+                "rsi_min_thresh": 29,
+                "rsi_max_thresh": 52,
+                "adx_thresh": 50.12227700842236,
+                "atr_mult": 2.1318922468781447,
+                "vwap_atr_mult": 0.5289768945203424,
+                "buy_factor": 0.9871498014780254,
+                "sell_factor": 0.6245313811305755,
+                "trailstop_pct": 1.6692156478938678,
+                "thresh_mode": "roll_median",
+                "thresh_window": 96
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 21,
+            "value": 24.364412878787892,
+            "params": {
+                "rsi_min_thresh": 18,
+                "rsi_max_thresh": 96,
+                "adx_thresh": 64.09853571939352,
+                "atr_mult": 1.5787351932986553,
+                "vwap_atr_mult": -3.2013497839063128,
+                "buy_factor": 0.23876290199635472,
+                "sell_factor": 0.07066610875839419,
+                "trailstop_pct": 3.470699905172186,
+                "thresh_mode": "roll_median",
+                "thresh_window": 119
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 22,
+            "value": 56.47811742424242,
+            "params": {
+                "rsi_min_thresh": 18,
+                "rsi_max_thresh": 99,
+                "adx_thresh": 62.11887967846699,
+                "atr_mult": 0.9307872319542339,
+                "vwap_atr_mult": -3.990673093634907,
+                "buy_factor": 0.4505848348825883,
+                "sell_factor": 0.03289454569473799,
+                "trailstop_pct": 4.688122463698971,
+                "thresh_mode": "roll_median",
+                "thresh_window": 106
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 23,
+            "value": 44.41117424242423,
+            "params": {
+                "rsi_min_thresh": 36,
+                "rsi_max_thresh": 90,
+                "adx_thresh": 61.57791129187101,
+                "atr_mult": 0.8365626168644196,
+                "vwap_atr_mult": -6.552422321427004,
+                "buy_factor": 0.2675589240961361,
+                "sell_factor": 0.3774579307439353,
+                "trailstop_pct": 4.7970260661654445,
+                "thresh_mode": "roll_median",
+                "thresh_window": 105
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 24,
+            "value": 38.86704166666667,
+            "params": {
+                "rsi_min_thresh": 15,
+                "rsi_max_thresh": 86,
+                "adx_thresh": 69.07899960599953,
+                "atr_mult": 2.563526923757256,
+                "vwap_atr_mult": -9.946395847796847,
+                "buy_factor": 0.40133708647366084,
+                "sell_factor": 0.23970485815090864,
+                "trailstop_pct": 8.287755109290863,
+                "thresh_mode": "roll_median",
+                "thresh_window": 107
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 25,
+            "value": 13.937765151515137,
+            "params": {
+                "rsi_min_thresh": 24,
+                "rsi_max_thresh": 78,
+                "adx_thresh": 52.640101113984144,
+                "atr_mult": 5.50972488845123,
+                "vwap_atr_mult": -4.516576388496404,
+                "buy_factor": 0.48832521054327327,
+                "sell_factor": 0.022410555307891766,
+                "trailstop_pct": 2.90518463051292,
+                "thresh_mode": "roll_median",
+                "thresh_window": 98
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 26,
+            "value": 47.54358712121212,
+            "params": {
+                "rsi_min_thresh": 30,
+                "rsi_max_thresh": 96,
+                "adx_thresh": 60.0431467308669,
+                "atr_mult": 1.1074887970321747,
+                "vwap_atr_mult": -7.218359853930993,
+                "buy_factor": 0.18465357982766384,
+                "sell_factor": 0.42417173970081884,
+                "trailstop_pct": 4.29096826224269,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 111
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 27,
+            "value": -1.0878409090908971,
+            "params": {
+                "rsi_min_thresh": 21,
+                "rsi_max_thresh": 57,
+                "adx_thresh": 41.556628364775165,
+                "atr_mult": 5.34028733578772,
+                "vwap_atr_mult": -3.520511937604441,
+                "buy_factor": 0.6266426559794931,
+                "sell_factor": 0.15822702195955052,
+                "trailstop_pct": 1.9673164472808466,
+                "thresh_mode": "roll_median",
+                "thresh_window": 67
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 28,
+            "value": -135.15307575757575,
+            "params": {
+                "rsi_min_thresh": 38,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 25.268151199887164,
+                "atr_mult": 0.5753470818560846,
+                "vwap_atr_mult": -8.912280755383263,
+                "buy_factor": 0.3906585661566871,
+                "sell_factor": 0.328404528086405,
+                "trailstop_pct": 1.2291698211103204,
+                "thresh_mode": "roll_median",
+                "thresh_window": 8
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 29,
+            "value": 1.011962121212119,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 68,
+                "adx_thresh": 6.14771178078027,
+                "atr_mult": 1.4048391924856949,
+                "vwap_atr_mult": -1.9558423270635252,
+                "buy_factor": 0.5086817234310126,
+                "sell_factor": 0.17262057230884242,
+                "trailstop_pct": 5.580797180697238,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 90
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 30,
+            "value": -1.9326249999999938,
+            "params": {
+                "rsi_min_thresh": 43,
+                "rsi_max_thresh": 82,
+                "adx_thresh": 15.858312526839232,
+                "atr_mult": 1.7737858023270574,
+                "vwap_atr_mult": -6.280053930979749,
+                "buy_factor": 0.7245561656636836,
+                "sell_factor": 0.6031141498486058,
+                "trailstop_pct": 3.054585907283765,
+                "thresh_mode": "roll_median",
+                "thresh_window": 98
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 31,
+            "value": 51.803238636363645,
+            "params": {
+                "rsi_min_thresh": 17,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 64.67117035143343,
+                "atr_mult": 1.1612352020781924,
+                "vwap_atr_mult": -4.085367246045491,
+                "buy_factor": 0.45888008009862274,
+                "sell_factor": 0.10389953393429571,
+                "trailstop_pct": 4.216386207694445,
+                "thresh_mode": "roll_median",
+                "thresh_window": 119
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 32,
+            "value": 36.30348484848484,
+            "params": {
+                "rsi_min_thresh": 11,
+                "rsi_max_thresh": 93,
+                "adx_thresh": 59.562426921025434,
+                "atr_mult": 0.7524395534145926,
+                "vwap_atr_mult": -1.0303722861382858,
+                "buy_factor": 0.5379667531559333,
+                "sell_factor": 0.045799022012545265,
+                "trailstop_pct": 3.198306131581895,
+                "thresh_mode": "roll_median",
+                "thresh_window": 112
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 33,
+            "value": 7.306734848484846,
+            "params": {
+                "rsi_min_thresh": 7,
+                "rsi_max_thresh": 89,
+                "adx_thresh": 63.591756289701394,
+                "atr_mult": 0.4402941281414106,
+                "vwap_atr_mult": 1.8514068948418867,
+                "buy_factor": 0.4248423146236464,
+                "sell_factor": 0.16494229612769357,
+                "trailstop_pct": 2.240257709915295,
+                "thresh_mode": "roll_median",
+                "thresh_window": 120
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 34,
+            "value": 2.732803030303027,
+            "params": {
+                "rsi_min_thresh": 27,
+                "rsi_max_thresh": 96,
+                "adx_thresh": 55.62291560758163,
+                "atr_mult": 3.371673168787634,
+                "vwap_atr_mult": -7.9776552411103205,
+                "buy_factor": 0.5741016753817697,
+                "sell_factor": 0.13491291439887582,
+                "trailstop_pct": 0.7895420724386628,
+                "thresh_mode": "roll_median",
+                "thresh_window": 82
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 35,
+            "value": 57.044651515151514,
+            "params": {
+                "rsi_min_thresh": 15,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 60.458906229779096,
+                "atr_mult": 9.884249949163959,
+                "vwap_atr_mult": -9.109284684019656,
+                "buy_factor": 0.31680177103553153,
+                "sell_factor": 0.7189893301145829,
+                "trailstop_pct": 5.144140267806502,
+                "thresh_mode": "roll_median",
+                "thresh_window": 111
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 36,
+            "value": -4.427416666666693,
+            "params": {
+                "rsi_min_thresh": 14,
+                "rsi_max_thresh": 74,
+                "adx_thresh": 69.9994075195018,
+                "atr_mult": 9.022820248659738,
+                "vwap_atr_mult": -8.945841637014613,
+                "buy_factor": 0.319817890903735,
+                "sell_factor": 0.7674117623328588,
+                "trailstop_pct": 6.2782095457489255,
+                "thresh_mode": "roll_median",
+                "thresh_window": 92
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 37,
+            "value": -7.439647727272738,
+            "params": {
+                "rsi_min_thresh": 22,
+                "rsi_max_thresh": 63,
+                "adx_thresh": 53.49519673997308,
+                "atr_mult": 6.4574379577300665,
+                "vwap_atr_mult": -7.774845932356049,
+                "buy_factor": 0.16921322542696782,
+                "sell_factor": 0.7204439397838516,
+                "trailstop_pct": 7.019293346676577,
+                "thresh_mode": "roll_median",
+                "thresh_window": 103
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 38,
+            "value": 1.0604583333333066,
+            "params": {
+                "rsi_min_thresh": 6,
+                "rsi_max_thresh": 86,
+                "adx_thresh": 33.01832062432422,
+                "atr_mult": 4.7612276795983925,
+                "vwap_atr_mult": -9.432834245784331,
+                "buy_factor": 0.2691840859012783,
+                "sell_factor": 0.8862879117978444,
+                "trailstop_pct": 5.591642495099298,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 112
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 39,
+            "value": 14.797613636363662,
+            "params": {
+                "rsi_min_thresh": 32,
+                "rsi_max_thresh": 92,
+                "adx_thresh": 57.43152615924815,
+                "atr_mult": 9.884563280268178,
+                "vwap_atr_mult": -6.159049950353734,
+                "buy_factor": 0.3532325403385217,
+                "sell_factor": 0.6732719821215989,
+                "trailstop_pct": 7.966113414340425,
+                "thresh_mode": "roll_median",
+                "thresh_window": 91
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 40,
+            "value": 27.83411363636368,
+            "params": {
+                "rsi_min_thresh": 27,
+                "rsi_max_thresh": 66,
+                "adx_thresh": 49.72299628058301,
+                "atr_mult": 2.8913733503867673,
+                "vwap_atr_mult": -8.541696580154074,
+                "buy_factor": 0.6511376665073535,
+                "sell_factor": 0.8151552057421956,
+                "trailstop_pct": 5.105945812425551,
+                "thresh_mode": "roll_median",
+                "thresh_window": 49
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 41,
+            "value": 11.402424242424262,
+            "params": {
+                "rsi_min_thresh": 18,
+                "rsi_max_thresh": 98,
+                "adx_thresh": 0.08630558062018423,
+                "atr_mult": 7.402045007211823,
+                "vwap_atr_mult": -2.959903407914876,
+                "buy_factor": 0.45834171610938773,
+                "sell_factor": 0.9274095068972281,
+                "trailstop_pct": 4.7940323092178465,
+                "thresh_mode": "roll_median",
+                "thresh_window": 111
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 42,
+            "value": 5.1882537878788035,
+            "params": {
+                "rsi_min_thresh": 12,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 65.54731059857133,
+                "atr_mult": 0.9614401794620615,
+                "vwap_atr_mult": -5.70681176863156,
+                "buy_factor": 0.35636684992029316,
+                "sell_factor": 0.21718043129953304,
+                "trailstop_pct": 3.5855401373548084,
+                "thresh_mode": "roll_median",
+                "thresh_window": 115
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 43,
+            "value": 38.32074621212121,
+            "params": {
+                "rsi_min_thresh": 20,
+                "rsi_max_thresh": 97,
+                "adx_thresh": 61.561023663575604,
+                "atr_mult": 2.1275377532649675,
+                "vwap_atr_mult": -7.452490912353284,
+                "buy_factor": 0.5548009560381083,
+                "sell_factor": 0.30622992525626297,
+                "trailstop_pct": 2.715508946660702,
+                "thresh_mode": "roll_median",
+                "thresh_window": 102
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 44,
+            "value": -17.957772727272722,
+            "params": {
+                "rsi_min_thresh": 16,
+                "rsi_max_thresh": 94,
+                "adx_thresh": 66.33444245382432,
+                "atr_mult": 1.321849897249574,
+                "vwap_atr_mult": -0.25465288943529396,
+                "buy_factor": 0.4890744802276355,
+                "sell_factor": 0.5271837352396386,
+                "trailstop_pct": 4.30529787404586,
+                "thresh_mode": "roll_median",
+                "thresh_window": 108
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 45,
+            "value": 43.31564015151514,
+            "params": {
+                "rsi_min_thresh": 8,
+                "rsi_max_thresh": 90,
+                "adx_thresh": 61.705816778140544,
+                "atr_mult": 6.706476621919544,
+                "vwap_atr_mult": -4.5296692077244955,
+                "buy_factor": 0.2966998336277834,
+                "sell_factor": 0.8362546189462259,
+                "trailstop_pct": 6.082070194956678,
+                "thresh_mode": "roll_median",
+                "thresh_window": 114
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 46,
+            "value": -19.54331060606061,
+            "params": {
+                "rsi_min_thresh": 25,
+                "rsi_max_thresh": 78,
+                "adx_thresh": 57.948812398614706,
+                "atr_mult": 0.2272533387554322,
+                "vwap_atr_mult": 9.444419073868605,
+                "buy_factor": 0.36308373130214644,
+                "sell_factor": 0.7336347894252983,
+                "trailstop_pct": 0.8784392069446301,
+                "thresh_mode": "roll_median",
+                "thresh_window": 26
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 47,
+            "value": 28.03059469696973,
+            "params": {
+                "rsi_min_thresh": 13,
+                "rsi_max_thresh": 98,
+                "adx_thresh": 55.52619688340812,
+                "atr_mult": 3.83436506215348,
+                "vwap_atr_mult": -9.240649300068053,
+                "buy_factor": 0.43909952616314796,
+                "sell_factor": 0.48984049313457917,
+                "trailstop_pct": 5.169829576320447,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 86
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 48,
+            "value": -11.012318181818184,
+            "params": {
+                "rsi_min_thresh": 19,
+                "rsi_max_thresh": 94,
+                "adx_thresh": 67.66436111546818,
+                "atr_mult": 1.7564088407506349,
+                "vwap_atr_mult": -2.6058004970978415,
+                "buy_factor": 0.20110466820153317,
+                "sell_factor": 0.08860888569038028,
+                "trailstop_pct": 0.17987413346448577,
+                "thresh_mode": "roll_median",
+                "thresh_window": 79
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 49,
+            "value": -17.957772727272722,
+            "params": {
+                "rsi_min_thresh": 0,
+                "rsi_max_thresh": 84,
+                "adx_thresh": 45.67091102541736,
+                "atr_mult": 0.41100659011743407,
+                "vwap_atr_mult": -9.961031159385785,
+                "buy_factor": 0.37867690056990716,
+                "sell_factor": 0.5733037128441849,
+                "trailstop_pct": 2.0292850042507595,
+                "thresh_mode": "roll_median",
+                "thresh_window": 51
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 50,
+            "value": -1.9729810606060407,
+            "params": {
+                "rsi_min_thresh": 33,
+                "rsi_max_thresh": 88,
+                "adx_thresh": 52.57070416039926,
+                "atr_mult": 2.379921862516492,
+                "vwap_atr_mult": 2.628296783355204,
+                "buy_factor": 0.06297265575390365,
+                "sell_factor": 0.6574570277335438,
+                "trailstop_pct": 3.990458499199008,
+                "thresh_mode": "roll_median",
+                "thresh_window": 94
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 51,
+            "value": 62.61268939393938,
+            "params": {
+                "rsi_min_thresh": 18,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 63.650429146206704,
+                "atr_mult": 1.1941013786627177,
+                "vwap_atr_mult": -4.219463207957438,
+                "buy_factor": 0.464746477918193,
+                "sell_factor": 0.12164080320204648,
+                "trailstop_pct": 4.410875581518313,
+                "thresh_mode": "roll_median",
+                "thresh_window": 119
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 52,
+            "value": 78.02699242424241,
+            "params": {
+                "rsi_min_thresh": 22,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 63.271621371938956,
+                "atr_mult": 1.0600957357401388,
+                "vwap_atr_mult": -4.035465626132509,
+                "buy_factor": 0.4861636547693541,
+                "sell_factor": 0.028941181070253015,
+                "trailstop_pct": 4.661503383632318,
+                "thresh_mode": "roll_median",
+                "thresh_window": 102
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 53,
+            "value": 0.9669583333333404,
+            "params": {
+                "rsi_min_thresh": 23,
+                "rsi_max_thresh": 95,
+                "adx_thresh": 66.92988933102069,
+                "atr_mult": 0.7203154581485532,
+                "vwap_atr_mult": -1.2086301663063337,
+                "buy_factor": 0.5145312313676205,
+                "sell_factor": 0.031774751578034444,
+                "trailstop_pct": 6.37819841846955,
+                "thresh_mode": "roll_median",
+                "thresh_window": 102
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 54,
+            "value": -94.33137878787872,
+            "params": {
+                "rsi_min_thresh": 28,
+                "rsi_max_thresh": 98,
+                "adx_thresh": 59.57356720183923,
+                "atr_mult": 0.9982484980134015,
+                "vwap_atr_mult": -5.123377088051019,
+                "buy_factor": 0.5905280728417694,
+                "sell_factor": 0.011887480397445895,
+                "trailstop_pct": 4.4901277803492246,
+                "thresh_mode": "roll_median",
+                "thresh_window": 107
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 55,
+            "value": 44.41176893939394,
+            "params": {
+                "rsi_min_thresh": 22,
+                "rsi_max_thresh": 58,
+                "adx_thresh": 63.06630426634048,
+                "atr_mult": 0.6258204428964396,
+                "vwap_atr_mult": -7.500875590079369,
+                "buy_factor": 0.3305920152793003,
+                "sell_factor": 0.11949517781177285,
+                "trailstop_pct": 6.709688931656873,
+                "thresh_mode": "roll_median",
+                "thresh_window": 100
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 56,
+            "value": 29.892064393939396,
+            "params": {
+                "rsi_min_thresh": 26,
+                "rsi_max_thresh": 92,
+                "adx_thresh": 57.104304042876116,
+                "atr_mult": 0.8158553921698413,
+                "vwap_atr_mult": -8.359318647593524,
+                "buy_factor": 0.2876490578364993,
+                "sell_factor": 0.9255852734089036,
+                "trailstop_pct": 5.40369335046761,
+                "thresh_mode": "roll_median",
+                "thresh_window": 115
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 57,
+            "value": 25.328193181818175,
+            "params": {
+                "rsi_min_thresh": 16,
+                "rsi_max_thresh": 98,
+                "adx_thresh": 67.6648488898345,
+                "atr_mult": 7.73493556661425,
+                "vwap_atr_mult": -6.993889139364587,
+                "buy_factor": 0.48082518436077565,
+                "sell_factor": 0.2112673679213621,
+                "trailstop_pct": 9.865220998026722,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 107
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 58,
+            "value": -9.73467803030303,
+            "params": {
+                "rsi_min_thresh": 10,
+                "rsi_max_thresh": 91,
+                "adx_thresh": 31.321341755444717,
+                "atr_mult": 1.0623963393916331,
+                "vwap_atr_mult": -5.777513917084114,
+                "buy_factor": 0.4011288256893449,
+                "sell_factor": 0.4417343472742177,
+                "trailstop_pct": 5.954297164645001,
+                "thresh_mode": "roll_median",
+                "thresh_window": 89
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 59,
+            "value": 54.55632954545456,
+            "params": {
+                "rsi_min_thresh": 30,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 60.73607828313496,
+                "atr_mult": 0.517547983734688,
+                "vwap_atr_mult": -3.7174943986870685,
+                "buy_factor": 0.42915118493212434,
+                "sell_factor": 0.7664669035384633,
+                "trailstop_pct": 5.03382124949641,
+                "thresh_mode": "roll_median",
+                "thresh_window": 116
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 60,
+            "value": -17.976856060606057,
+            "params": {
+                "rsi_min_thresh": 21,
+                "rsi_max_thresh": 96,
+                "adx_thresh": 69.80710708923303,
+                "atr_mult": 1.2774180353705096,
+                "vwap_atr_mult": -4.432208609144366,
+                "buy_factor": 0.23764455878274976,
+                "sell_factor": 0.06435118182095041,
+                "trailstop_pct": 3.312770975591318,
+                "thresh_mode": "roll_median",
+                "thresh_window": 67
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 61,
+            "value": 31.033340909090914,
+            "params": {
+                "rsi_min_thresh": 18,
+                "rsi_max_thresh": 100,
+                "adx_thresh": 62.437642743693104,
+                "atr_mult": 1.5318684402852356,
+                "vwap_atr_mult": -2.577376828337598,
+                "buy_factor": 0.5248313427954855,
+                "sell_factor": 0.06681976269206262,
+                "trailstop_pct": 3.8951223390818894,
+                "thresh_mode": "roll_median",
+                "thresh_window": 120
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 62,
+            "value": -19.47602651515151,
+            "params": {
+                "rsi_min_thresh": 15,
+                "rsi_max_thresh": 54,
+                "adx_thresh": 64.508719821865,
+                "atr_mult": 1.7518994633059684,
+                "vwap_atr_mult": -1.9868138055937603,
+                "buy_factor": 0.4425687922060586,
+                "sell_factor": 0.09723832623123234,
+                "trailstop_pct": 4.477669639236568,
+                "thresh_mode": "roll_median",
+                "thresh_window": 111
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 63,
+            "value": -17.957772727272722,
+            "params": {
+                "rsi_min_thresh": 24,
+                "rsi_max_thresh": 98,
+                "adx_thresh": 65.96304382322982,
+                "atr_mult": 0.9264502495464181,
+                "vwap_atr_mult": -0.43346455346006385,
+                "buy_factor": 0.5581948777247806,
+                "sell_factor": 0.3668995156360331,
+                "trailstop_pct": 3.6766210358740956,
+                "thresh_mode": "roll_median",
+                "thresh_window": 104
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 64,
+            "value": 35.181693181818204,
+            "params": {
+                "rsi_min_thresh": 20,
+                "rsi_max_thresh": 95,
+                "adx_thresh": 58.99192629204106,
+                "atr_mult": 1.2141491556677213,
+                "vwap_atr_mult": -4.902007129418208,
+                "buy_factor": 0.4724457258895575,
+                "sell_factor": 0.05653027386165403,
+                "trailstop_pct": 2.7054356891047204,
+                "thresh_mode": "roll_median",
+                "thresh_window": 96
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 65,
+            "value": -17.957772727272722,
+            "params": {
+                "rsi_min_thresh": 14,
+                "rsi_max_thresh": 99,
+                "adx_thresh": 64.00132893472568,
+                "atr_mult": 1.8903195078255663,
+                "vwap_atr_mult": 0.5555871998980964,
+                "buy_factor": 0.40728098072250474,
+                "sell_factor": 0.15400798197799842,
+                "trailstop_pct": 4.005627526899951,
+                "thresh_mode": "roll_median",
+                "thresh_window": 116
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 66,
+            "value": 9.913428030303045,
+            "params": {
+                "rsi_min_thresh": 17,
+                "rsi_max_thresh": 96,
+                "adx_thresh": 53.456323680785594,
+                "atr_mult": 1.5826612675927418,
+                "vwap_atr_mult": -3.4547382771955384,
+                "buy_factor": 0.6270186470072473,
+                "sell_factor": 0.6103051769174548,
+                "trailstop_pct": 4.544734849086393,
+                "thresh_mode": "roll_median",
+                "thresh_window": 109
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 67,
+            "value": -4.7431818181818075,
+            "params": {
+                "rsi_min_thresh": 25,
+                "rsi_max_thresh": 50,
+                "adx_thresh": 67.54197462589177,
+                "atr_mult": 5.793504816473446,
+                "vwap_atr_mult": -5.773405902780882,
+                "buy_factor": 0.3357134587186136,
+                "sell_factor": 0.2016623066415174,
+                "trailstop_pct": 4.774631408373394,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 72
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 68,
+            "value": 18.0435681818182,
+            "params": {
+                "rsi_min_thresh": 41,
+                "rsi_max_thresh": 93,
+                "adx_thresh": 56.841223013594465,
+                "atr_mult": 8.283125431352325,
+                "vwap_atr_mult": -6.783687458833367,
+                "buy_factor": 0.38213144523368203,
+                "sell_factor": 0.13680105331174044,
+                "trailstop_pct": 5.3756406427457915,
+                "thresh_mode": "roll_median",
+                "thresh_window": 120
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 69,
+            "value": 89.88979924242425,
+            "params": {
+                "rsi_min_thresh": 46,
+                "rsi_max_thresh": 74,
+                "adx_thresh": 51.15627863797204,
+                "atr_mult": 2.667771846376159,
+                "vwap_atr_mult": 5.883812446534444,
+                "buy_factor": 0.496948745300761,
+                "sell_factor": 0.011223227035938005,
+                "trailstop_pct": 1.6288658815942576,
+                "thresh_mode": "roll_median",
+                "thresh_window": 61
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 70,
+            "value": 61.92543181818181,
+            "params": {
+                "rsi_min_thresh": 50,
+                "rsi_max_thresh": 71,
+                "adx_thresh": 42.416086881161235,
+                "atr_mult": 2.7665308162749938,
+                "vwap_atr_mult": 6.697035108986107,
+                "buy_factor": 0.5014457789997521,
+                "sell_factor": 0.017348274486906505,
+                "trailstop_pct": 1.5329941472405073,
+                "thresh_mode": "roll_median",
+                "thresh_window": 59
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 71,
+            "value": -33.706579545454545,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 71,
+                "adx_thresh": 43.48629220510135,
+                "atr_mult": 2.7823415623589325,
+                "vwap_atr_mult": 6.515740441642809,
+                "buy_factor": 0.5037831346545596,
+                "sell_factor": 0.010659158862053049,
+                "trailstop_pct": 1.3563385486349728,
+                "thresh_mode": "roll_median",
+                "thresh_window": 59
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 72,
+            "value": 13.345499999999985,
+            "params": {
+                "rsi_min_thresh": 45,
+                "rsi_max_thresh": 76,
+                "adx_thresh": 38.12933292571555,
+                "atr_mult": 4.291838040599814,
+                "vwap_atr_mult": 6.77380664099728,
+                "buy_factor": 0.5481060138281705,
+                "sell_factor": 0.09112980413542873,
+                "trailstop_pct": 0.6476974715565571,
+                "thresh_mode": "roll_median",
+                "thresh_window": 54
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 73,
+            "value": 12.670912878787902,
+            "params": {
+                "rsi_min_thresh": 50,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 40.146552761160386,
+                "atr_mult": 3.2117473093854723,
+                "vwap_atr_mult": 8.369190923004712,
+                "buy_factor": 0.6029549414204041,
+                "sell_factor": 0.011712969047164845,
+                "trailstop_pct": 1.7056212049120694,
+                "thresh_mode": "roll_median",
+                "thresh_window": 44
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 74,
+            "value": 67.92951515151515,
+            "params": {
+                "rsi_min_thresh": 46,
+                "rsi_max_thresh": 81,
+                "adx_thresh": 48.216890990616875,
+                "atr_mult": 2.363733414003903,
+                "vwap_atr_mult": 3.536068702476715,
+                "buy_factor": 0.46442747788845795,
+                "sell_factor": 0.042054075282234815,
+                "trailstop_pct": 1.2073544302993802,
+                "thresh_mode": "roll_median",
+                "thresh_window": 63
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 75,
+            "value": 73.45171590909094,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 81,
+                "adx_thresh": 47.05493811181035,
+                "atr_mult": 2.2616096446049228,
+                "vwap_atr_mult": 4.461772863189962,
+                "buy_factor": 0.4827415896398836,
+                "sell_factor": 0.05035393115196763,
+                "trailstop_pct": 1.0441108025088925,
+                "thresh_mode": "roll_median",
+                "thresh_window": 63
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 76,
+            "value": 71.40770454545454,
+            "params": {
+                "rsi_min_thresh": 45,
+                "rsi_max_thresh": 83,
+                "adx_thresh": 47.92627648488275,
+                "atr_mult": 2.363249711971529,
+                "vwap_atr_mult": 4.1988114232490625,
+                "buy_factor": 0.5030665274585534,
+                "sell_factor": 0.053567560084367645,
+                "trailstop_pct": 1.0024020427005074,
+                "thresh_mode": "roll_median",
+                "thresh_window": 63
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 77,
+            "value": 87.48607196969698,
+            "params": {
+                "rsi_min_thresh": 46,
+                "rsi_max_thresh": 81,
+                "adx_thresh": 47.299944156651286,
+                "atr_mult": 2.1048241678002158,
+                "vwap_atr_mult": 4.580517846086711,
+                "buy_factor": 0.5297826814807085,
+                "sell_factor": 0.2732978428822815,
+                "trailstop_pct": 0.9038886568589944,
+                "thresh_mode": "roll_median",
+                "thresh_window": 65
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 78,
+            "value": 60.908700757575744,
+            "params": {
+                "rsi_min_thresh": 46,
+                "rsi_max_thresh": 81,
+                "adx_thresh": 47.68751773360226,
+                "atr_mult": 2.3658224572175452,
+                "vwap_atr_mult": 4.1350147298078,
+                "buy_factor": 0.6922742800208955,
+                "sell_factor": 0.27277618367638734,
+                "trailstop_pct": 1.0006378631430608,
+                "thresh_mode": "roll_median",
+                "thresh_window": 64
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 79,
+            "value": 85.98079924242423,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 83,
+                "adx_thresh": 47.65870907973081,
+                "atr_mult": 2.032179566411977,
+                "vwap_atr_mult": 4.826408917599376,
+                "buy_factor": 0.5300253365438683,
+                "sell_factor": 0.18244271658351766,
+                "trailstop_pct": 0.6052660782382436,
+                "thresh_mode": "roll_median",
+                "thresh_window": 64
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 80,
+            "value": 100.37695454545452,
+            "params": {
+                "rsi_min_thresh": 48,
+                "rsi_max_thresh": 83,
+                "adx_thresh": 51.08583634560766,
+                "atr_mult": 2.007456173717144,
+                "vwap_atr_mult": 5.236024923419192,
+                "buy_factor": 0.5258306280391594,
+                "sell_factor": 0.18102613840742932,
+                "trailstop_pct": 0.531291876620369,
+                "thresh_mode": "roll_median",
+                "thresh_window": 63
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 81,
+            "value": 103.17857954545454,
+            "params": {
+                "rsi_min_thresh": 48,
+                "rsi_max_thresh": 83,
+                "adx_thresh": 51.25776288853693,
+                "atr_mult": 2.04062209540415,
+                "vwap_atr_mult": 4.967824212597189,
+                "buy_factor": 0.5709989911368879,
+                "sell_factor": 0.1910162546386309,
+                "trailstop_pct": 0.5338527231505612,
+                "thresh_mode": "roll_median",
+                "thresh_window": 63
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 82,
+            "value": 95.99117045454544,
+            "params": {
+                "rsi_min_thresh": 48,
+                "rsi_max_thresh": 84,
+                "adx_thresh": 50.88221636360771,
+                "atr_mult": 3.4756111524080833,
+                "vwap_atr_mult": 5.223687145469066,
+                "buy_factor": 0.5814016183084041,
+                "sell_factor": 0.18133247721942716,
+                "trailstop_pct": 0.3887296880117058,
+                "thresh_mode": "roll_median",
+                "thresh_window": 74
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 83,
+            "value": 33.94911742424242,
+            "params": {
+                "rsi_min_thresh": 48,
+                "rsi_max_thresh": 85,
+                "adx_thresh": 44.630165769413566,
+                "atr_mult": 1.9901466820115252,
+                "vwap_atr_mult": 5.171510437939,
+                "buy_factor": 0.573106947133896,
+                "sell_factor": 0.18264609417473684,
+                "trailstop_pct": 0.49867849283435395,
+                "thresh_mode": "roll_median",
+                "thresh_window": 55
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 84,
+            "value": 90.98028030303028,
+            "params": {
+                "rsi_min_thresh": 40,
+                "rsi_max_thresh": 76,
+                "adx_thresh": 51.2071248667152,
+                "atr_mult": 3.1326145076867844,
+                "vwap_atr_mult": 5.831182163980192,
+                "buy_factor": 0.6764999667479912,
+                "sell_factor": 0.24644156603159417,
+                "trailstop_pct": 0.40468943968876026,
+                "thresh_mode": "roll_median",
+                "thresh_window": 73
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 85,
+            "value": 91.48548863636364,
+            "params": {
+                "rsi_min_thresh": 41,
+                "rsi_max_thresh": 76,
+                "adx_thresh": 51.64528479746129,
+                "atr_mult": 3.711239435744472,
+                "vwap_atr_mult": 5.751484798848124,
+                "buy_factor": 0.7834884045748096,
+                "sell_factor": 0.2439124646717829,
+                "trailstop_pct": 0.4695679389457263,
+                "thresh_mode": "roll_median",
+                "thresh_window": 74
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 86,
+            "value": 88.70218560606061,
+            "params": {
+                "rsi_min_thresh": 41,
+                "rsi_max_thresh": 76,
+                "adx_thresh": 50.64875933596385,
+                "atr_mult": 3.694748873308748,
+                "vwap_atr_mult": 6.065372478321255,
+                "buy_factor": 0.7960114186959519,
+                "sell_factor": 0.24588246549630555,
+                "trailstop_pct": 0.10635838579012091,
+                "thresh_mode": "roll_median",
+                "thresh_window": 76
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 87,
+            "value": 98.13379545454542,
+            "params": {
+                "rsi_min_thresh": 41,
+                "rsi_max_thresh": 76,
+                "adx_thresh": 51.28452154350607,
+                "atr_mult": 3.581919727050547,
+                "vwap_atr_mult": 5.905151264781735,
+                "buy_factor": 0.7575427142325833,
+                "sell_factor": 0.25057429557228444,
+                "trailstop_pct": 0.3856366059192571,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 77
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 88,
+            "value": 97.3880568181818,
+            "params": {
+                "rsi_min_thresh": 40,
+                "rsi_max_thresh": 76,
+                "adx_thresh": 51.16165093832587,
+                "atr_mult": 3.5122110779889804,
+                "vwap_atr_mult": 5.960088837978597,
+                "buy_factor": 0.7969992324650651,
+                "sell_factor": 0.2566306978750552,
+                "trailstop_pct": 0.32127652832193093,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 75
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 89,
+            "value": 97.97546969696968,
+            "params": {
+                "rsi_min_thresh": 40,
+                "rsi_max_thresh": 76,
+                "adx_thresh": 51.0391849214347,
+                "atr_mult": 3.7760229565836405,
+                "vwap_atr_mult": 6.149271177154106,
+                "buy_factor": 0.8097404847946207,
+                "sell_factor": 0.2399684744771486,
+                "trailstop_pct": 0.33648286683458295,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 74
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 90,
+            "value": 69.81473863636361,
+            "params": {
+                "rsi_min_thresh": 37,
+                "rsi_max_thresh": 79,
+                "adx_thresh": 52.18502743092497,
+                "atr_mult": 4.317855015075947,
+                "vwap_atr_mult": 7.461186597893862,
+                "buy_factor": 0.812149795096431,
+                "sell_factor": 0.31859520886468856,
+                "trailstop_pct": 0.3654464399741565,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 71
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 91,
+            "value": 98.54245075757575,
+            "params": {
+                "rsi_min_thresh": 40,
+                "rsi_max_thresh": 75,
+                "adx_thresh": 51.43349495920215,
+                "atr_mult": 3.564026600584817,
+                "vwap_atr_mult": 5.864474252789467,
+                "buy_factor": 0.7892514238136772,
+                "sell_factor": 0.25083680745707215,
+                "trailstop_pct": 0.1465638407893327,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 75
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 92,
+            "value": 95.86367803030299,
+            "params": {
+                "rsi_min_thresh": 39,
+                "rsi_max_thresh": 75,
+                "adx_thresh": 51.02404984920338,
+                "atr_mult": 3.506001183661966,
+                "vwap_atr_mult": 5.614252757817737,
+                "buy_factor": 0.7812998607741859,
+                "sell_factor": 0.29915455970290156,
+                "trailstop_pct": 0.40236450714766175,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 73
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 93,
+            "value": 96.4020946969697,
+            "params": {
+                "rsi_min_thresh": 43,
+                "rsi_max_thresh": 77,
+                "adx_thresh": 54.13664346148654,
+                "atr_mult": 4.925090016322584,
+                "vwap_atr_mult": 7.574255638667126,
+                "buy_factor": 0.864599989199483,
+                "sell_factor": 0.24120707900141983,
+                "trailstop_pct": 0.35008543802992653,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 73
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 94,
+            "value": 110.70583333333333,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 78,
+                "adx_thresh": 54.85094689225705,
+                "atr_mult": 4.8872572918776624,
+                "vwap_atr_mult": 7.620373718301462,
+                "buy_factor": 0.8658518682655529,
+                "sell_factor": 0.35756941436640444,
+                "trailstop_pct": 0.720073141422498,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 80
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 95,
+            "value": 108.61905681818183,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 79,
+                "adx_thresh": 54.35655761220731,
+                "atr_mult": 5.338937468900356,
+                "vwap_atr_mult": 8.178850442854255,
+                "buy_factor": 0.8782429152950154,
+                "sell_factor": 0.2888097882627425,
+                "trailstop_pct": 0.7431888233374125,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 79
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 96,
+            "value": 99.6830340909091,
+            "params": {
+                "rsi_min_thresh": 43,
+                "rsi_max_thresh": 79,
+                "adx_thresh": 54.78755233766281,
+                "atr_mult": 4.761994849545507,
+                "vwap_atr_mult": 7.877922504249035,
+                "buy_factor": 0.8924569512225546,
+                "sell_factor": 0.3585100161917077,
+                "trailstop_pct": 0.7880571906716971,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 79
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 97,
+            "value": 99.10351136363637,
+            "params": {
+                "rsi_min_thresh": 43,
+                "rsi_max_thresh": 78,
+                "adx_thresh": 54.44103757559504,
+                "atr_mult": 4.936094316746155,
+                "vwap_atr_mult": 8.143279727009013,
+                "buy_factor": 0.8812412738146383,
+                "sell_factor": 0.35781898334853324,
+                "trailstop_pct": 0.683006425541375,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 79
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 98,
+            "value": 21.11192045454547,
+            "params": {
+                "rsi_min_thresh": 43,
+                "rsi_max_thresh": 79,
+                "adx_thresh": 55.19155492696825,
+                "atr_mult": 6.271876490461165,
+                "vwap_atr_mult": 9.132426762125405,
+                "buy_factor": 0.9407530783763872,
+                "sell_factor": 0.35142397152007127,
+                "trailstop_pct": 0.753469545968549,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 79
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 99,
+            "value": 94.3223106060606,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 78,
+                "adx_thresh": 49.0523913270457,
+                "atr_mult": 4.856295201292591,
+                "vwap_atr_mult": 8.330743029677311,
+                "buy_factor": 0.8645900122019343,
+                "sell_factor": 0.41277456827644327,
+                "trailstop_pct": 0.13109425200157374,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 84
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 100,
+            "value": 39.3496856060606,
+            "params": {
+                "rsi_min_thresh": 36,
+                "rsi_max_thresh": 80,
+                "adx_thresh": 54.32704691333735,
+                "atr_mult": 4.102613047009551,
+                "vwap_atr_mult": 7.383787430174817,
+                "buy_factor": 0.9289470700426655,
+                "sell_factor": 0.35573300007704123,
+                "trailstop_pct": 1.1725103418657854,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 69
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 101,
+            "value": 92.42560227272728,
+            "params": {
+                "rsi_min_thresh": 43,
+                "rsi_max_thresh": 77,
+                "adx_thresh": 56.13371464011798,
+                "atr_mult": 5.115094362289414,
+                "vwap_atr_mult": 7.695374927558721,
+                "buy_factor": 0.8692713752514554,
+                "sell_factor": 0.2933505117777554,
+                "trailstop_pct": 0.6922438451989251,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 78
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 102,
+            "value": 28.220314393939397,
+            "params": {
+                "rsi_min_thresh": 42,
+                "rsi_max_thresh": 74,
+                "adx_thresh": 54.013226398776936,
+                "atr_mult": 4.572570441817478,
+                "vwap_atr_mult": 8.641930218059557,
+                "buy_factor": 0.8409220786930871,
+                "sell_factor": 0.338818175338002,
+                "trailstop_pct": 0.2228653003602544,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 81
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 103,
+            "value": 98.26010606060605,
+            "params": {
+                "rsi_min_thresh": 40,
+                "rsi_max_thresh": 77,
+                "adx_thresh": 49.66434866788494,
+                "atr_mult": 5.845883709899797,
+                "vwap_atr_mult": 7.840018634844661,
+                "buy_factor": 0.7423164398770187,
+                "sell_factor": 0.22789733550663163,
+                "trailstop_pct": 0.6519952896895065,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 88
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 104,
+            "value": 98.32067803030301,
+            "params": {
+                "rsi_min_thresh": 39,
+                "rsi_max_thresh": 72,
+                "adx_thresh": 49.75660637714637,
+                "atr_mult": 5.906433330059527,
+                "vwap_atr_mult": 7.976297420608933,
+                "buy_factor": 0.7346428886021262,
+                "sell_factor": 0.3963360284773718,
+                "trailstop_pct": 0.736037124732786,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 88
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 105,
+            "value": -17.957772727272722,
+            "params": {
+                "rsi_min_thresh": 39,
+                "rsi_max_thresh": 72,
+                "adx_thresh": 58.40205532995565,
+                "atr_mult": 5.791324966397807,
+                "vwap_atr_mult": 9.833163942626312,
+                "buy_factor": 0.7431222971545091,
+                "sell_factor": 0.3991205508985283,
+                "trailstop_pct": 1.8780496443071142,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 87
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 106,
+            "value": 76.29769696969696,
+            "params": {
+                "rsi_min_thresh": 37,
+                "rsi_max_thresh": 69,
+                "adx_thresh": 52.96933634268551,
+                "atr_mult": 7.086890003072153,
+                "vwap_atr_mult": 6.999646601639519,
+                "buy_factor": 0.9105723477187285,
+                "sell_factor": 0.3811827986172661,
+                "trailstop_pct": 0.780933586785761,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 82
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 107,
+            "value": 82.1065606060606,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 79,
+                "adx_thresh": 45.98168473924733,
+                "atr_mult": 6.024078033082966,
+                "vwap_atr_mult": 7.906467103135349,
+                "buy_factor": 0.7484493073279946,
+                "sell_factor": 0.2167265924240433,
+                "trailstop_pct": 1.4421072299944644,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 87
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 108,
+            "value": 72.21356818181818,
+            "params": {
+                "rsi_min_thresh": 35,
+                "rsi_max_thresh": 80,
+                "adx_thresh": 49.99929277026422,
+                "atr_mult": 5.469330508872398,
+                "vwap_atr_mult": 8.993081450901675,
+                "buy_factor": 0.9835204367191255,
+                "sell_factor": 0.4689365675458006,
+                "trailstop_pct": 0.5892422242491187,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 69
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 109,
+            "value": 97.79279924242424,
+            "params": {
+                "rsi_min_thresh": 42,
+                "rsi_max_thresh": 78,
+                "adx_thresh": 49.69009033352014,
+                "atr_mult": 4.002077358496949,
+                "vwap_atr_mult": 8.061469180090114,
+                "buy_factor": 0.8360829260907401,
+                "sell_factor": 0.2789042734691268,
+                "trailstop_pct": 1.076633671226221,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 84
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 110,
+            "value": 109.47601893939395,
+            "params": {
+                "rsi_min_thresh": 40,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 55.827939780625464,
+                "atr_mult": 4.51072672839585,
+                "vwap_atr_mult": 6.398072853373029,
+                "buy_factor": 0.8996938934917078,
+                "sell_factor": 0.3223895141644324,
+                "trailstop_pct": 1.285782922246793,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 80
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 111,
+            "value": 106.66637878787878,
+            "params": {
+                "rsi_min_thresh": 38,
+                "rsi_max_thresh": 72,
+                "adx_thresh": 55.762155038424645,
+                "atr_mult": 4.506358113193098,
+                "vwap_atr_mult": 6.404810412144358,
+                "buy_factor": 0.9085799615270602,
+                "sell_factor": 0.32403318836393197,
+                "trailstop_pct": 0.8588262621713496,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 81
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 112,
+            "value": 103.39595075757575,
+            "params": {
+                "rsi_min_thresh": 45,
+                "rsi_max_thresh": 72,
+                "adx_thresh": 55.86398746427119,
+                "atr_mult": 4.752340574785845,
+                "vwap_atr_mult": 7.2353278560752425,
+                "buy_factor": 0.900696836397074,
+                "sell_factor": 0.32506175635446655,
+                "trailstop_pct": 0.8377118340522052,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 93
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 113,
+            "value": 96.84926515151517,
+            "params": {
+                "rsi_min_thresh": 38,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 56.0775591166865,
+                "atr_mult": 4.50607852344061,
+                "vwap_atr_mult": 6.976454125407406,
+                "buy_factor": 0.8991237277922153,
+                "sell_factor": 0.33778851646714947,
+                "trailstop_pct": 1.261629730682519,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 91
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 114,
+            "value": 97.8730909090909,
+            "params": {
+                "rsi_min_thresh": 45,
+                "rsi_max_thresh": 67,
+                "adx_thresh": 58.09059359402856,
+                "atr_mult": 5.235244835483234,
+                "vwap_atr_mult": 7.190198598456044,
+                "buy_factor": 0.9616710062140199,
+                "sell_factor": 0.3177173467890107,
+                "trailstop_pct": 0.819025683281312,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 95
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 115,
+            "value": 107.6303522727273,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 57.31690966775539,
+                "atr_mult": 6.5990230178238045,
+                "vwap_atr_mult": 6.405525414386057,
+                "buy_factor": 0.8881141696025425,
+                "sell_factor": 0.3850169213128639,
+                "trailstop_pct": 0.9172934148191431,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 88
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 116,
+            "value": 104.36309469696968,
+            "params": {
+                "rsi_min_thresh": 42,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 55.17175384136907,
+                "atr_mult": 7.981524758720663,
+                "vwap_atr_mult": 6.511364802641502,
+                "buy_factor": 0.8457445957024626,
+                "sell_factor": 0.3821656437261684,
+                "trailstop_pct": 2.152612135164704,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 84
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 117,
+            "value": 116.03475757575758,
+            "params": {
+                "rsi_min_thresh": 48,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 57.00989104553926,
+                "atr_mult": 8.195619776347327,
+                "vwap_atr_mult": 6.472798692495197,
+                "buy_factor": 0.8937135884285985,
+                "sell_factor": 0.4272209131125513,
+                "trailstop_pct": 1.7930085204238493,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 80
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 118,
+            "value": 100.8481325757576,
+            "params": {
+                "rsi_min_thresh": 48,
+                "rsi_max_thresh": 74,
+                "adx_thresh": 60.36011158113334,
+                "atr_mult": 8.126194342604641,
+                "vwap_atr_mult": 6.55301182955108,
+                "buy_factor": 0.8860496236690298,
+                "sell_factor": 0.43118060724337115,
+                "trailstop_pct": 1.8452489476787104,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 80
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 119,
+            "value": 100.25623106060605,
+            "params": {
+                "rsi_min_thresh": 48,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 60.15397546647586,
+                "atr_mult": 8.268206131336607,
+                "vwap_atr_mult": 6.492902168874492,
+                "buy_factor": 0.8424562630282183,
+                "sell_factor": 0.43769036041956416,
+                "trailstop_pct": 1.8732645043657246,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 84
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 120,
+            "value": 101.94935227272728,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 60.26183527207945,
+                "atr_mult": 8.304686656204911,
+                "vwap_atr_mult": 6.419731248123386,
+                "buy_factor": 0.8418686979895998,
+                "sell_factor": 0.4402414105509158,
+                "trailstop_pct": 2.305111022196431,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 93
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 121,
+            "value": 100.25736742424242,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 73,
+                "adx_thresh": 59.812991487433614,
+                "atr_mult": 8.31671258161903,
+                "vwap_atr_mult": 6.452285326989688,
+                "buy_factor": 0.8423505214480598,
+                "sell_factor": 0.4392867350629614,
+                "trailstop_pct": 2.0369056020873253,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 84
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 122,
+            "value": 113.23093181818182,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 56.96504566109338,
+                "atr_mult": 8.508559328939135,
+                "vwap_atr_mult": 6.308047674567891,
+                "buy_factor": 0.9205595298529808,
+                "sell_factor": 0.45249242926546474,
+                "trailstop_pct": 2.21084611616829,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 93
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 123,
+            "value": 118.70706060606062,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 57.16706734868465,
+                "atr_mult": 6.951448598190622,
+                "vwap_atr_mult": 4.978182099354873,
+                "buy_factor": 0.9417065000788165,
+                "sell_factor": 0.4695804224014967,
+                "trailstop_pct": 2.352663522060131,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 93
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 124,
+            "value": 113.60770454545458,
+            "params": {
+                "rsi_min_thresh": 50,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 56.626496921422216,
+                "atr_mult": 7.542630185371209,
+                "vwap_atr_mult": 6.284635090240489,
+                "buy_factor": 0.9226611897318758,
+                "sell_factor": 0.4773688797378196,
+                "trailstop_pct": 2.4237477273811656,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 94
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 125,
+            "value": 80.04607575757575,
+            "params": {
+                "rsi_min_thresh": 50,
+                "rsi_max_thresh": 66,
+                "adx_thresh": 57.24845699523976,
+                "atr_mult": 6.709770300500364,
+                "vwap_atr_mult": 3.3246642397127957,
+                "buy_factor": 0.9241933980342173,
+                "sell_factor": 0.47275245709352287,
+                "trailstop_pct": 2.412813542803897,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 91
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 126,
+            "value": 105.20989772727273,
+            "params": {
+                "rsi_min_thresh": 45,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 56.42699797263191,
+                "atr_mult": 9.231331979744521,
+                "vwap_atr_mult": 4.7993189743607205,
+                "buy_factor": 0.95716889807039,
+                "sell_factor": 0.49712154307676254,
+                "trailstop_pct": 2.3029657589804167,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 93
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 127,
+            "value": 108.54457196969699,
+            "params": {
+                "rsi_min_thresh": 45,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 58.21262907001811,
+                "atr_mult": 7.264997338019093,
+                "vwap_atr_mult": 5.047672278544811,
+                "buy_factor": 0.9599141300762789,
+                "sell_factor": 0.5185880309109244,
+                "trailstop_pct": 2.4952471242390684,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 97
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 128,
+            "value": 110.90296212121213,
+            "params": {
+                "rsi_min_thresh": 45,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 56.55770074154082,
+                "atr_mult": 9.232483246665312,
+                "vwap_atr_mult": 5.479615210983546,
+                "buy_factor": 0.9565704989917896,
+                "sell_factor": 0.5159867775036976,
+                "trailstop_pct": 2.8772870222862394,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 98
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 129,
+            "value": 107.08310227272727,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 69,
+                "adx_thresh": 58.53128191147357,
+                "atr_mult": 9.19713432364399,
+                "vwap_atr_mult": 5.35862094000296,
+                "buy_factor": 0.9588858036468809,
+                "sell_factor": 0.5122440882501282,
+                "trailstop_pct": 2.932730691919952,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 97
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 130,
+            "value": 78.92748106060607,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 69,
+                "adx_thresh": 58.17142194723076,
+                "atr_mult": 9.32055286488176,
+                "vwap_atr_mult": 2.957875467580414,
+                "buy_factor": 0.9549043086513134,
+                "sell_factor": 0.5159899574868608,
+                "trailstop_pct": 3.0005480826638102,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 95
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 131,
+            "value": 105.50083333333333,
+            "params": {
+                "rsi_min_thresh": 46,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 56.65451524676969,
+                "atr_mult": 7.217226291583814,
+                "vwap_atr_mult": 4.483953982139941,
+                "buy_factor": 0.9646636958024909,
+                "sell_factor": 0.4993759517176551,
+                "trailstop_pct": 2.5369854051260603,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 98
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 132,
+            "value": 112.41018181818183,
+            "params": {
+                "rsi_min_thresh": 46,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 56.815708156814445,
+                "atr_mult": 7.3139054548705245,
+                "vwap_atr_mult": 5.438900721858737,
+                "buy_factor": 0.98634102700992,
+                "sell_factor": 0.5377463161770546,
+                "trailstop_pct": 2.5741588254499366,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 99
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 133,
+            "value": 100.32933712121209,
+            "params": {
+                "rsi_min_thresh": 46,
+                "rsi_max_thresh": 68,
+                "adx_thresh": 61.80177876804389,
+                "atr_mult": 7.284155906475972,
+                "vwap_atr_mult": 5.462433917201703,
+                "buy_factor": 0.9895414215081775,
+                "sell_factor": 0.5535569267960898,
+                "trailstop_pct": 2.5230454198027026,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 99
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 134,
+            "value": 96.87069696969698,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 70,
+                "adx_thresh": 58.46498963833007,
+                "atr_mult": 6.70885671501108,
+                "vwap_atr_mult": 3.8764539784872216,
+                "buy_factor": 0.9690923042265459,
+                "sell_factor": 0.5246635325819506,
+                "trailstop_pct": 2.814317474278987,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 98
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 135,
+            "value": 109.52519696969698,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 68,
+                "adx_thresh": 57.03995729264821,
+                "atr_mult": 7.509536613320484,
+                "vwap_atr_mult": 5.560309859723798,
+                "buy_factor": 0.9368967279124207,
+                "sell_factor": 0.5756177096449916,
+                "trailstop_pct": 2.6293147911383006,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 101
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 136,
+            "value": 106.19923106060604,
+            "params": {
+                "rsi_min_thresh": 50,
+                "rsi_max_thresh": 65,
+                "adx_thresh": 58.80614574270969,
+                "atr_mult": 9.014869595685772,
+                "vwap_atr_mult": 5.40173692365445,
+                "buy_factor": 0.9360672254658176,
+                "sell_factor": 0.5824035224279597,
+                "trailstop_pct": 3.2417735018095275,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 100
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 137,
+            "value": 7.937272727272746,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 68,
+                "adx_thresh": 28.567996222903357,
+                "atr_mult": 7.57603813988274,
+                "vwap_atr_mult": 6.208646942847623,
+                "buy_factor": 0.914938709123455,
+                "sell_factor": 0.536050111464558,
+                "trailstop_pct": 2.8640983165473255,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 101
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 138,
+            "value": 94.9678674242424,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 65,
+                "adx_thresh": 53.26084890786903,
+                "atr_mult": 6.422832663364377,
+                "vwap_atr_mult": 6.880150089575441,
+                "buy_factor": 0.942753433111051,
+                "sell_factor": 0.46581528416376444,
+                "trailstop_pct": 3.4063086881551534,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 104
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 139,
+            "value": 106.56309848484847,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 67,
+                "adx_thresh": 57.22961613452603,
+                "atr_mult": 9.613262940840194,
+                "vwap_atr_mult": 5.476205930893947,
+                "buy_factor": 0.9160765118549465,
+                "sell_factor": 0.5097012079523646,
+                "trailstop_pct": 3.0974311855471517,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 96
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 140,
+            "value": 98.3195075757576,
+            "params": {
+                "rsi_min_thresh": 44,
+                "rsi_max_thresh": 71,
+                "adx_thresh": 61.54608881505648,
+                "atr_mult": 6.994697209471681,
+                "vwap_atr_mult": 5.037621232019133,
+                "buy_factor": 0.9441415259964494,
+                "sell_factor": 0.5881087329555139,
+                "trailstop_pct": 2.685453305325182,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 89
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 141,
+            "value": 106.30214772727273,
+            "params": {
+                "rsi_min_thresh": 47,
+                "rsi_max_thresh": 68,
+                "adx_thresh": 57.43073900276893,
+                "atr_mult": 9.86668588686676,
+                "vwap_atr_mult": 5.5058507736298505,
+                "buy_factor": 0.9145108800759301,
+                "sell_factor": 0.5138486693515003,
+                "trailstop_pct": 2.092988644180817,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 96
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 142,
+            "value": 119.9315568181818,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 67,
+                "adx_thresh": 59.33043724923861,
+                "atr_mult": 8.526293912636069,
+                "vwap_atr_mult": 4.797898056363461,
+                "buy_factor": 0.977763957319578,
+                "sell_factor": 0.5477239528516841,
+                "trailstop_pct": 2.9224317246149667,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 98
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 143,
+            "value": 121.46173106060607,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 71,
+                "adx_thresh": 59.29361504344506,
+                "atr_mult": 8.60104365922311,
+                "vwap_atr_mult": 4.272371667863827,
+                "buy_factor": 0.9773109613157909,
+                "sell_factor": 0.5558892009483997,
+                "trailstop_pct": 2.614989934546821,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 97
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 144,
+            "value": -5.1195568181818665,
+            "params": {
+                "rsi_min_thresh": 49,
+                "rsi_max_thresh": 69,
+                "adx_thresh": 14.203066586739798,
+                "atr_mult": 8.798900958278308,
+                "vwap_atr_mult": 4.397408761415305,
+                "buy_factor": 0.9743877171417475,
+                "sell_factor": 0.5449092385467131,
+                "trailstop_pct": 2.5844238642732846,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 105
+            },
+            "state": "COMPLETE"
+        },
+        {
+            "number": 145,
+            "value": 121.65748863636362,
+            "params": {
+                "rsi_min_thresh": 50,
+                "rsi_max_thresh": 71,
+                "adx_thresh": 59.284368013442815,
+                "atr_mult": 7.594024796263216,
+                "vwap_atr_mult": 4.822508024012797,
+                "buy_factor": 0.9880477135512502,
+                "sell_factor": 0.5597458132126064,
+                "trailstop_pct": 1.7004403536786048,
+                "thresh_mode": "roll_mean",
+                "thresh_window": 102
+            },
+            "state": "COMPLETE"
+        }
+    ]
+}

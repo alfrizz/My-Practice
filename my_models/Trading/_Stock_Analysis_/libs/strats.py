@@ -89,11 +89,11 @@ def generate_actions(
 
         # BUY conditions
         if (
-            signal[i] >= sign_thr and
-            slope[i] > 0 and
-            adx[i] >= adx_thresh and
-            rsi_min_thresh < rsi[i] < rsi_max_thresh and 
-            close[i] > vwap_arr[i]
+            signal[i] > sign_thr and
+            slope[i] > 0 and # signal increasing
+            adx[i] > adx_thresh and # enough trend
+            rsi[i] < rsi_min_thresh and # oversold
+            close[i] > vwap_arr[i] # above volume weighted price
         ):
             df.at[df.index[i], "action"] = 1
             delta_buy = (signal[i] - sign_thr) / max(sign_thr, EPS)
@@ -102,8 +102,12 @@ def generate_actions(
         # SELL conditions
         elif (
             signal[i] < sign_thr and
-            slope[i] < 0 and
-            (close[i] < atr_arr[i] or close[i] < trail_arr[i])
+            slope[i] < 0 and # signal decreasing
+            adx[i] > adx_thresh and # enough trend
+            rsi[i] > rsi_max_thresh and # overbought
+            (close[i] < vwap_arr[i] or # below volume weighted price
+             close[i] < atr_arr[i] or # volatility threshold hit
+             close[i] < trail_arr[i]) # stop loss hit
         ):
             df.at[df.index[i], "action"] = -1
             delta_sell = (sign_thr - signal[i]) / max(sign_thr, EPS)
