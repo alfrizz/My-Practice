@@ -49,11 +49,11 @@ sync-practice.log   Logs of syncs and the autostart sequence; contains entries s
 C:\Users\alfri\.wslconfig
 -----------------------------------------------
 [wsl2]
-# Maximum RAM WSL2 can consume (leave the rest GB for Windows)
-memory=56GB
+# Leave 16GB for Windows to keep the host OS stable and prevent SSD swap thrashing
+memory=48GB
 
-# Number of virtual processors (leave at least 4 for host OS)
-processors=20
+# Leave a few CPU cores for Windows so the laptop doesn't freeze under load
+processors=16
 
 # Swap settings – large enough to avoid OOM, small enough to not thrash
 swap=16GB
@@ -94,7 +94,7 @@ G: /mnt/g drvfs metadata,uid=1000,gid=1000,fmask=111,umask=022 0 0
 # Delays swapping until RAM is under heavy pressure.
 vm.swappiness = 20
 # Disables heuristic overcommit; enforces allocation limits.
-vm.overcommit_memory = 2
+vm.overcommit_memory = 0
 # Allows processes to allocate up to 80 % of total RAM + swap.
 vm.overcommit_ratio = 80
 

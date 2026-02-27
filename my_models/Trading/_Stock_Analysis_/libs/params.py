@@ -22,14 +22,14 @@ ticker = 'AAPL'
 init_cash = 100000
 init_df_year = 2016
 month_to_check = '2021-01'
-sel_val_rmse = '0.16573'
+sel_val_rmse = '0.15884'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 feats_min_std = 0.03
 feats_max_corr = 0.999
-thresh_gb = 56 # use ram instead of memmap, if X_buf below this value
+thresh_gb = 8 # use ram instead of memmap, if X_buf below this value
 
 device = torch.device("cuda") 
 
@@ -49,28 +49,6 @@ feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
 sign_featall_csv = save_path / f"{ticker}_4_sign_featall.csv"
 pred_test_csv = save_path / f"{ticker}_5_pred_test.csv"
 pred_trainval_csv = save_path / f"{ticker}_5_pred_trainval.csv"
-
-
-# def _human(n):
-#     for u in ("B","KB","MB","GB"):
-#         if abs(n) < 1024: return f"{n:3.1f}{u}"
-#         n /= 1024
-#     return f"{n:.1f}TB"
-
-
-# def to_csv_with_progress(df, path, chunksize=10_000, index=True):
-#     with open(path, "w", newline="") as f:
-#         df.iloc[:0].to_csv(f, index=index, date_format="%Y-%m-%d %H:%M:%S")  # header only
-#         total = len(df)
-#         pbar = tqdm(total=total, desc="Saving CSV", unit="rows")
-#         for start in range(0, total, chunksize):
-#             end = start + chunksize
-#             df.iloc[start:end].to_csv(f, index=index, header=False, date_format="%Y-%m-%d %H:%M:%S")
-#             f.flush()
-#             pbar.update(min(end, total) - start)
-#             pbar.set_postfix_str(f"size={_human(f.tell())}")
-#         pbar.close()
-
 
 
 def _human(n):
@@ -124,16 +102,16 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":       True,   # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":   64,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_D_MODEL":   128,     # transformer embedding width (d_model); adapter maps upstream features into this
     "TRANSFORMER_LAYERS":    2,      # number of encoder layers
     "TRANSFORMER_HEADS":     4,      # attention heads in each layer
     "TRANSFORMER_FF_MULT":   4,      # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":         0.03,   # transformer dropout; ↑regularization
+    "DROPOUT_TRANS":         0.1,   # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":         False,  # enable bidirectional “long” LSTM
     "LONG_UNITS":            64,     # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
-    "DROPOUT_LONG":          0.1,    # dropout after projection (or long-LSTM)
+    "DROPOUT_LONG":          0.12,    # dropout after projection (or long-LSTM)
 
     # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
     "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
@@ -154,7 +132,7 @@ hparams = {
     "WEIGHT_DECAY":          2e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              2,      # max grad norm; ↑training stability, ↓gradient expressivity
     
-    "ONECYCLE_MAX_LR":       2e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       5e-4,   # peak LR in the cycle
     "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head ([0-1])
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
@@ -164,10 +142,10 @@ hparams = {
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           16,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
     "VAL_BATCH":             1,      # sequences per val batch
-    "TRAIN_WORKERS":         8,      # DataLoader workers; ↑throughput, ↓CPU contention
-    "TRAIN_PREFETCH_FACTOR": 4,      # prefetch factor; ↑loader speed, ↓memory overhead
+    "TRAIN_WORKERS":         4,      # Number of data batches each CPU worker process queues up in RAM in advance. DataLoader workers; ↑throughput, ↓CPU contention
+    "TRAIN_PREFETCH_FACTOR": 2,      # prefetch factor; ↑loader speed, ↓memory overhead
 
-    "LOOK_BACK":             30,     # length of each input window (how many minutes of history each training example contains)
+    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
     
     "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
@@ -273,6 +251,6 @@ if ticker == 'AAPL':
 
     strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
     signals_cols_tick    = ['close_raw', 'targ_signal', 'signal_thresh']
-    features_cols_tick   =  ['atr_pct_7', 'range_pct', 'atr_pct_28', 'ret_std_63', 'donch_w_20', 'ret_std_21', 'atr_pct_14', 'time_afthour', 'kc_w_20_20_1.5', 'bb_w_20_2p0', 'dist_low_200', 'time_in_sess', 'donch_w_55', 'trade_count', 'bb_w_50_2p0', 'lower_shad', 'time_premark', 'upper_shad', 'dist_high_200', 'time_hour', 'volume', 'time_minute', 'time_week_of_year', 'sma_pct_200', 'atr_7_RZ', 'time_month', 'atr_14_RZ', 'time_day_of_year', 'adx_28', 'vol_spike_28', 'sma_pct_50', 'atr_28_RZ', 'roc_5', 'body_pct', 'plus_di_14', 'roll_vwap_20_RZ', 'minus_di_7', 'plus_di_28', 'plus_di_7', 'rolling_max_close_200_RZ', 'minus_di_28', 'sma_pct_100', 'minus_di_14', 'roc_21', 'ret', 'rolling_min_close_200_RZ', 'rsi_21', 'ema_8_RZ', 'vol_spike_14', 'macd_signal_6_13_5_RZ']
+    features_cols_tick   = ['range_pct', 'atr_pct_7', 'bb_w_50_2p0', 'ret_std_21', 'bb_w_20_3p0', 'time_in_sess', 'atr_pct_14', 'donch_w_20', 'time_premark', 'kc_w_20_20_2.0', 'atr_pct_28', 'ret_std_63', 'time_afthour', 'upper_shad', 'donch_w_55', 'dist_low_100', 'lower_shad', 'trade_count', 'dist_high_100', 'time_hour', 'volume', 'time_day_of_year', 'vol_spike_28', 'time_month', 'atr_7_RZ', 'atr_14_RZ', 'minus_di_28', 'kc_h_20_20_1.5_RZ', 'ret', 'adx_28', 'time_minute', 'minus_di_14', 'plus_di_7', 'atr_21_RZ', 'atr_28_RZ', 'sma_pct_21', 'time_week_of_year', 'minus_di_21', 'donch_h_55_RZ', 'bb_lband_50_2p0_RZ', 'kc_h_20_20_2.0_RZ', 'minus_di_7', 'plus_di_28', 'bb_lband_20_3p0_RZ', 'bb_hband_50_2p0_RZ', 'plus_di_21', 'rsi_28', 'plus_di_14', 'stoch_d_9_3_3', 'roc_21']
 
 

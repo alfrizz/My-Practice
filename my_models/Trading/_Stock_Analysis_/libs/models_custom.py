@@ -79,38 +79,397 @@ def _allocate_lstm_states(batch_size: int,
 ###############
 
 
+# class ModelClass(nn.Module):
+#     """
+#     Minimal configurable backbone:
+#     - optional Conv1d -> optional TCN
+#     - optional short Bi-LSTM -> optional Transformer path (feature_proj + pos_enc)
+#     - short2long projection -> optional long Bi-LSTM -> pooling/attn -> MLP head
+#     - canonical input_proj registered so diagnostics map to raw features
+#     Naming, attribute names and forward semantics preserved from your last version.
+#     """
+
+#     def layer_projection(self, in_dim: int, out_dim: int) -> nn.Module:
+#         return nn.Identity() if in_dim == out_dim else nn.Linear(in_dim, out_dim)
+
+#     def __init__(
+#         self,
+#         n_feats: int,
+#         short_units: int,
+#         long_units: int,
+#         transformer_d_model: int,
+#         transformer_layers: int,
+#         dropout_short: float,
+#         dropout_long: float,
+#         dropout_trans: float,
+#         pred_hidden: int,
+#         look_back: int,
+#         use_conv: bool,
+#         use_tcn: bool,
+#         use_short_lstm: bool,
+#         use_transformer: bool,
+#         use_long_lstm: bool,
+#         use_delta: bool,
+#         flatten_mode: str,
+#     ):
+#         super().__init__()
+#         self.look_back = look_back
+#         self.short_units = short_units
+#         self.long_units = long_units
+#         self.use_conv = use_conv
+#         self.use_tcn = use_tcn
+#         self.use_short_lstm = use_short_lstm
+#         self.use_transformer = use_transformer
+#         self.use_long_lstm = use_long_lstm
+#         self.use_delta = use_delta
+
+#         assert short_units % 2 == 0 and long_units % 2 == 0
+
+#         # 0) Conv
+#         CONV_CHANNELS = params.hparams["CONV_CHANNELS"]
+#         if use_conv:
+#             conv_k, conv_dilation = params.hparams["CONV_K"], params.hparams["CONV_DILATION"]
+#             padding = (conv_k // 2) * conv_dilation
+#             self.conv = nn.Conv1d(n_feats, CONV_CHANNELS, kernel_size=conv_k, dilation=conv_dilation, padding=padding)
+#             self.bn = nn.GroupNorm(8, CONV_CHANNELS)
+#         else:
+#             self.conv = nn.Identity(); self.bn = nn.Identity()
+#         self.relu = nn.ReLU()
+
+#         # 1) TCN
+#         TCN_CHANNELS = params.hparams["TCN_CHANNELS"]
+#         if use_tcn:
+#             layers, k = params.hparams["TCN_LAYERS"], params.hparams["TCN_KERNEL"]
+#             blocks, in_ch = [], (CONV_CHANNELS if use_conv else n_feats)
+#             for i in range(layers):
+#                 d = 2 ** i; pad = (k // 2) * d
+#                 blocks += [nn.Conv1d(in_ch, TCN_CHANNELS, k, dilation=d, padding=pad),
+#                            nn.GroupNorm(8, TCN_CHANNELS), nn.ReLU()]
+#                 in_ch = TCN_CHANNELS
+#             self.tcn = nn.Sequential(*blocks)
+#         else:
+#             self.tcn = nn.Identity()
+
+#         # 2) Short LSTM
+#         short_in = (TCN_CHANNELS if use_tcn else (CONV_CHANNELS if use_conv else n_feats))
+#         if use_short_lstm:
+#             self.short_lstm = nn.LSTM(input_size=short_in, hidden_size=short_units // 2, batch_first=True, bidirectional=True)
+#             self.ln_short = nn.LayerNorm(short_units); self.do_short = nn.Dropout(dropout_short)
+#         else:
+#             self.short_lstm = None; self.ln_short = nn.Identity(); self.do_short = nn.Identity()
+#         self.h_short = None; self.c_short = None
+
+#         upstream_dim = short_units if use_short_lstm else short_in
+
+#         # canonical input projection raw->upstream (registered for diagnostics)
+#         self.input_proj = nn.Linear(n_feats, upstream_dim)
+#         nn.init.xavier_uniform_(self.input_proj.weight)
+#         if getattr(self.input_proj, "bias", None) is not None:
+#             nn.init.zeros_(self.input_proj.bias)
+
+#         # 3) Transformer adapter + modules
+#         if use_transformer:
+#             d_model = transformer_d_model
+#             heads = params.hparams["TRANSFORMER_HEADS"]
+#             ff_dim = d_model * params.hparams["TRANSFORMER_FF_MULT"]
+#             self.feature_proj = self.layer_projection(upstream_dim, d_model)
+#             self.pos_enc = PositionalEncoding(d_model=d_model, dropout=dropout_trans, max_len=look_back)
+#             enc_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=heads, dim_feedforward=ff_dim, dropout=dropout_trans)
+#             self.transformer = nn.TransformerEncoder(enc_layer, num_layers=transformer_layers)
+#         else:
+#             self.feature_proj = nn.Linear(upstream_dim, upstream_dim)
+#             nn.init.eye_(self.feature_proj.weight) if upstream_dim == upstream_dim else None
+#             if getattr(self.feature_proj, "bias", None) is not None:
+#                 nn.init.zeros_(self.feature_proj.bias)
+#             self.pos_enc = nn.Identity(); self.transformer = nn.Identity()
+
+#         # 4) Projection -> LayerNorm -> Dropout
+#         proj_in = transformer_d_model if use_transformer else upstream_dim
+#         self.short2long = self.layer_projection(proj_in, long_units)
+#         self.ln_proj = nn.LayerNorm(long_units); self.do_proj = nn.Dropout(dropout_long)
+
+#         # 5) Long LSTM
+#         if use_long_lstm:
+#             self.long_lstm = nn.LSTM(input_size=long_units, hidden_size=long_units // 2, batch_first=True, bidirectional=True)
+#             self.ln_long = nn.LayerNorm(long_units); self.do_long = nn.Dropout(dropout_long)
+#         else:
+#             self.long_lstm = None; self.ln_long = nn.Identity(); self.do_long = nn.Identity()
+#         self.h_long = None; self.c_long = None
+
+#         # 6) Head
+#         assert flatten_mode in ("flatten", "last", "pool", "attn")
+#         self.flatten_mode = flatten_mode
+#         flat_dim = (look_back * long_units if flatten_mode == "flatten" else long_units)
+#         self.ln_flat = nn.LayerNorm(flat_dim)
+#         self.head_flat = nn.Sequential(weight_norm(nn.Linear(flat_dim, pred_hidden)), nn.ReLU(), weight_norm(nn.Linear(pred_hidden, 1)))
+#         nn.init.zeros_(self.head_flat[-1].bias)
+#         self.attn_pool = nn.Linear(long_units, 1); nn.init.zeros_(self.attn_pool.bias)
+
+#         # 7) Delta head
+#         if self.use_delta:
+#             _d = nn.Linear(flat_dim, 1); nn.init.zeros_(_d.weight); nn.init.zeros_(_d.bias); self.delta_head = _d
+
+#     def forward(self, x: torch.Tensor):
+#         if x.dim() > 3:
+#             *lead, T, F = x.shape; x = x.view(-1, T, F)
+#         if x.dim() == 2:
+#             x = x.unsqueeze(0)
+#         B, T, _ = x.shape
+
+#         xc = self.conv(x.transpose(1,2)); xc = self.bn(xc); xc = self.relu(xc); x = xc.transpose(1,2)
+#         tcn_out = self.tcn(x.transpose(1,2)).transpose(1,2)
+
+#         if self.use_short_lstm:
+#             if self.h_short is None or self.h_short.size(1) != B:
+#                 self.h_short, self.c_short = _allocate_lstm_states(B, self.short_units // 2, True, x.device)
+#             out_s, (h_s, c_s) = self.short_lstm(tcn_out, (self.h_short, self.c_short))
+#             self.h_short, self.c_short = h_s.detach(), c_s.detach()
+#             out_s = self.ln_short(out_s); out_s = self.do_short(out_s)
+#         else:
+#             out_s = tcn_out
+
+#         # Transformer wiring: apply canonical input_proj only when its expected in_dim matches tensor last-dim
+#         if hasattr(self, "input_proj"):
+#             in_dim_expected = self.input_proj.weight.shape[1]
+#             if out_s.size(-1) == in_dim_expected:
+#                 pre_tr = self.input_proj(out_s)
+#             else:
+#                 pre_tr = out_s
+#         else:
+#             pre_tr = out_s
+
+#         tr_in = self.feature_proj(pre_tr)
+#         tr_in = self.pos_enc(tr_in)
+#         tr_out = self.transformer(tr_in.transpose(0,1).contiguous())
+#         out_t = tr_out.transpose(0,1).contiguous()
+
+#         out_p = self.short2long(out_t); out_p = self.ln_proj(out_p); out_p = self.do_proj(out_p)
+
+#         if self.use_long_lstm:
+#             if self.h_long is None or self.h_long.size(1) != B:
+#                 self.h_long, self.c_long = _allocate_lstm_states(B, self.long_units // 2, True, out_p.device)
+#             out_l, (h_l, c_l) = self.long_lstm(out_p, (self.h_long, self.c_long))
+#             self.h_long, self.c_long = h_l.detach(), c_l.detach()
+#             out_l = self.ln_long(out_l); out_l = self.do_long(out_l)
+#         else:
+#             out_l = out_p
+
+#         if self.flatten_mode == "flatten":
+#             flat = out_l.reshape(B, -1)
+#         elif self.flatten_mode == "last":
+#             flat = out_l[:, -1, :]
+#         elif self.flatten_mode == "attn":
+#             scores = self.attn_pool(out_l).squeeze(-1)
+#             weights = torch.softmax(scores, dim=1)
+#             flat = (out_l * weights.unsqueeze(-1)).sum(dim=1)
+#         else:
+#             flat = out_l.mean(dim=1)
+
+#         norm_flat = self.ln_flat(flat)
+#         base_out = self.head_flat(norm_flat)
+#         base = base_out.squeeze(-1)
+#         delta = self.delta_head(norm_flat).squeeze(-1) if self.use_delta else torch.zeros_like(base)
+#         return base.unsqueeze(-1), delta.unsqueeze(-1)
+
+
+
+# class ModelClass(nn.Module):
+#     """
+#     Minimal Configurable Backbone for Time-Series Prediction.
+    
+#     Functionality:
+#     - Routes a 3D tensor (Batch, Time, Features) through optional feature extractors.
+#     - Conv1d: Local temporal feature extraction.
+#     - TCN: Extended temporal receptive field via Temporal Convolutional Network.
+#     - Short Bi-LSTM: Captures immediate sequential dependencies.
+#     - Transformer: Captures long-range, non-linear global dependencies (Optimized with batch_first=True).
+#     - Long Bi-LSTM: Final sequential smoothing over the global transformer outputs.
+#     - Output Head: Flattens or pools the sequence to predict a base target.
+#     - Delta Head: Optionally predicts a residual (delta) target.
+#     """
+
+#     def layer_projection(self, in_dim: int, out_dim: int) -> nn.Module:
+#         """Helper to create a linear projection only if dimensions differ."""
+#         return nn.Identity() if in_dim == out_dim else nn.Linear(in_dim, out_dim)
+
+#     def __init__(
+#         self, n_feats: int, short_units: int, long_units: int, transformer_d_model: int,
+#         transformer_layers: int, dropout_short: float, dropout_long: float, dropout_trans: float,
+#         pred_hidden: int, look_back: int, use_conv: bool, use_tcn: bool, use_short_lstm: bool,
+#         use_transformer: bool, use_long_lstm: bool, use_delta: bool, flatten_mode: str,
+#     ):
+#         super().__init__()
+#         self.look_back = look_back
+#         self.short_units = short_units
+#         self.long_units = long_units
+#         self.use_conv, self.use_tcn = use_conv, use_tcn
+#         self.use_short_lstm, self.use_transformer = use_short_lstm, use_transformer
+#         self.use_long_lstm, self.use_delta = use_long_lstm, use_delta
+
+#         assert short_units % 2 == 0 and long_units % 2 == 0
+
+#         # 0) Conv Block
+#         CONV_CHANNELS = params.hparams["CONV_CHANNELS"]
+#         if use_conv:
+#             conv_k, conv_dilation = params.hparams["CONV_K"], params.hparams["CONV_DILATION"]
+#             padding = (conv_k // 2) * conv_dilation
+#             self.conv = nn.Conv1d(n_feats, CONV_CHANNELS, kernel_size=conv_k, dilation=conv_dilation, padding=padding)
+#             self.bn = nn.GroupNorm(8, CONV_CHANNELS)
+#         else:
+#             self.conv = nn.Identity(); self.bn = nn.Identity()
+#         self.relu = nn.ReLU()
+
+#         # 1) TCN Block
+#         TCN_CHANNELS = params.hparams["TCN_CHANNELS"]
+#         if use_tcn:
+#             layers, k = params.hparams["TCN_LAYERS"], params.hparams["TCN_KERNEL"]
+#             blocks, in_ch = [], (CONV_CHANNELS if use_conv else n_feats)
+#             for i in range(layers):
+#                 d = 2 ** i
+#                 pad = (k // 2) * d
+#                 blocks += [nn.Conv1d(in_ch, TCN_CHANNELS, k, dilation=d, padding=pad), nn.GroupNorm(8, TCN_CHANNELS), nn.ReLU()]
+#                 in_ch = TCN_CHANNELS
+#             self.tcn = nn.Sequential(*blocks)
+#         else:
+#             self.tcn = nn.Identity()
+
+#         # 2) Short LSTM Block
+#         short_in = (TCN_CHANNELS if use_tcn else (CONV_CHANNELS if use_conv else n_feats))
+#         if use_short_lstm:
+#             self.short_lstm = nn.LSTM(input_size=short_in, hidden_size=short_units // 2, batch_first=True, bidirectional=True)
+#             self.ln_short = nn.LayerNorm(short_units); self.do_short = nn.Dropout(dropout_short)
+#         else:
+#             self.short_lstm = None; self.ln_short = nn.Identity(); self.do_short = nn.Identity()
+#         self.h_short = self.c_short = None
+
+#         upstream_dim = short_units if use_short_lstm else short_in
+
+#         # Canonical input projection (raw->upstream) registered for feature diagnostics
+#         self.input_proj = nn.Linear(n_feats, upstream_dim)
+#         nn.init.xavier_uniform_(self.input_proj.weight)
+#         if getattr(self.input_proj, "bias", None) is not None:
+#             nn.init.zeros_(self.input_proj.bias)
+
+#         # 3) Transformer Block (OPTIMIZED)
+#         if use_transformer:
+#             d_model = transformer_d_model
+#             heads, ff_dim = params.hparams["TRANSFORMER_HEADS"], d_model * params.hparams["TRANSFORMER_FF_MULT"]
+#             self.feature_proj = self.layer_projection(upstream_dim, d_model)
+#             self.pos_enc = PositionalEncoding(d_model=d_model, dropout=dropout_trans, max_len=look_back)
+            
+#             # OPTIMIZATION: batch_first=True enables FlashAttention / Nested Tensors
+#             enc_layer = nn.TransformerEncoderLayer(
+#                 d_model=d_model, nhead=heads, dim_feedforward=ff_dim, 
+#                 dropout=dropout_trans, batch_first=True 
+#             )
+#             self.transformer = nn.TransformerEncoder(enc_layer, num_layers=transformer_layers)
+#         else:
+#             self.feature_proj = nn.Linear(upstream_dim, upstream_dim)
+#             if upstream_dim == upstream_dim: nn.init.eye_(self.feature_proj.weight) 
+#             if getattr(self.feature_proj, "bias", None) is not None: nn.init.zeros_(self.feature_proj.bias)
+#             self.pos_enc = nn.Identity(); self.transformer = nn.Identity()
+
+#         # 4) Bridge Projection
+#         proj_in = transformer_d_model if use_transformer else upstream_dim
+#         self.short2long = self.layer_projection(proj_in, long_units)
+#         self.ln_proj = nn.LayerNorm(long_units); self.do_proj = nn.Dropout(dropout_long)
+
+#         # 5) Long LSTM Block
+#         if use_long_lstm:
+#             self.long_lstm = nn.LSTM(input_size=long_units, hidden_size=long_units // 2, batch_first=True, bidirectional=True)
+#             self.ln_long = nn.LayerNorm(long_units); self.do_long = nn.Dropout(dropout_long)
+#         else:
+#             self.long_lstm = None; self.ln_long = nn.Identity(); self.do_long = nn.Identity()
+#         self.h_long = self.c_long = None
+
+#         # 6) Output Head
+#         assert flatten_mode in ("flatten", "last", "pool", "attn")
+#         self.flatten_mode = flatten_mode
+#         flat_dim = (look_back * long_units if flatten_mode == "flatten" else long_units)
+#         self.ln_flat = nn.LayerNorm(flat_dim)
+#         self.head_flat = nn.Sequential(weight_norm(nn.Linear(flat_dim, pred_hidden)), nn.ReLU(), weight_norm(nn.Linear(pred_hidden, 1)))
+#         nn.init.zeros_(self.head_flat[-1].bias)
+#         self.attn_pool = nn.Linear(long_units, 1); nn.init.zeros_(self.attn_pool.bias)
+
+#         # 7) Delta Head
+#         if self.use_delta:
+#             _d = nn.Linear(flat_dim, 1); nn.init.zeros_(_d.weight); nn.init.zeros_(_d.bias); self.delta_head = _d
+
+#     def forward(self, x: torch.Tensor):
+#         if x.dim() > 3:
+#             *lead, T, F = x.shape; x = x.view(-1, T, F)
+#         if x.dim() == 2: x = x.unsqueeze(0)
+#         B, T, _ = x.shape
+
+#         xc = self.conv(x.transpose(1, 2)); xc = self.bn(xc); xc = self.relu(xc); x = xc.transpose(1, 2)
+#         tcn_out = self.tcn(x.transpose(1, 2)).transpose(1, 2)
+
+#         if self.use_short_lstm:
+#             if self.h_short is None or self.h_short.size(1) != B:
+#                 self.h_short, self.c_short = _allocate_lstm_states(B, self.short_units // 2, True, x.device)
+#             out_s, (h_s, c_s) = self.short_lstm(tcn_out, (self.h_short, self.c_short))
+#             self.h_short, self.c_short = h_s.detach(), c_s.detach()
+#             out_s = self.do_short(self.ln_short(out_s))
+#         else:
+#             out_s = tcn_out
+
+#         if hasattr(self, "input_proj"):
+#             in_dim_expected = self.input_proj.weight.shape[1]
+#             pre_tr = self.input_proj(out_s) if out_s.size(-1) == in_dim_expected else out_s
+#         else:
+#             pre_tr = out_s
+
+#         tr_in = self.pos_enc(self.feature_proj(pre_tr))
+        
+#         # OPTIMIZATION: Transposes removed; relies on batch_first=True
+#         out_t = self.transformer(tr_in)
+
+#         out_p = self.do_proj(self.ln_proj(self.short2long(out_t)))
+
+#         if self.use_long_lstm:
+#             if self.h_long is None or self.h_long.size(1) != B:
+#                 self.h_long, self.c_long = _allocate_lstm_states(B, self.long_units // 2, True, out_p.device)
+#             out_l, (h_l, c_l) = self.long_lstm(out_p, (self.h_long, self.c_long))
+#             self.h_long, self.c_long = h_l.detach(), c_l.detach()
+#             out_l = self.do_long(self.ln_long(out_l))
+#         else:
+#             out_l = out_p
+
+#         if self.flatten_mode == "flatten": flat = out_l.reshape(B, -1)
+#         elif self.flatten_mode == "last": flat = out_l[:, -1, :]
+#         elif self.flatten_mode == "attn":
+#             weights = torch.softmax(self.attn_pool(out_l).squeeze(-1), dim=1)
+#             flat = (out_l * weights.unsqueeze(-1)).sum(dim=1)
+#         else: flat = out_l.mean(dim=1)
+
+#         norm_flat = self.ln_flat(flat)
+#         base = self.head_flat(norm_flat).squeeze(-1)
+#         delta = self.delta_head(norm_flat).squeeze(-1) if self.use_delta else torch.zeros_like(base)
+        
+#         return base.unsqueeze(-1), delta.unsqueeze(-1)
+        
+
+
 class ModelClass(nn.Module):
     """
-    Minimal configurable backbone:
-    - optional Conv1d -> optional TCN
-    - optional short Bi-LSTM -> optional Transformer path (feature_proj + pos_enc)
-    - short2long projection -> optional long Bi-LSTM -> pooling/attn -> MLP head
-    - canonical input_proj registered so diagnostics map to raw features
-    Naming, attribute names and forward semantics preserved from your last version.
+    Minimal Configurable Backbone for Time-Series Prediction.
+    
+    Functionality:
+    - Routes a 3D tensor (Batch, Time, Features) through optional feature extractors.
+    - Conditionally executes Conv1d, TCN, Bi-LSTMs, and Transformers based on hparams.
+    - Bypasses all overhead (like transposes and ReLUs) if a specific block is disabled.
+    - Uses batch_first=True for Transformer optimization.
+    - Output Head flattens or pools the sequence to predict a base target.
+    - Delta Head optionally predicts a residual (delta) target.
     """
-
     def layer_projection(self, in_dim: int, out_dim: int) -> nn.Module:
         return nn.Identity() if in_dim == out_dim else nn.Linear(in_dim, out_dim)
 
     def __init__(
-        self,
-        n_feats: int,
-        short_units: int,
-        long_units: int,
-        transformer_d_model: int,
-        transformer_layers: int,
-        dropout_short: float,
-        dropout_long: float,
-        dropout_trans: float,
-        pred_hidden: int,
-        look_back: int,
-        use_conv: bool,
-        use_tcn: bool,
-        use_short_lstm: bool,
-        use_transformer: bool,
-        use_long_lstm: bool,
-        use_delta: bool,
-        flatten_mode: str,
+        self, n_feats: int, short_units: int, long_units: int, transformer_d_model: int,
+        transformer_layers: int, dropout_short: float, dropout_long: float, dropout_trans: float,
+        pred_hidden: int, look_back: int, use_conv: bool, use_tcn: bool, use_short_lstm: bool,
+        use_transformer: bool, use_long_lstm: bool, use_delta: bool, flatten_mode: str,
     ):
         super().__init__()
         self.look_back = look_back
@@ -125,153 +484,176 @@ class ModelClass(nn.Module):
 
         assert short_units % 2 == 0 and long_units % 2 == 0
 
-        # 0) Conv
+        # 0) Conv Block (Safely packaged to prevent stray ReLUs on raw data)
         CONV_CHANNELS = params.hparams["CONV_CHANNELS"]
-        if use_conv:
+        if self.use_conv:
             conv_k, conv_dilation = params.hparams["CONV_K"], params.hparams["CONV_DILATION"]
             padding = (conv_k // 2) * conv_dilation
-            self.conv = nn.Conv1d(n_feats, CONV_CHANNELS, kernel_size=conv_k, dilation=conv_dilation, padding=padding)
-            self.bn = nn.GroupNorm(8, CONV_CHANNELS)
+            self.conv_block = nn.Sequential(
+                nn.Conv1d(n_feats, CONV_CHANNELS, kernel_size=conv_k, dilation=conv_dilation, padding=padding),
+                nn.GroupNorm(8, CONV_CHANNELS),
+                nn.ReLU()
+            )
         else:
-            self.conv = nn.Identity(); self.bn = nn.Identity()
-        self.relu = nn.ReLU()
+            self.conv_block = None
 
-        # 1) TCN
+        # 1) TCN Block
         TCN_CHANNELS = params.hparams["TCN_CHANNELS"]
-        if use_tcn:
+        if self.use_tcn:
             layers, k = params.hparams["TCN_LAYERS"], params.hparams["TCN_KERNEL"]
-            blocks, in_ch = [], (CONV_CHANNELS if use_conv else n_feats)
+            blocks = []
+            in_ch = CONV_CHANNELS if self.use_conv else n_feats
             for i in range(layers):
-                d = 2 ** i; pad = (k // 2) * d
-                blocks += [nn.Conv1d(in_ch, TCN_CHANNELS, k, dilation=d, padding=pad),
-                           nn.GroupNorm(8, TCN_CHANNELS), nn.ReLU()]
+                d = 2 ** i
+                pad = (k // 2) * d
+                blocks += [
+                    nn.Conv1d(in_ch, TCN_CHANNELS, k, dilation=d, padding=pad), 
+                    nn.GroupNorm(8, TCN_CHANNELS), 
+                    nn.ReLU()
+                ]
                 in_ch = TCN_CHANNELS
             self.tcn = nn.Sequential(*blocks)
         else:
-            self.tcn = nn.Identity()
+            self.tcn = None
 
-        # 2) Short LSTM
-        short_in = (TCN_CHANNELS if use_tcn else (CONV_CHANNELS if use_conv else n_feats))
-        if use_short_lstm:
+        # 2) Short LSTM Block
+        short_in = (TCN_CHANNELS if self.use_tcn else (CONV_CHANNELS if self.use_conv else n_feats))
+        if self.use_short_lstm:
             self.short_lstm = nn.LSTM(input_size=short_in, hidden_size=short_units // 2, batch_first=True, bidirectional=True)
-            self.ln_short = nn.LayerNorm(short_units); self.do_short = nn.Dropout(dropout_short)
+            self.ln_short = nn.LayerNorm(short_units)
+            self.do_short = nn.Dropout(dropout_short)
         else:
-            self.short_lstm = None; self.ln_short = nn.Identity(); self.do_short = nn.Identity()
-        self.h_short = None; self.c_short = None
+            self.short_lstm = None
+            
+        self.h_short = self.c_short = None
 
-        upstream_dim = short_units if use_short_lstm else short_in
+        upstream_dim = short_units if self.use_short_lstm else short_in
 
-        # canonical input projection raw->upstream (registered for diagnostics)
+        # Canonical input projection
         self.input_proj = nn.Linear(n_feats, upstream_dim)
         nn.init.xavier_uniform_(self.input_proj.weight)
         if getattr(self.input_proj, "bias", None) is not None:
             nn.init.zeros_(self.input_proj.bias)
 
-        # 3) Transformer adapter + modules
-        if use_transformer:
+        # 3) Transformer Block
+        if self.use_transformer:
             d_model = transformer_d_model
             heads = params.hparams["TRANSFORMER_HEADS"]
             ff_dim = d_model * params.hparams["TRANSFORMER_FF_MULT"]
             self.feature_proj = self.layer_projection(upstream_dim, d_model)
             self.pos_enc = PositionalEncoding(d_model=d_model, dropout=dropout_trans, max_len=look_back)
-            enc_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=heads, dim_feedforward=ff_dim, dropout=dropout_trans)
+            
+            enc_layer = nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=heads, dim_feedforward=ff_dim, 
+                dropout=dropout_trans, batch_first=True 
+            )
             self.transformer = nn.TransformerEncoder(enc_layer, num_layers=transformer_layers)
         else:
             self.feature_proj = nn.Linear(upstream_dim, upstream_dim)
-            nn.init.eye_(self.feature_proj.weight) if upstream_dim == upstream_dim else None
-            if getattr(self.feature_proj, "bias", None) is not None:
-                nn.init.zeros_(self.feature_proj.bias)
-            self.pos_enc = nn.Identity(); self.transformer = nn.Identity()
+            if upstream_dim == upstream_dim: nn.init.eye_(self.feature_proj.weight) 
+            if getattr(self.feature_proj, "bias", None) is not None: nn.init.zeros_(self.feature_proj.bias)
+            self.pos_enc = nn.Identity()
+            self.transformer = nn.Identity()
 
-        # 4) Projection -> LayerNorm -> Dropout
-        proj_in = transformer_d_model if use_transformer else upstream_dim
+        # 4) Bridge Projection
+        proj_in = transformer_d_model if self.use_transformer else upstream_dim
         self.short2long = self.layer_projection(proj_in, long_units)
-        self.ln_proj = nn.LayerNorm(long_units); self.do_proj = nn.Dropout(dropout_long)
+        self.ln_proj = nn.LayerNorm(long_units)
+        self.do_proj = nn.Dropout(dropout_long)
 
-        # 5) Long LSTM
-        if use_long_lstm:
+        # 5) Long LSTM Block
+        if self.use_long_lstm:
             self.long_lstm = nn.LSTM(input_size=long_units, hidden_size=long_units // 2, batch_first=True, bidirectional=True)
-            self.ln_long = nn.LayerNorm(long_units); self.do_long = nn.Dropout(dropout_long)
+            self.ln_long = nn.LayerNorm(long_units)
+            self.do_long = nn.Dropout(dropout_long)
         else:
-            self.long_lstm = None; self.ln_long = nn.Identity(); self.do_long = nn.Identity()
-        self.h_long = None; self.c_long = None
+            self.long_lstm = None
+            
+        self.h_long = self.c_long = None
 
-        # 6) Head
+        # 6) Output Head
         assert flatten_mode in ("flatten", "last", "pool", "attn")
         self.flatten_mode = flatten_mode
         flat_dim = (look_back * long_units if flatten_mode == "flatten" else long_units)
         self.ln_flat = nn.LayerNorm(flat_dim)
-        self.head_flat = nn.Sequential(weight_norm(nn.Linear(flat_dim, pred_hidden)), nn.ReLU(), weight_norm(nn.Linear(pred_hidden, 1)))
+        self.head_flat = nn.Sequential(
+            weight_norm(nn.Linear(flat_dim, pred_hidden)), 
+            nn.ReLU(), 
+            weight_norm(nn.Linear(pred_hidden, 1))
+        )
         nn.init.zeros_(self.head_flat[-1].bias)
-        self.attn_pool = nn.Linear(long_units, 1); nn.init.zeros_(self.attn_pool.bias)
+        self.attn_pool = nn.Linear(long_units, 1)
+        nn.init.zeros_(self.attn_pool.bias)
 
-        # 7) Delta head
+        # 7) Delta Head
         if self.use_delta:
-            _d = nn.Linear(flat_dim, 1); nn.init.zeros_(_d.weight); nn.init.zeros_(_d.bias); self.delta_head = _d
+            _d = nn.Linear(flat_dim, 1)
+            nn.init.zeros_(_d.weight)
+            nn.init.zeros_(_d.bias)
+            self.delta_head = _d
 
     def forward(self, x: torch.Tensor):
         if x.dim() > 3:
             *lead, T, F = x.shape; x = x.view(-1, T, F)
-        if x.dim() == 2:
+        if x.dim() == 2: 
             x = x.unsqueeze(0)
+            
         B, T, _ = x.shape
 
-        xc = self.conv(x.transpose(1,2)); xc = self.bn(xc); xc = self.relu(xc); x = xc.transpose(1,2)
-        tcn_out = self.tcn(x.transpose(1,2)).transpose(1,2)
+        # OPTIMIZATION: Only transpose if the layer is actually enabled
+        if self.conv_block is not None:
+            x = self.conv_block(x.transpose(1, 2)).transpose(1, 2)
+            
+        if self.tcn is not None:
+            x = self.tcn(x.transpose(1, 2)).transpose(1, 2)
 
         if self.use_short_lstm:
             if self.h_short is None or self.h_short.size(1) != B:
                 self.h_short, self.c_short = _allocate_lstm_states(B, self.short_units // 2, True, x.device)
-            out_s, (h_s, c_s) = self.short_lstm(tcn_out, (self.h_short, self.c_short))
+            out_s, (h_s, c_s) = self.short_lstm(x, (self.h_short, self.c_short))
             self.h_short, self.c_short = h_s.detach(), c_s.detach()
-            out_s = self.ln_short(out_s); out_s = self.do_short(out_s)
+            out_s = self.do_short(self.ln_short(out_s))
         else:
-            out_s = tcn_out
+            out_s = x
 
-        # Transformer wiring: apply canonical input_proj only when its expected in_dim matches tensor last-dim
+        # Input Projection
         if hasattr(self, "input_proj"):
             in_dim_expected = self.input_proj.weight.shape[1]
-            if out_s.size(-1) == in_dim_expected:
-                pre_tr = self.input_proj(out_s)
-            else:
-                pre_tr = out_s
+            pre_tr = self.input_proj(out_s) if out_s.size(-1) == in_dim_expected else out_s
         else:
             pre_tr = out_s
 
-        tr_in = self.feature_proj(pre_tr)
-        tr_in = self.pos_enc(tr_in)
-        tr_out = self.transformer(tr_in.transpose(0,1).contiguous())
-        out_t = tr_out.transpose(0,1).contiguous()
-
-        out_p = self.short2long(out_t); out_p = self.ln_proj(out_p); out_p = self.do_proj(out_p)
+        tr_in = self.pos_enc(self.feature_proj(pre_tr))
+        out_t = self.transformer(tr_in)
+        out_p = self.do_proj(self.ln_proj(self.short2long(out_t)))
 
         if self.use_long_lstm:
             if self.h_long is None or self.h_long.size(1) != B:
                 self.h_long, self.c_long = _allocate_lstm_states(B, self.long_units // 2, True, out_p.device)
             out_l, (h_l, c_l) = self.long_lstm(out_p, (self.h_long, self.c_long))
             self.h_long, self.c_long = h_l.detach(), c_l.detach()
-            out_l = self.ln_long(out_l); out_l = self.do_long(out_l)
+            out_l = self.do_long(self.ln_long(out_l))
         else:
             out_l = out_p
 
-        if self.flatten_mode == "flatten":
+        # Flatten / Pool
+        if self.flatten_mode == "flatten": 
             flat = out_l.reshape(B, -1)
-        elif self.flatten_mode == "last":
+        elif self.flatten_mode == "last": 
             flat = out_l[:, -1, :]
         elif self.flatten_mode == "attn":
-            scores = self.attn_pool(out_l).squeeze(-1)
-            weights = torch.softmax(scores, dim=1)
+            weights = torch.softmax(self.attn_pool(out_l).squeeze(-1), dim=1)
             flat = (out_l * weights.unsqueeze(-1)).sum(dim=1)
-        else:
+        else: 
             flat = out_l.mean(dim=1)
 
         norm_flat = self.ln_flat(flat)
-        base_out = self.head_flat(norm_flat)
-        base = base_out.squeeze(-1)
+        base = self.head_flat(norm_flat).squeeze(-1)
         delta = self.delta_head(norm_flat).squeeze(-1) if self.use_delta else torch.zeros_like(base)
+        
         return base.unsqueeze(-1), delta.unsqueeze(-1)
 
-
+        
 ######################################################################################################
 
 
@@ -468,80 +850,218 @@ def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
 #################### 
 
 
-def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
-                                       y_signal: torch.Tensor,
-                                       seq_lengths: list,
-                                       wd_batch: torch.Tensor,
-                                       reset_state_fn,
-                                       model,
-                                       prev_day=None):
-    """
-    Prepare per-window tensors from a padded flattened collate (minimal, no format checks).
+# def _prepare_windows_and_targets_batch(x_batch: torch.Tensor,
+#                                        y_signal: torch.Tensor,
+#                                        seq_lengths: list,
+#                                        wd_batch: torch.Tensor,
+#                                        reset_state_fn,
+#                                        model,
+#                                        prev_day=None):
+#     """
+#     Prepare per-window tensors from a padded flattened collate (minimal, no format checks).
 
-    Assumes pad_collate produced x_batch flattened as B blocks of W_max each:
-      x_batch.shape == (B * W_max, T, F)
-      y_signal.shape == (B * W_max,)
-      seq_lengths is a sequence of length B with true window counts per day.
-    Behaviour:
-      - Calls reset_state_fn(model, wd_batch[day_idx], prev_day) once per day.
-      - For day i takes the first L = seq_lengths[i] entries from block
-        x_batch[i*W_max : (i+1)*W_max].
-      - Returns (windows_tensor, targets_tensor, prev_day) where windows_tensor
-        has shape (N, T, F) and targets_tensor has shape (N,), with N = sum(seq_lengths).
-      - Minimal implementation: no layout detection or format checks.
-    """
-    device = x_batch.device
+#     Assumes pad_collate produced x_batch flattened as B blocks of W_max each:
+#       x_batch.shape == (B * W_max, T, F)
+#       y_signal.shape == (B * W_max,)
+#       seq_lengths is a sequence of length B with true window counts per day.
+#     Behaviour:
+#       - Calls reset_state_fn(model, wd_batch[day_idx], prev_day) once per day.
+#       - For day i takes the first L = seq_lengths[i] entries from block
+#         x_batch[i*W_max : (i+1)*W_max].
+#       - Returns (windows_tensor, targets_tensor, prev_day) where windows_tensor
+#         has shape (N, T, F) and targets_tensor has shape (N,), with N = sum(seq_lengths).
+#       - Minimal implementation: no layout detection or format checks.
+#     """
+#     device = x_batch.device
 
+#     B = len(seq_lengths)
+#     W_max = x_batch.size(0) // B
+
+#     windows_list = []
+#     targets_list = []
+
+#     for day_idx, L in enumerate(seq_lengths):
+#         prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)
+#         if L <= 0:
+#             continue
+#         base = day_idx * W_max
+#         windows_list.append(x_batch[base : base + L])   # (L, T, F)
+#         targets_list.append(y_signal[base : base + L])  # (L,)
+
+#     if not windows_list:
+#         return None, None, prev_day
+
+#     windows_tensor = torch.cat(windows_list, dim=0).to(device).float()
+#     targets_tensor = torch.cat(targets_list, dim=0).to(device).float()
+#     return windows_tensor, targets_tensor, prev_day
+
+
+# def _prepare_windows_and_targets_batch(
+#     x_batch: torch.Tensor, y_signal: torch.Tensor, seq_lengths: list,
+#     wd_batch: torch.Tensor, reset_state_fn, model, prev_day=None
+# ):
+#     """
+#     Extracts valid, unpadded windows and targets from a padded batch block.
+    
+#     Functionality:
+#     - Iterates through the batch to manage stateful LSTM resets across day boundaries.
+#     - If the batch has zero padding, skips slicing and returns raw tensors.
+#     - Uses a 1D boolean mask to instantly filter out padded windows in a single, 
+#       highly optimized GPU memory operation (replacing slow lists and torch.cat).
+#     """
+#     B = len(seq_lengths)
+#     W_max = x_batch.size(0) // B
+    
+#     # 1. Sequentially handle the day-by-day LSTM state resets
+#     for day_idx in range(B):
+#         prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)
+        
+#     total_valid = sum(seq_lengths)
+#     if total_valid == 0:
+#         return None, None, prev_day
+        
+#     # 2. FAST PATH: Skip masking if there is no padding
+#     if total_valid == B * W_max:
+#         return x_batch.float(), y_signal.float(), prev_day
+
+#     # 3. BOOLEAN MASKING: Blazing fast extraction of irregular blocks
+#     mask = torch.zeros(B * W_max, dtype=torch.bool)
+#     for i, L in enumerate(seq_lengths):
+#         if L > 0:
+#             start_idx = i * W_max
+#             mask[start_idx : start_idx + L] = True
+            
+#     mask = mask.to(x_batch.device, non_blocking=True)
+    
+#     windows_tensor = x_batch[mask].float()
+#     targets_tensor = y_signal[mask].float()
+
+#     return windows_tensor, targets_tensor, prev_day
+
+def _prepare_windows_and_targets_batch(
+    x_batch: torch.Tensor, y_signal: torch.Tensor, seq_lengths: list,
+    wd_batch: torch.Tensor, reset_state_fn, model, prev_day=None
+):
+    """
+    Extracts valid, unpadded windows and targets from a padded batch block.
+    
+    Functionality:
+    - Iterates through the batch to manage stateful LSTM resets across day boundaries.
+    - If the batch has zero padding, skips slicing and returns raw tensors (fast path).
+    - Uses a 1D boolean mask to filter out padded windows in a single GPU operation.
+    """
     B = len(seq_lengths)
     W_max = x_batch.size(0) // B
-
-    windows_list = []
-    targets_list = []
-
-    for day_idx, L in enumerate(seq_lengths):
+    
+    # 1. Sequentially handle the day-by-day LSTM state resets
+    for day_idx in range(B):
         prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)
-        if L <= 0:
-            continue
-        base = day_idx * W_max
-        windows_list.append(x_batch[base : base + L])   # (L, T, F)
-        targets_list.append(y_signal[base : base + L])  # (L,)
-
-    if not windows_list:
+        
+    total_valid = sum(seq_lengths)
+    if total_valid == 0:
         return None, None, prev_day
+        
+    # 2. FAST PATH: Skip masking if there is no padding
+    if total_valid == B * W_max:
+        return x_batch.float(), y_signal.float(), prev_day
 
-    windows_tensor = torch.cat(windows_list, dim=0).to(device).float()
-    targets_tensor = torch.cat(targets_list, dim=0).to(device).float()
+    # 3. BOOLEAN MASKING: Extract irregular blocks
+    # Pre-allocate mask on device to avoid CPU->GPU transfer cost
+    mask = torch.zeros(B * W_max, dtype=torch.bool, device=x_batch.device)
+    for i, L in enumerate(seq_lengths):
+        if L > 0:
+            start_idx = i * W_max
+            mask[start_idx : start_idx + L] = True
+            
+    windows_tensor = x_batch[mask].float()
+    targets_tensor = y_signal[mask].float()
+
     return windows_tensor, targets_tensor, prev_day
-
-
+    
 ########################
+
+
+# def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
+#     """
+#     Run model validation over a loader and return metrics and predictions.
+    
+#     Returns: (metrics_dict, preds_array, base_preds_array, targets_array)
+#     - Moves model to current parameter device and runs in eval mode with no grad.
+#     - Preserves model LSTM state across windows using prev_day and _prepare_windows_and_targets_batch.
+#     - Calls model(windows) -> (base, delta) and composes total = base + delta.
+#     - Collects CPU numpy arrays: tot_preds, base_preds, and targets for metrics.
+#     - Stores last_val_tot_preds, last_val_targs on the model for logging-
+#     """
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model.to(device).eval()
+#     model.h_short = model.h_long = None
+#     prev_day = None
+#     val_base_preds, val_tot_preds, val_targs, val_lengths = [], [], [], []
+
+#     with torch.no_grad():
+#         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in \
+#                 tqdm(loader, desc="eval", leave=False):
+
+#             x_batch = x_batch.to(device, non_blocking=True)
+#             y_signal = y_signal.to(device, non_blocking=True)
+
+#             # prepare windows and per-window scalar targets (single helper)
+#             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
+#                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
+#             )
+#             if windows_tensor is None:
+#                 continue
+   
+#             base_tensor, delta_tensor = model(windows_tensor)
+#             total_tensor = base_tensor + delta_tensor
+#             assert total_tensor.dim() == 2 and total_tensor.size(1) == 1
+            
+#             # total and base preds as CPU 1D lists
+#             val_base_preds.extend(base_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
+#             val_tot_preds.extend(total_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
+#             val_targs.extend(targets_tensor.cpu().tolist())
+#             val_lengths.extend([L for L in seq_lengths if L > 0])
+            
+#     val_base_preds = np.array(val_base_preds, dtype=np.float64)
+#     val_tot_preds = np.array(val_tot_preds, dtype=np.float64)
+#     val_targs = np.array(val_targs, dtype=np.float64)
+
+#     model.bl_val_mean, model.bl_val_pers = compute_baselines(np.asarray(val_targs), val_lengths)
+
+#     model.last_val_tot_preds  = torch.from_numpy(val_tot_preds).float()
+#     model.last_val_targs = torch.from_numpy(val_targs).float()
+   
+#     return _compute_metrics(val_tot_preds, val_targs), _compute_metrics(val_base_preds, val_targs), val_tot_preds, val_base_preds, val_targs
 
 
 def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
     """
     Run model validation over a loader and return metrics and predictions.
     
-    Returns: (metrics_dict, preds_array, base_preds_array, targets_array)
-    - Moves model to current parameter device and runs in eval mode with no grad.
-    - Preserves model LSTM state across windows using prev_day and _prepare_windows_and_targets_batch.
-    - Calls model(windows) -> (base, delta) and composes total = base + delta.
-    - Collects CPU numpy arrays: tot_preds, base_preds, and targets for metrics.
-    - Stores last_val_tot_preds, last_val_targs on the model for logging-
+    Functionality:
+    - Runs in eval() mode with torch.no_grad() to save memory.
+    - Preserves LSTM states correctly using _prepare_windows_and_targets_batch.
+    - Accumulates predictions as raw GPU tensors to avoid PCIe sync bottlenecks.
+    - Moves all tensors to CPU/Numpy only once at the end of the evaluation.
+    - Computes and stores baselines and metrics.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
     model.h_short = model.h_long = None
     prev_day = None
-    val_base_preds, val_tot_preds, val_targs, val_lengths = [], [], [], []
+    
+    # OPTIMIZATION: Accumulate GPU tensors, not CPU lists
+    val_base_preds_tensors = []
+    val_tot_preds_tensors = []
+    val_targs_tensors = []
+    val_lengths = []
 
     with torch.no_grad():
-        for x_batch, y_signal, rc, wd, ts_list, seq_lengths in \
-                tqdm(loader, desc="eval", leave=False):
+        for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(loader, desc="eval", leave=False):
 
             x_batch = x_batch.to(device, non_blocking=True)
             y_signal = y_signal.to(device, non_blocking=True)
 
-            # prepare windows and per-window scalar targets (single helper)
             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
             )
@@ -550,51 +1070,446 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
    
             base_tensor, delta_tensor = model(windows_tensor)
             total_tensor = base_tensor + delta_tensor
-            assert total_tensor.dim() == 2 and total_tensor.size(1) == 1
             
-            # total and base preds as CPU 1D lists
-            val_base_preds.extend(base_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
-            val_tot_preds.extend(total_tensor.reshape(total_tensor.size(0), -1)[:, 0].detach().cpu().tolist())
-            val_targs.extend(targets_tensor.cpu().tolist())
+            # OPTIMIZATION: Keep on GPU for now
+            val_base_preds_tensors.append(base_tensor.view(-1).detach())
+            val_tot_preds_tensors.append(total_tensor.view(-1).detach())
+            val_targs_tensors.append(targets_tensor.view(-1).detach())
             val_lengths.extend([L for L in seq_lengths if L > 0])
             
-    val_base_preds = np.array(val_base_preds, dtype=np.float64)
-    val_tot_preds = np.array(val_tot_preds, dtype=np.float64)
-    val_targs = np.array(val_targs, dtype=np.float64)
+    # Bulk move to CPU and convert to Numpy
+    val_base_preds = torch.cat(val_base_preds_tensors).cpu().numpy().astype(np.float64) if val_base_preds_tensors else np.array([], dtype=np.float64)
+    val_tot_preds = torch.cat(val_tot_preds_tensors).cpu().numpy().astype(np.float64) if val_tot_preds_tensors else np.array([], dtype=np.float64)
+    val_targs = torch.cat(val_targs_tensors).cpu().numpy().astype(np.float64) if val_targs_tensors else np.array([], dtype=np.float64)
 
-    model.bl_val_mean, model.bl_val_pers = compute_baselines(np.asarray(val_targs), val_lengths)
+    model.bl_val_mean, model.bl_val_pers = compute_baselines(val_targs, val_lengths)
 
-    model.last_val_tot_preds  = torch.from_numpy(val_tot_preds).float()
+    # Store for diagnostics
+    model.last_val_tot_preds = torch.from_numpy(val_tot_preds).float()
     model.last_val_targs = torch.from_numpy(val_targs).float()
    
     return _compute_metrics(val_tot_preds, val_targs), _compute_metrics(val_base_preds, val_targs), val_tot_preds, val_base_preds, val_targs
 
-
+    
 ###################################################################################################### 
 
+# def model_training_loop(
+#     model:                nn.Module,
+#     optimizer:            torch.optim.Optimizer,
+#     scheduler:            torch.optim.lr_scheduler.OneCycleLR,
+#     scaler:               torch.amp.GradScaler,
+#     train_loader,
+#     val_loader,
+#     all_features = False
+# ) -> float:
+#     """
+#     Train the model with a baseline head and a detached residual (delta) head using AMP.
+    
+#     Behavior summary
+#     - model(windows) -> (base, delta); prediction total = base + delta.
+#     - base is supervised by base_loss = CustomMSELoss(base, targets) smoothed.
+#     - delta is trained to match detached residual delta_target = (targets - base).detach(); delta_loss = CustomMSELoss(delta, delta_target) not smoothed.
+#     - Combined objective: total_loss = base_loss + lambda_delta * delta_loss.
+#     - Uses torch.amp.autocast (mixed precision) + GradScaler; unscale -> clip_grad_norm -> scaler.step/update; scheduler.step guarded to only run when optimizer.step executed.
+#     - Aggregates epoch metrics on total predictions and runs validation via eval_on_loader.
+    
+#     Returns best_val (best validation RMSE).
+#     """
+#     # zero-init delta head bias so delta starts neutral
+#     if getattr(model, "delta_head", None) is not None:
+#         torch.nn.init.zeros_(model.delta_head.bias)
+        
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model_feats = params.features_cols_tick
+#     model_hparams = params.hparams
+
+#     gc.collect()
+#     torch.cuda.empty_cache()
+#     model.to(device)
+
+#     live_plot = plots.LiveRMSEPlot()
+#     best_val, best_state, patience = float("inf"), None, 0
+#     models_dir = Path(params.models_folder)
+
+#     MSE_base = CustomMSELoss(
+#         alpha=float(model_hparams["ALPHA_SMOOTH"]),
+#         warmup_steps=int(model_hparams["WARMUP_STEPS"]),
+#         use_huber=bool(model_hparams["USE_HUBER"]),
+#         huber_delta=float(model_hparams["HUBER_DELTA"]),
+#     )
+    
+#     # delta head is trained to match detached residual; keep no slope penalty there
+#     MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
+
+#     for epoch in range(1, model_hparams["MAX_EPOCHS"] + 1):
+
+#         model.train()
+#         model.h_short = model.h_long = None
+
+#         tr_base_preds, tr_tot_preds, tr_targs, tr_delta_preds, tr_delta_targs, tr_lengths  = [], [], [], [], [], []           
+#         prev_day = None
+
+#         epoch_total_loss_sum = 0.0
+#         epoch_base_loss_sum = 0.0
+#         epoch_delta_loss_sum = 0.0
+#         epoch_loss_count = 0
+        
+#         epoch_start = datetime.utcnow().timestamp()
+#         epoch_samples = 0
+
+#         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in \
+#                 tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
+
+#             x_batch = x_batch.to(device, non_blocking=True)
+#             y_signal = y_signal.to(device, non_blocking=True)
+
+#             optimizer.zero_grad(set_to_none=True)
+
+#             # prepare windows and per-window scalar targets (single helper)
+#             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
+#                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
+#             )
+#             if windows_tensor is None:
+#                 continue
+
+#             with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
+ 
+#                 # model now returns primitive outputs: base (B,1) and delta (B,1)
+#                 base_tensor, delta_tensor = model(windows_tensor)  # base, delta each (B,1)
+#                 total_tensor = base_tensor + delta_tensor 
+                
+#                 base_tensor  = base_tensor.reshape(base_tensor.size(0), -1)[:, 0]
+#                 delta_tensor = delta_tensor.reshape(delta_tensor.size(0), -1)[:, 0]
+#                 total_tensor = total_tensor.reshape(total_tensor.size(0), -1)[:, 0]
+#                 assert total_tensor.shape[0] == targets_tensor.shape[0], "mismatch between model outputs and assembled targets"
+
+#                 # base loss: supervise the baseline head only
+#                 base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
+                
+#                 # teach delta to predict the detached residual
+#                 if model.use_delta and model_hparams["LAMBDA_DELTA"] > 0:
+#                     delta_target = (targets_tensor - base_tensor).detach()
+#                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
+#                     tr_delta_preds.extend(delta_tensor.detach().cpu().tolist())
+#                     tr_delta_targs.extend(delta_target.cpu().tolist())
+#                 else:
+#                     delta_loss = torch.tensor(0.0, device=base_tensor.device)
+
+#                 tr_base_preds.extend(base_tensor.detach().cpu().tolist())
+#                 tr_tot_preds.extend(total_tensor.detach().cpu().tolist())
+#                 tr_targs.extend(targets_tensor.cpu().tolist())
+#                 tr_lengths.extend([L for L in seq_lengths if L > 0])
+#                 epoch_samples += int(targets_tensor.size(0))
+
+#                 # combined training objective (final scalar used for backward)
+#                 total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
+
+#             # Backward (AMP) with event timing and a single host sync (for logging)
+#             if torch.cuda.is_available():
+#                 be0 = torch.cuda.Event(enable_timing=True); be1 = torch.cuda.Event(enable_timing=True)
+#                 be0.record()
+#                 scaler.scale(total_loss).backward()
+#                 be1.record()
+#                 torch.cuda.synchronize()    # single explicit sync to complete events
+#                 backward_ms = be0.elapsed_time(be1)
+#             else:
+#                 t0b = perf_counter()
+#                 scaler.scale(total_loss).backward()
+#                 backward_ms = (perf_counter() - t0b) * 1000.0
+#             model._last_backward_ms = backward_ms
+
+#             scaler.unscale_(optimizer)
+
+#             # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
+#             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
+#             if params_with_grad:
+#                 torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
+
+#             # Guard scheduler so it only advances when optimizer.step actually ran (prevents LR drift if GradScaler skipped the update)
+#             _called = {"v": False}
+#             _real = optimizer.step
+#             optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
+#             try:
+#                 scaler.step(optimizer)
+#             finally:
+#                 scaler.update()
+#             optimizer.step = _real
+#             if _called["v"]:
+#                 scheduler.step()
+  
+#             # After step: minimal host work (convert scalars/lists once)
+#             epoch_total_loss_sum += float(total_loss.detach().cpu())
+#             epoch_base_loss_sum += float(base_loss.detach().cpu())
+#             epoch_delta_loss_sum += float(delta_loss.detach().cpu())
+#             epoch_loss_count += 1
+
+#         # compute baselines for logging
+#         model.bl_tr_mean, model.bl_tr_pers = compute_baselines(np.asarray(tr_targs), tr_lengths)
+        
+#         # Metrics & validation
+#         tr_tot_metrics = _compute_metrics(np.array(tr_tot_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))
+#         tr_base_metrics = _compute_metrics(np.array(tr_base_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))  
+#         if len(tr_delta_preds) > 0:
+#             tr_delta_metrics = _compute_metrics(np.array(tr_delta_preds, dtype=np.float64), np.array(tr_delta_targs, dtype=np.float64))
+#         else:
+#             tr_delta_metrics = {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
+#         tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
+        
+#         val_tot_metrics, val_base_metrics, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
+#         val_tot_rmse, val_tot_r2 = val_tot_metrics["rmse"], val_tot_metrics["r2"]
+
+#         avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
+#         avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
+#         avg_delta_loss = epoch_delta_loss_sum / max(1, epoch_loss_count)
+
+#         epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
+#         model._last_epoch_elapsed = float(epoch_elapsed)
+#         model._last_epoch_samples = int(epoch_samples)
+    
+#         models_core.log_epoch_summary(
+#             epoch,
+#             model,
+#             optimizer,
+#             tr_tot_metrics=tr_tot_metrics,
+#             tr_base_metrics=tr_base_metrics,
+#             tr_delta_metrics=tr_delta_metrics,
+#             val_tot_metrics=val_tot_metrics,
+#             val_base_metrics=val_base_metrics,
+#             val_tot_preds=val_tot_preds,
+#             val_base_preds=val_base_preds,
+#             val_targs=val_targs,
+#             avg_base_loss=avg_base_loss,
+#             avg_delta_loss=avg_delta_loss,
+#             log_file=params.log_file,
+#             hparams=model_hparams,
+#         )
+#         live_plot.update(tr_tot_rmse, val_tot_rmse)
+
+#         best_val, improved, *_ = models_core.maybe_save_chkpt(
+#             models_dir, model, val_tot_rmse, best_val, model_feats, model_hparams,
+#             {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse}, live_plot
+#         )
+
+#         model._last_epoch_checkpoint = bool(improved)
+
+#         current_lr = optimizer.param_groups[0]["lr"]
+#         print(
+#             f"Epoch {epoch:02d}  "
+#             f"TRAIN→ RMSE={tr_tot_rmse:.5f}, R²={tr_tot_r2:.3f} |  "
+#             f"VALID→ RMSE={val_tot_rmse:.5f}, R²={val_tot_r2:.3f} |  "
+#             f"lr={current_lr:.2e} |  "
+#             f"loss={avg_loss:.5e} |  "
+#             f"improved={bool(improved)}"
+#         )
+
+#         if improved:
+#             best_state, patience = {
+#                 k: v.cpu() for k, v in model.state_dict().items()
+#             }, 0
+#         else:
+#             patience += 1
+#             if patience >= model_hparams["EARLY_STOP_PATIENCE"]:
+#                 break
+
+#     if best_state is not None:
+#         model.load_state_dict(best_state)
+#         models_core.save_final_chkpt(
+#             models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_tot_metrics, live_plot, 
+#             suffix="_all" if all_features else "_fin"
+#         )
+
+#     for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):
+#         try:
+#             delattr(model, attr)
+#         except Exception:
+#             pass
+
+#     return best_val
+
+
+# def model_training_loop(
+#     model: nn.Module, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.OneCycleLR,
+#     scaler: torch.amp.GradScaler, train_loader, val_loader, all_features=False
+# ) -> float:
+#     """
+#     Executes the main supervised training loop for the time-series model.
+    
+#     Functionality:
+#     - Runs AMP (Mixed Precision) forward passes.
+#     - Computes primary loss (Smoothed MSE) and secondary detached delta loss.
+#     - Prevents PCIe bottlenecks by accumulating prediction tensors entirely on the GPU.
+#     - Backpropagates scaled losses, clips gradients, and steps optimizer/scheduler safely.
+#     - Validates, logs metrics, and manages Checkpoints/Early Stopping.
+#     """
+#     if getattr(model, "delta_head", None) is not None:
+#         torch.nn.init.zeros_(model.delta_head.bias)
+        
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model_feats = params.features_cols_tick
+#     model_hparams = params.hparams
+
+#     gc.collect()
+#     if torch.cuda.is_available(): torch.cuda.empty_cache()
+#     model.to(device)
+
+#     live_plot = plots.LiveRMSEPlot()
+#     best_val, best_state, patience = float("inf"), None, 0
+#     models_dir = Path(params.models_folder)
+
+#     MSE_base = CustomMSELoss(
+#         alpha=float(model_hparams["ALPHA_SMOOTH"]), warmup_steps=int(model_hparams["WARMUP_STEPS"]),
+#         use_huber=bool(model_hparams["USE_HUBER"]), huber_delta=float(model_hparams["HUBER_DELTA"]),
+#     )
+#     MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
+
+#     for epoch in range(1, model_hparams["MAX_EPOCHS"] + 1):
+#         model.train()
+#         model.h_short = model.h_long = None
+#         prev_day = None
+
+#         # OPTIMIZATION: Accumulate GPU tensors directly
+#         tr_base_preds_tensors, tr_tot_preds_tensors, tr_targs_tensors = [], [], []
+#         tr_delta_preds_tensors, tr_delta_targs_tensors, tr_lengths = [], [], []
+        
+#         epoch_total_loss_sum = epoch_base_loss_sum = epoch_delta_loss_sum = 0.0
+#         epoch_loss_count = epoch_samples = 0
+#         epoch_start = datetime.utcnow().timestamp()
+
+#         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
+#             x_batch = x_batch.to(device, non_blocking=True)
+#             y_signal = y_signal.to(device, non_blocking=True)
+
+#             optimizer.zero_grad(set_to_none=True)
+
+#             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
+#                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
+#             )
+#             if windows_tensor is None: continue
+
+#             with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
+#                 base_tensor, delta_tensor = model(windows_tensor)  
+#                 total_tensor = base_tensor + delta_tensor 
+                
+#                 base_tensor, delta_tensor, total_tensor = base_tensor.view(-1), delta_tensor.view(-1), total_tensor.view(-1)
+                
+#                 base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
+                
+#                 if model.use_delta and model_hparams["LAMBDA_DELTA"] > 0:
+#                     delta_target = (targets_tensor - base_tensor).detach()
+#                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
+#                     tr_delta_preds_tensors.append(delta_tensor.detach())
+#                     tr_delta_targs_tensors.append(delta_target)
+#                 else:
+#                     delta_loss = torch.tensor(0.0, device=device)
+
+#                 tr_base_preds_tensors.append(base_tensor.detach())
+#                 tr_tot_preds_tensors.append(total_tensor.detach())
+#                 tr_targs_tensors.append(targets_tensor.detach())
+                
+#                 tr_lengths.extend([L for L in seq_lengths if L > 0])
+#                 epoch_samples += int(targets_tensor.size(0))
+
+#                 total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
+
+#             # OPTIMIZATION: No torch.cuda.synchronize() block
+#             scaler.scale(total_loss).backward()
+#             scaler.unscale_(optimizer)
+
+#             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
+#             if params_with_grad: torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
+
+#             # Guard scheduler
+#             _called = {"v": False}
+#             _real = optimizer.step
+#             optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
+#             try: scaler.step(optimizer)
+#             finally: scaler.update()
+#             optimizer.step = _real
+#             if _called["v"]: scheduler.step()
+  
+#             epoch_total_loss_sum += total_loss.item()
+#             epoch_base_loss_sum += base_loss.item()
+#             epoch_delta_loss_sum += delta_loss.item()
+#             epoch_loss_count += 1
+
+#         # ==== Bulk Data Transfer to CPU ====
+#         tr_base_preds = torch.cat(tr_base_preds_tensors).cpu().tolist() if tr_base_preds_tensors else []
+#         tr_tot_preds = torch.cat(tr_tot_preds_tensors).cpu().tolist() if tr_tot_preds_tensors else []
+#         tr_targs = torch.cat(tr_targs_tensors).cpu().tolist() if tr_targs_tensors else []
+        
+#         if len(tr_delta_preds_tensors) > 0:
+#             tr_delta_preds = torch.cat(tr_delta_preds_tensors).cpu().tolist()
+#             tr_delta_targs = torch.cat(tr_delta_targs_tensors).cpu().tolist()
+#         else:
+#             tr_delta_preds, tr_delta_targs = [], []
+
+#         # ==== Metrics & Validation ====
+#         model.bl_tr_mean, model.bl_tr_pers = compute_baselines(np.asarray(tr_targs), tr_lengths)
+        
+#         tr_tot_metrics = _compute_metrics(np.array(tr_tot_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))
+#         tr_base_metrics = _compute_metrics(np.array(tr_base_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))  
+#         tr_delta_metrics = _compute_metrics(np.array(tr_delta_preds, dtype=np.float64), np.array(tr_delta_targs, dtype=np.float64)) if tr_delta_preds else {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
+            
+#         tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
+#         val_tot_metrics, val_base_metrics, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
+#         val_tot_rmse, val_tot_r2 = val_tot_metrics["rmse"], val_tot_metrics["r2"]
+
+#         avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
+#         avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
+#         avg_delta_loss = epoch_delta_loss_sum / max(1, epoch_loss_count)
+
+#         model._last_epoch_elapsed = float(datetime.utcnow().timestamp() - epoch_start)
+#         model._last_epoch_samples = int(epoch_samples)
+    
+#         models_core.log_epoch_summary(
+#             epoch, model, optimizer, tr_tot_metrics=tr_tot_metrics, tr_base_metrics=tr_base_metrics,
+#             tr_delta_metrics=tr_delta_metrics, val_tot_metrics=val_tot_metrics, val_base_metrics=val_base_metrics,
+#             val_tot_preds=val_tot_preds, val_base_preds=val_base_preds, val_targs=val_targs,
+#             avg_base_loss=avg_base_loss, avg_delta_loss=avg_delta_loss, log_file=params.log_file, hparams=model_hparams,
+#         )
+#         live_plot.update(tr_tot_rmse, val_tot_rmse)
+
+#         best_val, improved, *_ = models_core.maybe_save_chkpt(
+#             models_dir, model, val_tot_rmse, best_val, model_feats, model_hparams,
+#             {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse}, live_plot
+#         )
+#         model._last_epoch_checkpoint = bool(improved)
+
+#         print(f"Epoch {epoch:02d}  TRAIN→ RMSE={tr_tot_rmse:.5f}, R²={tr_tot_r2:.3f} |  VALID→ RMSE={val_tot_rmse:.5f}, R²={val_tot_r2:.3f} |  lr={optimizer.param_groups[0]['lr']:.2e} |  loss={avg_loss:.5e} |  improved={bool(improved)}")
+
+#         if improved:
+#             best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+#             patience = 0
+#         else:
+#             patience += 1
+#             if patience >= model_hparams["EARLY_STOP_PATIENCE"]:
+#                 print(f"Early stopping triggered after {epoch} epochs.")
+#                 break
+
+#     if best_state is not None:
+#         model.load_state_dict(best_state)
+#         models_core.save_final_chkpt(models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_tot_metrics, live_plot, suffix="_all" if all_features else "_fin")
+
+#     for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):
+#         try: delattr(model, attr)
+#         except Exception: pass
+
+#     return best_val
+
 def model_training_loop(
-    model:                nn.Module,
-    optimizer:            torch.optim.Optimizer,
-    scheduler:            torch.optim.lr_scheduler.OneCycleLR,
-    scaler:               torch.amp.GradScaler,
-    train_loader,
-    val_loader,
-    all_features = False
+    model: nn.Module, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.OneCycleLR,
+    scaler: torch.amp.GradScaler, train_loader, val_loader, all_features=False
 ) -> float:
     """
-    Train the model with a baseline head and a detached residual (delta) head using AMP.
+    Executes the main supervised training loop for the time-series model.
     
-    Behavior summary
-    - model(windows) -> (base, delta); prediction total = base + delta.
-    - base is supervised by base_loss = CustomMSELoss(base, targets) smoothed.
-    - delta is trained to match detached residual delta_target = (targets - base).detach(); delta_loss = CustomMSELoss(delta, delta_target) not smoothed.
-    - Combined objective: total_loss = base_loss + lambda_delta * delta_loss.
-    - Uses torch.amp.autocast (mixed precision) + GradScaler; unscale -> clip_grad_norm -> scaler.step/update; scheduler.step guarded to only run when optimizer.step executed.
-    - Aggregates epoch metrics on total predictions and runs validation via eval_on_loader.
-    
-    Returns best_val (best validation RMSE).
+    Functionality:
+    - Runs AMP (Mixed Precision) forward passes.
+    - Computes primary loss (Smoothed MSE) and secondary detached delta loss.
+    - Prevents PCIe bottlenecks by accumulating prediction tensors entirely on the GPU.
+    - Backpropagates scaled losses, clips gradients, and steps optimizer/scheduler safely.
+    - Validates, logs metrics, and manages Checkpoints/Early Stopping.
     """
-    # zero-init delta head bias so delta starts neutral
     if getattr(model, "delta_head", None) is not None:
         torch.nn.init.zeros_(model.delta_head.bias)
         
@@ -603,7 +1518,7 @@ def model_training_loop(
     model_hparams = params.hparams
 
     gc.collect()
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available(): torch.cuda.empty_cache()
     model.to(device)
 
     live_plot = plots.LiveRMSEPlot()
@@ -611,129 +1526,101 @@ def model_training_loop(
     models_dir = Path(params.models_folder)
 
     MSE_base = CustomMSELoss(
-        alpha=float(model_hparams["ALPHA_SMOOTH"]),
-        warmup_steps=int(model_hparams["WARMUP_STEPS"]),
-        use_huber=bool(model_hparams["USE_HUBER"]),
-        huber_delta=float(model_hparams["HUBER_DELTA"]),
+        alpha=float(model_hparams["ALPHA_SMOOTH"]), warmup_steps=int(model_hparams["WARMUP_STEPS"]),
+        use_huber=bool(model_hparams["USE_HUBER"]), huber_delta=float(model_hparams["HUBER_DELTA"]),
     )
-    
-    # delta head is trained to match detached residual; keep no slope penalty there
     MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
 
     for epoch in range(1, model_hparams["MAX_EPOCHS"] + 1):
-
         model.train()
         model.h_short = model.h_long = None
-
-        tr_base_preds, tr_tot_preds, tr_targs, tr_delta_preds, tr_delta_targs, tr_lengths  = [], [], [], [], [], []           
         prev_day = None
 
-        epoch_total_loss_sum = 0.0
-        epoch_base_loss_sum = 0.0
-        epoch_delta_loss_sum = 0.0
-        epoch_loss_count = 0
+        # OPTIMIZATION: Accumulate GPU tensors directly
+        tr_base_preds_tensors, tr_tot_preds_tensors, tr_targs_tensors = [], [], []
+        tr_delta_preds_tensors, tr_delta_targs_tensors, tr_lengths = [], [], []
         
+        epoch_total_loss_sum = epoch_base_loss_sum = epoch_delta_loss_sum = 0.0
+        epoch_loss_count = epoch_samples = 0
         epoch_start = datetime.utcnow().timestamp()
-        epoch_samples = 0
 
-        for x_batch, y_signal, rc, wd, ts_list, seq_lengths in \
-                tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
-
+        for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False):
             x_batch = x_batch.to(device, non_blocking=True)
             y_signal = y_signal.to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
 
-            # prepare windows and per-window scalar targets (single helper)
             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
             )
-            if windows_tensor is None:
-                continue
+            if windows_tensor is None: continue
 
             with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
- 
-                # model now returns primitive outputs: base (B,1) and delta (B,1)
-                base_tensor, delta_tensor = model(windows_tensor)  # base, delta each (B,1)
+                base_tensor, delta_tensor = model(windows_tensor)  
                 total_tensor = base_tensor + delta_tensor 
                 
-                base_tensor  = base_tensor.reshape(base_tensor.size(0), -1)[:, 0]
-                delta_tensor = delta_tensor.reshape(delta_tensor.size(0), -1)[:, 0]
-                total_tensor = total_tensor.reshape(total_tensor.size(0), -1)[:, 0]
-                assert total_tensor.shape[0] == targets_tensor.shape[0], "mismatch between model outputs and assembled targets"
-
-                # base loss: supervise the baseline head only
+                base_tensor, delta_tensor, total_tensor = base_tensor.view(-1), delta_tensor.view(-1), total_tensor.view(-1)
+                
                 base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
                 
-                # teach delta to predict the detached residual
                 if model.use_delta and model_hparams["LAMBDA_DELTA"] > 0:
                     delta_target = (targets_tensor - base_tensor).detach()
                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
-                    tr_delta_preds.extend(delta_tensor.detach().cpu().tolist())
-                    tr_delta_targs.extend(delta_target.cpu().tolist())
+                    tr_delta_preds_tensors.append(delta_tensor.detach())
+                    tr_delta_targs_tensors.append(delta_target)
                 else:
-                    delta_loss = torch.tensor(0.0, device=base_tensor.device)
+                    delta_loss = torch.tensor(0.0, device=device)
 
-                tr_base_preds.extend(base_tensor.detach().cpu().tolist())
-                tr_tot_preds.extend(total_tensor.detach().cpu().tolist())
-                tr_targs.extend(targets_tensor.cpu().tolist())
+                tr_base_preds_tensors.append(base_tensor.detach())
+                tr_tot_preds_tensors.append(total_tensor.detach())
+                tr_targs_tensors.append(targets_tensor.detach())
+                
                 tr_lengths.extend([L for L in seq_lengths if L > 0])
                 epoch_samples += int(targets_tensor.size(0))
 
-                # combined training objective (final scalar used for backward)
                 total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
 
-            # Backward (AMP) with event timing and a single host sync (for logging)
-            if torch.cuda.is_available():
-                be0 = torch.cuda.Event(enable_timing=True); be1 = torch.cuda.Event(enable_timing=True)
-                be0.record()
-                scaler.scale(total_loss).backward()
-                be1.record()
-                torch.cuda.synchronize()    # single explicit sync to complete events
-                backward_ms = be0.elapsed_time(be1)
-            else:
-                t0b = perf_counter()
-                scaler.scale(total_loss).backward()
-                backward_ms = (perf_counter() - t0b) * 1000.0
-            model._last_backward_ms = backward_ms
-
+            # OPTIMIZATION: No torch.cuda.synchronize() block
+            scaler.scale(total_loss).backward()
             scaler.unscale_(optimizer)
 
-            # Clip and step (operate on pre-built params_with_grad list to avoid repeated generator overhead)
             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
-            if params_with_grad:
-                torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
+            if params_with_grad: torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
 
-            # Guard scheduler so it only advances when optimizer.step actually ran (prevents LR drift if GradScaler skipped the update)
+            # Guard scheduler
             _called = {"v": False}
             _real = optimizer.step
             optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
-            try:
-                scaler.step(optimizer)
-            finally:
-                scaler.update()
+            try: scaler.step(optimizer)
+            finally: scaler.update()
             optimizer.step = _real
-            if _called["v"]:
-                scheduler.step()
+            if _called["v"]: scheduler.step()
   
-            # After step: minimal host work (convert scalars/lists once)
-            epoch_total_loss_sum += float(total_loss.detach().cpu())
-            epoch_base_loss_sum += float(base_loss.detach().cpu())
-            epoch_delta_loss_sum += float(delta_loss.detach().cpu())
+            epoch_total_loss_sum += total_loss.item()
+            epoch_base_loss_sum += base_loss.item()
+            epoch_delta_loss_sum += delta_loss.item()
             epoch_loss_count += 1
 
-        # compute baselines for logging
-        model.bl_tr_mean, model.bl_tr_pers = compute_baselines(np.asarray(tr_targs), tr_lengths)
+        # ==== Bulk Data Transfer to CPU (Straight to NumPy) ====
+        tr_base_preds = torch.cat(tr_base_preds_tensors).cpu().numpy().astype(np.float64) if tr_base_preds_tensors else np.array([], dtype=np.float64)
+        tr_tot_preds  = torch.cat(tr_tot_preds_tensors).cpu().numpy().astype(np.float64)  if tr_tot_preds_tensors  else np.array([], dtype=np.float64)
+        tr_targs      = torch.cat(tr_targs_tensors).cpu().numpy().astype(np.float64)      if tr_targs_tensors      else np.array([], dtype=np.float64)
         
-        # Metrics & validation
-        tr_tot_metrics = _compute_metrics(np.array(tr_tot_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))
-        tr_base_metrics = _compute_metrics(np.array(tr_base_preds, dtype=np.float64), np.array(tr_targs, dtype=np.float64))  
-        if len(tr_delta_preds) > 0:
-            tr_delta_metrics = _compute_metrics(np.array(tr_delta_preds, dtype=np.float64), np.array(tr_delta_targs, dtype=np.float64))
+        if len(tr_delta_preds_tensors) > 0:
+            tr_delta_preds = torch.cat(tr_delta_preds_tensors).cpu().numpy().astype(np.float64)
+            tr_delta_targs = torch.cat(tr_delta_targs_tensors).cpu().numpy().astype(np.float64)
         else:
-            tr_delta_metrics = {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
-        tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
+            tr_delta_preds, tr_delta_targs = np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
+        # ==== Metrics & Validation ====
+        model.bl_tr_mean, model.bl_tr_pers = compute_baselines(tr_targs, tr_lengths)
         
+        # Now we can pass them directly without redefining np.array()
+        tr_tot_metrics   = _compute_metrics(tr_tot_preds, tr_targs)
+        tr_base_metrics  = _compute_metrics(tr_base_preds, tr_targs)  
+        tr_delta_metrics = _compute_metrics(tr_delta_preds, tr_delta_targs) if tr_delta_preds.size else {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
+            
+        tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
         val_tot_metrics, val_base_metrics, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
         val_tot_rmse, val_tot_r2 = val_tot_metrics["rmse"], val_tot_metrics["r2"]
 
@@ -741,26 +1628,14 @@ def model_training_loop(
         avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
         avg_delta_loss = epoch_delta_loss_sum / max(1, epoch_loss_count)
 
-        epoch_elapsed = datetime.utcnow().timestamp() - epoch_start
-        model._last_epoch_elapsed = float(epoch_elapsed)
+        model._last_epoch_elapsed = float(datetime.utcnow().timestamp() - epoch_start)
         model._last_epoch_samples = int(epoch_samples)
     
         models_core.log_epoch_summary(
-            epoch,
-            model,
-            optimizer,
-            tr_tot_metrics=tr_tot_metrics,
-            tr_base_metrics=tr_base_metrics,
-            tr_delta_metrics=tr_delta_metrics,
-            val_tot_metrics=val_tot_metrics,
-            val_base_metrics=val_base_metrics,
-            val_tot_preds=val_tot_preds,
-            val_base_preds=val_base_preds,
-            val_targs=val_targs,
-            avg_base_loss=avg_base_loss,
-            avg_delta_loss=avg_delta_loss,
-            log_file=params.log_file,
-            hparams=model_hparams,
+            epoch, model, optimizer, tr_tot_metrics=tr_tot_metrics, tr_base_metrics=tr_base_metrics,
+            tr_delta_metrics=tr_delta_metrics, val_tot_metrics=val_tot_metrics, val_base_metrics=val_base_metrics,
+            val_tot_preds=val_tot_preds, val_base_preds=val_base_preds, val_targs=val_targs,
+            avg_base_loss=avg_base_loss, avg_delta_loss=avg_delta_loss, log_file=params.log_file, hparams=model_hparams,
         )
         live_plot.update(tr_tot_rmse, val_tot_rmse)
 
@@ -768,45 +1643,88 @@ def model_training_loop(
             models_dir, model, val_tot_rmse, best_val, model_feats, model_hparams,
             {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse}, live_plot
         )
-
         model._last_epoch_checkpoint = bool(improved)
 
-        current_lr = optimizer.param_groups[0]["lr"]
-        print(
-            f"Epoch {epoch:02d}  "
-            f"TRAIN→ RMSE={tr_tot_rmse:.5f}, R²={tr_tot_r2:.3f} |  "
-            f"VALID→ RMSE={val_tot_rmse:.5f}, R²={val_tot_r2:.3f} |  "
-            f"lr={current_lr:.2e} |  "
-            f"loss={avg_loss:.5e} |  "
-            f"improved={bool(improved)}"
-        )
+        print(f"Epoch {epoch:02d}  TRAIN→ RMSE={tr_tot_rmse:.5f}, R²={tr_tot_r2:.3f} |  VALID→ RMSE={val_tot_rmse:.5f}, R²={val_tot_r2:.3f} |  lr={optimizer.param_groups[0]['lr']:.2e} |  loss={avg_loss:.5e} |  improved={bool(improved)}")
 
         if improved:
-            best_state, patience = {
-                k: v.cpu() for k, v in model.state_dict().items()
-            }, 0
+            best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+            patience = 0
         else:
             patience += 1
             if patience >= model_hparams["EARLY_STOP_PATIENCE"]:
+                print(f"Early stopping triggered after {epoch} epochs.")
                 break
 
     if best_state is not None:
         model.load_state_dict(best_state)
-        models_core.save_final_chkpt(
-            models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_tot_metrics, live_plot, 
-            suffix="_all" if all_features else "_fin"
-        )
+        models_core.save_final_chkpt(models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_tot_metrics, live_plot, suffix="_all" if all_features else "_fin")
 
     for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):
-        try:
-            delattr(model, attr)
-        except Exception:
-            pass
+        try: delattr(model, attr)
+        except Exception: pass
 
     return best_val
-
-
+    
 ######################################################################################################
+
+
+# def add_preds_and_split(
+#     df: pd.DataFrame,
+#     train_preds: np.ndarray,
+#     val_preds:   np.ndarray,
+#     test_preds:  np.ndarray,
+#     end_times_tr:  np.ndarray,
+#     end_times_val: np.ndarray,
+#     end_times_te:  np.ndarray,
+# ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+#     """
+#     Stamp per-window predictions onto minute bars and return (train+val, test) rows with pred_signal.
+#     Fail-fast checks: matching lengths, no duplicate prediction timestamps, and all timestamps present in df.index.
+#     Adds simple synthetic bid/ask from close_raw.
+#     Assumes tz-consistent or tz-naive timestamps.
+#     """
+#     # length checks
+#     for name, preds, times in (
+#         ("train", train_preds, end_times_tr),
+#         ("val",   val_preds,   end_times_val),
+#         ("test",  test_preds,  end_times_te),
+#     ):
+#         if len(np.asarray(preds).ravel()) != len(np.asarray(times)):
+#             raise ValueError(f"{name} preds length != times length: {len(preds)} != {len(times)}")
+
+#     df = df.copy()
+#     df["pred_signal"] = np.nan
+#     df["ask"] = df["close_raw"] * (1 + params.bidask_spread_pct / 100.0)
+#     df["bid"] = df["close_raw"] * (1 - params.bidask_spread_pct / 100.0)
+
+#     def _series(preds, times, name):
+#         idx = pd.to_datetime(times)
+#         if pd.Index(idx).has_duplicates:
+#             dup = pd.Index(idx)[pd.Index(idx).duplicated(keep=False)][:5]
+#             raise ValueError(f"{name} timestamps contain duplicates, e.g. {dup.tolist()}")
+#         return pd.Series(np.asarray(preds).ravel(), index=idx)
+
+#     # build series and validate
+#     s_tr  = _series(train_preds, end_times_tr, "train")
+#     s_val = _series(val_preds,   end_times_val, "val")
+#     s_te  = _series(test_preds,  end_times_te,  "test")
+
+#     # stamp predictions with a simple progress bar
+#     for desc, s in (("train", s_tr), ("val", s_val), ("test", s_te)):
+#         missing = s.index.difference(df.index)
+#         if not missing.empty:
+#             raise KeyError(f"{desc} timestamps not in df.index; e.g. {missing[:5].tolist()} (total {len(missing)})")
+#         for ts in tqdm(s.index, desc=f"Stamping {desc}", unit="ts"):
+#             df.at[ts, "pred_signal"] = s.at[ts]
+
+#     # split outputs where pred_signal exists
+#     idx_trval = s_tr.index.union(s_val.index)
+#     idx_te    = s_te.index
+#     df_trainval = df.loc[idx_trval].dropna(subset=["pred_signal"])
+#     df_test     = df.loc[idx_te].dropna(subset=["pred_signal"])
+
+#     return df_trainval, df_test
 
 
 def add_preds_and_split(
@@ -819,12 +1737,17 @@ def add_preds_and_split(
     end_times_te:  np.ndarray,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Stamp per-window predictions onto minute bars and return (train+val, test) rows with pred_signal.
-    Fail-fast checks: matching lengths, no duplicate prediction timestamps, and all timestamps present in df.index.
-    Adds simple synthetic bid/ask from close_raw.
-    Assumes tz-consistent or tz-naive timestamps.
+    Stamp per-window predictions onto minute bars and return (train+val, test) DataFrames.
+    
+    Functionality:
+    1. Fail-fast validation: Ensures prediction arrays and timestamp arrays are the same length.
+    2. Bid/Ask creation: Adds synthetic bid/ask columns based on close_raw and params.bidask_spread_pct.
+    3. Duplicate checks: Ensures no duplicate timestamps exist in the prediction arrays.
+    4. Vectorized Stamping (Optimized): Uses Pandas bulk `.loc` assignment to map predictions 
+       onto the main DataFrame instantaneously, bypassing slow Python row-by-row iteration.
+    5. Splitting: Separates the main DataFrame into a train/val block and a test block.
     """
-    # length checks
+    # 1. Length checks
     for name, preds, times in (
         ("train", train_preds, end_times_tr),
         ("val",   val_preds,   end_times_val),
@@ -835,9 +1758,12 @@ def add_preds_and_split(
 
     df = df.copy()
     df["pred_signal"] = np.nan
+    
+    # 2. Add synthetic bid/ask spread
     df["ask"] = df["close_raw"] * (1 + params.bidask_spread_pct / 100.0)
     df["bid"] = df["close_raw"] * (1 - params.bidask_spread_pct / 100.0)
 
+    # 3. Helper to build validated Pandas Series
     def _series(preds, times, name):
         idx = pd.to_datetime(times)
         if pd.Index(idx).has_duplicates:
@@ -845,22 +1771,25 @@ def add_preds_and_split(
             raise ValueError(f"{name} timestamps contain duplicates, e.g. {dup.tolist()}")
         return pd.Series(np.asarray(preds).ravel(), index=idx)
 
-    # build series and validate
+    # Build series for each split
     s_tr  = _series(train_preds, end_times_tr, "train")
     s_val = _series(val_preds,   end_times_val, "val")
     s_te  = _series(test_preds,  end_times_te,  "test")
 
-    # stamp predictions with a simple progress bar
+    # 4. OPTIMIZED: Vectorized stamping
+    # Using .loc directly maps the whole array of values to the matching indices instantly
     for desc, s in (("train", s_tr), ("val", s_val), ("test", s_te)):
         missing = s.index.difference(df.index)
         if not missing.empty:
             raise KeyError(f"{desc} timestamps not in df.index; e.g. {missing[:5].tolist()} (total {len(missing)})")
-        for ts in tqdm(s.index, desc=f"Stamping {desc}", unit="ts"):
-            df.at[ts, "pred_signal"] = s.at[ts]
+        
+        # This one line replaces the slow 'for ts in tqdm(s.index): df.at[ts, "pred_signal"] = s.at[ts]'
+        df.loc[s.index, "pred_signal"] = s.values
 
-    # split outputs where pred_signal exists
+    # 5. Split outputs where pred_signal exists
     idx_trval = s_tr.index.union(s_val.index)
     idx_te    = s_te.index
+    
     df_trainval = df.loc[idx_trval].dropna(subset=["pred_signal"])
     df_test     = df.loc[idx_te].dropna(subset=["pred_signal"])
 

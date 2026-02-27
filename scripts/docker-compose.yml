@@ -10,9 +10,9 @@ services:
     restart: unless-stopped
 
     gpus: all
-    cpus: "18.0"
-    mem_limit: "52g"
-    shm_size: 32g     
+    cpus: "14.0"         # Leaves 2 cores for WSL background tasks
+    mem_limit: "42g"     # Gives WSL a 6GB buffer to breathe
+    shm_size: 8g         # Lowered since we are using 0 workers for now
     ports:
       - "8888:8888"
 
