@@ -37,52 +37,157 @@ def plot_close_volume(df, title="Close Price and Volume"):
 #################################################################################
 
 
+# class LiveRMSEPlot:
+#     """
+#     LiveRMSEPlot updates a single figure to show training progress without spawning
+#     a new image for each epoch. It works with different matplotlib backends, e.g.,
+#     %matplotlib inline, widget, or notebook.
+
+#     The plot displays:
+#       - Blue line and dot: training RMSE history.
+#       - Orange line and dot: validation RMSE history.
+
+#     If the latest validation RMSE is not a number (NaN), the corresponding dot is
+#     hidden by setting its offsets to an empty 2D array.
+#     """
+
+#     def __init__(self):
+#         # Retrieve the current matplotlib backend and convert it to lowercase.
+#         self.backend = matplotlib.get_backend().lower()
+#         # Build the figure and axes.
+#         self._build_figure()
+#         # Display the figure once and keep a reference to the display_id so that we can
+#         # update the same output cell on subsequent calls instead of spawning a new figure.
+#         self.disp_id = display(self.fig, display_id=True)
+#         # Initialize empty lists to store epoch numbers and RMSE metrics.
+#         self.e, self.tr, self.va = [], [], []      # e = epochs, tr = train RMSE, va = validation RMSE
+
+#     # ------------------------------------------------------------------ #
+#     def _build_figure(self):
+#         """
+#         Constructs and configures the matplotlib figure and axes.
+#         - Creates empty line plots for training (blue) and validation (orange).
+#         - Creates scatter plot objects (dots) for the latest RMSE values.
+#         - Sets up grid, labels, title, and legend.
+#         """
+#         self.fig, self.ax = plt.subplots(figsize=(6, 4), dpi=110)
+#         self.ax.set(xlabel="epoch", ylabel="RMSE", title="Training progress")
+#         self.ax.grid(True)
+        
+#         # Create a blue line for training RMSE.
+#         (self.tr_line,) = self.ax.plot([], [], c="#1f77b4", lw=1.5)
+#         # Create an orange line for validation RMSE.
+#         (self.va_line,) = self.ax.plot([], [], c="#ff7f0e", lw=1.5)
+#         # Create scatter objects for the latest training and validation points.
+#         self.tr_dot = self.ax.scatter([], [], c="#1f77b4", s=30)
+#         self.va_dot = self.ax.scatter([], [], c="#ff7f0e", s=30)
+        
+#         # Add a legend to differentiate between training and validation RMSE.
+#         self.ax.legend(["train", "val"])
+
+#     # ------------------------------------------------------------------ #
+#     def update(self, train_rmse: float, val_rmse: float):
+#         """
+#         Updates the live plot with new training and validation RMSE values.
+
+#         Steps:
+#          1. Append the new epoch and metric values.
+#          2. Update the line plots with the full RMSE history.
+#          3. Update the latest dot position for both training and validation.
+#             - If the validation RMSE is NaN, hide its dot by setting an empty 2D array.
+#          4. Recalculate and update axis limits.
+#          5. Redraw the figure using the appropriate method for the backend.
+#         """
+#         # 1. Append new data:
+#         #    - Epochs are automatically numbered starting from 1.
+#         self.e.append(len(self.e) + 1)
+#         self.tr.append(train_rmse)
+#         self.va.append(val_rmse)
+        
+#         # 2. Update line plots:
+#         #    - For the training line, simply use all available data.
+#         self.tr_line.set_data(self.e, self.tr)
+        
+#         #    - For the validation line, filter out non-finite values (e.g., NaN).
+#         finite = np.isfinite(self.va)
+#         self.va_line.set_data(np.asarray(self.e)[finite],
+#                               np.asarray(self.va)[finite])
+        
+#         # 3. Update the latest dots:
+#         #    - Always update the training dot with the most recent training RMSE.
+#         self.tr_dot.set_offsets([[self.e[-1], self.tr[-1]]])
+        
+#         #    - For the validation dot, only update if the latest value is finite.
+#         if np.isfinite(self.va[-1]):
+#             self.va_dot.set_offsets([[self.e[-1], self.va[-1]]])
+#         else:
+#             # Instead of an empty list, we pass an empty 2D NumPy array with shape (0,2)
+#             # to properly hide the dot when the validation RMSE is NaN.
+#             self.va_dot.set_offsets(np.empty((0, 2)))
+        
+#         # 4. Rescale the axes:
+#         #    - This ensures all data is visible in the plot.
+#         self.ax.relim()
+#         self.ax.autoscale_view()
+        
+#         # 5. Redraw the figure:
+#         #    - For widget backends, use draw_idle to schedule a redraw.
+#         #    - For inline / notebook backends, force a redraw and update the output cell.
+#         if "widget" in self.backend or "ipympl" in self.backend:
+#             self.fig.canvas.draw_idle()
+#         else:
+#             self.fig.canvas.draw()
+#             self.disp_id.update(self.fig)
+
+
 class LiveRMSEPlot:
     """
     LiveRMSEPlot updates a single figure to show training progress without spawning
-    a new image for each epoch. It works with different matplotlib backends, e.g.,
-    %matplotlib inline, widget, or notebook.
+    a new image for each epoch. 
 
-    The plot displays:
-      - Blue line and dot: training RMSE history.
-      - Orange line and dot: validation RMSE history.
-
-    If the latest validation RMSE is not a number (NaN), the corresponding dot is
-    hidden by setting its offsets to an empty 2D array.
+    Functionality:
+    - Clears old ghost figures from memory on initialization to prevent RAM leaks.
+    - Displays a blue line/dot for training RMSE and an orange line/dot for validation RMSE.
+    - Hides validation dots if the value is NaN.
+    - Re-renders the canvas efficiently using set_data and set_offsets.
     """
 
     def __init__(self):
-        # Retrieve the current matplotlib backend and convert it to lowercase.
+        # FIX MEMORY LEAK: Close any lingering matplotlib figures from previous cell executions
+        plt.close('all')
+        
+        # Retrieve the current matplotlib backend and convert it to lowercase
         self.backend = matplotlib.get_backend().lower()
-        # Build the figure and axes.
+        
+        # Build the figure and axes safely
         self._build_figure()
-        # Display the figure once and keep a reference to the display_id so that we can
-        # update the same output cell on subsequent calls instead of spawning a new figure.
+        
+        # Display the figure once and keep a reference to the display_id
         self.disp_id = display(self.fig, display_id=True)
-        # Initialize empty lists to store epoch numbers and RMSE metrics.
-        self.e, self.tr, self.va = [], [], []      # e = epochs, tr = train RMSE, va = validation RMSE
+        
+        # Initialize empty lists to store epoch numbers and RMSE metrics
+        self.e, self.tr, self.va = [], [], []
 
     # ------------------------------------------------------------------ #
     def _build_figure(self):
         """
         Constructs and configures the matplotlib figure and axes.
-        - Creates empty line plots for training (blue) and validation (orange).
-        - Creates scatter plot objects (dots) for the latest RMSE values.
+        - Creates empty line plots and scatter dots.
         - Sets up grid, labels, title, and legend.
         """
         self.fig, self.ax = plt.subplots(figsize=(6, 4), dpi=110)
         self.ax.set(xlabel="epoch", ylabel="RMSE", title="Training progress")
         self.ax.grid(True)
         
-        # Create a blue line for training RMSE.
+        # Create a blue line for training RMSE
         (self.tr_line,) = self.ax.plot([], [], c="#1f77b4", lw=1.5)
-        # Create an orange line for validation RMSE.
+        # Create an orange line for validation RMSE
         (self.va_line,) = self.ax.plot([], [], c="#ff7f0e", lw=1.5)
-        # Create scatter objects for the latest training and validation points.
+        # Create scatter objects for the latest training and validation points
         self.tr_dot = self.ax.scatter([], [], c="#1f77b4", s=30)
         self.va_dot = self.ax.scatter([], [], c="#ff7f0e", s=30)
         
-        # Add a legend to differentiate between training and validation RMSE.
+        # Add a legend
         self.ax.legend(["train", "val"])
 
     # ------------------------------------------------------------------ #
@@ -91,55 +196,44 @@ class LiveRMSEPlot:
         Updates the live plot with new training and validation RMSE values.
 
         Steps:
-         1. Append the new epoch and metric values.
-         2. Update the line plots with the full RMSE history.
-         3. Update the latest dot position for both training and validation.
-            - If the validation RMSE is NaN, hide its dot by setting an empty 2D array.
-         4. Recalculate and update axis limits.
-         5. Redraw the figure using the appropriate method for the backend.
+        1. Append the new epoch and metric values.
+        2. Update the line plots with the full RMSE history.
+        3. Update the latest dot position, hiding the validation dot if NaN.
+        4. Recalculate and update axis limits.
+        5. Redraw the figure efficiently based on the backend.
         """
-        # 1. Append new data:
-        #    - Epochs are automatically numbered starting from 1.
+        # 1. Append new data
         self.e.append(len(self.e) + 1)
         self.tr.append(train_rmse)
         self.va.append(val_rmse)
         
-        # 2. Update line plots:
-        #    - For the training line, simply use all available data.
+        # 2. Update line plots
         self.tr_line.set_data(self.e, self.tr)
         
-        #    - For the validation line, filter out non-finite values (e.g., NaN).
         finite = np.isfinite(self.va)
         self.va_line.set_data(np.asarray(self.e)[finite],
                               np.asarray(self.va)[finite])
         
-        # 3. Update the latest dots:
-        #    - Always update the training dot with the most recent training RMSE.
+        # 3. Update the latest dots
         self.tr_dot.set_offsets([[self.e[-1], self.tr[-1]]])
         
-        #    - For the validation dot, only update if the latest value is finite.
         if np.isfinite(self.va[-1]):
             self.va_dot.set_offsets([[self.e[-1], self.va[-1]]])
         else:
-            # Instead of an empty list, we pass an empty 2D NumPy array with shape (0,2)
-            # to properly hide the dot when the validation RMSE is NaN.
             self.va_dot.set_offsets(np.empty((0, 2)))
         
-        # 4. Rescale the axes:
-        #    - This ensures all data is visible in the plot.
+        # 4. Rescale the axes
         self.ax.relim()
         self.ax.autoscale_view()
         
-        # 5. Redraw the figure:
-        #    - For widget backends, use draw_idle to schedule a redraw.
-        #    - For inline / notebook backends, force a redraw and update the output cell.
+        # 5. Redraw the figure
         if "widget" in self.backend or "ipympl" in self.backend:
             self.fig.canvas.draw_idle()
         else:
             self.fig.canvas.draw()
             self.disp_id.update(self.fig)
 
-
+            
 #########################################################################################################
 
 

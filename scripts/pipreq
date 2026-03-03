@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
-REQS="$PROJECT/scripts/requirements.txt"
+REQS="/home/alfrizz/scripts/requirements.txt"
 CONTAINER="gpu-jl"
 
 for pkg in "$@"; do

@@ -16,6 +16,9 @@ LOCK="/tmp/sync-practice.lock"
 TARGET="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
 PS_CMD='/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 
+# 1) PRE-REBOOT CLEANUP: Remove old locks to ensure clean start
+rm -f "$LOCK"
+
 # Single-instance lock
 exec 9>"$LOCK"
 if ! flock -n 9; then
@@ -46,30 +49,36 @@ for i in {1..300}; do
   sleep 1
 done
 
-# Start Unison in background (ignore transient manual log and runlog)
-# repear every xxx seconds (eg 900), and copy only if size lower than yyy KB (eg 150 MB = 150*1024 KB)
-unison \
-  -root "$HOME" -root "$TARGET" -fat -perms 0 -batch -auto -times \
-  -maxbackups 1 -confirmmerge=false -prefer newer -links false -fastcheck true \
-  -repeat 900 -silent \
-  -maxsizethreshold $((150*1024)) \
-  -ignore 'Name .*' \
-  -ignore 'Path jlenv/**' \
-  -ignore 'Path snap/**' \
-  -ignore 'Path bin/**' \
-  -ignore 'Name docker_tmp' \
-  -ignore 'Name __pycache__' \
-  -ignore 'Name *.pyc' \
-  -ignore 'Name sync-practice.log' \
-  -ignore 'Name sync-practice-manual.log' \
-  -ignore 'Name sync-practice.runlog' \
-  -ignore 'Name *.pth' \
-  -ignore 'Name *.lnk' \
-  -logfile "$LOG" &
+# Start Unison daily in the background
+(
+  while true; do
+    unison \
+      -root "$HOME" -root "$TARGET" -fat -perms 0 -batch -auto -times \
+      -maxbackups 1 -confirmmerge=false -prefer newer -links false -fastcheck true \
+      -silent \
+      -maxsizethreshold 1048576 \
+      -ignore 'Name .*' \
+      -ignore 'Path jlenv/**' \
+      -ignore 'Path snap/**' \
+      -ignore 'Path bin/**' \
+      -ignore 'Name docker_tmp' \
+      -ignore 'Name __pycache__' \
+      -ignore 'Name *.pyc' \
+      -ignore 'Name sync-practice.log' \
+      -ignore 'Name sync-practice-manual.log' \
+      -ignore 'Name sync-practice.runlog' \
+      -ignore 'Name *.pth' \
+      -ignore 'Name *.lnk' \
+      -logfile "$LOG" || true
+      
+    # 2) CORRECT TIMER: 3 hours (10800s) to avoid thrashing CPU
+    sleep 10800
+  done
+) &
 
 chmod -R u+rwX "$HOME/scripts" || true
 
-# Docker and Jupyter handling (simple)
+# Docker and Jupyter handling
 MAX_DOCKER_WAIT=300
 SLEEP=2
 echo "$(date) Waiting up to ${MAX_DOCKER_WAIT}s for Docker daemon..." >>"$LOG"
@@ -78,20 +87,21 @@ for _ in $(seq 1 $((MAX_DOCKER_WAIT / SLEEP))); do
   if docker info >/dev/null 2>&1; then
     echo "$(date) Docker available; ensuring gpu-jl is running." >>"$LOG"
 
+    # 3) FIX PORT CONFLICT: Stop container first to clear port 8888
+    docker stop gpu-jl 2>/dev/null || true
+
     if docker ps -a --format '{{.Names}}' | grep -xq gpu-jl; then
       docker start gpu-jl >>"$LOG" 2>&1 || echo "$(date) Failed to start gpu-jl" >>"$LOG"
     else
       docker-compose -f "$HOME/scripts/docker-compose.yml" up -d --no-deps jupyter >>"$LOG" 2>&1 || echo "$(date) Failed to create/start gpu-jl via docker-compose" >>"$LOG"
     fi
 
-    # Wait for entrypoint to detect the host mount, then wait for Jupyter and open localhost in Windows
+    # Wait for entrypoint to detect data
     for _ in $(seq 1 60); do
-      if docker logs --tail 200 gpu-jl 2>/dev/null | grep -q 'Detected host mount for /workspace'; then
-        # Wait until Jupyter responds, then open browser
+      if docker logs --tail 200 gpu-jl 2>/dev/null | grep -q 'Detected data in /workspace'; then
         for _ in $(seq 1 60); do
           if curl -sSf http://localhost:8888/lab >/dev/null 2>&1; then
 
-            # Minimal, safe: wait for Windows explorer to be present before invoking Start-Process
             for try in $(seq 1 60); do
               if [ -x "$PS_CMD" ] && "$PS_CMD" -NoProfile -Command "if (Get-Process -Name explorer -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >/dev/null 2>&1; then
                 break
@@ -99,7 +109,6 @@ for _ in $(seq 1 $((MAX_DOCKER_WAIT / SLEEP))); do
               sleep 2
             done
 
-            # harmless readiness marker
             touch /tmp/jupyter-ready
 
             if [ -x "$PS_CMD" ]; then
@@ -121,4 +130,3 @@ for _ in $(seq 1 $((MAX_DOCKER_WAIT / SLEEP))); do
   fi
   sleep $SLEEP
 done
-

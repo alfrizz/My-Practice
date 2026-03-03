@@ -39,126 +39,6 @@ import matplotlib.pyplot as plt
 #########################################################################################################
 
 
-# def build_tensors(
-#     df,
-#     look_back,
-#     features_cols,
-#     *,
-#     col_close  = 'close_raw',
-#     col_signal = 'targ_signal',
-#     device     = torch.device("cpu"),
-#     tmp_dir    = "/tmp/X_buf.dat",
-#     thresh_gb  = params.thresh_gb,
-# ) -> tuple[
-#     torch.Tensor,  # X         shape=(N, look_back, F)
-#     torch.Tensor,  # y_sig     shape=(N,)
-#     torch.Tensor,  # raw_close shape=(N,)
-#     np.ndarray     # end_times shape=(N,) dtype=datetime64[ns]
-# ]:
-#     """
-#     Build sliding-window tensors for an LSTM trading model.
-
-#     - Two-pass per-day builder:
-#         1) scan each day to collect per-day arrays and compute total windows (N_total);
-#         2) allocate buffers (RAM or memmap) sized to N_total and write sliding windows in parallel.
-#     - Produces X (N, look_back, F), y_sig, raw_close and end_times.
-#     - Windows are aligned to their end positions (index[look_back-1:]) and all window-ends are kept.
-#     """
-#     # number of features
-#     F = len(features_cols)
-
-#     # 1) First pass: collect per-day payloads and compute N_total
-#     day_groups = df.groupby(df.index.normalize(), sort=False)
-#     payloads = []
-#     N_total = 0
-
-#     for _, day_df in tqdm(day_groups, desc="Preparing days"):
-#         day_df = day_df.sort_index()
-#         T = len(day_df)
-#         if T <= look_back:
-#             continue  # not enough bars to form a single window
-
-#         # per-day arrays
-#         feats_np = np.ascontiguousarray(day_df[features_cols].to_numpy(np.float32))  # (T, F) C-contiguous
-#         sig_np   = day_df[col_signal].to_numpy(np.float32)   # (T,)
-#         close_np = day_df[col_close].to_numpy(np.float32)        # (T,)
-
-#         # window-end alignment: windows end at indices look_back-1 .. T-1
-#         ends_np = day_df.index.to_numpy()[look_back - 1:]           # (T - look_back + 1,)
-#         m = len(ends_np)                                            # number of windows for this day
-#         if m == 0:
-#             continue
-
-#         # end-aligned slices
-#         sig_end   = sig_np[look_back - 1:]
-#         close_end = close_np[look_back - 1:]
-
-#         # payload: per-day arrays and write offset (no mask)
-#         payloads.append((feats_np, sig_end, close_end, ends_np, N_total))
-#         N_total += m
-
-#     # summary and size estimate
-#     print("N_total:", N_total, "look_back:", look_back, "F:", F)
-#     est_bytes = int(N_total) * int(look_back) * int(F) * 4
-#     est_gb = est_bytes / (1024**3)
-#     print(f"Estimated X_buf size: {est_bytes/1e9:.2f} GB — {'using memmap' if est_gb > thresh_gb else 'using RAM (in-memory)'} (thresh {thresh_gb} GiB)")
-
-#     # 3) Allocate buffers (memmap if large) and initialize to NaN/NaT
-#     if est_gb > thresh_gb:
-#         print('initializing mmap...')
-#         X_buf = np.memmap(tmp_dir, dtype=np.float32, mode="w+", shape=(N_total, look_back, F))
-#         X_buf[:] = np.nan
-#         X_buf.flush()
-#     else:
-#         X_buf = np.full((N_total, look_back, F), np.nan, dtype=np.float32)
-
-#     y_buf = np.full((N_total,), np.nan, dtype=np.float32)
-#     r_buf = np.full((N_total,), np.nan, dtype=np.float32)
-#     c_buf = np.full((N_total,), np.nan, dtype=np.float32)
-#     t_buf = np.full((N_total,), np.datetime64("NaT"), dtype="datetime64[ns]")
-
-#     # 4) Second pass: build sliding windows and write contiguous blocks
-#     pbar = tqdm(total=len(payloads), desc="Writing days")
-
-#     def _write_np(payload):
-#         feats_np, sig_end, close_end, ends_np, offset = payload
-
-#         # build explicit windows with canonical layout (m, look_back, F)
-#         m = feats_np.shape[0] - look_back + 1
-#         if m <= 0:
-#             return None
-#         wins = np.stack([feats_np[i : i + look_back] for i in range(m)], axis=0)  # (m, look_back, F)
-#         dst = X_buf[offset : offset + m]
-#         dst[:] = wins
-
-#         # write targets and end-times (contiguous slices)
-#         y_buf[offset : offset + m] = sig_end[:m]
-#         c_buf[offset : offset + m] = close_end[:m]
-#         t_buf[offset : offset + m] = ends_np[:m]
-
-#         return None
-
-#     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as exe:
-#         for _ in exe.map(_write_np, payloads):
-#             pbar.update(1)
-#     pbar.close()
-
-#     # 5) Wrap buffers as CPU torch tensors (do not move to GPU here)
-#     X         = torch.from_numpy(X_buf)
-#     y_sig     = torch.from_numpy(y_buf)
-#     raw_close = torch.from_numpy(c_buf)
-#     end_times = t_buf.copy()
-
-#     # 6) Light cleanup and non-finite reporting
-#     gc.collect()
-#     if not np.isfinite(y_buf).all():
-#         bad_idx = np.where(~np.isfinite(y_buf))[0]
-#         print(f"build_tensors: non-finite y_sig at positions {bad_idx[:16].tolist()} (total {len(bad_idx)})")
-
-#     return X, y_sig, raw_close, end_times
-
-
-
 def build_tensors(
     df,
     look_back,
@@ -487,27 +367,97 @@ def pad_collate(batch):
 ###############
 
 
+# def split_to_day_datasets(
+#     X_tr, y_sig_tr, raw_close_tr, end_times_tr,
+#     X_val, y_sig_val, raw_close_val, end_times_val,
+#     X_te,  y_sig_te,  raw_close_te,  end_times_te,
+#     *,
+#     train_batch:           int = 32,
+#     train_workers:         int = 0,
+#     train_prefetch_factor: int = 1
+# ) -> tuple[DataLoader, DataLoader, DataLoader]:
+#     """
+#     Instantiate DayWindowDataset for train/val/test and wrap into DataLoaders.
+
+#     Functionality:
+#       1) Build three DayWindowDataset objects, each receiving raw_close tensor:
+#          - train set gets raw_close_tr
+#          - val   set gets raw_close_val
+#          - test  set gets raw_close_te
+#       2) Wrap each dataset in a DataLoader using pad_collate:
+#          - train: batch_size=train_batch, num_workers=train_workers, prefetch_factor.
+#          - val & test: batch_size=1, num_workers=0.
+#       This ensures __getitem__ always sees a real raw_close tensor, never None.
+#     """
+#     splits = [
+#         ("train", X_tr,  y_sig_tr,  raw_close_tr,  end_times_tr),
+#         ("val",   X_val, y_sig_val, raw_close_val, end_times_val),
+#         ("test",  X_te,  y_sig_te,  raw_close_te,  end_times_te),
+#     ]
+
+#     datasets = {}
+#     for name, Xd, ys, rc, et in tqdm(splits, desc="Creating DayWindowDatasets", unit="split"):
+#         datasets[name] = DayWindowDataset(
+#             X             = Xd,
+#             y_signal      = ys,
+#             raw_close     = rc,  
+#             end_times     = et,
+#         )
+
+#     # Train loader: padded multi-day batches
+#     train_loader = DataLoader(
+#         datasets["train"],
+#         batch_size           = train_batch,
+#         shuffle              = False,
+#         drop_last            = False,
+#         collate_fn           = pad_collate,
+#         num_workers          = train_workers,
+#         pin_memory           = True,
+#         persistent_workers   = (train_workers > 0),
+#         prefetch_factor      = (train_prefetch_factor if train_workers > 0 else None),
+#     )
+
+#     # Validation loader: single-day batches
+#     val_loader = DataLoader(
+#         datasets["val"],
+#         batch_size = 1,
+#         shuffle    = False,
+#         collate_fn = pad_collate,
+#         num_workers= 0,
+#         pin_memory = True,
+#     )
+
+#     # Test loader: single-day batches
+#     test_loader = DataLoader(
+#         datasets["test"],
+#         batch_size = 1,
+#         shuffle    = False,
+#         collate_fn = pad_collate,
+#         num_workers= 0,
+#         pin_memory = True,
+#     )
+
+#     return train_loader, val_loader, test_loader
+
+
 def split_to_day_datasets(
     X_tr, y_sig_tr, raw_close_tr, end_times_tr,
     X_val, y_sig_val, raw_close_val, end_times_val,
     X_te,  y_sig_te,  raw_close_te,  end_times_te,
     *,
     train_batch:           int = 32,
-    train_workers:         int = 0,
+    val_test_batch:        int = 1,
+    train_workers:         int = 1,
     train_prefetch_factor: int = 1
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     """
-    Instantiate DayWindowDataset for train/val/test and wrap into DataLoaders.
+    Instantiate DayWindowDataset for train/val/test and wrap them into PyTorch DataLoaders.
 
     Functionality:
-      1) Build three DayWindowDataset objects, each receiving raw_close tensor:
-         - train set gets raw_close_tr
-         - val   set gets raw_close_val
-         - test  set gets raw_close_te
-      2) Wrap each dataset in a DataLoader using pad_collate:
-         - train: batch_size=train_batch, num_workers=train_workers, prefetch_factor.
-         - val & test: batch_size=1, num_workers=0.
-      This ensures __getitem__ always sees a real raw_close tensor, never None.
+      1) Builds DayWindowDataset objects for each split, linking features, labels, raw prices, and timestamps.
+      2) Wraps datasets into DataLoaders using a custom padding collator (pad_collate).
+      3) Configures the train loader for batched, optional multi-worker loading. 
+      4) Configures validation and test loaders to process single days sequentially (batch_size=1, num_workers=0).
     """
     splits = [
         ("train", X_tr,  y_sig_tr,  raw_close_tr,  end_times_tr),
@@ -540,7 +490,7 @@ def split_to_day_datasets(
     # Validation loader: single-day batches
     val_loader = DataLoader(
         datasets["val"],
-        batch_size = 1,
+        batch_size = val_test_batch,
         shuffle    = False,
         collate_fn = pad_collate,
         num_workers= 0,
@@ -550,7 +500,7 @@ def split_to_day_datasets(
     # Test loader: single-day batches
     test_loader = DataLoader(
         datasets["test"],
-        batch_size = 1,
+        batch_size = val_test_batch,
         shuffle    = False,
         collate_fn = pad_collate,
         num_workers= 0,
@@ -567,6 +517,7 @@ def model_core_pipeline(
     df,                          # feature‐enriched DataFrame
     look_back: int,              # how many ticks per window
     train_batch: int,            # batch size for training
+    val_test_batch: int,         # batch size for test and val
     train_workers: int,          # DataLoader worker count
     prefetch_factor: int,        # DataLoader prefetch_factor
     features_cols: list,         # Kept features columns
@@ -619,6 +570,7 @@ def model_core_pipeline(
         X_te,  y_sig_te,  raw_close_te,  end_times_te,
 
         train_batch           = train_batch,
+        val_test_batch        = val_test_batch,
         train_workers         = train_workers,
         train_prefetch_factor = prefetch_factor
     )
@@ -691,58 +643,47 @@ def summarize_split(name, loader, times):
 #     live_plot
 # ) -> tuple[float, bool, dict, dict, dict | None]:
 #     """
-#     Compare `val_rmse` (current validation RMSE) against the best RMSE so far
-#     (cur_best) and on-disk checkpoints. If it’s an improvement, capture
-#     the model’s weights, metrics, and plot for both folder-best and
-#     in-run checkpointing.
+#     Evaluates validation performance, captures model state, and handles checkpoint saving.
 
-#     Returns:
-#       updated_best_rmse : new best RMSE (float)
-#       improved          : True if val_rmse < cur_best
-#       best_train_metrics: snapshot of train metrics at this best
-#       best_val_metrics  : snapshot of val   metrics at this best
-#       best_state_dict   : model.state_dict() if improved, else None
-
-#     Notes (logging/audit):
-#       - This function performs the save side-effect (torch.save) when a new
-#         folder-best is found. To improve traceability, it emits a single,
-#         compact audit line into the main log file (using params.log_file) at
-#         the moment the file is written, containing the validation RMSE and
-#         the checkpoint filename.
-#       - Emitting that audit line here ties the on-disk artifact deterministically
-#         to the log stream for reproducibility and postmortem analysis.
-#       - All other logging (per-epoch summaries, header) is handled elsewhere.
+#     Functionalities:
+#     1. Compares the current epoch's validation RMSE (`val_rmse`) against the best seen in RAM (`cur_best`).
+#     2. If it's an improvement, it captures the model's weights, metrics, and renders the live plot to bytes.
+#     3. Scans the target directory (`models_dir`) to find the best historically saved checkpoint.
+#        (Optimization: This scan only happens if the current model actually improved in-memory, saving disk I/O).
+#     4. If the new RMSE beats the historical best on disk, it saves a new `_chp.pth` file containing 
+#        the weights, hyperparameters, and plots, and writes a minimal audit line to the log file.
 #     """
 #     # Ensure output folder exists
 #     models_dir.mkdir(exist_ok=True)
 
-#     # 1) Gather on-disk RMSEs to know if we're beating existing files
-#     pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth"
-#     save_re = re.compile(pattern)
-#     existing_rmses = [
-#         float(m.group(1))
-#         for f in models_dir.glob("*.pth")
-#         if (m := save_re.match(f.name))
-#     ]
-#     best_on_disk = min(existing_rmses, default=float("inf"))
-
-#     # 2) Check for improvement in this run
+#     # 1) Check for improvement in THIS run first (Fast in-memory comparison)
 #     if val_rmse < cur_best:
 #         improved = True
 #         updated_best = val_rmse
 
-#         # Capture weights + metric snapshots
+#         # Capture the raw weights and metric snapshots while they are fresh
 #         best_state = model.state_dict()
 #         best_tr    = tr.copy()
-#         best_val    = val.copy()
+#         best_val   = val.copy()
 
-#         # Render the live RMSE plot to bytes
+#         # Render the live RMSE plot to bytes so it can be embedded inside the .pth file
 #         buf = io.BytesIO()
 #         live_plot.fig.savefig(buf, format="png")
 #         buf.seek(0)
 #         plot_bytes = buf.read()
 
-#         # 3) If we also beat any on-disk model, write a folder-best checkpoint
+#         # 2) Gather on-disk RMSEs to know if we're beating existing files
+#         # We only hit the hard drive here because we already know we have an in-memory improvement
+#         pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth"
+#         save_re = re.compile(pattern)
+#         existing_rmses = [
+#             float(m.group(1))
+#             for f in models_dir.glob("*.pth")
+#             if (m := save_re.match(f.name))
+#         ]
+#         best_on_disk = min(existing_rmses, default=float("inf"))
+
+#         # 3) If we also beat any historically saved model on disk, write a new folder-best checkpoint
 #         if updated_best < best_on_disk:
 #             fname = f"{params.ticker}_{updated_best:.5f}_chp.pth"
 #             ckpt = {
@@ -756,23 +697,21 @@ def summarize_split(name, loader, times):
 #             ckpt_path = models_dir / fname
 #             torch.save(ckpt, ckpt_path)
 
-#             # Minimal audit line written at the moment of the save so logs
+#             # Write a minimal audit line at the exact moment of the save so logs
 #             # deterministically record which file was written for which val RMSE.
 #             try:
 #                 _append_log(f"CHKPT SAVED val={updated_best:.3f} path={ckpt_path}", params.log_file)
 #             except Exception:
-#                 # best-effort: do not fail the save on logging errors
+#                 # Best-effort: do not fail the save process on logging errors
 #                 pass
 
-#             # Keep original user-visible print for immediate feedback
+#             # Provide immediate visual feedback in the Jupyter notebook
 #             print(f"🔖 Saved folder-best checkpoint (_chp): {fname}")
 
 #         return updated_best, improved, best_tr, best_val, best_state
 
-#     # No improvement
+#     # If no improvement was found, return the unchanged bests
 #     return cur_best, False, {}, {}, None
-
-
 
 def maybe_save_chkpt(
     models_dir: Path,
@@ -786,47 +725,51 @@ def maybe_save_chkpt(
     live_plot
 ) -> tuple[float, bool, dict, dict, dict | None]:
     """
-    Evaluates validation performance, captures model state, and handles checkpoint saving.
+    Evaluates validation performance, safely captures model state to CPU, and manages checkpoint files.
 
     Functionalities:
-    1. Compares the current epoch's validation RMSE (`val_rmse`) against the best seen in RAM (`cur_best`).
-    2. If it's an improvement, it captures the model's weights, metrics, and renders the live plot to bytes.
-    3. Scans the target directory (`models_dir`) to find the best historically saved checkpoint.
-       (Optimization: This scan only happens if the current model actually improved in-memory, saving disk I/O).
-    4. If the new RMSE beats the historical best on disk, it saves a new `_chp.pth` file containing 
-       the weights, hyperparameters, and plots, and writes a minimal audit line to the log file.
+    1. Compares current validation RMSE to the best seen in-memory.
+    2. If improved, safely copies model weights to CPU RAM to prevent GPU memory leaks.
+    3. Renders the live plot to bytes, safely closing the buffer to prevent RAM bloat.
+    4. Scans the directory for older, worse checkpoints and deletes them to prevent disk exhaustion.
+    5. Saves a single, definitive new _chp.pth file to the drive.
     """
     # Ensure output folder exists
     models_dir.mkdir(exist_ok=True)
 
-    # 1) Check for improvement in THIS run first (Fast in-memory comparison)
+    # 1) Check for improvement in THIS run first
     if val_rmse < cur_best:
         improved = True
         updated_best = val_rmse
 
-        # Capture the raw weights and metric snapshots while they are fresh
-        best_state = model.state_dict()
+        # FIX GPU RAM LEAK: Deep copy model weights directly to CPU 
+        best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
         best_tr    = tr.copy()
         best_val   = val.copy()
 
-        # Render the live RMSE plot to bytes so it can be embedded inside the .pth file
-        buf = io.BytesIO()
-        live_plot.fig.savefig(buf, format="png")
-        buf.seek(0)
-        plot_bytes = buf.read()
+        # FIX BUFFER LEAK: Use context manager to automatically close the IO stream
+        with io.BytesIO() as buf:
+            live_plot.fig.savefig(buf, format="png")
+            buf.seek(0)
+            plot_bytes = buf.read()
 
-        # 2) Gather on-disk RMSEs to know if we're beating existing files
-        # We only hit the hard drive here because we already know we have an in-memory improvement
-        pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth"
+        # 2) Gather on-disk RMSEs and clean up old checkpoints (FIX DISK LEAK)
+        pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_chp\.pth"
         save_re = re.compile(pattern)
-        existing_rmses = [
-            float(m.group(1))
-            for f in models_dir.glob("*.pth")
-            if (m := save_re.match(f.name))
-        ]
-        best_on_disk = min(existing_rmses, default=float("inf"))
+        
+        old_checkpoints = []
+        best_on_disk = float("inf")
+        
+        # Identify all existing checkpoint files for this ticker
+        for f in models_dir.glob("*.pth"):
+            match = save_re.match(f.name)
+            if match:
+                val_score = float(match.group(1))
+                old_checkpoints.append(f)
+                if val_score < best_on_disk:
+                    best_on_disk = val_score
 
-        # 3) If we also beat any historically saved model on disk, write a new folder-best checkpoint
+        # 3) If we beat the historical best, write the new file and delete the old ones
         if updated_best < best_on_disk:
             fname = f"{params.ticker}_{updated_best:.5f}_chp.pth"
             ckpt = {
@@ -839,13 +782,18 @@ def maybe_save_chkpt(
             }
             ckpt_path = models_dir / fname
             torch.save(ckpt, ckpt_path)
+            
+            # Delete older checkpoints to prevent Docker virtual disk from filling up
+            for old_file in old_checkpoints:
+                try:
+                    old_file.unlink()
+                except Exception:
+                    pass
 
-            # Write a minimal audit line at the exact moment of the save so logs
-            # deterministically record which file was written for which val RMSE.
+            # Write a minimal audit line
             try:
                 _append_log(f"CHKPT SAVED val={updated_best:.3f} path={ckpt_path}", params.log_file)
             except Exception:
-                # Best-effort: do not fail the save process on logging errors
                 pass
 
             # Provide immediate visual feedback in the Jupyter notebook
@@ -860,6 +808,47 @@ def maybe_save_chkpt(
 ################ 
 
 
+# def save_final_chkpt(
+#     models_dir: Path,
+#     best_state: dict,
+#     best_val_rmse: float,
+#     model_feats, 
+#     model_hparams,
+#     best_tr: dict,
+#     best_val: dict,
+#     live_plot,
+#     suffix: str = "_fin"
+# ):
+#     """
+#     Write the final overall‐best checkpoint (_fin):
+
+#       • Uses the state_dict mapping in `best_state`
+#       • Embeds hyperparameters, final train/val metrics, and the plot PNG
+#       • Filename: <TICKER>_<best_val_rmse><suffix>.pth
+#     """
+#     # Render the live RMSE plot to PNG bytes
+#     buf = io.BytesIO()
+#     live_plot.fig.savefig(buf, format="png")
+#     buf.seek(0)
+#     final_plot = buf.read()
+
+#     # Assemble the checkpoint dict
+#     ckpt = {
+#         "model_state_dict": best_state,
+#         "hparams":          model_hparams,
+#         "features":         model_feats,
+#         "train_metrics":    best_tr,
+#         "val_metrics":      best_val,
+#         "train_plot_png":   final_plot,
+#     }
+
+#     # Write to disk
+#     fname = f"{params.ticker}_{best_val_rmse:.5f}{suffix}.pth"
+#     (models_dir / fname).parent.mkdir(exist_ok=True, parents=True)
+#     torch.save(ckpt, models_dir / fname)
+#     print(f"✅ Final‐best model saved: {fname}")
+
+
 def save_final_chkpt(
     models_dir: Path,
     best_state: dict,
@@ -872,17 +861,18 @@ def save_final_chkpt(
     suffix: str = "_fin"
 ):
     """
-    Write the final overall‐best checkpoint (_fin):
+    Writes the final overall-best checkpoint (_fin) safely to disk.
 
-      • Uses the state_dict mapping in `best_state`
-      • Embeds hyperparameters, final train/val metrics, and the plot PNG
-      • Filename: <TICKER>_<best_val_rmse><suffix>.pth
+    Functionality:
+    - Renders the final state of the live plot using a safely managed memory buffer.
+    - Embeds hyperparameters, final metrics, weights, and the plot PNG into a single dictionary.
+    - Saves the final `.pth` file to the drive.
     """
-    # Render the live RMSE plot to PNG bytes
-    buf = io.BytesIO()
-    live_plot.fig.savefig(buf, format="png")
-    buf.seek(0)
-    final_plot = buf.read()
+    # FIX BUFFER LEAK: Manage BytesIO with context manager
+    with io.BytesIO() as buf:
+        live_plot.fig.savefig(buf, format="png")
+        buf.seek(0)
+        final_plot = buf.read()
 
     # Assemble the checkpoint dict
     ckpt = {
@@ -898,9 +888,9 @@ def save_final_chkpt(
     fname = f"{params.ticker}_{best_val_rmse:.5f}{suffix}.pth"
     (models_dir / fname).parent.mkdir(exist_ok=True, parents=True)
     torch.save(ckpt, models_dir / fname)
-    print(f"✅ Final‐best model saved: {fname}")
+    print(f"✅ Final-best model saved: {fname}")
 
-
+    
 ################
 
 
@@ -1359,6 +1349,161 @@ _RUN_STARTED = False
 _RUN_DEBUG_DONE = False
 _RUN_LOCK = threading.Lock()
 
+# def init_log(
+#     log_file:  Path,
+#     hparams:   dict,
+#     baselines: dict,
+#     optimizer: torch.optim.Optimizer,
+#     model: torch.nn.Module,
+# ):
+#     """
+#     Emit run-start diagnostics and a single authoritative micro-snapshot to the log.
+
+#     Responsibilities
+#     - Emit run header, baselines and hyperparameters once.
+#     - Run a one-shot micro-snapshot collector (collect_or_run_forward_micro_snapshot).
+#     - Compute canonical parameter stats and produce a single authoritative
+#       BATCH_SHAPE + MICRODETAIL line derived from the numeric snapshot.
+
+#     Design notes
+#     - The collector performs sampling, forward, timing and raw numeric measurement
+#       and attaches a dict at model._micro_snapshot. init_log computes canonical
+#       parameter counts/bytes and performs all human-facing formatting.
+#     - Helpers are nested for single-file locality as requested.
+#     """
+#     # small helpers (single source of truth for param counts/bytes and formatting)
+#     def model_param_stats(model: torch.nn.Module):
+#         total_params = sum(p.numel() for p in model.parameters())
+#         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+#         def _elem_size_for(p):
+#             es = getattr(p, "element_size", None)
+#             if callable(es):
+#                 return int(es())
+#             return 4
+
+#         param_bytes = int(sum(p.numel() * _elem_size_for(p) for p in model.parameters()))
+#         return int(total_params), int(trainable_params), int(param_bytes)
+
+#     def human_bytes(n):
+#         if n is None:
+#             return "None"
+#         n = int(n)
+#         if n >= 1024**2:
+#             return f"{n/1024**2:.2f}MB"
+#         if n >= 1024:
+#             return f"{n/1024:.1f}KB"
+#         return f"{n}B"
+
+#     global _RUN_STARTED, _RUN_DEBUG_DONE, _RUN_LOCK
+
+#     with _RUN_LOCK:
+#         if not _RUN_STARTED:
+#             sep = "-" * 150
+#             _append_log("\n" + sep, log_file)
+#             _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
+
+#             _append_log(RUN_DIAGNOSTIC_EXPLANATION, log_file)
+
+#             if isinstance(baselines, dict) and baselines:
+#                 _append_log("\nBASELINES:", log_file)
+#                 _append_log(f"  TRAIN mean RMSE        = {baselines['bl_tr_mean']:.5f}", log_file)
+#                 _append_log(f"  TRAIN persistence RMSE = {baselines['bl_tr_pers']:.5f}", log_file)
+#                 _append_log(f"  VAL   mean RMSE        = {baselines['bl_val_mean']:.5f}", log_file)
+#                 _append_log(f"  VAL   persistence RMSE = {baselines['bl_val_pers']:.5f}", log_file)
+
+#             if isinstance(hparams, dict) and hparams:
+#                 _append_log("\nHYPERPARAMS:", log_file)
+#                 for k, v in hparams.items():
+#                     _append_log(f"  {k} = {v}", log_file)
+#                 _append_log("", log_file)
+
+#             # Compact runtime summary pieces
+#             debug_opt_line = None
+#             if optimizer is not None:
+#                 opt_groups = len(optimizer.param_groups)
+#                 opt_lrs = [g.get("lr", 0.0) for g in optimizer.param_groups]
+#                 opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
+#                 debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
+
+#             # Canonical model counts computed once here so variables exist later
+#             if model is not None:
+#                 total_params, trainable_params, computed_param_bytes = model_param_stats(model)
+#                 frozen_params = total_params - trainable_params
+#                 model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
+#                 param_bytes_line = f"param_bytes={human_bytes(computed_param_bytes)}"
+#             else:
+#                 total_params = trainable_params = computed_param_bytes = None
+#                 model_static_line = None
+#                 param_bytes_line = None
+
+#             compact_parts = []
+#             if debug_opt_line:
+#                 compact_parts.append(debug_opt_line)
+#             if model_static_line:
+#                 compact_parts.append(model_static_line)
+#             if param_bytes_line:
+#                 compact_parts.append(param_bytes_line)
+
+#             if compact_parts:
+#                 _append_log(" | ".join(compact_parts), log_file)
+
+#             _RUN_STARTED = True
+
+#         # --- One-shot snapshot emission at most once ---
+#         if not _RUN_DEBUG_DONE:
+#             tloader = locals().get("train_loader", None) or globals().get("train_loader", None)
+#             prms = locals().get("params", None) or globals().get("params", None)
+#             opt_local = locals().get("optimizer", None) or globals().get("optimizer", None)
+
+#             # run collector (collector stays minimal: sampling/timing/forward)
+#             if callable(globals().get("collect_or_run_forward_micro_snapshot", None)):
+#                 collect_or_run_forward_micro_snapshot(
+#                     model=model,
+#                     train_loader=tloader,
+#                     params=prms,
+#                     optimizer=opt_local,
+#                     log_file=log_file,
+#                 )
+
+#             micro_ms = getattr(model, "_micro_snapshot", None)
+
+#             # stamp canonical param stats into snapshot and emit MICRODETAIL
+#             if isinstance(micro_ms, dict):
+#                 micro_ms["total_params"] = int(total_params) if total_params is not None else None
+#                 micro_ms["trainable_params"] = int(trainable_params) if trainable_params is not None else None
+#                 micro_ms["param_bytes"] = int(computed_param_bytes) if computed_param_bytes is not None else None
+
+#                 _append_log(
+#                     f"BATCH_SHAPE B={micro_ms.get('B')} groups={micro_ms.get('groups')} seq_len_full={micro_ms.get('seq_len_full')} feat={micro_ms.get('feat_dim')}",
+#                     log_file,
+#                 )
+
+#                 # format helpers used only for MICRODETAIL rendering
+#                 def _hb(v):
+#                     if v is None: return "None"
+#                     v = int(v)
+#                     if v >= 1024**2: return f"{v/1024**2:.2f}MB"
+#                     if v >= 1024: return f"{v/1024:.1f}KB"
+#                     return f"{v}B"
+
+#                 def _fmt(k, v):
+#                     if v is None:
+#                         return f"{k}=None"
+#                     # treat only param_bytes (and keys explicitly with "bytes") as byte quantities
+#                     if "bytes" in k or k == "param_bytes" or "cpu_copy" in k or "windows" in k:
+#                         return f"{k}={_hb(v)}"
+#                     if "shape" in k and not isinstance(v, str):
+#                         return f"{k}={tuple(v)}"
+#                     if isinstance(v, float):
+#                         return f"{k}={v:.2f}"
+#                     return f"{k}={v}"
+
+#                 parts = [_fmt(k, micro_ms.get(k)) for k in sorted(micro_ms.keys())]
+#                 _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
+
+#                 _RUN_DEBUG_DONE = True
+
 def init_log(
     log_file:  Path,
     hparams:   dict,
@@ -1367,21 +1512,16 @@ def init_log(
     model: torch.nn.Module,
 ):
     """
-    Emit run-start diagnostics and a single authoritative micro-snapshot to the log.
+    Emits run-start diagnostics and a single authoritative micro-snapshot to the log.
 
-    Responsibilities
-    - Emit run header, baselines and hyperparameters once.
-    - Run a one-shot micro-snapshot collector (collect_or_run_forward_micro_snapshot).
-    - Compute canonical parameter stats and produce a single authoritative
+    Functionality:
+    - Safely initializes model parameter counts at the highest scope to prevent UnboundLocalErrors.
+    - Emits a run header, baselines, and hyperparameters exactly once per session.
+    - Runs a one-shot micro-snapshot collector (collect_or_run_forward_micro_snapshot).
+    - Computes canonical parameter stats and produces a single authoritative
       BATCH_SHAPE + MICRODETAIL line derived from the numeric snapshot.
-
-    Design notes
-    - The collector performs sampling, forward, timing and raw numeric measurement
-      and attaches a dict at model._micro_snapshot. init_log computes canonical
-      parameter counts/bytes and performs all human-facing formatting.
-    - Helpers are nested for single-file locality as requested.
     """
-    # small helpers (single source of truth for param counts/bytes and formatting)
+    # Small helper to consistently count model parameters
     def model_param_stats(model: torch.nn.Module):
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -1395,6 +1535,7 @@ def init_log(
         param_bytes = int(sum(p.numel() * _elem_size_for(p) for p in model.parameters()))
         return int(total_params), int(trainable_params), int(param_bytes)
 
+    # Small helper to format byte sizes into human-readable strings
     def human_bytes(n):
         if n is None:
             return "None"
@@ -1408,6 +1549,14 @@ def init_log(
     global _RUN_STARTED, _RUN_DEBUG_DONE, _RUN_LOCK
 
     with _RUN_LOCK:
+        # --- THE FIX: Always compute these variables in the outer local scope ---
+        # This ensures they are never unbound, regardless of the global flag states.
+        if model is not None:
+            total_params, trainable_params, computed_param_bytes = model_param_stats(model)
+        else:
+            total_params = trainable_params = computed_param_bytes = None
+
+        # 1. First-time initialization block (Runs exactly once per session)
         if not _RUN_STARTED:
             sep = "-" * 150
             _append_log("\n" + sep, log_file)
@@ -1415,6 +1564,7 @@ def init_log(
 
             _append_log(RUN_DIAGNOSTIC_EXPLANATION, log_file)
 
+            # Log baselines if provided
             if isinstance(baselines, dict) and baselines:
                 _append_log("\nBASELINES:", log_file)
                 _append_log(f"  TRAIN mean RMSE        = {baselines['bl_tr_mean']:.5f}", log_file)
@@ -1422,13 +1572,14 @@ def init_log(
                 _append_log(f"  VAL   mean RMSE        = {baselines['bl_val_mean']:.5f}", log_file)
                 _append_log(f"  VAL   persistence RMSE = {baselines['bl_val_pers']:.5f}", log_file)
 
+            # Log hyperparameters if provided
             if isinstance(hparams, dict) and hparams:
                 _append_log("\nHYPERPARAMS:", log_file)
                 for k, v in hparams.items():
                     _append_log(f"  {k} = {v}", log_file)
                 _append_log("", log_file)
 
-            # Compact runtime summary pieces
+            # Format and append optimizer info
             debug_opt_line = None
             if optimizer is not None:
                 opt_groups = len(optimizer.param_groups)
@@ -1436,17 +1587,16 @@ def init_log(
                 opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
                 debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
 
-            # Canonical model counts computed once here so variables exist later
+            # Format and append model static info (using the safely computed variables)
             if model is not None:
-                total_params, trainable_params, computed_param_bytes = model_param_stats(model)
                 frozen_params = total_params - trainable_params
                 model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
                 param_bytes_line = f"param_bytes={human_bytes(computed_param_bytes)}"
             else:
-                total_params = trainable_params = computed_param_bytes = None
                 model_static_line = None
                 param_bytes_line = None
 
+            # Join compact parts and log
             compact_parts = []
             if debug_opt_line:
                 compact_parts.append(debug_opt_line)
@@ -1460,13 +1610,13 @@ def init_log(
 
             _RUN_STARTED = True
 
-        # --- One-shot snapshot emission at most once ---
+        # 2. One-shot snapshot emission block (Runs exactly once per session)
         if not _RUN_DEBUG_DONE:
             tloader = locals().get("train_loader", None) or globals().get("train_loader", None)
             prms = locals().get("params", None) or globals().get("params", None)
             opt_local = locals().get("optimizer", None) or globals().get("optimizer", None)
 
-            # run collector (collector stays minimal: sampling/timing/forward)
+            # Run collector to capture forward pass shapes and times
             if callable(globals().get("collect_or_run_forward_micro_snapshot", None)):
                 collect_or_run_forward_micro_snapshot(
                     model=model,
@@ -1478,7 +1628,7 @@ def init_log(
 
             micro_ms = getattr(model, "_micro_snapshot", None)
 
-            # stamp canonical param stats into snapshot and emit MICRODETAIL
+            # Merge canonical param stats into snapshot and emit MICRODETAIL string
             if isinstance(micro_ms, dict):
                 micro_ms["total_params"] = int(total_params) if total_params is not None else None
                 micro_ms["trainable_params"] = int(trainable_params) if trainable_params is not None else None
@@ -1489,7 +1639,7 @@ def init_log(
                     log_file,
                 )
 
-                # format helpers used only for MICRODETAIL rendering
+                # Sub-helpers for MICRODETAIL formatting
                 def _hb(v):
                     if v is None: return "None"
                     v = int(v)
@@ -1500,7 +1650,6 @@ def init_log(
                 def _fmt(k, v):
                     if v is None:
                         return f"{k}=None"
-                    # treat only param_bytes (and keys explicitly with "bytes") as byte quantities
                     if "bytes" in k or k == "param_bytes" or "cpu_copy" in k or "windows" in k:
                         return f"{k}={_hb(v)}"
                     if "shape" in k and not isinstance(v, str):
@@ -1513,78 +1662,8 @@ def init_log(
                 _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
 
                 _RUN_DEBUG_DONE = True
-
-
+                
 #################################################################################################################################
-
-
-# def log_epoch_feature_importance(model,
-#                                  feature_names: Optional[List[str]] = None,
-#                                  col_close = 'close_raw',
-#                                  col_signal = 'targ_signal',
-#                                  df = None,
-#                                  params = None,
-#                                  layer_token: Optional[str] = None,
-#                                  alpha: float = 0.9,
-#                                  mode: str = "combo",   # "combo" | "weights" | "grads"
-#                                  beta: Optional[float] = None,  # if set, update EWMA stored on model
-#                                  eps: float = 1e-12) -> Dict[str, Any]:
-#     """
-#     Compute per-feature scores from model.feature_proj.weight and its grad.
-
-#     - Prefer passing feature_names (ordered list). 
-#     - mode controls which normalized components to use:
-#       - "weights": normalized column weight norms only
-#       - "grads": normalized column grad norms only
-#       - "combo": alpha*w_norm + (1-alpha)*g_norm
-#     - Normalization: use log1p followed by min-max scaling for better visual spread.
-#     - Returns dict: top_token, items (list of tuples), score (np.array), w_norm, g_norm, layer_token.
-#     """
-
-#     # --- read weights and grads on CPU
-#     p = dict(model.named_parameters()).get("feature_proj.weight")
-#     W = p.detach().cpu().numpy()                 # (out_dim, in_dim)
-
-#     w_norm = np.linalg.norm(W, axis=0)           # shape (in_dim,)
-#     if p.grad is None:
-#         g_norm = np.zeros_like(w_norm)
-#     else:
-#         G = p.grad.detach().cpu().numpy()
-#         g_norm = np.linalg.norm(G, axis=0)
-
-#     # --- normalization helper (log1p + min-max) ---
-#     def _norm_vis(arr):
-#         if arr.size == 0:
-#             return arr
-#         a = np.log1p(arr)            # compress heavy tails
-#         lo, hi = a.min(), a.max()
-#         return (a - lo) / (hi - lo + eps)
-
-#     w_s = _norm_vis(w_norm)
-#     g_s = _norm_vis(g_norm) if g_norm.size else g_norm
-
-#     # --- build score according to mode ---
-#     if mode == "weights":
-#         score = w_s
-#     elif mode == "grads":
-#         score = g_s
-#     else:
-#         score = alpha * w_s + (1.0 - alpha) * g_s
-
-#     # --- prepare items, top token and persist simple history ---
-#     items = list(zip(feature_names, score, w_norm, g_norm))
-#     items.sort(key=lambda x: x[1], reverse=True)
-#     top_token = ",".join(f"{n}:{s:.2e}" for n, s, _, _ in items)
-
-#     if not hasattr(model, "_feat_imp_history"):
-#         model._feat_imp_history = []
-#     model._feat_imp_history.append(score.copy())
-
-#     # preserve layer_token behavior if provided
-#     if top_token and layer_token is not None:
-#         layer_token = (layer_token if layer_token is not None else "") + f",FEAT_TOP[{top_token}]"
-
-#     return {"top_token": top_token, "items": items, "score": score, "w_norm": w_norm, "g_norm": g_norm, "layer_token": layer_token}
 
 
 def log_epoch_feature_importance(
@@ -1687,235 +1766,6 @@ _feat_history = []
 _param_history = []    
 _epochs = []
 _live_bars = plots.LiveFeatGuBars(top_feats=999, top_params=999)
-
-# def log_epoch_summary(
-#     epoch:            int,
-#     model:            torch.nn.Module,
-#     optimizer:        torch.optim.Optimizer,
-#     tr_tot_metrics:   dict,
-#     tr_base_metrics:  dict,
-#     tr_delta_metrics: dict,
-#     val_tot_metrics:  dict,
-#     val_base_metrics: float,
-#     val_tot_preds:    float,
-#     val_base_preds:   float,
-#     val_targs:        float,
-#     avg_base_loss:    float,
-#     avg_delta_loss:   float,
-#     log_file:         Path,
-#     hparams:          dict,
-# ):
-#     """
-#     Emit a compact, human-readable per-epoch summary line and supporting diagnostics.
-
-#     Purpose
-#     - Produce a single-line epoch summary that combines optimizer structure, gradient
-#       diagnostics, training/validation metrics, scheduler progress, timing/throughput,
-#       GPU usage, checkpoint flag, and a small set of layer-wise gradient-ratio diagnostics.
-#     - Provide deterministic, single-pass computations of per-parameter gradient norms
-#       and update ratios to power the summary tokens.
-#     """
-
-#     # 1) Ensure header + run-static info (init_log handles guards and one-shot debug if available)
-#     init_log(
-#         log_file,
-#         hparams=hparams,
-#         baselines={
-#             "bl_tr_mean":  model.bl_tr_mean,
-#             "bl_tr_pers":  model.bl_tr_pers,
-#             "bl_val_mean": model.bl_val_mean,
-#             "bl_val_pers": model.bl_val_pers,
-#         },
-#         optimizer=optimizer,
-#         model=model,
-#     )
-
-#     # 2) detect top-level parameter groups ("heads") and their grad-norm totals — minimal
-#     recs = []; prefix_sq = {}; all_sq = 0.0
-#     lr = optimizer.param_groups[0]["lr"] if optimizer.param_groups else 0.0
-    
-#     for name, p in model.named_parameters():
-#         if getattr(p, "numel", lambda: 1)() == 0:
-#             continue
-#         if p.grad is None:
-#             g = 0.0
-#         else:
-#             if getattr(p.grad, "is_sparse", False):
-#                 vals = p.grad.data.coalesce().values()
-#                 g = float(vals.norm().cpu()) if vals.numel() else 0.0
-#             else:
-#                 g = float(p.grad.norm().cpu())
-#         w = float(p.detach().norm().cpu())
-#         u = (lr * g) / max(w, 1e-8)
-#         recs.append((name, g, u))
-#         sq = g * g; all_sq += sq
-#         pref = name.split('.', 1)[0]
-#         prefix_sq[pref] = prefix_sq.get(pref, 0.0) + sq
-
-#     g_vals = [g for _, g, _ in recs]; u_vals = [u for _, _, u in recs]
-
-#     # per-prefix GN and total GN
-#     prefix_gn = {p: math.sqrt(sq) for p, sq in prefix_sq.items()}
-#     GN_tot = math.sqrt(all_sq)
-    
-#     # build a GN token listing all prefixes sorted by descending GN
-#     sorted_prefixes = [p for p, _ in sorted(prefix_gn.items(), key=lambda x: x[1], reverse=True)]
-#     gn_items = ",".join(f"{p}={prefix_gn[p]:.3f}" for p in sorted_prefixes) if sorted_prefixes else ""
-
-#     # 3) 4) safe percentiles for GD and UR
-#     if g_vals:
-#         g_sorted = sorted(g_vals)
-#         n = len(g_sorted)
-#         GD_med = g_sorted[n // 2]
-#         GD_p90 = g_sorted[max(0, min(n - 1, int(math.floor(0.9 * (n - 1)))))]
-#         GD_max = g_sorted[-1]
-#     else:
-#         GD_med = GD_p90 = GD_max = 0.0
-    
-#     if u_vals:
-#         u_sorted = sorted(u_vals)
-#         n_u = len(u_sorted)
-#         UR_med = u_sorted[n_u // 2]
-#         UR_max = u_sorted[-1]
-#     else:
-#         UR_med = UR_max = 0.0
-
-#     # 5) Slip-rate & max hub (stateful LSTM diagnostic)
-#     slip_thresh=1e-6
-#     hub    = getattr(model, "last_hub", None)
-#     HR     = float(hub.max().cpu()) if hub is not None else 0.0
-#     SL     = float((hub > slip_thresh).float().mean().cpu()) if hub is not None else 0.0
-
-#     # 6) Slope-RMSE (SR) on last validation batch
-#     with torch.no_grad():
-#         pv, tv = getattr(model, "last_val_tot_preds", None), getattr(model, "last_val_targs", None)
-#         SR = 0.0
-#         if pv is not None and tv is not None and pv.numel() >= 2 and tv.numel() >= 2:
-#             if pv.dim() == 1:
-#                 dp, dt = pv[1:] - pv[:-1], tv[1:] - tv[:-1]
-#             else:
-#                 if pv.size(1) >= 2 and tv.size(1) >= 2:
-#                     dp = pv[:, 1:] - pv[:, :-1]
-#                     dt = tv[:, 1:] - tv[:, :-1]
-#                 else:
-#                     dp = dt = None
-#             if dp is not None and dt is not None and dp.numel() > 0:
-#                 SR = float(torch.sqrt(((dp - dt) ** 2).mean()).item())
-
-#     # 6.1) Fraction model better than baseline on validation (per-sample)
-#     fraction_model_better = 0.0
-#     if val_tot_preds is not None and val_base_preds is not None and val_targs is not None:
-#         # ensure numpy arrays (1D) and aligned length
-#         vp = np.asarray(val_tot_preds, dtype=float).ravel()
-#         vb = np.asarray(val_base_preds, dtype=float).ravel()
-#         vt = np.asarray(val_targs, dtype=float).ravel()
-#         if vp.shape == vb.shape == vt.shape and vp.size > 0:
-#             fraction_model_better = float((np.abs(vp - vt) < np.abs(vb - vt)).mean())
-
-#     # 7) Pull train/val RMSE, R², MAE
-#     tr_rmse, tr_mae, tr_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["mae"], tr_tot_metrics["r2"]
-#     val_rmse, val_mae, val_r2 = val_tot_metrics["rmse"], val_tot_metrics["mae"], val_tot_metrics["r2"]
-
-#     train_base_rmse = tr_base_metrics["rmse"] 
-#     train_delta_rmse = tr_delta_metrics["rmse"]
-#     val_base_rmse = val_base_metrics["rmse"]
-
-#     loss_tokens = ""
-#     loss_tokens = f"BASE_LOSS={avg_base_loss:.4e}"
-#     delta_ratio = avg_delta_loss / (avg_base_loss + 1e-12)
-#     loss_tokens += f",DELTA_LOSS={avg_delta_loss:.4e},DELTA_RATIO={delta_ratio:.3e}"
-#     loss_tokens += f",BASE_RMSE={train_base_rmse:.5f},DELTA_RMSE={train_delta_rmse:.5f}"
-
-#     # 8) compact Top: dedupe by short name, show all buckets sorted by g (compact format)
-#     def short_name(n):
-#         if "parametrizations" in n:
-#             return n.split('.')[-1]
-#         return ".".join(n.split('.')[-3:])
-    
-#     seen = {}
-#     for name, g, u in recs:
-#         if "parametrizations" in name:
-#             continue
-#         s = short_name(name)
-#         # keep the entry with the largest g for each short name
-#         if s not in seen or g > seen[s][0]:
-#             seen[s] = (g, u)
-
-#     # sort all buckets by descending gradient and produce compact s:g/u tokens
-#     items = sorted(seen.items(), key=lambda kv: kv[1][0], reverse=True)
-#     G_U = ",".join(f"{s}:{g:.1e}/{u:.1e}" for s, (g, u) in items)
-
-#     # 9) Assemble OPTS token (compact)
-#     try:
-#         opt_groups = len(optimizer.param_groups)
-#         opt_lrs_sh = ",".join(f"{g.get('lr',0.0):.1e}" for g in optimizer.param_groups[:3]) + (",..." if len(optimizer.param_groups) > 3 else "")
-#         opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
-#         opt_token = f"OPTS[{opt_groups}:{opt_lrs_sh}|cnts={opt_counts}]"
-#     except Exception:
-#         opt_token = f"OPTS[1:{lr:.1e}]"
-
-#     # 10) Optional scheduler percent-complete token (read-only, best-effort)
-#     sched_pct_token = ""
-#     sched_obj = getattr(optimizer, "scheduler", None) or globals().get("scheduler", None)
-#     if sched_obj is not None:
-#         total = getattr(sched_obj, "_total_steps", None) or getattr(sched_obj, "total_steps", None)
-#         # prefer explicit step counters
-#         step_idx = getattr(sched_obj, "last_epoch", None)
-#         if step_idx is None:
-#             step_idx = getattr(sched_obj, "_step_count", None)
-#         if total is None:
-#             # if total is missing but scheduler has been given expected_total elsewhere, try that attribute
-#             total = getattr(sched_obj, "expected_total", None)
-#         if total is not None and step_idx is not None and int(total) > 0:
-#             pct = min(100.0, max(0.0, 100.0 * float(step_idx) / float(total)))
-#             sched_pct_token = f"SCHED_PCT={pct:.1f}%"
-
-#     # 11) Optional timing / throughput (if the training loop stored them on the model)
-#     elapsed = getattr(model, "_last_epoch_elapsed", 0)
-#     samples = getattr(model, "_last_epoch_samples", 0)
-#     tp = (samples / elapsed) if (elapsed and elapsed > 0) else 0.0
-
-#     # 12) Optional checkpoint marker (if training loop marked it on the model)
-#     chk = getattr(model, "_last_epoch_checkpoint", False)
-
-#     # 13) Optional GPU memory high-water (low-noise, printed only if CUDA available)
-#     max_mem = (torch.cuda.max_memory_allocated() / (1024 ** 3)) if torch.cuda.is_available() else 0.0
-
-#     # 14) append FEAT_TOP after layer_token finalized
-#     feat_res = log_epoch_feature_importance(model, feature_names=model.feature_names,
-#                                            params=params, alpha=0.9, mode="combo") # some sensitivity to recent learning: score = 0.9norm_w + 0.1norm_g.
-
-#     # Final line assembly (compact, per-epoch changing values only)
-#     line = (
-#         f"\nE{epoch:02d} | "
-#         f"{opt_token} | "
-#         f"GN[{gn_items},TOT={GN_tot:.3f}] | "
-#         f"GD[{GD_med:.1e},{GD_p90:.1e},{GD_max:.1e}] | "
-#         f"UR[{UR_med:.1e},{UR_max:.1e}] | "
-#         f"lr={lr:.1e} | "
-#         f"TR[{tr_rmse:.4f},{tr_mae:.4f},{tr_r2:.4f},BASE_RMSE={train_base_rmse:.4f},DELTA_RMSE={train_delta_rmse:.4f}] | "
-#         f"VAL[{val_rmse:.4f},{val_mae:.4f},{val_r2:.4f},BASE_RMSE={val_base_rmse:.4f}] | "
-#         f"{loss_tokens} | "
-#         f"{sched_pct_token} | "
-#         f"SR={SR:.3f} | "
-#         f"SL={SL:.2f},HR={HR:.3f} | "
-#         f"FMB={fraction_model_better:.4f} | "
-#         f"T={elapsed:.1f}s,TP={tp:.1f}seg/s | "
-#         f"chk={int(bool(chk))} | "
-#         f"GPU={max_mem:.2f}GiB | "
-#         f"\nG/U={G_U} | "
-#         f"\nFEAT_TOP={feat_res['top_token']}"
-#     )
-#     _append_log(line, log_file)
-
-#     # plotting
-#     # build numeric dicts (no string parsing)
-#     gdict = {s: float(g) for s, (g, u) in items}
-    
-#     featdict = {k: float(v) for k, v in (p.split(':',1) for p in feat_res['top_token'].split(','))}
-
-#     _live_bars.update(featdict, gdict, epoch)
-
 
 def log_epoch_summary(
     epoch:            int,

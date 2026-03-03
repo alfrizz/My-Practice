@@ -15,6 +15,8 @@ import re
 import sys
 
 from tqdm import tqdm
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 #########################################################################################################
 
@@ -22,7 +24,7 @@ ticker = 'AAPL'
 init_cash = 100000
 init_df_year = 2016
 month_to_check = '2021-01'
-sel_val_rmse = '0.15884'
+sel_val_rmse = '0.16086'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
@@ -47,36 +49,57 @@ base_csv = save_path / f"{ticker}_1_base.csv"
 indunsc_csv = save_path / f"{ticker}_2_indunsc.csv"
 feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
 sign_featall_csv = save_path / f"{ticker}_4_sign_featall.csv"
-pred_test_csv = save_path / f"{ticker}_5_pred_test.csv"
-pred_trainval_csv = save_path / f"{ticker}_5_pred_trainval.csv"
+pred_test_pqt = save_path / f"{ticker}_5_pred_test.parquet"
+pred_trainval_pqt = save_path / f"{ticker}_5_pred_trainval.parquet"
 
 
-def _human(n):
-    for u in ("B","KB","MB","GB","TB"):
-        if abs(n) < 1024:
-            return f"{n:3.1f}{u}"
-        n /= 1024
-    return f"{n:.1f}PB"
+# def _human(n):
+#     for u in ("B","KB","MB","GB","TB"):
+#         if abs(n) < 1024:
+#             return f"{n:3.1f}{u}"
+#         n /= 1024
+#     return f"{n:.1f}PB"
 
-def to_csv_with_progress(df, path, chunksize=10_000, index=True, show_size_every=5, leave=True):
-    with open(path, "w", newline="") as f:
-        df.iloc[:0].to_csv(f, index=index, date_format="%Y-%m-%d %H:%M:%S")  # header only
-        total = len(df)
-        pbar = tqdm(total=total, desc="Saving CSV", unit="rows", leave=leave, dynamic_ncols=True)
-        chunk_count = 0
-        for start in range(0, total, chunksize):
-            end = start + chunksize
-            df.iloc[start:end].to_csv(f, index=index, header=False, date_format="%Y-%m-%d %H:%M:%S")
-            # no per-chunk flush; update bar
-            written = min(end, total) - start
-            pbar.update(written)
-            chunk_count += 1
-            if show_size_every and (chunk_count % show_size_every == 0):
-                # use f.tell() for bytes; call infrequently to avoid overhead
-                pbar.set_postfix(size=_human(f.tell()))
-                pbar.refresh()
-        pbar.close()
+# def to_csv_with_progress(df, path, chunksize=10_000, index=True, show_size_every=5, leave=True):
+#     with open(path, "w", newline="") as f:
+#         df.iloc[:0].to_csv(f, index=index, date_format="%Y-%m-%d %H:%M:%S")  # header only
+#         total = len(df)
+#         pbar = tqdm(total=total, desc="Saving CSV", unit="rows", leave=leave, dynamic_ncols=True)
+#         chunk_count = 0
+#         for start in range(0, total, chunksize):
+#             end = start + chunksize
+#             df.iloc[start:end].to_csv(f, index=index, header=False, date_format="%Y-%m-%d %H:%M:%S")
+#             # no per-chunk flush; update bar
+#             written = min(end, total) - start
+#             pbar.update(written)
+#             chunk_count += 1
+#             if show_size_every and (chunk_count % show_size_every == 0):
+#                 # use f.tell() for bytes; call infrequently to avoid overhead
+#                 pbar.set_postfix(size=_human(f.tell()))
+#                 pbar.refresh()
+#         pbar.close()
 
+
+
+def to_parquet_with_progress(df: pd.DataFrame, filepath, chunksize: int = 25000):
+    """
+    Saves a DataFrame to Parquet format while displaying a progress bar.
+    
+    Functionality:
+    - Converts the DataFrame to an Apache Arrow table.
+    - Slices the table into chunks (default 25k rows) and streams them to disk.
+    - Preserves all datatypes and dramatically reduces file size compared to CSV.
+    """
+    # Convert pandas DataFrame to an Apache Arrow Table
+    table = pa.Table.from_pandas(df)
+    
+    # Calculate total chunks for the progress bar
+    total_chunks = (len(table) + chunksize - 1) // chunksize
+    
+    # Write the table in chunks to update the progress bar
+    with pq.ParquetWriter(filepath, table.schema) as writer:
+        for i in tqdm(range(0, len(table), chunksize), total=total_chunks, desc=f"Saving Parquet"):
+            writer.write_table(table.slice(i, chunksize))
 
 
 #########################################################################################################
@@ -102,16 +125,16 @@ hparams = {
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":       True,   # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":   128,     # transformer embedding width (d_model); adapter maps upstream features into this
+    "TRANSFORMER_D_MODEL":   64,     # transformer embedding width (d_model); adapter maps upstream features into this
     "TRANSFORMER_LAYERS":    2,      # number of encoder layers
     "TRANSFORMER_HEADS":     4,      # attention heads in each layer
-    "TRANSFORMER_FF_MULT":   4,      # FFN expansion factor (d_model * MULT)
-    "DROPOUT_TRANS":         0.1,   # transformer dropout; ↑regularization
+    "TRANSFORMER_FF_MULT":   2,      # FFN expansion factor (d_model * MULT)
+    "DROPOUT_TRANS":         0.1,    # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
     "USE_LONG_LSTM":         False,  # enable bidirectional “long” LSTM
     "LONG_UNITS":            64,     # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
-    "DROPOUT_LONG":          0.12,    # dropout after projection (or long-LSTM)
+    "DROPOUT_LONG":          0.12,   # dropout after projection (or long-LSTM)
 
     # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
     "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
@@ -132,7 +155,7 @@ hparams = {
     "WEIGHT_DECAY":          2e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
     "CLIPNORM":              2,      # max grad norm; ↑training stability, ↓gradient expressivity
     
-    "ONECYCLE_MAX_LR":       5e-4,   # peak LR in the cycle
+    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in the cycle
     "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head ([0-1])
     "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
@@ -141,13 +164,13 @@ hparams = {
 
     # ── Training Control Parameters ────────────────────────────────────
     "TRAIN_BATCH":           16,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
-    "VAL_BATCH":             1,      # sequences per val batch
-    "TRAIN_WORKERS":         4,      # Number of data batches each CPU worker process queues up in RAM in advance. DataLoader workers; ↑throughput, ↓CPU contention
-    "TRAIN_PREFETCH_FACTOR": 2,      # prefetch factor; ↑loader speed, ↓memory overhead
+    "VAL_TEST_BATCH":        16,     # sequences per val batch (must be 1 for LSTM)
+    "TRAIN_WORKERS":         0,      # Number of data batches each CPU worker process queues up in RAM in advance. DataLoader workers; ↑throughput, ↓CPU contention
+    "TRAIN_PREFETCH_FACTOR": None,    # prefetch factor; ↑loader speed, ↓memory overhead (ignored if train_workers = 0)
 
     "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
     
-    "MICRO_SAMPLE_K":        16,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
+    "MICRO_SAMPLE_K":        1,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
 }
 
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
