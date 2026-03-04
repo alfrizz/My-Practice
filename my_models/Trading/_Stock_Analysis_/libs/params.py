@@ -31,7 +31,7 @@ bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for co
 
 feats_min_std = 0.03
 feats_max_corr = 0.999
-thresh_gb = 8 # use ram instead of memmap, if X_buf below this value
+mmap_thresh_gb = 16 # use ram instead of memmap, if X_buf below this value
 
 device = torch.device("cuda") 
 
@@ -109,68 +109,68 @@ hparams = {
     # ── Input convolution toggle ──────────────────────────
     "USE_CONV":              False,  # enable Conv1d + BatchNorm1d
     "CONV_K":                3,      # Conv1d kernel size; ↑local smoothing, ↓fine-detail
-    "CONV_DILATION":         1,      # Conv1d dilation;   ↑receptive field, ↓granularity
+    "CONV_DILATION":         1,      # Conv1d dilation; ↑receptive field, ↓granularity
     "CONV_CHANNELS":         64,     # Conv1d output channels; ↑early-stage capacity, ↓compute
 
     # ── Temporal ConvNet (TCN) toggle ────────────────────
-    "USE_TCN":               False,  # enable dilated Conv1d stack
-    "TCN_LAYERS":            1,      # number of dilated Conv1d layers
-    "TCN_KERNEL":            3,      # kernel size for each TCN layer
-    "TCN_CHANNELS":          64,     # TCN output channels; independent from CONV_CHANNELS for flexibility
+    "USE_TCN":                False, # enable dilated Conv1d stack
+    "TCN_LAYERS":             1,      # number of dilated Conv1d layers
+    "TCN_KERNEL":             3,      # kernel size for each TCN layer
+    "TCN_CHANNELS":           64,     # TCN output channels; independent from CONV_CHANNELS
 
     # ── Short Bi-LSTM toggle ──────────────────────────────
-    "USE_SHORT_LSTM":        False,  # enable bidirectional “short” LSTM
-    "SHORT_UNITS":           64,     # short-LSTM total output width (bidirectional); per-dir hidden = SHORT_UNITS // 2
-    "DROPOUT_SHORT":         0.1,    # dropout after short-LSTM; ↑regularization
+    "USE_SHORT_LSTM":        False, # enable bidirectional “short” LSTM
+    "SHORT_UNITS":           64,     # short-LSTM total output width (bidirectional); per-dir hidden = UNITS // 2
+    "DROPOUT_SHORT":         0.1,    # dropout after short-LSTM; ↑regularization, ↓overfitting
 
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":       True,   # enable TransformerEncoder
-    "TRANSFORMER_D_MODEL":   64,     # transformer embedding width (d_model); adapter maps upstream features into this
-    "TRANSFORMER_LAYERS":    2,      # number of encoder layers
-    "TRANSFORMER_HEADS":     4,      # attention heads in each layer
-    "TRANSFORMER_FF_MULT":   2,      # FFN expansion factor (d_model * MULT)
+    "TRANSFORMER_D_MODEL":   64,     # transformer embedding width (d_model); adapter maps features into this
+    "TRANSFORMER_LAYERS":    1,      # number of encoder layers; ↑depth/complexity, ↓speed/stability
+    "TRANSFORMER_HEADS":     4,      # attention heads; must divide d_model; ↑multi-aspect focus
+    "TRANSFORMER_FF_MULT":   2,      # FFN expansion factor (d_model * MULT); ↑internal capacity
     "DROPOUT_TRANS":         0.1,    # transformer dropout; ↑regularization
 
     # ── Long Bi-LSTM ──────────────
-    "USE_LONG_LSTM":         False,  # enable bidirectional “long” LSTM
-    "LONG_UNITS":            64,     # long-LSTM total output width (bidirectional); per-dir hidden = LONG_UNITS // 2
-    "DROPOUT_LONG":          0.12,   # dropout after projection (or long-LSTM)
+    "USE_LONG_LSTM":         False, # enable bidirectional “long” LSTM
+    "LONG_UNITS":            64,     # long-LSTM total output width (bidirectional); per-dir hidden = UNITS // 2
+    "DROPOUT_LONG":          0.12,   # dropout after projection or long-LSTM layer
 
-    # ── Regression head, smooting, huber and delta  ───────────────────────────────────────
-    "FLATTEN_MODE":          "attn", # format to be provided to regression head: "flatten" | "last" | "pool" | "attn"
-    "PRED_HIDDEN":           96,     # head MLP hidden dim; ↑capacity, ↓over-parameterization
+    # ── Regression head, smoothing, huber and delta ───────────────────────────────────────
+    "FLATTEN_MODE":          "attn", # head input: "flatten" | "last" | "pool" | "attn" (attention-based pooling)
+    "PRED_HIDDEN":           96,     # head MLP hidden dim; ↑capacity, ↓generalization
     
-    "ALPHA_SMOOTH":          0,      # derivative slope-penalty weight; ↑smoothness, ↓spike fidelity
-    "WARMUP_STEPS":          3,      # linear warmup for slope penalty (0 = no warmup)
+    "ALPHA_SMOOTH":          0,      # derivative slope-penalty weight; ↑smoothness, ↓temporal precision
+    "WARMUP_STEPS":          3,      # steps to ramp slope penalty from 0 to ALPHA_SMOOTH
     
-    "USE_HUBER":             False,  # if True use Huber for level term instead of MSE
-    "HUBER_DELTA":           0.1,    # Huber delta (transition threshold); scale to your typical error
+    "USE_HUBER":             False, # if True use Huber loss; ↑robustness to outliers vs MSE
+    "HUBER_DELTA":           0.1,    # Huber transition threshold; scale to typical target error
     
-    "USE_DELTA":             False,  # enable Delta baseline vs features predictions head
-    "LAMBDA_DELTA":          0.1,    # Delta residual loss weight  ↑: stronger residual fit  ↓: safer base learning
+    "USE_DELTA":             False, # enable Delta residual prediction vs base signal
+    "LAMBDA_DELTA":          0.1,    # Delta loss weight; ↑residual fit focus, ↓base learning stability
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
-    "MAX_EPOCHS":            90,     # max epochs
-    "EARLY_STOP_PATIENCE":   9,      # no-improve epochs; ↑robustness to noise, ↓max training time 
-    "WEIGHT_DECAY":          2e-6,   # L2 penalty; ↑weight shrinkage (smoother), ↓model expressivity
-    "CLIPNORM":              2,      # max grad norm; ↑training stability, ↓gradient expressivity
+    "MAX_EPOCHS":            90,     # max training epochs
+    "EARLY_STOP_PATIENCE":   9,      # epochs to wait without improvement; ↑robustness to noise
+    "WEIGHT_DECAY":          2e-6,   # L2 penalty; ↑weight shrinkage, ↓overfitting
+    "CLIPNORM":              2,      # max grad norm; ↑stability (prevents exploding gradients)
     
-    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in the cycle
-    "HEAD_LR_PCT":           1,      # percentage of learning rate to apply to the head ([0-1])
-    "ONECYCLE_DIV_FACTOR":   10,     # start_lr = max_lr / div_factor
-    "ONECYCLE_FINAL_DIV":    100,    # end_lr   = max_lr / final_div_factor
-    "ONECYCLE_PCT_START":    0.1,    # fraction of total steps spent rising
-    "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear'
+    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in 1cycle policy
+    "HEAD_LR_PCT":           1,      # LR multiplier for head vs backbone (0.0 to 1.0)
+    "ONECYCLE_DIV_FACTOR":   10,     # initial_lr = max_lr / div_factor
+    "ONECYCLE_FINAL_DIV":    100,    # end_lr = max_lr / final_div_factor
+    "ONECYCLE_PCT_START":    0.1,    # fraction of cycle spent increasing LR
+    "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear' LR annealing
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           16,     # sequences per train batch; ↑GPU efficiency, ↓stochasticity
-    "VAL_TEST_BATCH":        16,     # sequences per val batch (must be 1 for LSTM)
-    "TRAIN_WORKERS":         0,      # Number of data batches each CPU worker process queues up in RAM in advance. DataLoader workers; ↑throughput, ↓CPU contention
-    "TRAIN_PREFETCH_FACTOR": None,    # prefetch factor; ↑loader speed, ↓memory overhead (ignored if train_workers = 0)
-
-    "LOOK_BACK":             60,     # length of each input window (how many minutes of history each training example contains)
+    "TRAIN_BATCH":           16,     # sequences per train batch; ↑throughput, ↓stochasticity/GPU heat
+    "VAL_TEST_BATCH":        16,     # sequences per val batch; must be 1 for stateful LSTMs
+    "TRAIN_WORKERS":         0,      # DataLoader sub-processes; 0 = main thread (safest for laptop heat)
+    "TRAIN_PREFETCH_FACTOR": None,   # batches to pre-load; ignored if TRAIN_WORKERS = 0
     
-    "MICRO_SAMPLE_K":        1,     # sample K per-segment forwards to compute p50/p90 latencies (cost: extra forward calls; recommend 16 for diagnostics)
+    "PIN_MEMORY":            False,  # Locks RAM for faster GPU transfer; ↓latency, ↑kernel pressure (Set False if experiencing reboots/Watchdog errors)
+    "LOOK_BACK":             60,     # sequence length; minutes of history per training example
+    "MICRO_SAMPLE_K":        1,      # sample count for latency metrics; ↑diagnostics, ↓speed
 }
 
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)

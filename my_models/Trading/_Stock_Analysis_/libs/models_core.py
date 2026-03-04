@@ -48,7 +48,7 @@ def build_tensors(
     col_signal = 'targ_signal',
     device     = torch.device("cpu"),
     tmp_dir    = "/tmp/X_buf.dat",
-    thresh_gb  = params.thresh_gb,
+    mmap_thresh_gb  = params.mmap_thresh_gb,
 ) -> tuple[
     torch.Tensor,  # X         shape=(N, look_back, F)
     torch.Tensor,  # y_sig     shape=(N,)
@@ -62,7 +62,7 @@ def build_tensors(
     1. First Pass (Analysis): Scans day-by-day to extract arrays and calculate the exact
        total number of sliding windows (N_total) that will be generated.
     2. Allocation: Pre-allocates a massive contiguous block of memory (either in RAM or on 
-       disk via memmap if it exceeds thresh_gb) to hold the final dataset.
+       disk via memmap if it exceeds mmap_thresh_gb) to hold the final dataset.
     3. Second Pass (Writing): Uses a ThreadPoolExecutor to write the sliding windows into the 
        pre-allocated buffer.
     4. Window Generation (Optimized): Uses `sliding_window_view` to generate overlapping windows
@@ -101,10 +101,10 @@ def build_tensors(
     print("N_total:", N_total, "look_back:", look_back, "F:", F)
     est_bytes = int(N_total) * int(look_back) * int(F) * 4
     est_gb = est_bytes / (1024**3)
-    print(f"Estimated X_buf size: {est_bytes/1e9:.2f} GB — {'using memmap' if est_gb > thresh_gb else 'using RAM'} (thresh {thresh_gb} GiB)")
+    print(f"Estimated X_buf size: {est_bytes/1e9:.2f} GB — {'using memmap' if est_gb > mmap_thresh_gb else 'using RAM'} (thresh {mmap_thresh_gb} GiB)")
 
     # 3) Allocate buffers
-    if est_gb > thresh_gb:
+    if est_gb > mmap_thresh_gb:
         print('initializing mmap...')
         X_buf = np.memmap(tmp_dir, dtype=np.float32, mode="w+", shape=(N_total, look_back, F))
         X_buf[:] = np.nan
@@ -250,194 +250,221 @@ def chronological_split(
 #########################################################################################################
 
 
+# class DayWindowDataset(Dataset):
+#     """
+#     Return per-day tensors for the requested calendar day index.
+    
+#     Functionality
+#     - Slices the precomputed sliding-window buffers for the day defined by idx and
+#       returns the day's windows and labels without an extra leading day dimension.
+#     - Produces per-day shapes that pad_collate expects:
+#       - x        -> Tensor[W, T, F]       windows for that calendar day
+#       - y_sig    -> Tensor[W]             per-window scalar targets
+#       - rc       -> Tensor[W]             raw_close slice aligned to windows
+#       - wd       -> int                   weekday index for the day
+#       - end_ts   -> numpy.datetime64      timestamp of last window for the day
+#     """
+#     def __init__(
+#         self,
+#         X:               torch.Tensor,   # (N_windows, look_back, F)
+#         y_signal:        torch.Tensor,   # (N_windows,)
+#         raw_close:       torch.Tensor,   # (N_windows,)
+#         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
+#     ):
+#         # self.return_thresh = return_thresh
+
+#         # 1) Store all buffers (raw_close always provided now)
+#         self.X         = X
+#         self.y_signal  = y_signal
+#         self.raw_close = raw_close
+#         self.end_times = end_times   # numpy.datetime64[ns]
+
+#         # 2) Group windows by calendar day
+#         days64 = end_times.astype("datetime64[D]")       # e.g. 2025-09-25
+#         days, counts = np.unique(days64, return_counts=True)
+#         boundaries = np.concatenate(([0], np.cumsum(counts)))
+
+#         # 3) Build start/end indices and weekday tensor
+#         self.start   = torch.tensor(boundaries[:-1], dtype=torch.long)
+#         self.end     = torch.tensor(boundaries[1:],  dtype=torch.long)
+#         weekdays     = pd.to_datetime(days).dayofweek
+#         self.weekday = torch.tensor(weekdays, dtype=torch.long)
+
+#     def __len__(self):
+#         return len(self.start)
+
+#     def __getitem__(self, idx: int):
+#         # Determine slice indices for this day
+#         s = self.start[idx].item()
+#         e = self.end[idx].item()
+    
+#         # 4) Slice out windows (no leading day dim)
+#         x     = self.X[s:e]           # (W, look_back, F)
+#         y_sig = self.y_signal[s:e]    # (W,)
+    
+#         # Extract raw_close slice (length W, no leading dim)
+#         rc = self.raw_close[s:e]   # (W,)
+    
+#         # Weekday index and last-window timestamp
+#         wd     = int(self.weekday[idx].item())
+#         end_ts = self.end_times[e - 1]  # numpy.datetime64[ns]
+    
+#         # Return the tuple with simplified shapes
+#         return x, y_sig, rc, wd, end_ts
+
+
 class DayWindowDataset(Dataset):
     """
     Return per-day tensors for the requested calendar day index.
     
-    Functionality
-    - Slices the precomputed sliding-window buffers for the day defined by idx and
-      returns the day's windows and labels without an extra leading day dimension.
-    - Produces per-day shapes that pad_collate expects:
-      - x        -> Tensor[W, T, F]       windows for that calendar day
-      - y_sig    -> Tensor[W]             per-window scalar targets
-      - rc       -> Tensor[W]             raw_close slice aligned to windows
-      - wd       -> int                   weekday index for the day
-      - end_ts   -> numpy.datetime64      timestamp of last window for the day
+    Functionality:
+    - Groups precomputed windows by calendar day during initialization.
+    - Slices windows and labels for the specific day requested by idx.
+    - Optimized: Uses Python lists for indices to avoid expensive .item() 
+      calls during the training loop, reducing CPU-GPU sync overhead.
     """
     def __init__(
         self,
-        X:               torch.Tensor,   # (N_windows, look_back, F)
-        y_signal:        torch.Tensor,   # (N_windows,)
-        raw_close:       torch.Tensor,   # (N_windows,)
-        end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
+        X:         torch.Tensor,   # (N_windows, look_back, F)
+        y_signal:  torch.Tensor,   # (N_windows,)
+        raw_close: torch.Tensor,   # (N_windows,)
+        end_times: np.ndarray,     # (N_windows,), datetime64[ns]
     ):
-        # self.return_thresh = return_thresh
-
-        # 1) Store all buffers (raw_close always provided now)
         self.X         = X
         self.y_signal  = y_signal
         self.raw_close = raw_close
-        self.end_times = end_times   # numpy.datetime64[ns]
+        self.end_times = end_times  # numpy.datetime64[ns]
 
-        # 2) Group windows by calendar day
-        days64 = end_times.astype("datetime64[D]")       # e.g. 2025-09-25
+        # 1) Group windows by calendar day
+        days64 = end_times.astype("datetime64[D]") 
         days, counts = np.unique(days64, return_counts=True)
         boundaries = np.concatenate(([0], np.cumsum(counts)))
 
-        # 3) Build start/end indices and weekday tensor
-        self.start   = torch.tensor(boundaries[:-1], dtype=torch.long)
-        self.end     = torch.tensor(boundaries[1:],  dtype=torch.long)
-        weekdays     = pd.to_datetime(days).dayofweek
-        self.weekday = torch.tensor(weekdays, dtype=torch.long)
+        # 2) FIX: Store indices and weekdays as standard Python lists.
+        # This removes the need for .item() calls in the fast-path __getitem__.
+        self.start_list   = boundaries[:-1].tolist()
+        self.end_list     = boundaries[1:].tolist()
+        
+        weekdays          = pd.to_datetime(days).dayofweek
+        self.weekday_list = weekdays.tolist()
 
     def __len__(self):
-        return len(self.start)
+        return len(self.start_list)
 
     def __getitem__(self, idx: int):
-        # Determine slice indices for this day
-        s = self.start[idx].item()
-        e = self.end[idx].item()
+        # 3) FAST PATH: Direct integer access from lists
+        s = self.start_list[idx]
+        e = self.end_list[idx]
     
-        # 4) Slice out windows (no leading day dim)
+        # Slicing tensors is fast and does not trigger a sync
         x     = self.X[s:e]           # (W, look_back, F)
         y_sig = self.y_signal[s:e]    # (W,)
+        rc    = self.raw_close[s:e]   # (W,)
     
-        # Extract raw_close slice (length W, no leading dim)
-        rc = self.raw_close[s:e]   # (W,)
+        # No .item() or int() conversion needed here anymore
+        wd     = self.weekday_list[idx]
+        end_ts = self.end_times[e - 1] # numpy.datetime64[ns]
     
-        # Weekday index and last-window timestamp
-        wd     = int(self.weekday[idx].item())
-        end_ts = self.end_times[e - 1]  # numpy.datetime64[ns]
-    
-        # Return the tuple with simplified shapes
         return x, y_sig, rc, wd, end_ts
 
         
 ######################
 
 
+# def pad_collate(batch):
+#     """
+#     Pad and flatten a batch of per-day examples into canonical per-window tensors.
+
+#     Args
+#     - batch: iterable of DayWindowDataset items, 
+#       where x is expected to be per-day windows shaped (W, T, F).
+
+#     Returns
+#     - x_flat     Tensor[N, T, F]    flattened windows (N = B * W_max)
+#     - ysig_flat  Tensor[N]          flattened per-window scalar targets
+#     - rc_flat    Tensor[N]          flattened per-window raw_close values
+#     - wd_per_day list[int]          per-day weekday ints (length B)
+#     - ts_list    list               per-day end timestamps 
+#     - lengths    list[int]          true window counts per day 
+#     """
+#     # Unpack tuple structure
+#     x_list, ysig_list, rc_list, wd_list, ts_list = zip(*batch)
+
+#     xs      = list(x_list)        # expect (W, T, F)
+#     ysig    = list(ysig_list)     # expect (W,)
+#     rc_seq  = list(rc_list)       # expect (W,)
+
+#     lengths = [seq.size(0) for seq in xs]  # per-day window counts W_i
+
+#     # Pad per-day along the window axis -> shapes (B, W_max, ...)
+#     x_pad    = pad_sequence(xs,   batch_first=True)  # (B, W_max, T, F)
+#     ysig_pad = pad_sequence(ysig,   batch_first=True) # (B, W_max)
+#     rc_pad   = pad_sequence(rc_seq, batch_first=True) # (B, W_max)
+
+#     # Weekday per-day (B,)
+#     wd_tensor = torch.tensor(wd_list, dtype=torch.long)
+
+#     # Flatten first two dims to canonical per-window shapes (N = B * W_max)
+#     B, W_max = ysig_pad.shape[0], ysig_pad.shape[1]
+#     T = x_pad.shape[2]
+#     F = x_pad.shape[3]
+
+#     x_flat    = x_pad.contiguous().view(B * W_max, T, F)   # (N, T, F)
+#     ysig_flat = ysig_pad.contiguous().view(B * W_max)      # (N,)
+#     rc_flat   = rc_pad.contiguous().view(B * W_max)        # (N,)
+
+#     # Keep per-day weekday vector (B,) for state resets; callers use lengths to align windows
+#     wd_per_day = wd_tensor.tolist()  # list[int] length B
+
+#     return x_flat, ysig_flat, rc_flat, wd_per_day, list(ts_list), lengths
+
+
 def pad_collate(batch):
     """
-    Pad and flatten a batch of per-day examples into canonical per-window tensors.
+    Pads and flattens a batch of per-day examples into canonical per-window tensors.
 
-    Args
-    - batch: iterable of DayWindowDataset items, 
-      where x is expected to be per-day windows shaped (W, T, F).
-
-    Returns
-    - x_flat     Tensor[N, T, F]    flattened windows (N = B * W_max)
-    - ysig_flat  Tensor[N]          flattened per-window scalar targets
-    - rc_flat    Tensor[N]          flattened per-window raw_close values
-    - wd_per_day list[int]          per-day weekday ints (length B)
-    - ts_list    list               per-day end timestamps 
-    - lengths    list[int]          true window counts per day 
+    Functionality:
+    1. Unpacks day-based sequences of features, signals, and raw prices.
+    2. Pads sequences to a uniform length (W_max) using torch.nn.utils.rnn.pad_sequence.
+    3. Flattens batches from (B, W_max) to (B*W_max) to align with standard model heads.
+    4. Maintains metadata (weekdays, timestamps, and true lengths) as lists to avoid CPU-GPU syncs.
     """
-    # Unpack tuple structure
+    # Unpack the list of tuples returned by the Dataset
     x_list, ysig_list, rc_list, wd_list, ts_list = zip(*batch)
 
-    xs      = list(x_list)        # expect (W, T, F)
-    ysig    = list(ysig_list)     # expect (W,)
-    rc_seq  = list(rc_list)       # expect (W,)
+    xs      = list(x_list)    # Expect (W, T, F)
+    ysig    = list(ysig_list) # Expect (W,)
+    rc_seq  = list(rc_list)   # Expect (W,)
 
-    lengths = [seq.size(0) for seq in xs]  # per-day window counts W_i
+    # Calculate true window counts per day before padding
+    lengths = [seq.size(0) for seq in xs] 
 
-    # Pad per-day along the window axis -> shapes (B, W_max, ...)
-    x_pad    = pad_sequence(xs,   batch_first=True)  # (B, W_max, T, F)
+    # 1. Pad per-day sequences along the window axis -> shapes (B, W_max, ...)
+    # This uses PyTorch optimized padding kernels
+    x_pad    = pad_sequence(xs,    batch_first=True)  # (B, W_max, T, F)
     ysig_pad = pad_sequence(ysig,   batch_first=True) # (B, W_max)
     rc_pad   = pad_sequence(rc_seq, batch_first=True) # (B, W_max)
 
-    # Weekday per-day (B,)
-    wd_tensor = torch.tensor(wd_list, dtype=torch.long)
-
-    # Flatten first two dims to canonical per-window shapes (N = B * W_max)
+    # Get batch dimensions for flattening
     B, W_max = ysig_pad.shape[0], ysig_pad.shape[1]
     T = x_pad.shape[2]
     F = x_pad.shape[3]
 
+    # 2. Flatten first two dims to canonical per-window shapes (N = B * W_max)
+    # .contiguous() ensures memory layout is correct before the .view() call
     x_flat    = x_pad.contiguous().view(B * W_max, T, F)   # (N, T, F)
     ysig_flat = ysig_pad.contiguous().view(B * W_max)      # (N,)
     rc_flat   = rc_pad.contiguous().view(B * W_max)        # (N,)
 
-    # Keep per-day weekday vector (B,) for state resets; callers use lengths to align windows
-    wd_per_day = wd_tensor.tolist()  # list[int] length B
+    # 3. Optimized Weekday handling: 
+    # Keep as a standard Python list to avoid redundant torch.tensor -> .tolist() conversion.
+    # This removes the tiny CPU-GPU sync bottleneck for this specific variable.
+    wd_per_day = list(wd_list) 
 
     return x_flat, ysig_flat, rc_flat, wd_per_day, list(ts_list), lengths
 
     
 ###############
-
-
-# def split_to_day_datasets(
-#     X_tr, y_sig_tr, raw_close_tr, end_times_tr,
-#     X_val, y_sig_val, raw_close_val, end_times_val,
-#     X_te,  y_sig_te,  raw_close_te,  end_times_te,
-#     *,
-#     train_batch:           int = 32,
-#     train_workers:         int = 0,
-#     train_prefetch_factor: int = 1
-# ) -> tuple[DataLoader, DataLoader, DataLoader]:
-#     """
-#     Instantiate DayWindowDataset for train/val/test and wrap into DataLoaders.
-
-#     Functionality:
-#       1) Build three DayWindowDataset objects, each receiving raw_close tensor:
-#          - train set gets raw_close_tr
-#          - val   set gets raw_close_val
-#          - test  set gets raw_close_te
-#       2) Wrap each dataset in a DataLoader using pad_collate:
-#          - train: batch_size=train_batch, num_workers=train_workers, prefetch_factor.
-#          - val & test: batch_size=1, num_workers=0.
-#       This ensures __getitem__ always sees a real raw_close tensor, never None.
-#     """
-#     splits = [
-#         ("train", X_tr,  y_sig_tr,  raw_close_tr,  end_times_tr),
-#         ("val",   X_val, y_sig_val, raw_close_val, end_times_val),
-#         ("test",  X_te,  y_sig_te,  raw_close_te,  end_times_te),
-#     ]
-
-#     datasets = {}
-#     for name, Xd, ys, rc, et in tqdm(splits, desc="Creating DayWindowDatasets", unit="split"):
-#         datasets[name] = DayWindowDataset(
-#             X             = Xd,
-#             y_signal      = ys,
-#             raw_close     = rc,  
-#             end_times     = et,
-#         )
-
-#     # Train loader: padded multi-day batches
-#     train_loader = DataLoader(
-#         datasets["train"],
-#         batch_size           = train_batch,
-#         shuffle              = False,
-#         drop_last            = False,
-#         collate_fn           = pad_collate,
-#         num_workers          = train_workers,
-#         pin_memory           = True,
-#         persistent_workers   = (train_workers > 0),
-#         prefetch_factor      = (train_prefetch_factor if train_workers > 0 else None),
-#     )
-
-#     # Validation loader: single-day batches
-#     val_loader = DataLoader(
-#         datasets["val"],
-#         batch_size = 1,
-#         shuffle    = False,
-#         collate_fn = pad_collate,
-#         num_workers= 0,
-#         pin_memory = True,
-#     )
-
-#     # Test loader: single-day batches
-#     test_loader = DataLoader(
-#         datasets["test"],
-#         batch_size = 1,
-#         shuffle    = False,
-#         collate_fn = pad_collate,
-#         num_workers= 0,
-#         pin_memory = True,
-#     )
-
-#     return train_loader, val_loader, test_loader
 
 
 def split_to_day_datasets(
@@ -448,7 +475,8 @@ def split_to_day_datasets(
     train_batch:           int = 32,
     val_test_batch:        int = 1,
     train_workers:         int = 1,
-    train_prefetch_factor: int = 1
+    train_prefetch_factor: int = 1,
+    pin_memory:            bool = params.hparams["PIN_MEMORY"]
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     """
     Instantiate DayWindowDataset for train/val/test and wrap them into PyTorch DataLoaders.
@@ -482,7 +510,7 @@ def split_to_day_datasets(
         drop_last            = False,
         collate_fn           = pad_collate,
         num_workers          = train_workers,
-        pin_memory           = True,
+        pin_memory           = pin_memory,
         persistent_workers   = (train_workers > 0),
         prefetch_factor      = (train_prefetch_factor if train_workers > 0 else None),
     )
@@ -494,7 +522,7 @@ def split_to_day_datasets(
         shuffle    = False,
         collate_fn = pad_collate,
         num_workers= 0,
-        pin_memory = True,
+        pin_memory = pin_memory,
     )
 
     # Test loader: single-day batches
@@ -504,7 +532,7 @@ def split_to_day_datasets(
         shuffle    = False,
         collate_fn = pad_collate,
         num_workers= 0,
-        pin_memory = True,
+        pin_memory = pin_memory,
     )
 
     return train_loader, val_loader, test_loader
@@ -631,88 +659,6 @@ def summarize_split(name, loader, times):
 #########################################################################################################
 
 
-# def maybe_save_chkpt(
-#     models_dir: Path,
-#     model: torch.nn.Module,
-#     val_rmse: float,
-#     cur_best: float,
-#     model_feats, 
-#     model_hparams,
-#     tr: dict,
-#     val: dict,
-#     live_plot
-# ) -> tuple[float, bool, dict, dict, dict | None]:
-#     """
-#     Evaluates validation performance, captures model state, and handles checkpoint saving.
-
-#     Functionalities:
-#     1. Compares the current epoch's validation RMSE (`val_rmse`) against the best seen in RAM (`cur_best`).
-#     2. If it's an improvement, it captures the model's weights, metrics, and renders the live plot to bytes.
-#     3. Scans the target directory (`models_dir`) to find the best historically saved checkpoint.
-#        (Optimization: This scan only happens if the current model actually improved in-memory, saving disk I/O).
-#     4. If the new RMSE beats the historical best on disk, it saves a new `_chp.pth` file containing 
-#        the weights, hyperparameters, and plots, and writes a minimal audit line to the log file.
-#     """
-#     # Ensure output folder exists
-#     models_dir.mkdir(exist_ok=True)
-
-#     # 1) Check for improvement in THIS run first (Fast in-memory comparison)
-#     if val_rmse < cur_best:
-#         improved = True
-#         updated_best = val_rmse
-
-#         # Capture the raw weights and metric snapshots while they are fresh
-#         best_state = model.state_dict()
-#         best_tr    = tr.copy()
-#         best_val   = val.copy()
-
-#         # Render the live RMSE plot to bytes so it can be embedded inside the .pth file
-#         buf = io.BytesIO()
-#         live_plot.fig.savefig(buf, format="png")
-#         buf.seek(0)
-#         plot_bytes = buf.read()
-
-#         # 2) Gather on-disk RMSEs to know if we're beating existing files
-#         # We only hit the hard drive here because we already know we have an in-memory improvement
-#         pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_(?:chp|fin)\.pth"
-#         save_re = re.compile(pattern)
-#         existing_rmses = [
-#             float(m.group(1))
-#             for f in models_dir.glob("*.pth")
-#             if (m := save_re.match(f.name))
-#         ]
-#         best_on_disk = min(existing_rmses, default=float("inf"))
-
-#         # 3) If we also beat any historically saved model on disk, write a new folder-best checkpoint
-#         if updated_best < best_on_disk:
-#             fname = f"{params.ticker}_{updated_best:.5f}_chp.pth"
-#             ckpt = {
-#                 "model_state_dict": best_state,
-#                 "hparams":          model_hparams,
-#                 "features":         model_feats,
-#                 "train_metrics":    best_tr,
-#                 "val_metrics":      best_val,
-#                 "train_plot_png":   plot_bytes,
-#             }
-#             ckpt_path = models_dir / fname
-#             torch.save(ckpt, ckpt_path)
-
-#             # Write a minimal audit line at the exact moment of the save so logs
-#             # deterministically record which file was written for which val RMSE.
-#             try:
-#                 _append_log(f"CHKPT SAVED val={updated_best:.3f} path={ckpt_path}", params.log_file)
-#             except Exception:
-#                 # Best-effort: do not fail the save process on logging errors
-#                 pass
-
-#             # Provide immediate visual feedback in the Jupyter notebook
-#             print(f"🔖 Saved folder-best checkpoint (_chp): {fname}")
-
-#         return updated_best, improved, best_tr, best_val, best_state
-
-#     # If no improvement was found, return the unchanged bests
-#     return cur_best, False, {}, {}, None
-
 def maybe_save_chkpt(
     models_dir: Path,
     model: torch.nn.Module,
@@ -754,14 +700,14 @@ def maybe_save_chkpt(
             plot_bytes = buf.read()
 
         # 2) Gather on-disk RMSEs and clean up old checkpoints (FIX DISK LEAK)
-        pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_chp\.pth"
+        pattern = rf"{re.escape(params.ticker)}_(\d+\.\d+)_chp\.pth$"
         save_re = re.compile(pattern)
         
         old_checkpoints = []
         best_on_disk = float("inf")
         
         # Identify all existing checkpoint files for this ticker
-        for f in models_dir.glob("*.pth"):
+        for f in models_dir.glob("*_chp.pth"):
             match = save_re.match(f.name)
             if match:
                 val_score = float(match.group(1))
@@ -806,47 +752,6 @@ def maybe_save_chkpt(
 
     
 ################ 
-
-
-# def save_final_chkpt(
-#     models_dir: Path,
-#     best_state: dict,
-#     best_val_rmse: float,
-#     model_feats, 
-#     model_hparams,
-#     best_tr: dict,
-#     best_val: dict,
-#     live_plot,
-#     suffix: str = "_fin"
-# ):
-#     """
-#     Write the final overall‐best checkpoint (_fin):
-
-#       • Uses the state_dict mapping in `best_state`
-#       • Embeds hyperparameters, final train/val metrics, and the plot PNG
-#       • Filename: <TICKER>_<best_val_rmse><suffix>.pth
-#     """
-#     # Render the live RMSE plot to PNG bytes
-#     buf = io.BytesIO()
-#     live_plot.fig.savefig(buf, format="png")
-#     buf.seek(0)
-#     final_plot = buf.read()
-
-#     # Assemble the checkpoint dict
-#     ckpt = {
-#         "model_state_dict": best_state,
-#         "hparams":          model_hparams,
-#         "features":         model_feats,
-#         "train_metrics":    best_tr,
-#         "val_metrics":      best_val,
-#         "train_plot_png":   final_plot,
-#     }
-
-#     # Write to disk
-#     fname = f"{params.ticker}_{best_val_rmse:.5f}{suffix}.pth"
-#     (models_dir / fname).parent.mkdir(exist_ok=True, parents=True)
-#     torch.save(ckpt, models_dir / fname)
-#     print(f"✅ Final‐best model saved: {fname}")
 
 
 def save_final_chkpt(
@@ -1349,160 +1254,6 @@ _RUN_STARTED = False
 _RUN_DEBUG_DONE = False
 _RUN_LOCK = threading.Lock()
 
-# def init_log(
-#     log_file:  Path,
-#     hparams:   dict,
-#     baselines: dict,
-#     optimizer: torch.optim.Optimizer,
-#     model: torch.nn.Module,
-# ):
-#     """
-#     Emit run-start diagnostics and a single authoritative micro-snapshot to the log.
-
-#     Responsibilities
-#     - Emit run header, baselines and hyperparameters once.
-#     - Run a one-shot micro-snapshot collector (collect_or_run_forward_micro_snapshot).
-#     - Compute canonical parameter stats and produce a single authoritative
-#       BATCH_SHAPE + MICRODETAIL line derived from the numeric snapshot.
-
-#     Design notes
-#     - The collector performs sampling, forward, timing and raw numeric measurement
-#       and attaches a dict at model._micro_snapshot. init_log computes canonical
-#       parameter counts/bytes and performs all human-facing formatting.
-#     - Helpers are nested for single-file locality as requested.
-#     """
-#     # small helpers (single source of truth for param counts/bytes and formatting)
-#     def model_param_stats(model: torch.nn.Module):
-#         total_params = sum(p.numel() for p in model.parameters())
-#         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-#         def _elem_size_for(p):
-#             es = getattr(p, "element_size", None)
-#             if callable(es):
-#                 return int(es())
-#             return 4
-
-#         param_bytes = int(sum(p.numel() * _elem_size_for(p) for p in model.parameters()))
-#         return int(total_params), int(trainable_params), int(param_bytes)
-
-#     def human_bytes(n):
-#         if n is None:
-#             return "None"
-#         n = int(n)
-#         if n >= 1024**2:
-#             return f"{n/1024**2:.2f}MB"
-#         if n >= 1024:
-#             return f"{n/1024:.1f}KB"
-#         return f"{n}B"
-
-#     global _RUN_STARTED, _RUN_DEBUG_DONE, _RUN_LOCK
-
-#     with _RUN_LOCK:
-#         if not _RUN_STARTED:
-#             sep = "-" * 150
-#             _append_log("\n" + sep, log_file)
-#             _append_log(f"RUN START: {datetime.utcnow().isoformat()}Z", log_file)
-
-#             _append_log(RUN_DIAGNOSTIC_EXPLANATION, log_file)
-
-#             if isinstance(baselines, dict) and baselines:
-#                 _append_log("\nBASELINES:", log_file)
-#                 _append_log(f"  TRAIN mean RMSE        = {baselines['bl_tr_mean']:.5f}", log_file)
-#                 _append_log(f"  TRAIN persistence RMSE = {baselines['bl_tr_pers']:.5f}", log_file)
-#                 _append_log(f"  VAL   mean RMSE        = {baselines['bl_val_mean']:.5f}", log_file)
-#                 _append_log(f"  VAL   persistence RMSE = {baselines['bl_val_pers']:.5f}", log_file)
-
-#             if isinstance(hparams, dict) and hparams:
-#                 _append_log("\nHYPERPARAMS:", log_file)
-#                 for k, v in hparams.items():
-#                     _append_log(f"  {k} = {v}", log_file)
-#                 _append_log("", log_file)
-
-#             # Compact runtime summary pieces
-#             debug_opt_line = None
-#             if optimizer is not None:
-#                 opt_groups = len(optimizer.param_groups)
-#                 opt_lrs = [g.get("lr", 0.0) for g in optimizer.param_groups]
-#                 opt_counts = [sum(1 for _ in g["params"]) for g in optimizer.param_groups]
-#                 debug_opt_line = f"DEBUG_OPT GROUPS={opt_groups} LRS={[f'{x:.1e}' for x in opt_lrs]} COUNTS={opt_counts}"
-
-#             # Canonical model counts computed once here so variables exist later
-#             if model is not None:
-#                 total_params, trainable_params, computed_param_bytes = model_param_stats(model)
-#                 frozen_params = total_params - trainable_params
-#                 model_static_line = f"MODEL_STATIC: total_params={total_params:,} trainable={trainable_params:,} frozen={frozen_params:,}"
-#                 param_bytes_line = f"param_bytes={human_bytes(computed_param_bytes)}"
-#             else:
-#                 total_params = trainable_params = computed_param_bytes = None
-#                 model_static_line = None
-#                 param_bytes_line = None
-
-#             compact_parts = []
-#             if debug_opt_line:
-#                 compact_parts.append(debug_opt_line)
-#             if model_static_line:
-#                 compact_parts.append(model_static_line)
-#             if param_bytes_line:
-#                 compact_parts.append(param_bytes_line)
-
-#             if compact_parts:
-#                 _append_log(" | ".join(compact_parts), log_file)
-
-#             _RUN_STARTED = True
-
-#         # --- One-shot snapshot emission at most once ---
-#         if not _RUN_DEBUG_DONE:
-#             tloader = locals().get("train_loader", None) or globals().get("train_loader", None)
-#             prms = locals().get("params", None) or globals().get("params", None)
-#             opt_local = locals().get("optimizer", None) or globals().get("optimizer", None)
-
-#             # run collector (collector stays minimal: sampling/timing/forward)
-#             if callable(globals().get("collect_or_run_forward_micro_snapshot", None)):
-#                 collect_or_run_forward_micro_snapshot(
-#                     model=model,
-#                     train_loader=tloader,
-#                     params=prms,
-#                     optimizer=opt_local,
-#                     log_file=log_file,
-#                 )
-
-#             micro_ms = getattr(model, "_micro_snapshot", None)
-
-#             # stamp canonical param stats into snapshot and emit MICRODETAIL
-#             if isinstance(micro_ms, dict):
-#                 micro_ms["total_params"] = int(total_params) if total_params is not None else None
-#                 micro_ms["trainable_params"] = int(trainable_params) if trainable_params is not None else None
-#                 micro_ms["param_bytes"] = int(computed_param_bytes) if computed_param_bytes is not None else None
-
-#                 _append_log(
-#                     f"BATCH_SHAPE B={micro_ms.get('B')} groups={micro_ms.get('groups')} seq_len_full={micro_ms.get('seq_len_full')} feat={micro_ms.get('feat_dim')}",
-#                     log_file,
-#                 )
-
-#                 # format helpers used only for MICRODETAIL rendering
-#                 def _hb(v):
-#                     if v is None: return "None"
-#                     v = int(v)
-#                     if v >= 1024**2: return f"{v/1024**2:.2f}MB"
-#                     if v >= 1024: return f"{v/1024:.1f}KB"
-#                     return f"{v}B"
-
-#                 def _fmt(k, v):
-#                     if v is None:
-#                         return f"{k}=None"
-#                     # treat only param_bytes (and keys explicitly with "bytes") as byte quantities
-#                     if "bytes" in k or k == "param_bytes" or "cpu_copy" in k or "windows" in k:
-#                         return f"{k}={_hb(v)}"
-#                     if "shape" in k and not isinstance(v, str):
-#                         return f"{k}={tuple(v)}"
-#                     if isinstance(v, float):
-#                         return f"{k}={v:.2f}"
-#                     return f"{k}={v}"
-
-#                 parts = [_fmt(k, micro_ms.get(k)) for k in sorted(micro_ms.keys())]
-#                 _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
-
-#                 _RUN_DEBUG_DONE = True
 
 def init_log(
     log_file:  Path,
@@ -1662,6 +1413,7 @@ def init_log(
                 _append_log("MICRODETAIL ms: " + " ".join(parts), log_file)
 
                 _RUN_DEBUG_DONE = True
+
                 
 #################################################################################################################################
 

@@ -329,69 +329,70 @@ def compute_baselines(flat_targets: np.ndarray, lengths: Sequence[int]) -> Tuple
 
 # def _reset_states(
 #     model:    nn.Module,
-#     wd_i:     torch.Tensor,
+#     wd_list:  Union[list, torch.Tensor],
 #     prev_day: int | None
 # ) -> int:
 #     """
-#     Reset short-term on any day change, and long-term weekly, ie when the day index
-#     wraps around (i.e. new_day < prev_day).
+#     Manages model state resets for a batch of days, clearing recurrent 
+#     memory on day changes and long-term memory on weekly wraps.
 
-#     Args:
-#       model     : ModelClass instance (implements reset_short/reset_long)
-#       wd_i      : scalar tensor with day-of-week (0=Mon,…,6=Sun)
-#       prev_day  : last seen day-of-week or None
-
-#     Returns:
-#       the new day-of-week for next call
+#     Functionality:
+#     - Checks for day/week transitions using CPU-side logic to avoid GPU sync overhead.
+#     - Resets h_short/c_short and h_long/c_long via getattr/setattr for model flexibility.
+#     - Safely handles both list and tensor inputs for weekday data.
 #     """
 #     if not hasattr(model, "_reset_log"): model._reset_log = []
-#     day = int(wd_i)
+    
+#     # Fast CPU-side indexing
+#     first_day = int(wd_list[0])
+#     last_day = int(wd_list[-1])
 
-#     # daily reset if the day changed
-#     if prev_day is None or day != prev_day:
-#         # clear short LSTM states so forward will allocate fresh states
-#         model.h_short = None
-#         model.c_short = None
-#         model._reset_log.append(("short", day))
+#     # 1. Daily Reset (Short-Term)
+#     if prev_day is None or first_day != prev_day:
+#         for attr in ["h_short", "c_short"]:
+#             if hasattr(model, attr): setattr(model, attr, None)
+#         model._reset_log.append(("short", first_day))
 
-#         # weekly reset if we've wrapped past the end of the week
-#         if prev_day is not None and day < prev_day:
-#             model.h_long = None
-#             model.c_long = None
-#             model._reset_log.append(("long", day))
+#     # 2. Weekly Reset (Long-Term)
+#     # Check for wrap-around within the batch list
+#     has_wrap_internal = any(wd_list[i] < wd_list[i-1] for i in range(1, len(wd_list)))
+#     if prev_day is not None and (first_day < prev_day or has_wrap_internal):
+#         for attr in ["h_long", "c_long"]:
+#             if hasattr(model, attr): setattr(model, attr, None)
+#         model._reset_log.append(("long", first_day))
 
-#     return day
+#     return last_day
 
 
 def _reset_states(
     model:    nn.Module,
-    wd_list:  Union[list, torch.Tensor],
+    wd_list:  list,
     prev_day: int | None
 ) -> int:
     """
-    Manages model state resets for a batch of days, clearing recurrent 
-    memory on day changes and long-term memory on weekly wraps.
-
-    Functionality:
-    - Checks for day/week transitions using CPU-side logic to avoid GPU sync overhead.
-    - Resets h_short/c_short and h_long/c_long via getattr/setattr for model flexibility.
-    - Safely handles both list and tensor inputs for weekday data.
-    """
-    if not hasattr(model, "_reset_log"): model._reset_log = []
+    Manages model state resets (short-term and long-term) for sequential data.
     
-    # Fast CPU-side indexing
-    first_day = int(wd_list[0])
-    last_day = int(wd_list[-1])
-
-    # 1. Daily Reset (Short-Term)
+    Functionality:
+    1. Detects day changes to reset short-term memory (h_short/c_short).
+    2. Detects weekly wrap-around or non-sequential days to reset long-term memory.
+    3. Operates entirely on CPU using Python lists to avoid expensive GPU-CPU syncs.
+    """
+    if not hasattr(model, "_reset_log"): 
+        model._reset_log = []
+    
+    # 1. Boundary Check (Pure CPU path is fastest for small batches)
+    first_day = wd_list[0]
+    last_day = wd_list[-1]
+    
+    # 2. Daily Reset Trigger
     if prev_day is None or first_day != prev_day:
         for attr in ["h_short", "c_short"]:
             if hasattr(model, attr): setattr(model, attr, None)
         model._reset_log.append(("short", first_day))
 
-    # 2. Weekly Reset (Long-Term)
-    # Check for wrap-around within the batch list
+    # 3. Weekly Reset Trigger (Checks for internal wrap-around)
     has_wrap_internal = any(wd_list[i] < wd_list[i-1] for i in range(1, len(wd_list)))
+    
     if prev_day is not None and (first_day < prev_day or has_wrap_internal):
         for attr in ["h_long", "c_long"]:
             if hasattr(model, attr): setattr(model, attr, None)
@@ -403,22 +404,101 @@ def _reset_states(
 ############################ 
 
 
+# class CustomMSELoss(nn.Module):
+#     """
+#     Level + slope loss.
+
+#     Total loss = level_loss + effective_alpha * slope_loss
+
+#     - alpha: base weight for slope (derivative) MSE (same as before).
+#     - warmup_steps: integer number of steps/epochs to linearly ramp slope weight from 0 -> alpha.
+#                     If 0, no warmup (effective_alpha == alpha).
+#     - use_huber: if True use Huber (smooth L1) for the level term; otherwise use MSE exactly.
+#     - huber_delta: delta for Huber (transition threshold). Note: Huber in PyTorch uses 0.5 * e^2
+#                    in the quadratic region (not identical to MSE), so keep use_huber=False to
+#                    preserve exact previous MSE behavior.
+#     forward signature:
+#       forward(preds, targs, seq_lengths, step=None)
+#       - step: optional integer used for warmup (epoch or global step depending on caller).
+#     """
+#     def __init__(
+#         self,
+#         alpha: float = 0.0,
+#         warmup_steps: int = 0,
+#         use_huber: bool = False,
+#         huber_delta: float = 1.0,
+#     ):
+#         super().__init__()
+#         self.alpha = float(alpha)
+#         self.warmup_steps = int(warmup_steps)
+#         self.use_huber = bool(use_huber)
+#         self.huber_delta = float(huber_delta)
+
+#     def _effective_alpha(self, step: Optional[int]) -> float:
+#         if self.alpha <= 0.0:
+#             return 0.0
+#         if self.warmup_steps <= 0 or step is None:
+#             return self.alpha
+#         t = min(1.0, float(step) / float(self.warmup_steps))
+#         return self.alpha * t
+
+#     def forward(
+#         self,
+#         preds: torch.Tensor,
+#         targs: torch.Tensor,
+#         seq_lengths: List[int],
+#         step: Optional[int] = None,
+#     ) -> torch.Tensor:
+#         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
+
+#         # Level term: MSE or Huber depending on flag
+#         if self.use_huber:
+#             # PyTorch's huber_loss uses delta and returns per-element losses; set reduction="mean"
+#             L1 = torch.nn.functional.huber_loss(preds, targs, reduction="mean", delta=self.huber_delta)
+#         else:
+#             L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
+
+#         # If no slope penalty requested, return level loss
+#         if self.alpha <= 0.0:
+#             return L1
+
+#         eff_alpha = self._effective_alpha(step)
+#         if eff_alpha <= 0.0:
+#             return L1
+
+#         # Build per-sequence one-step diffs, avoid crossing sequence boundaries
+#         parts_p = []
+#         parts_t = []
+#         s = 0
+#         for L in seq_lengths:
+#             if L > 1:
+#                 e = s + L
+#                 p = preds[s:e]
+#                 r = targs[s:e]
+#                 parts_p.append(p[1:] - p[:-1])
+#                 parts_t.append(r[1:] - r[:-1])
+#             s += L
+
+#         if not parts_p:
+#             return L1
+
+#         dp = torch.cat(parts_p, dim=0)
+#         dt = torch.cat(parts_t, dim=0)
+#         L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
+
+#         return L1 + eff_alpha * L2
+
+
 class CustomMSELoss(nn.Module):
     """
-    Level + slope loss.
+    Combined Level and Slope (Derivative) Loss.
 
-    Total loss = level_loss + effective_alpha * slope_loss
-
-    - alpha: base weight for slope (derivative) MSE (same as before).
-    - warmup_steps: integer number of steps/epochs to linearly ramp slope weight from 0 -> alpha.
-                    If 0, no warmup (effective_alpha == alpha).
-    - use_huber: if True use Huber (smooth L1) for the level term; otherwise use MSE exactly.
-    - huber_delta: delta for Huber (transition threshold). Note: Huber in PyTorch uses 0.5 * e^2
-                   in the quadratic region (not identical to MSE), so keep use_huber=False to
-                   preserve exact previous MSE behavior.
-    forward signature:
-      forward(preds, targs, seq_lengths, step=None)
-      - step: optional integer used for warmup (epoch or global step depending on caller).
+    Functionality:
+    - Computes MSE or Huber loss for the primary signal levels.
+    - Computes an additional MSE loss on the first-order differences (slopes).
+    - Vectorized: Calculates differences across the entire batch in parallel,
+      masking out invalid transitions between different sequences.
+    - Includes a linear warmup for the slope penalty weight (alpha).
     """
     def __init__(
         self,
@@ -448,45 +528,50 @@ class CustomMSELoss(nn.Module):
         seq_lengths: List[int],
         step: Optional[int] = None,
     ) -> torch.Tensor:
+        # preds/targs shape: (N,) or (N, 1)
         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
 
-        # Level term: MSE or Huber depending on flag
+        # 1. Level Loss (Standard MSE or Huber)
         if self.use_huber:
-            # PyTorch's huber_loss uses delta and returns per-element losses; set reduction="mean"
             L1 = torch.nn.functional.huber_loss(preds, targs, reduction="mean", delta=self.huber_delta)
         else:
             L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
 
-        # If no slope penalty requested, return level loss
-        if self.alpha <= 0.0:
-            return L1
-
+        # 2. Slope Penalty Check
         eff_alpha = self._effective_alpha(step)
         if eff_alpha <= 0.0:
             return L1
 
-        # Build per-sequence one-step diffs, avoid crossing sequence boundaries
-        parts_p = []
-        parts_t = []
-        s = 0
-        for L in seq_lengths:
-            if L > 1:
-                e = s + L
-                p = preds[s:e]
-                r = targs[s:e]
-                parts_p.append(p[1:] - p[:-1])
-                parts_t.append(r[1:] - r[:-1])
-            s += L
+        # 3. Vectorized Slope Calculation
+        # Compute global differences (N-1,)
+        diff_p = preds[1:] - preds[:-1]
+        diff_t = targs[1:] - targs[:-1]
 
-        if not parts_p:
+        # Identify boundary indices where sequences end
+        # Example: if seq_lengths = [3, 2], boundaries are at index 2 (between 2 and 3)
+        if len(seq_lengths) > 1:
+            device = preds.device
+            # Compute cumulative sums to find end-of-sequence indices
+            boundaries = torch.as_tensor(seq_lengths, device=device).cumsum(dim=0)[:-1]
+            
+            # Create a boolean mask for valid transitions (True = same sequence)
+            # Index 'i' in diff_p represents transition between preds[i] and preds[i+1]
+            # Transition is invalid if 'i' is the last index of a sequence (boundary - 1)
+            valid_mask = torch.ones(diff_p.size(0), dtype=torch.bool, device=device)
+            valid_mask[boundaries - 1] = False
+            
+            # Apply mask
+            diff_p = diff_p[valid_mask]
+            diff_t = diff_t[valid_mask]
+
+        if diff_p.numel() == 0:
             return L1
 
-        dp = torch.cat(parts_p, dim=0)
-        dt = torch.cat(parts_t, dim=0)
-        L2 = torch.nn.functional.mse_loss(dp, dt, reduction="mean")
-
+        # 4. Final Aggregated Loss
+        L2 = torch.nn.functional.mse_loss(diff_p, diff_t, reduction="mean")
         return L1 + eff_alpha * L2
 
+        
 ############################
 
 
@@ -518,43 +603,38 @@ def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
 
 # def _prepare_windows_and_targets_batch(
 #     x_batch: torch.Tensor, y_signal: torch.Tensor, seq_lengths: list,
-#     wd_batch: torch.Tensor, reset_state_fn, model, prev_day=None
+#     wd_list: list, reset_state_fn, model, prev_day=None
 # ):
 #     """
-#     Extracts valid, unpadded windows and targets from a padded batch block.
-    
+#     Collapses a padded batch and handles state resets without GPU-CPU synchronization.
+
 #     Functionality:
-#     - Iterates through the batch to manage stateful LSTM resets across day boundaries.
-#     - If the batch has zero padding, skips slicing and returns raw tensors (fast path).
-#     - Uses a 1D boolean mask to filter out padded windows in a single GPU operation.
+#     - Passes the CPU-resident weekday list directly to the reset function (No .item() calls).
+#     - Uses vectorized boolean masking on the GPU to remove padding in a single parallel step.
 #     """
 #     B = len(seq_lengths)
-#     W_max = x_batch.size(0) // B
+#     if B == 0: return None, None, prev_day
     
-#     # 1. Sequentially handle the day-by-day LSTM state resets
-#     for day_idx in range(B):
-#         prev_day = reset_state_fn(model, wd_batch[day_idx], prev_day)
-        
+#     W_max = x_batch.size(0) // B
+#     device = x_batch.device
+    
+#     # 1. Synchronize State: Execute reset logic (stays on CPU)
+#     prev_day = reset_state_fn(model, wd_list, prev_day)
+
 #     total_valid = sum(seq_lengths)
-#     if total_valid == 0:
-#         return None, None, prev_day
+#     if total_valid == 0: return None, None, prev_day
         
-#     # 2. FAST PATH: Skip masking if there is no padding
+#     # 2. Fast Path: No padding detected
 #     if total_valid == B * W_max:
 #         return x_batch.float(), y_signal.float(), prev_day
 
-#     # 3. BOOLEAN MASKING: Extract irregular blocks
-#     # Pre-allocate mask on device to avoid CPU->GPU transfer cost
-#     mask = torch.zeros(B * W_max, dtype=torch.bool, device=x_batch.device)
-#     for i, L in enumerate(seq_lengths):
-#         if L > 0:
-#             start_idx = i * W_max
-#             mask[start_idx : start_idx + L] = True
+#     # 3. Vectorized Masking: Parallelized padding removal on GPU
+#     # Use torch.as_tensor which is faster for lists, and ensure it's on the device immediately
+#     lens_tensor = torch.as_tensor(seq_lengths, device=device, dtype=torch.long).unsqueeze(1)
+#     mask = torch.arange(W_max, device=device).expand(B, W_max) < lens_tensor
+#     mask = mask.reshape(-1) 
             
-#     windows_tensor = x_batch[mask].float()
-#     targets_tensor = y_signal[mask].float()
-
-#     return windows_tensor, targets_tensor, prev_day
+#     return x_batch[mask].float(), y_signal[mask].float(), prev_day
 
 
 def _prepare_windows_and_targets_batch(
@@ -562,95 +642,42 @@ def _prepare_windows_and_targets_batch(
     wd_list: list, reset_state_fn, model, prev_day=None
 ):
     """
-    Collapses a padded batch and handles state resets without GPU-CPU synchronization.
-
+    Collapses padded batches and orchestrates state resets for sequential training.
+    
     Functionality:
-    - Passes the CPU-resident weekday list directly to the reset function (No .item() calls).
-    - Uses vectorized boolean masking on the GPU to remove padding in a single parallel step.
+    1. Triggers state resets based on the provided list of weekdays.
+    2. Uses vectorized boolean masking on the GPU to remove zero-padding.
+    3. Minimizes CPU-GPU traffic by using .as_tensor() for masking parameters.
     """
     B = len(seq_lengths)
-    if B == 0: return None, None, prev_day
+    if B == 0: 
+        return None, None, prev_day
     
     W_max = x_batch.size(0) // B
     device = x_batch.device
     
-    # 1. Synchronize State: Execute reset logic (stays on CPU)
+    # 1. State Management (Runs on CPU using the weekday list)
     prev_day = reset_state_fn(model, wd_list, prev_day)
 
+    # Calculate total valid windows (Fast CPU sum)
     total_valid = sum(seq_lengths)
-    if total_valid == 0: return None, None, prev_day
+    if total_valid == 0: 
+        return None, None, prev_day
         
-    # 2. Fast Path: No padding detected
+    # 2. Shortcut: If no padding exists, skip masking overhead
     if total_valid == B * W_max:
         return x_batch.float(), y_signal.float(), prev_day
 
-    # 3. Vectorized Masking: Parallelized padding removal on GPU
-    lens_tensor = torch.tensor(seq_lengths, device=device).unsqueeze(1)
+    # 3. GPU Masking
+    # Convert seq_lengths to GPU tensor once for the comparison math
+    lens_tensor = torch.as_tensor(seq_lengths, device=device, dtype=torch.long).unsqueeze(1)
     mask = torch.arange(W_max, device=device).expand(B, W_max) < lens_tensor
     mask = mask.reshape(-1) 
             
     return x_batch[mask].float(), y_signal[mask].float(), prev_day
-
+    
     
 ########################
-
-
-# def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
-#     """
-#     Run model validation over a loader and return metrics and predictions.
-    
-#     Functionality:
-#     - Runs in eval() mode with torch.no_grad() to save memory.
-#     - Preserves LSTM states correctly using _prepare_windows_and_targets_batch.
-#     - Accumulates predictions as raw GPU tensors to avoid PCIe sync bottlenecks.
-#     - Moves all tensors to CPU/Numpy only once at the end of the evaluation.
-#     - Computes and stores baselines and metrics.
-#     """
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#     model.to(device).eval()
-#     model.h_short = model.h_long = None
-#     prev_day = None
-    
-#     # OPTIMIZATION: Accumulate GPU tensors, not CPU lists
-#     val_base_preds_tensors = []
-#     val_tot_preds_tensors = []
-#     val_targs_tensors = []
-#     val_lengths = []
-
-#     with torch.no_grad():
-#         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(loader, desc="eval", leave=True):
-
-#             x_batch = x_batch.to(device, non_blocking=True)
-#             y_signal = y_signal.to(device, non_blocking=True)
-
-#             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
-#                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
-#             )
-#             if windows_tensor is None:
-#                 continue
-   
-#             base_tensor, delta_tensor = model(windows_tensor)
-#             total_tensor = base_tensor + delta_tensor
-            
-#             # OPTIMIZATION: Keep on GPU for now
-#             val_base_preds_tensors.append(base_tensor.view(-1).detach())
-#             val_tot_preds_tensors.append(total_tensor.view(-1).detach())
-#             val_targs_tensors.append(targets_tensor.view(-1).detach())
-#             val_lengths.extend([L for L in seq_lengths if L > 0])
-            
-#     # Bulk move to CPU and convert to Numpy
-#     val_base_preds = torch.cat(val_base_preds_tensors).cpu().numpy().astype(np.float64) if val_base_preds_tensors else np.array([], dtype=np.float64)
-#     val_tot_preds = torch.cat(val_tot_preds_tensors).cpu().numpy().astype(np.float64) if val_tot_preds_tensors else np.array([], dtype=np.float64)
-#     val_targs = torch.cat(val_targs_tensors).cpu().numpy().astype(np.float64) if val_targs_tensors else np.array([], dtype=np.float64)
-
-#     model.bl_val_mean, model.bl_val_pers = compute_baselines(val_targs, val_lengths)
-
-#     # Store for diagnostics
-#     model.last_val_tot_preds = torch.from_numpy(val_tot_preds).float()
-#     model.last_val_targs = torch.from_numpy(val_targs).float()
-   
-#     return _compute_metrics(val_tot_preds, val_targs), _compute_metrics(val_base_preds, val_targs), val_tot_preds, val_base_preds, val_targs
-
 
 
 def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
@@ -717,14 +744,7 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
 #     scaler: torch.amp.GradScaler, train_loader, val_loader, all_features=False
 # ) -> float:
 #     """
-#     Executes the main supervised training loop for the time-series model.
-    
-#     Functionality:
-#     - Runs AMP (Mixed Precision) forward passes.
-#     - Computes primary loss (Smoothed MSE) and secondary detached delta loss.
-#     - Prevents PCIe bottlenecks by accumulating prediction tensors entirely on the GPU.
-#     - Backpropagates scaled losses, clips gradients, and steps optimizer/scheduler safely.
-#     - Validates, logs metrics, and manages Checkpoints/Early Stopping.
+#     Executes the training loop with optimized timing and detailed metric reporting.
 #     """
 #     if getattr(model, "delta_head", None) is not None:
 #         torch.nn.init.zeros_(model.delta_head.bias)
@@ -752,187 +772,14 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
 #         model.h_short = model.h_long = None
 #         prev_day = None
 
-#         # OPTIMIZATION: Accumulate GPU tensors directly
 #         tr_base_preds_tensors, tr_tot_preds_tensors, tr_targs_tensors = [], [], []
 #         tr_delta_preds_tensors, tr_delta_targs_tensors, tr_lengths = [], [], []
-        
 #         epoch_total_loss_sum = epoch_base_loss_sum = epoch_delta_loss_sum = 0.0
 #         epoch_loss_count = epoch_samples = 0
-#         epoch_start = datetime.utcnow().timestamp()
-
-#         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=True):
-#             x_batch = x_batch.to(device, non_blocking=True)
-#             y_signal = y_signal.to(device, non_blocking=True)
-
-#             optimizer.zero_grad(set_to_none=True)
-
-#             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
-#                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
-#             )
-#             if windows_tensor is None: continue
-
-#             with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
-#                 base_tensor, delta_tensor = model(windows_tensor)  
-#                 total_tensor = base_tensor + delta_tensor 
-                
-#                 base_tensor, delta_tensor, total_tensor = base_tensor.view(-1), delta_tensor.view(-1), total_tensor.view(-1)
-                
-#                 base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
-                
-#                 if model.use_delta and model_hparams["LAMBDA_DELTA"] > 0:
-#                     delta_target = (targets_tensor - base_tensor).detach()
-#                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
-#                     tr_delta_preds_tensors.append(delta_tensor.detach())
-#                     tr_delta_targs_tensors.append(delta_target)
-#                 else:
-#                     delta_loss = torch.tensor(0.0, device=device)
-
-#                 tr_base_preds_tensors.append(base_tensor.detach())
-#                 tr_tot_preds_tensors.append(total_tensor.detach())
-#                 tr_targs_tensors.append(targets_tensor.detach())
-                
-#                 tr_lengths.extend([L for L in seq_lengths if L > 0])
-#                 epoch_samples += int(targets_tensor.size(0))
-
-#                 total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
-
-#             # OPTIMIZATION: No torch.cuda.synchronize() block
-#             scaler.scale(total_loss).backward()
-#             scaler.unscale_(optimizer)
-
-#             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
-#             if params_with_grad: torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
-
-#             # Guard scheduler
-#             _called = {"v": False}
-#             _real = optimizer.step
-#             optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
-#             try: scaler.step(optimizer)
-#             finally: scaler.update()
-#             optimizer.step = _real
-#             if _called["v"]: scheduler.step()
-  
-#             epoch_total_loss_sum += total_loss.item()
-#             epoch_base_loss_sum += base_loss.item()
-#             epoch_delta_loss_sum += delta_loss.item()
-#             epoch_loss_count += 1
-
-#         # ==== Bulk Data Transfer to CPU (Straight to NumPy) ====
-#         tr_base_preds = torch.cat(tr_base_preds_tensors).cpu().numpy().astype(np.float64) if tr_base_preds_tensors else np.array([], dtype=np.float64)
-#         tr_tot_preds  = torch.cat(tr_tot_preds_tensors).cpu().numpy().astype(np.float64)  if tr_tot_preds_tensors  else np.array([], dtype=np.float64)
-#         tr_targs      = torch.cat(tr_targs_tensors).cpu().numpy().astype(np.float64)      if tr_targs_tensors      else np.array([], dtype=np.float64)
         
-#         if len(tr_delta_preds_tensors) > 0:
-#             tr_delta_preds = torch.cat(tr_delta_preds_tensors).cpu().numpy().astype(np.float64)
-#             tr_delta_targs = torch.cat(tr_delta_targs_tensors).cpu().numpy().astype(np.float64)
-#         else:
-#             tr_delta_preds, tr_delta_targs = np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+#         # --- TRAINING PHASE ---
+#         train_start = datetime.utcnow().timestamp()
 
-#         # ==== Metrics & Validation ====
-#         model.bl_tr_mean, model.bl_tr_pers = compute_baselines(tr_targs, tr_lengths)
-        
-#         # Now we can pass them directly without redefining np.array()
-#         tr_tot_metrics   = _compute_metrics(tr_tot_preds, tr_targs)
-#         tr_base_metrics  = _compute_metrics(tr_base_preds, tr_targs)  
-#         tr_delta_metrics = _compute_metrics(tr_delta_preds, tr_delta_targs) if tr_delta_preds.size else {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
-            
-#         tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
-#         val_tot_metrics, val_base_metrics, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
-#         val_tot_rmse, val_tot_r2 = val_tot_metrics["rmse"], val_tot_metrics["r2"]
-
-#         avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
-#         avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
-#         avg_delta_loss = epoch_delta_loss_sum / max(1, epoch_loss_count)
-
-#         model._last_epoch_elapsed = float(datetime.utcnow().timestamp() - epoch_start)
-#         model._last_epoch_samples = int(epoch_samples)
-    
-#         models_core.log_epoch_summary(
-#             epoch, model, optimizer, tr_tot_metrics=tr_tot_metrics, tr_base_metrics=tr_base_metrics,
-#             tr_delta_metrics=tr_delta_metrics, val_tot_metrics=val_tot_metrics, val_base_metrics=val_base_metrics,
-#             val_tot_preds=val_tot_preds, val_base_preds=val_base_preds, val_targs=val_targs,
-#             avg_base_loss=avg_base_loss, avg_delta_loss=avg_delta_loss, log_file=params.log_file, hparams=model_hparams,
-#         )
-#         live_plot.update(tr_tot_rmse, val_tot_rmse)
-
-#         best_val, improved, *_ = models_core.maybe_save_chkpt(
-#             models_dir, model, val_tot_rmse, best_val, model_feats, model_hparams,
-#             {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse}, live_plot
-#         )
-#         model._last_epoch_checkpoint = bool(improved)
-
-#         print(f"Epoch {epoch:02d}  TRAIN→ RMSE={tr_tot_rmse:.5f}, R²={tr_tot_r2:.3f} |  VALID→ RMSE={val_tot_rmse:.5f}, R²={val_tot_r2:.3f} |  lr={optimizer.param_groups[0]['lr']:.2e} |  loss={avg_loss:.5e} |  improved={bool(improved)}")
-
-#         if improved:
-#             best_state = {k: v.cpu() for k, v in model.state_dict().items()}
-#             patience = 0
-#         else:
-#             patience += 1
-#             if patience >= model_hparams["EARLY_STOP_PATIENCE"]:
-#                 print(f"Early stopping triggered after {epoch} epochs.")
-#                 break
-
-#     if best_state is not None:
-#         model.load_state_dict(best_state)
-#         models_core.save_final_chkpt(models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_tot_metrics, live_plot, suffix="_all" if all_features else "_fin")
-
-#     for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):
-#         try: delattr(model, attr)
-#         except Exception: pass
-
-#     return best_val
-
-
-
-
-# def model_training_loop(
-#     model: nn.Module, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.OneCycleLR,
-#     scaler: torch.amp.GradScaler, train_loader, val_loader, all_features=False
-# ) -> float:
-#     """
-#     Executes the main supervised training loop for the time-series model.
-
-#     Functionality:
-#     - Implements AMP (Mixed Precision) and Gradient Scaling for faster training.
-#     - Minimizes PCIe bottlenecks by accumulating predictions on the GPU.
-#     - Handles model state resets, gradient clipping, and early stopping logic.
-#     - Logs detailed epoch summaries and updates live training plots.
-#     """
-#     if getattr(model, "delta_head", None) is not None:
-#         torch.nn.init.zeros_(model.delta_head.bias)
-        
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#     model_feats = params.features_cols_tick
-#     model_hparams = params.hparams
-
-#     # Clear memory before starting
-#     gc.collect()
-#     if torch.cuda.is_available(): torch.cuda.empty_cache()
-#     model.to(device)
-
-#     live_plot = plots.LiveRMSEPlot()
-#     best_val, best_state, patience = float("inf"), None, 0
-#     models_dir = Path(params.models_folder)
-
-#     MSE_base = CustomMSELoss(
-#         alpha=float(model_hparams["ALPHA_SMOOTH"]), warmup_steps=int(model_hparams["WARMUP_STEPS"]),
-#         use_huber=bool(model_hparams["USE_HUBER"]), huber_delta=float(model_hparams["HUBER_DELTA"]),
-#     )
-#     MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
-
-#     for epoch in range(1, model_hparams["MAX_EPOCHS"] + 1):
-#         model.train()
-#         model.h_short = model.h_long = None
-#         prev_day = None
-
-#         tr_base_preds_tensors, tr_tot_preds_tensors, tr_targs_tensors = [], [], []
-#         tr_delta_preds_tensors, tr_delta_targs_tensors, tr_lengths = [], [], []
-        
-#         epoch_total_loss_sum = epoch_base_loss_sum = epoch_delta_loss_sum = 0.0
-#         epoch_loss_count = epoch_samples = 0
-#         epoch_start = datetime.utcnow().timestamp()
-
-#         # smoothing=0 ensures it/s represents the full average of the epoch
 #         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False, smoothing=0):
 #             x_batch = x_batch.to(device, non_blocking=True)
 #             y_signal = y_signal.to(device, non_blocking=True)
@@ -944,7 +791,6 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
 #             )
 #             if windows_tensor is None: continue
 
-#             # Mixed precision training
 #             with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
 #                 base_tensor, delta_tensor = model(windows_tensor)  
 #                 total_tensor = base_tensor + delta_tensor 
@@ -966,17 +812,14 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
                 
 #                 tr_lengths.extend([L for L in seq_lengths if L > 0])
 #                 epoch_samples += int(targets_tensor.size(0))
-
 #                 total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
 
-#             # Backward pass with scaling
 #             scaler.scale(total_loss).backward()
 #             scaler.unscale_(optimizer)
 
 #             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
 #             if params_with_grad: torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
 
-#             # Step optimizer and update scaler
 #             _called = {"v": False}
 #             _real = optimizer.step
 #             optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
@@ -990,53 +833,46 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
 #             epoch_delta_loss_sum += delta_loss.item()
 #             epoch_loss_count += 1
 
-#         # Move training predictions to CPU
-#         tr_base_preds = torch.cat(tr_base_preds_tensors).cpu().numpy().astype(np.float64) if tr_base_preds_tensors else np.array([], dtype=np.float64)
-#         tr_tot_preds  = torch.cat(tr_tot_preds_tensors).cpu().numpy().astype(np.float64)  if tr_tot_preds_tensors  else np.array([], dtype=np.float64)
-#         tr_targs      = torch.cat(tr_targs_tensors).cpu().numpy().astype(np.float64)      if tr_targs_tensors      else np.array([], dtype=np.float64)
-        
-#         if len(tr_delta_preds_tensors) > 0:
-#             tr_delta_preds = torch.cat(tr_delta_preds_tensors).cpu().numpy().astype(np.float64)
-#             tr_delta_targs = torch.cat(tr_delta_targs_tensors).cpu().numpy().astype(np.float64)
-#         else:
-#             tr_delta_preds, tr_delta_targs = np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+#         train_stop = datetime.utcnow().timestamp()
+#         val_start_time = datetime.utcnow().timestamp()
+
+#         # --- DATA PROCESSING & VALIDATION ---
+#         tr_tot_preds = torch.cat(tr_tot_preds_tensors).cpu().numpy().astype(np.float64) if tr_tot_preds_tensors else np.array([], dtype=np.float64)
+#         tr_targs     = torch.cat(tr_targs_tensors).cpu().numpy().astype(np.float64) if tr_targs_tensors else np.array([], dtype=np.float64)
 
 #         model.bl_tr_mean, model.bl_tr_pers = compute_baselines(tr_targs, tr_lengths)
+#         tr_tot_metrics = _compute_metrics(tr_tot_preds, tr_targs)
         
-#         tr_tot_metrics   = _compute_metrics(tr_tot_preds, tr_targs)
-#         tr_base_metrics  = _compute_metrics(tr_base_preds, tr_targs)  
-#         tr_delta_metrics = _compute_metrics(tr_delta_preds, tr_delta_targs) if tr_delta_preds.size else {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
-            
-#         tr_tot_rmse, tr_tot_r2 = tr_tot_metrics["rmse"], tr_tot_metrics["r2"]
-#         val_tot_metrics, val_base_metrics, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
-#         val_tot_rmse, val_tot_r2 = val_tot_metrics["rmse"], val_tot_metrics["r2"]
+#         val_res, val_base_res, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
+#         val_stop_time = datetime.utcnow().timestamp()
 
+#         # Timing and Speeds
+#         train_elapsed = train_stop - train_start
+#         val_elapsed = val_stop_time - val_start_time
+#         train_speed = epoch_loss_count / max(0.1, train_elapsed)
+#         val_speed = len(val_loader) / max(0.1, val_elapsed)
 #         avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
-#         avg_base_loss = epoch_base_loss_sum / max(1, epoch_loss_count)
-#         avg_delta_loss = epoch_delta_loss_sum / max(1, epoch_loss_count)
 
-#         model._last_epoch_elapsed = float(datetime.utcnow().timestamp() - epoch_start)
-#         model._last_epoch_samples = int(epoch_samples)
-    
+#         # Logging
 #         models_core.log_epoch_summary(
-#             epoch, model, optimizer, tr_tot_metrics=tr_tot_metrics, tr_base_metrics=tr_base_metrics,
-#             tr_delta_metrics=tr_delta_metrics, val_tot_metrics=val_tot_metrics, val_base_metrics=val_base_metrics,
+#             epoch, model, optimizer, tr_tot_metrics=tr_tot_metrics, tr_base_metrics=_compute_metrics(tr_tot_preds, tr_targs),
+#             tr_delta_metrics={"rmse":0, "mae":0, "r2":0}, val_tot_metrics=val_res, val_base_metrics=val_base_res,
 #             val_tot_preds=val_tot_preds, val_base_preds=val_base_preds, val_targs=val_targs,
-#             avg_base_loss=avg_base_loss, avg_delta_loss=avg_delta_loss, log_file=params.log_file, hparams=model_hparams,
+#             avg_base_loss=epoch_base_loss_sum/max(1, epoch_loss_count), avg_delta_loss=epoch_delta_loss_sum/max(1, epoch_loss_count), 
+#             log_file=params.log_file, hparams=model_hparams,
 #         )
-#         live_plot.update(tr_tot_rmse, val_tot_rmse)
+#         live_plot.update(tr_tot_metrics["rmse"], val_res["rmse"])
 
-#         # Checkpointing and Early Stopping
 #         best_val, improved, *_ = models_core.maybe_save_chkpt(
-#             models_dir, model, val_tot_rmse, best_val, model_feats, model_hparams,
-#             {"rmse": tr_tot_rmse}, {"rmse": val_tot_rmse}, live_plot
+#             models_dir, model, val_res["rmse"], best_val, model_feats, model_hparams,
+#             {"rmse": tr_tot_metrics["rmse"]}, {"rmse": val_res["rmse"]}, live_plot
 #         )
-#         model._last_epoch_checkpoint = bool(improved)
 
-#         # Global average iterations per second for final summary
-#         exact_its = epoch_loss_count / max(1.0, model._last_epoch_elapsed)
-
-#         print(f"Epoch {epoch:02d}  TRAIN→ RMSE={tr_tot_rmse:.5f}, R²={tr_tot_r2:.3f} |  VALID→ RMSE={val_tot_rmse:.5f}, R²={val_tot_r2:.3f} |  lr={optimizer.param_groups[0]['lr']:.2e} |  loss={avg_loss:.5e} |  speed={exact_its:.1f} it/s |  improved={bool(improved)}")
+#         # --- DETAILED SUMMARY PRINT ---
+#         print(f"Epoch {epoch:02d} | "
+#               f"TRAIN→ RMSE={tr_tot_metrics['rmse']:.5f}, R²={tr_tot_metrics['r2']:.3f}, {train_elapsed:.1f}s ({train_speed:.1f} batch/s) | "
+#               f"VALID→ RMSE={val_res['rmse']:.5f}, R²={val_res['r2']:.3f}, {val_elapsed:.1f}s ({val_speed:.1f} batch/s) | "
+#               f"loss={avg_loss:.5e} | improved={bool(improved)}")
 
 #         if improved:
 #             best_state = {k: v.cpu() for k, v in model.state_dict().items()}
@@ -1049,16 +885,9 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
 
 #     if best_state is not None:
 #         model.load_state_dict(best_state)
-#         models_core.save_final_chkpt(models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_tot_metrics, live_plot, suffix="_all" if all_features else "_fin")
-
-#     # Cleanup temporary model attributes
-#     for attr in ("_last_epoch_elapsed","_last_epoch_samples","_last_epoch_checkpoint","_first_batch_snapshot"):
-#         try: delattr(model, attr)
-#         except Exception: pass
+#         models_core.save_final_chkpt(models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_res, live_plot, suffix="_fin")
 
 #     return best_val
-
-
 
 
 def model_training_loop(
@@ -1066,7 +895,13 @@ def model_training_loop(
     scaler: torch.amp.GradScaler, train_loader, val_loader, all_features=False
 ) -> float:
     """
-    Executes the training loop with optimized timing and detailed metric reporting.
+    Executes an optimized training loop with minimized CPU-GPU synchronization.
+
+    Functionality:
+    - Moves loss accumulation to the GPU to avoid per-batch .item() sync points.
+    - Replaces dynamic optimizer patching with standard GradScaler state checks.
+    - Ensures states (h_short, c_short) are reset correctly at epoch start.
+    - Maintains all logging, plotting, and checkpointing logic as originally designed.
     """
     if getattr(model, "delta_head", None) is not None:
         torch.nn.init.zeros_(model.delta_head.bias)
@@ -1096,7 +931,11 @@ def model_training_loop(
 
         tr_base_preds_tensors, tr_tot_preds_tensors, tr_targs_tensors = [], [], []
         tr_delta_preds_tensors, tr_delta_targs_tensors, tr_lengths = [], [], []
-        epoch_total_loss_sum = epoch_base_loss_sum = epoch_delta_loss_sum = 0.0
+        
+        # OPTIMIZATION: Accumulate loss on GPU as tensors to avoid .item() syncs in the loop
+        loss_total_acc = torch.tensor(0.0, device=device)
+        loss_base_acc = torch.tensor(0.0, device=device)
+        loss_delta_acc = torch.tensor(0.0, device=device)
         epoch_loss_count = epoch_samples = 0
         
         # --- TRAINING PHASE ---
@@ -1132,7 +971,7 @@ def model_training_loop(
                 tr_tot_preds_tensors.append(total_tensor.detach())
                 tr_targs_tensors.append(targets_tensor.detach())
                 
-                tr_lengths.extend([L for L in seq_lengths if L > 0])
+                tr_lengths += [L for L in seq_lengths if L > 0]
                 epoch_samples += int(targets_tensor.size(0))
                 total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
 
@@ -1140,25 +979,29 @@ def model_training_loop(
             scaler.unscale_(optimizer)
 
             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
-            if params_with_grad: torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
+            if params_with_grad: 
+                torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
 
-            _called = {"v": False}
-            _real = optimizer.step
-            optimizer.step = lambda *a, **k: (_called.__setitem__("v", True), _real(*a, **k))[1]
-            try: scaler.step(optimizer)
-            finally: scaler.update()
-            optimizer.step = _real
-            if _called["v"]: scheduler.step()
+            # OPTIMIZATION: Standard GradScaler state check instead of lambda monkey-patching
+            before_scale = scaler.get_scale()
+            scaler.step(optimizer)
+            scaler.update()
+            
+            # If the scale didn't decrease, the optimizer.step was successfully called
+            if scaler.get_scale() >= before_scale:
+                scheduler.step()
   
-            epoch_total_loss_sum += total_loss.item()
-            epoch_base_loss_sum += base_loss.item()
-            epoch_delta_loss_sum += delta_loss.item()
+            # Accumulate values on GPU (detaching to avoid graph retention)
+            loss_total_acc += total_loss.detach()
+            loss_base_acc += base_loss.detach()
+            loss_delta_acc += delta_loss.detach()
             epoch_loss_count += 1
 
         train_stop = datetime.utcnow().timestamp()
         val_start_time = datetime.utcnow().timestamp()
 
         # --- DATA PROCESSING & VALIDATION ---
+        # Moving to CPU in one bulk move at the end of the epoch
         tr_tot_preds = torch.cat(tr_tot_preds_tensors).cpu().numpy().astype(np.float64) if tr_tot_preds_tensors else np.array([], dtype=np.float64)
         tr_targs     = torch.cat(tr_targs_tensors).cpu().numpy().astype(np.float64) if tr_targs_tensors else np.array([], dtype=np.float64)
 
@@ -1173,14 +1016,18 @@ def model_training_loop(
         val_elapsed = val_stop_time - val_start_time
         train_speed = epoch_loss_count / max(0.1, train_elapsed)
         val_speed = len(val_loader) / max(0.1, val_elapsed)
-        avg_loss = epoch_total_loss_sum / max(1, epoch_loss_count)
+        
+        # Only pull results from GPU to CPU once per epoch
+        avg_loss = loss_total_acc.item() / max(1, epoch_loss_count)
+        avg_base_loss = loss_base_acc.item() / max(1, epoch_loss_count)
+        avg_delta_loss = loss_delta_acc.item() / max(1, epoch_loss_count)
 
         # Logging
         models_core.log_epoch_summary(
             epoch, model, optimizer, tr_tot_metrics=tr_tot_metrics, tr_base_metrics=_compute_metrics(tr_tot_preds, tr_targs),
             tr_delta_metrics={"rmse":0, "mae":0, "r2":0}, val_tot_metrics=val_res, val_base_metrics=val_base_res,
             val_tot_preds=val_tot_preds, val_base_preds=val_base_preds, val_targs=val_targs,
-            avg_base_loss=epoch_base_loss_sum/max(1, epoch_loss_count), avg_delta_loss=epoch_delta_loss_sum/max(1, epoch_loss_count), 
+            avg_base_loss=avg_base_loss, avg_delta_loss=avg_delta_loss, 
             log_file=params.log_file, hparams=model_hparams,
         )
         live_plot.update(tr_tot_metrics["rmse"], val_res["rmse"])
@@ -1211,76 +1058,8 @@ def model_training_loop(
 
     return best_val
 
+    
 ######################################################################################################
-
-
-# def add_preds_and_split(
-#     df: pd.DataFrame,
-#     train_preds: np.ndarray,
-#     val_preds:   np.ndarray,
-#     test_preds:  np.ndarray,
-#     end_times_tr:  np.ndarray,
-#     end_times_val: np.ndarray,
-#     end_times_te:  np.ndarray,
-# ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-#     """
-#     Stamp per-window predictions onto minute bars and return (train+val, test) DataFrames.
-    
-#     Functionality:
-#     1. Fail-fast validation: Ensures prediction arrays and timestamp arrays are the same length.
-#     2. Bid/Ask creation: Adds synthetic bid/ask columns based on close_raw and params.bidask_spread_pct.
-#     3. Duplicate checks: Ensures no duplicate timestamps exist in the prediction arrays.
-#     4. Vectorized Stamping (Optimized): Uses Pandas bulk `.loc` assignment to map predictions 
-#        onto the main DataFrame instantaneously, bypassing slow Python row-by-row iteration.
-#     5. Splitting: Separates the main DataFrame into a train/val block and a test block.
-#     """
-#     # 1. Length checks
-#     for name, preds, times in (
-#         ("train", train_preds, end_times_tr),
-#         ("val",   val_preds,   end_times_val),
-#         ("test",  test_preds,  end_times_te),
-#     ):
-#         if len(np.asarray(preds).ravel()) != len(np.asarray(times)):
-#             raise ValueError(f"{name} preds length != times length: {len(preds)} != {len(times)}")
-
-#     df = df.copy()
-#     df["pred_signal"] = np.nan
-    
-#     # 2. Add synthetic bid/ask spread
-#     df["ask"] = df["close_raw"] * (1 + params.bidask_spread_pct / 100.0)
-#     df["bid"] = df["close_raw"] * (1 - params.bidask_spread_pct / 100.0)
-
-#     # 3. Helper to build validated Pandas Series
-#     def _series(preds, times, name):
-#         idx = pd.to_datetime(times)
-#         if pd.Index(idx).has_duplicates:
-#             dup = pd.Index(idx)[pd.Index(idx).duplicated(keep=False)][:5]
-#             raise ValueError(f"{name} timestamps contain duplicates, e.g. {dup.tolist()}")
-#         return pd.Series(np.asarray(preds).ravel(), index=idx)
-
-#     # Build series for each split
-#     s_tr  = _series(train_preds, end_times_tr, "train")
-#     s_val = _series(val_preds,   end_times_val, "val")
-#     s_te  = _series(test_preds,  end_times_te,  "test")
-
-#     # 4. OPTIMIZED: Vectorized stamping
-#     # Using .loc directly maps the whole array of values to the matching indices instantly
-#     for desc, s in (("train", s_tr), ("val", s_val), ("test", s_te)):
-#         missing = s.index.difference(df.index)
-#         if not missing.empty:
-#             raise KeyError(f"{desc} timestamps not in df.index; e.g. {missing[:5].tolist()} (total {len(missing)})")
-        
-#         # This one line replaces the slow 'for ts in tqdm(s.index): df.at[ts, "pred_signal"] = s.at[ts]'
-#         df.loc[s.index, "pred_signal"] = s.values
-
-#     # 5. Split outputs where pred_signal exists
-#     idx_trval = s_tr.index.union(s_val.index)
-#     idx_te    = s_te.index
-    
-#     df_trainval = df.loc[idx_trval].dropna(subset=["pred_signal"])
-#     df_test     = df.loc[idx_te].dropna(subset=["pred_signal"])
-
-#     return df_trainval, df_test
 
 
 def add_preds_and_split(
