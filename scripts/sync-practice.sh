@@ -12,12 +12,22 @@ mkdir -p "$(dirname "$LOG")"
 # Boot marker
 echo "$(date) sync-practice.sh started (pid $$)" >>"$LOG"
 
+# Ensure system uses RAM instead of SSD to prevent stuttering/heat
+sudo sysctl -w vm.swappiness=10 || true
+
 LOCK="/tmp/sync-practice.lock"
 TARGET="/mnt/g/My Drive/Ingegneria/Data Science GD/My-Practice"
 PS_CMD='/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 
 # 1) PRE-REBOOT CLEANUP: Remove old locks to ensure clean start
 rm -f "$LOCK"
+
+# --- 1.a) OPTIMIZATION: Empty WSL Trash ---
+# This recovers ~40GB of space and reduces Disk I/O overhead before sync begins.
+if [ -d "$HOME/.Trash-0" ]; then
+    echo "$(date) Purging .Trash-0 to improve filesystem responsiveness..." >>"$LOG"
+    rm -rf "$HOME/.Trash-0/"* || true
+fi
 
 # Single-instance lock
 exec 9>"$LOCK"
@@ -52,7 +62,10 @@ done
 # Start Unison daily in the background
 (
   while true; do
-    unison \
+    # --- 1.b) OPTIMIZATION: Updated Exclusions ---
+    # Added *.dat and *.csv to prevent Unison from thrashing large data files.
+    # Model checkpoints (*.pth) are also excluded to prevent internet/sync lag.
+    sudo unison \
       -root "$HOME" -root "$TARGET" -fat -perms 0 -batch -auto -times \
       -maxbackups 1 -confirmmerge=false -prefer newer -links false -fastcheck true \
       -silent \
@@ -68,6 +81,8 @@ done
       -ignore 'Name sync-practice-manual.log' \
       -ignore 'Name sync-practice.runlog' \
       -ignore 'Name *.pth' \
+      -ignore 'Name *.dat' \
+      -ignore 'Name *.csv' \
       -ignore 'Name *.lnk' \
       -logfile "$LOG" || true
       

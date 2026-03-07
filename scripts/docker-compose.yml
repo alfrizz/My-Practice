@@ -1,34 +1,52 @@
+# ==============================================================================
+# GPU JupyterLab Service Configuration
+# 
+# This service provisions a Docker container for GPU-accelerated Machine Learning.
+# It mounts local code and temporary directories, exposes JupyterLab on port 8888,
+# and limits CPU/Memory usage to prevent starving the host WSL environment and 
+# avoid thermal throttling/reboots on the physical hardware.
+# ==============================================================================
+
 services:
   jupyter:
     container_name: gpu-jl
 
+    # Build context from the local scripts directory
     build:
       context: ${HOME}/scripts
       dockerfile: Dockerfile
     image: alfrizz/gpu-jl:latest
 
+    # Keep container running unless explicitly stopped
     restart: unless-stopped
 
+    # Hardware Access & Resource Limits
     gpus: all
-    cpus: "14.0"         # Leaves 2 cores for WSL background tasks
-    mem_limit: "42g"     # Gives WSL a 6GB buffer to breathe
-    shm_size: 8g         # Lowered since we are using 0 workers for now
+    cpus: "7.0"          # Out of 8 WSL cores, leaves 1 core for WSL/Unison background tasks
+    mem_limit: "42g"     # Out of 48GB WSL memory, leaves 6GB for OS stability
+    shm_size: 8g         # Shared memory allocation for PyTorch dataloaders
+
+    # Network Mapping
     ports:
       - "8888:8888"
 
-    volumes:        
+    # Volume Mounts
+    volumes:
       - "/home/alfrizz/docker_tmp:/tmp"
       - "/home/alfrizz:/workspace"  # Local Linux storage
 
     working_dir: /workspace
 
+    # Execution 
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
 
+    # Environment Variables
     environment:
       - MAX_WAIT=30
       - ALPACA_KEY_live=${ALPACA_KEY_live}
       - ALPACA_SECRET_live=${ALPACA_SECRET_live}
 
+    # Application Command
     command:
       - jupyter
       - lab
@@ -37,5 +55,3 @@ services:
       - --allow-root
       - --NotebookApp.token=
       - --ServerApp.root_dir=/workspace
-
-

@@ -250,69 +250,6 @@ def chronological_split(
 #########################################################################################################
 
 
-# class DayWindowDataset(Dataset):
-#     """
-#     Return per-day tensors for the requested calendar day index.
-    
-#     Functionality
-#     - Slices the precomputed sliding-window buffers for the day defined by idx and
-#       returns the day's windows and labels without an extra leading day dimension.
-#     - Produces per-day shapes that pad_collate expects:
-#       - x        -> Tensor[W, T, F]       windows for that calendar day
-#       - y_sig    -> Tensor[W]             per-window scalar targets
-#       - rc       -> Tensor[W]             raw_close slice aligned to windows
-#       - wd       -> int                   weekday index for the day
-#       - end_ts   -> numpy.datetime64      timestamp of last window for the day
-#     """
-#     def __init__(
-#         self,
-#         X:               torch.Tensor,   # (N_windows, look_back, F)
-#         y_signal:        torch.Tensor,   # (N_windows,)
-#         raw_close:       torch.Tensor,   # (N_windows,)
-#         end_times:       np.ndarray,     # (N_windows,), datetime64[ns]
-#     ):
-#         # self.return_thresh = return_thresh
-
-#         # 1) Store all buffers (raw_close always provided now)
-#         self.X         = X
-#         self.y_signal  = y_signal
-#         self.raw_close = raw_close
-#         self.end_times = end_times   # numpy.datetime64[ns]
-
-#         # 2) Group windows by calendar day
-#         days64 = end_times.astype("datetime64[D]")       # e.g. 2025-09-25
-#         days, counts = np.unique(days64, return_counts=True)
-#         boundaries = np.concatenate(([0], np.cumsum(counts)))
-
-#         # 3) Build start/end indices and weekday tensor
-#         self.start   = torch.tensor(boundaries[:-1], dtype=torch.long)
-#         self.end     = torch.tensor(boundaries[1:],  dtype=torch.long)
-#         weekdays     = pd.to_datetime(days).dayofweek
-#         self.weekday = torch.tensor(weekdays, dtype=torch.long)
-
-#     def __len__(self):
-#         return len(self.start)
-
-#     def __getitem__(self, idx: int):
-#         # Determine slice indices for this day
-#         s = self.start[idx].item()
-#         e = self.end[idx].item()
-    
-#         # 4) Slice out windows (no leading day dim)
-#         x     = self.X[s:e]           # (W, look_back, F)
-#         y_sig = self.y_signal[s:e]    # (W,)
-    
-#         # Extract raw_close slice (length W, no leading dim)
-#         rc = self.raw_close[s:e]   # (W,)
-    
-#         # Weekday index and last-window timestamp
-#         wd     = int(self.weekday[idx].item())
-#         end_ts = self.end_times[e - 1]  # numpy.datetime64[ns]
-    
-#         # Return the tuple with simplified shapes
-#         return x, y_sig, rc, wd, end_ts
-
-
 class DayWindowDataset(Dataset):
     """
     Return per-day tensors for the requested calendar day index.
@@ -369,54 +306,6 @@ class DayWindowDataset(Dataset):
 
         
 ######################
-
-
-# def pad_collate(batch):
-#     """
-#     Pad and flatten a batch of per-day examples into canonical per-window tensors.
-
-#     Args
-#     - batch: iterable of DayWindowDataset items, 
-#       where x is expected to be per-day windows shaped (W, T, F).
-
-#     Returns
-#     - x_flat     Tensor[N, T, F]    flattened windows (N = B * W_max)
-#     - ysig_flat  Tensor[N]          flattened per-window scalar targets
-#     - rc_flat    Tensor[N]          flattened per-window raw_close values
-#     - wd_per_day list[int]          per-day weekday ints (length B)
-#     - ts_list    list               per-day end timestamps 
-#     - lengths    list[int]          true window counts per day 
-#     """
-#     # Unpack tuple structure
-#     x_list, ysig_list, rc_list, wd_list, ts_list = zip(*batch)
-
-#     xs      = list(x_list)        # expect (W, T, F)
-#     ysig    = list(ysig_list)     # expect (W,)
-#     rc_seq  = list(rc_list)       # expect (W,)
-
-#     lengths = [seq.size(0) for seq in xs]  # per-day window counts W_i
-
-#     # Pad per-day along the window axis -> shapes (B, W_max, ...)
-#     x_pad    = pad_sequence(xs,   batch_first=True)  # (B, W_max, T, F)
-#     ysig_pad = pad_sequence(ysig,   batch_first=True) # (B, W_max)
-#     rc_pad   = pad_sequence(rc_seq, batch_first=True) # (B, W_max)
-
-#     # Weekday per-day (B,)
-#     wd_tensor = torch.tensor(wd_list, dtype=torch.long)
-
-#     # Flatten first two dims to canonical per-window shapes (N = B * W_max)
-#     B, W_max = ysig_pad.shape[0], ysig_pad.shape[1]
-#     T = x_pad.shape[2]
-#     F = x_pad.shape[3]
-
-#     x_flat    = x_pad.contiguous().view(B * W_max, T, F)   # (N, T, F)
-#     ysig_flat = ysig_pad.contiguous().view(B * W_max)      # (N,)
-#     rc_flat   = rc_pad.contiguous().view(B * W_max)        # (N,)
-
-#     # Keep per-day weekday vector (B,) for state resets; callers use lengths to align windows
-#     wd_per_day = wd_tensor.tolist()  # list[int] length B
-
-#     return x_flat, ysig_flat, rc_flat, wd_per_day, list(ts_list), lengths
 
 
 def pad_collate(batch):
