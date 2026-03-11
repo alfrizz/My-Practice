@@ -14,9 +14,10 @@ import sys
 import pandas as pd
 import numpy  as np
 import math
+import time
 
 import datetime as dt
-from datetime import datetime, time
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -77,210 +78,6 @@ def _allocate_lstm_states(batch_size: int,
 
 
 ###############
-
-
-# class ModelClass(nn.Module):
-#     """
-#     Minimal Configurable Backbone for Time-Series Prediction.
-    
-#     Functionality:
-#     - Routes a 3D tensor (Batch, Time, Features) through optional feature extractors.
-#     - Conditionally executes Conv1d, TCN, Bi-LSTMs, and Transformers based on hparams.
-#     - Bypasses all overhead (like transposes and ReLUs) if a specific block is disabled.
-#     - Uses batch_first=True for Transformer optimization.
-#     - Output Head flattens or pools the sequence to predict a base target.
-#     - Delta Head optionally predicts a residual (delta) target.
-#     """
-#     def layer_projection(self, in_dim: int, out_dim: int) -> nn.Module:
-#         return nn.Identity() if in_dim == out_dim else nn.Linear(in_dim, out_dim)
-
-#     def __init__(
-#         self, n_feats: int, short_units: int, long_units: int, transformer_d_model: int,
-#         transformer_layers: int, dropout_short: float, dropout_long: float, dropout_trans: float,
-#         pred_hidden: int, look_back: int, use_conv: bool, use_tcn: bool, use_short_lstm: bool,
-#         use_transformer: bool, use_long_lstm: bool, use_delta: bool, flatten_mode: str,
-#     ):
-#         super().__init__()
-#         self.look_back = look_back
-#         self.short_units = short_units
-#         self.long_units = long_units
-#         self.use_conv = use_conv
-#         self.use_tcn = use_tcn
-#         self.use_short_lstm = use_short_lstm
-#         self.use_transformer = use_transformer
-#         self.use_long_lstm = use_long_lstm
-#         self.use_delta = use_delta
-
-#         assert short_units % 2 == 0 and long_units % 2 == 0
-
-#         # 0) Conv Block (Safely packaged to prevent stray ReLUs on raw data)
-#         CONV_CHANNELS = params.hparams["CONV_CHANNELS"]
-#         if self.use_conv:
-#             conv_k, conv_dilation = params.hparams["CONV_K"], params.hparams["CONV_DILATION"]
-#             padding = (conv_k // 2) * conv_dilation
-#             self.conv_block = nn.Sequential(
-#                 nn.Conv1d(n_feats, CONV_CHANNELS, kernel_size=conv_k, dilation=conv_dilation, padding=padding),
-#                 nn.GroupNorm(8, CONV_CHANNELS),
-#                 nn.ReLU()
-#             )
-#         else:
-#             self.conv_block = None
-
-#         # 1) TCN Block
-#         TCN_CHANNELS = params.hparams["TCN_CHANNELS"]
-#         if self.use_tcn:
-#             layers, k = params.hparams["TCN_LAYERS"], params.hparams["TCN_KERNEL"]
-#             blocks = []
-#             in_ch = CONV_CHANNELS if self.use_conv else n_feats
-#             for i in range(layers):
-#                 d = 2 ** i
-#                 pad = (k // 2) * d
-#                 blocks += [
-#                     nn.Conv1d(in_ch, TCN_CHANNELS, k, dilation=d, padding=pad), 
-#                     nn.GroupNorm(8, TCN_CHANNELS), 
-#                     nn.ReLU()
-#                 ]
-#                 in_ch = TCN_CHANNELS
-#             self.tcn = nn.Sequential(*blocks)
-#         else:
-#             self.tcn = None
-
-#         # 2) Short LSTM Block
-#         short_in = (TCN_CHANNELS if self.use_tcn else (CONV_CHANNELS if self.use_conv else n_feats))
-#         if self.use_short_lstm:
-#             self.short_lstm = nn.LSTM(input_size=short_in, hidden_size=short_units // 2, batch_first=True, bidirectional=True)
-#             self.ln_short = nn.LayerNorm(short_units)
-#             self.do_short = nn.Dropout(dropout_short)
-#         else:
-#             self.short_lstm = None
-            
-#         self.h_short = self.c_short = None
-
-#         upstream_dim = short_units if self.use_short_lstm else short_in
-
-#         # Canonical input projection
-#         self.input_proj = nn.Linear(n_feats, upstream_dim)
-#         nn.init.xavier_uniform_(self.input_proj.weight)
-#         if getattr(self.input_proj, "bias", None) is not None:
-#             nn.init.zeros_(self.input_proj.bias)
-
-#         # 3) Transformer Block
-#         if self.use_transformer:
-#             d_model = transformer_d_model
-#             heads = params.hparams["TRANSFORMER_HEADS"]
-#             ff_dim = d_model * params.hparams["TRANSFORMER_FF_MULT"]
-#             self.feature_proj = self.layer_projection(upstream_dim, d_model)
-#             self.pos_enc = PositionalEncoding(d_model=d_model, dropout=dropout_trans, max_len=look_back)
-            
-#             enc_layer = nn.TransformerEncoderLayer(
-#                 d_model=d_model, nhead=heads, dim_feedforward=ff_dim, 
-#                 dropout=dropout_trans, batch_first=True 
-#             )
-#             self.transformer = nn.TransformerEncoder(enc_layer, num_layers=transformer_layers)
-#         else:
-#             self.feature_proj = nn.Linear(upstream_dim, upstream_dim)
-#             if upstream_dim == upstream_dim: nn.init.eye_(self.feature_proj.weight) 
-#             if getattr(self.feature_proj, "bias", None) is not None: nn.init.zeros_(self.feature_proj.bias)
-#             self.pos_enc = nn.Identity()
-#             self.transformer = nn.Identity()
-
-#         # 4) Bridge Projection
-#         proj_in = transformer_d_model if self.use_transformer else upstream_dim
-#         self.short2long = self.layer_projection(proj_in, long_units)
-#         self.ln_proj = nn.LayerNorm(long_units)
-#         self.do_proj = nn.Dropout(dropout_long)
-
-#         # 5) Long LSTM Block
-#         if self.use_long_lstm:
-#             self.long_lstm = nn.LSTM(input_size=long_units, hidden_size=long_units // 2, batch_first=True, bidirectional=True)
-#             self.ln_long = nn.LayerNorm(long_units)
-#             self.do_long = nn.Dropout(dropout_long)
-#         else:
-#             self.long_lstm = None
-            
-#         self.h_long = self.c_long = None
-
-#         # 6) Output Head
-#         assert flatten_mode in ("flatten", "last", "pool", "attn")
-#         self.flatten_mode = flatten_mode
-#         flat_dim = (look_back * long_units if flatten_mode == "flatten" else long_units)
-#         self.ln_flat = nn.LayerNorm(flat_dim)
-#         self.head_flat = nn.Sequential(
-#             weight_norm(nn.Linear(flat_dim, pred_hidden)), 
-#             nn.ReLU(), 
-#             weight_norm(nn.Linear(pred_hidden, 1))
-#         )
-#         nn.init.zeros_(self.head_flat[-1].bias)
-#         self.attn_pool = nn.Linear(long_units, 1)
-#         nn.init.zeros_(self.attn_pool.bias)
-
-#         # 7) Delta Head
-#         if self.use_delta:
-#             _d = nn.Linear(flat_dim, 1)
-#             nn.init.zeros_(_d.weight)
-#             nn.init.zeros_(_d.bias)
-#             self.delta_head = _d
-
-#     def forward(self, x: torch.Tensor):
-#         if x.dim() > 3:
-#             *lead, T, F = x.shape; x = x.view(-1, T, F)
-#         if x.dim() == 2: 
-#             x = x.unsqueeze(0)
-            
-#         B, T, _ = x.shape
-
-#         # OPTIMIZATION: Only transpose if the layer is actually enabled
-#         if self.conv_block is not None:
-#             x = self.conv_block(x.transpose(1, 2)).transpose(1, 2)
-            
-#         if self.tcn is not None:
-#             x = self.tcn(x.transpose(1, 2)).transpose(1, 2)
-
-#         if self.use_short_lstm:
-#             if self.h_short is None or self.h_short.size(1) != B:
-#                 self.h_short, self.c_short = _allocate_lstm_states(B, self.short_units // 2, True, x.device)
-#             out_s, (h_s, c_s) = self.short_lstm(x, (self.h_short, self.c_short))
-#             self.h_short, self.c_short = h_s.detach(), c_s.detach()
-#             out_s = self.do_short(self.ln_short(out_s))
-#         else:
-#             out_s = x
-
-#         # Input Projection
-#         if hasattr(self, "input_proj"):
-#             in_dim_expected = self.input_proj.weight.shape[1]
-#             pre_tr = self.input_proj(out_s) if out_s.size(-1) == in_dim_expected else out_s
-#         else:
-#             pre_tr = out_s
-
-#         tr_in = self.pos_enc(self.feature_proj(pre_tr))
-#         out_t = self.transformer(tr_in)
-#         out_p = self.do_proj(self.ln_proj(self.short2long(out_t)))
-
-#         if self.use_long_lstm:
-#             if self.h_long is None or self.h_long.size(1) != B:
-#                 self.h_long, self.c_long = _allocate_lstm_states(B, self.long_units // 2, True, out_p.device)
-#             out_l, (h_l, c_l) = self.long_lstm(out_p, (self.h_long, self.c_long))
-#             self.h_long, self.c_long = h_l.detach(), c_l.detach()
-#             out_l = self.do_long(self.ln_long(out_l))
-#         else:
-#             out_l = out_p
-
-#         # Flatten / Pool
-#         if self.flatten_mode == "flatten": 
-#             flat = out_l.reshape(B, -1)
-#         elif self.flatten_mode == "last": 
-#             flat = out_l[:, -1, :]
-#         elif self.flatten_mode == "attn":
-#             weights = torch.softmax(self.attn_pool(out_l).squeeze(-1), dim=1)
-#             flat = (out_l * weights.unsqueeze(-1)).sum(dim=1)
-#         else: 
-#             flat = out_l.mean(dim=1)
-
-#         norm_flat = self.ln_flat(flat)
-#         base = self.head_flat(norm_flat).squeeze(-1)
-#         delta = self.delta_head(norm_flat).squeeze(-1) if self.use_delta else torch.zeros_like(base)
-        
-#         return base.unsqueeze(-1), delta.unsqueeze(-1)
 
 
 class ModelClass(nn.Module):
@@ -544,6 +341,7 @@ def compute_baselines(flat_targets: np.ndarray, lengths: Sequence[int]) -> Tuple
 
 ############### 
 
+
 def _reset_states(
     model:    nn.Module,
     wd_list:  list,
@@ -584,16 +382,101 @@ def _reset_states(
 ############################ 
 
 
+# class CustomMSELoss(nn.Module):
+#     """
+#     Combined Level and Slope (Derivative) Loss.
+
+#     Functionality:
+#     - Computes MSE or Huber loss for the primary signal levels.
+#     - Computes an additional MSE loss on the first-order differences (slopes).
+#     - Vectorized: Calculates differences across the entire batch in parallel,
+#       masking out invalid transitions between different sequences.
+#     - Includes a linear warmup for the slope penalty weight (alpha).
+#     """
+#     def __init__(
+#         self,
+#         alpha: float = 0.0,
+#         warmup_steps: int = 0,
+#         use_huber: bool = False,
+#         huber_delta: float = 1.0,
+#     ):
+#         super().__init__()
+#         self.alpha = float(alpha)
+#         self.warmup_steps = int(warmup_steps)
+#         self.use_huber = bool(use_huber)
+#         self.huber_delta = float(huber_delta)
+
+#     def _effective_alpha(self, step: Optional[int]) -> float:
+#         if self.alpha <= 0.0:
+#             return 0.0
+#         if self.warmup_steps <= 0 or step is None:
+#             return self.alpha
+#         t = min(1.0, float(step) / float(self.warmup_steps))
+#         return self.alpha * t
+
+#     def forward(
+#         self,
+#         preds: torch.Tensor,
+#         targs: torch.Tensor,
+#         seq_lengths: List[int],
+#         step: Optional[int] = None,
+#     ) -> torch.Tensor:
+#         # preds/targs shape: (N,) or (N, 1)
+#         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
+
+#         # 1. Level Loss (Standard MSE or Huber)
+#         if self.use_huber:
+#             L1 = torch.nn.functional.huber_loss(preds, targs, reduction="mean", delta=self.huber_delta)
+#         else:
+#             L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
+
+#         # 2. Slope Penalty Check
+#         eff_alpha = self._effective_alpha(step)
+#         if eff_alpha <= 0.0:
+#             return L1
+
+#         # 3. Vectorized Slope Calculation
+#         # Compute global differences (N-1,)
+#         diff_p = preds[1:] - preds[:-1]
+#         diff_t = targs[1:] - targs[:-1]
+
+#         # Identify boundary indices where sequences end
+#         # Example: if seq_lengths = [3, 2], boundaries are at index 2 (between 2 and 3)
+#         if len(seq_lengths) > 1:
+#             device = preds.device
+#             # Compute cumulative sums to find end-of-sequence indices
+#             boundaries = torch.as_tensor(seq_lengths, device=device).cumsum(dim=0)[:-1]
+            
+#             # Create a boolean mask for valid transitions (True = same sequence)
+#             # Index 'i' in diff_p represents transition between preds[i] and preds[i+1]
+#             # Transition is invalid if 'i' is the last index of a sequence (boundary - 1)
+#             valid_mask = torch.ones(diff_p.size(0), dtype=torch.bool, device=device)
+#             valid_mask[boundaries - 1] = False
+            
+#             # Apply mask
+#             diff_p = diff_p[valid_mask]
+#             diff_t = diff_t[valid_mask]
+
+#         if diff_p.numel() == 0:
+#             return L1
+
+#         # 4. Final Aggregated Loss
+#         L2 = torch.nn.functional.mse_loss(diff_p, diff_t, reduction="mean")
+#         return L1 + eff_alpha * L2
+
+
 class CustomMSELoss(nn.Module):
     """
-    Combined Level and Slope (Derivative) Loss.
+    Combined Level and Slope (Derivative) Loss for Time-Series.
 
     Functionality:
-    - Computes MSE or Huber loss for the primary signal levels.
-    - Computes an additional MSE loss on the first-order differences (slopes).
-    - Vectorized: Calculates differences across the entire batch in parallel,
-      masking out invalid transitions between different sequences.
-    - Includes a linear warmup for the slope penalty weight (alpha).
+    - Calculates the standard distance (Level) between predictions and targets.
+    - Calculates the distance between first-order differences (Slope/Velocity).
+    - Vectorized: Uses slicing and indexing to calculate batch-wide slopes in one pass.
+    - Sequence Aware: Uses seq_lengths to avoid calculating slopes across 
+      discontinuous day boundaries (e.g., Friday's last tick to Monday's first).
+    - Warmup: Gradually introduces the slope penalty (alpha) to allow the model 
+      to learn basic levels before focusing on movement shapes.
     """
     def __init__(
         self,
@@ -609,10 +492,13 @@ class CustomMSELoss(nn.Module):
         self.huber_delta = float(huber_delta)
 
     def _effective_alpha(self, step: Optional[int]) -> float:
+        """ Calculates the current weight of the slope penalty based on training step. """
         if self.alpha <= 0.0:
             return 0.0
+        # If no step or warmup provided, use full alpha
         if self.warmup_steps <= 0 or step is None:
             return self.alpha
+        # Linear ramp from 0 to alpha
         t = min(1.0, float(step) / float(self.warmup_steps))
         return self.alpha * t
 
@@ -623,118 +509,205 @@ class CustomMSELoss(nn.Module):
         seq_lengths: List[int],
         step: Optional[int] = None,
     ) -> torch.Tensor:
-        # preds/targs shape: (N,) or (N, 1)
-        assert preds.shape == targs.shape, "preds and targs must have identical shapes"
+        """
+        Main loss computation for Level and Slope.
+        """
+        # Ensure flat shapes for regression
+        assert preds.shape == targs.shape, "Shape mismatch between preds and targets"
 
-        # 1. Level Loss (Standard MSE or Huber)
+        # 1. PRIMARY LOSS: Level alignment (MSE or Huber)
         if self.use_huber:
             L1 = torch.nn.functional.huber_loss(preds, targs, reduction="mean", delta=self.huber_delta)
         else:
             L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
 
-        # 2. Slope Penalty Check
+        # 2. SLOPE PREPARATION: Determine current alpha
         eff_alpha = self._effective_alpha(step)
         if eff_alpha <= 0.0:
             return L1
 
-        # 3. Vectorized Slope Calculation
-        # Compute global differences (N-1,)
-        diff_p = preds[1:] - preds[:-1]
-        diff_t = targs[1:] - targs[:-1]
-
-        # Identify boundary indices where sequences end
-        # Example: if seq_lengths = [3, 2], boundaries are at index 2 (between 2 and 3)
+        # 3. SECONDARY LOSS: Slope (Derivative) alignment
+        # To calculate slope, we subtract each value from the next (i+1 - i)
         if len(seq_lengths) > 1:
             device = preds.device
-            # Compute cumulative sums to find end-of-sequence indices
+            # Compute indices where one day ends and another begins
+            # We must NOT calculate a slope between these points
             boundaries = torch.as_tensor(seq_lengths, device=device).cumsum(dim=0)[:-1]
             
-            # Create a boolean mask for valid transitions (True = same sequence)
-            # Index 'i' in diff_p represents transition between preds[i] and preds[i+1]
-            # Transition is invalid if 'i' is the last index of a sequence (boundary - 1)
-            valid_mask = torch.ones(diff_p.size(0), dtype=torch.bool, device=device)
-            valid_mask[boundaries - 1] = False
+            # Create a boolean mask for valid 'next-step' transitions
+            valid_indices = torch.ones(preds.size(0) - 1, dtype=torch.bool, device=device)
+            # Mark the jumps between days as False
+            valid_indices[boundaries - 1] = False
             
-            # Apply mask
-            diff_p = diff_p[valid_mask]
-            diff_t = diff_t[valid_mask]
+            # Slice and subtract only the valid sequential pairs
+            diff_p = preds[1:][valid_indices] - preds[:-1][valid_indices]
+            diff_t = targs[1:][valid_indices] - targs[:-1][valid_indices]
+        else:
+            # Single sequence batch: just do simple vector subtraction
+            diff_p = preds[1:] - preds[:-1]
+            diff_t = targs[1:] - targs[:-1]
 
+        # 4. AGGREGATE: Level Loss + Scaled Slope Loss
         if diff_p.numel() == 0:
             return L1
 
-        # 4. Final Aggregated Loss
         L2 = torch.nn.functional.mse_loss(diff_p, diff_t, reduction="mean")
-        return L1 + eff_alpha * L2
+        return L1 + (eff_alpha * L2)
 
         
-############################
+#############################
+
+
+# def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
+#     """
+#     Compute RMSE, MAE, and R² on flat NumPy arrays of predictions vs. targets.
+#     """
+#     if preds.size == 0:
+#         return {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
+
+#     diff = preds - targs
+#     mse  = float((diff ** 2).mean())
+#     mae  = float(np.abs(diff).mean())
+#     rmse = float(np.sqrt(mse))
+
+#     # R² = 1 − RSS/TSS
+#     if preds.size < 2 or np.isclose(targs.var(), 0.0):
+#         r2 = float("nan")
+#     else:
+#         tss = float(((targs - targs.mean()) ** 2).sum())
+#         rss = float((diff ** 2).sum())
+#         r2  = float("nan") if tss == 0.0 else 1.0 - (rss / tss)
+
+#     return {"rmse": rmse, "mae": mae, "r2": r2}
 
 
 def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
     """
-    Compute RMSE, MAE, and R² on flat NumPy arrays of predictions vs. targets.
+    Calculates standard regression performance metrics using NumPy.
+
+    Functionality:
+    - Calculates RMSE (Root Mean Squared Error) for error magnitude.
+    - Calculates MAE (Mean Absolute Error) for linear error.
+    - Calculates R² (Coefficient of Determination) for model explanatory power.
+    - Safety: Handles empty arrays and zero-variance targets to prevent NaNs/crashes.
+    - Performance: Uses vectorized variance-based R² for high-speed evaluation.
     """
-    if preds.size == 0:
-        return {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
+    # 1. Edge Case: Empty data
+    if preds.size == 0 or targs.size == 0:
+        return {"rmse": np.nan, "mae": np.nan, "r2": np.nan}
 
+    # 2. Vectorized Error Calculation
+    # Faster to compute once than calling mean_squared_error repeatedly
     diff = preds - targs
-    mse  = float((diff ** 2).mean())
-    mae  = float(np.abs(diff).mean())
-    rmse = float(np.sqrt(mse))
+    mse = np.mean(diff**2)
+    mae = np.mean(np.abs(diff))
+    rmse = np.sqrt(mse)
 
-    # R² = 1 − RSS/TSS
-    if preds.size < 2 or np.isclose(targs.var(), 0.0):
-        r2 = float("nan")
+    # 3. Explanatory Power (R²)
+    # R² = 1 - (Unexplained Variance / Total Variance)
+    targs_var = np.var(targs)
+    
+    # If there is no variance in the target (e.g., a single sample or flat line), 
+    # R² is mathematically undefined. We use a small epsilon check.
+    if preds.size < 2 or targs_var < 1e-9:
+        r2 = np.nan
     else:
-        tss = float(((targs - targs.mean()) ** 2).sum())
-        rss = float((diff ** 2).sum())
-        r2  = float("nan") if tss == 0.0 else 1.0 - (rss / tss)
+        # Optimized R² formula for bulk NumPy arrays
+        r2 = 1.0 - (mse / targs_var)
 
-    return {"rmse": rmse, "mae": mae, "r2": r2}
+    return {
+        "rmse": float(rmse), 
+        "mae": float(mae), 
+        "r2": float(r2)
+    } 
 
-
+    
 #################### 
 
+
+# def _prepare_windows_and_targets_batch(
+#     x_batch: torch.Tensor, y_signal: torch.Tensor, seq_lengths: list,
+#     wd_list: list, reset_state_fn, model, prev_day=None
+# ):
+#     """
+#     Collapses padded batches and orchestrates state resets for sequential training.
+    
+#     Functionality:
+#     1. Triggers state resets based on the provided list of weekdays.
+#     2. Uses vectorized boolean masking on the GPU to remove zero-padding.
+#     3. Minimizes CPU-GPU traffic by using .as_tensor() for masking parameters.
+#     """
+#     B = len(seq_lengths)
+#     if B == 0: 
+#         return None, None, prev_day
+    
+#     W_max = x_batch.size(0) // B
+#     device = x_batch.device
+    
+#     # 1. State Management (Runs on CPU using the weekday list)
+#     prev_day = reset_state_fn(model, wd_list, prev_day)
+
+#     # Calculate total valid windows (Fast CPU sum)
+#     total_valid = sum(seq_lengths)
+#     if total_valid == 0: 
+#         return None, None, prev_day
+        
+#     # 2. Shortcut: If no padding exists, skip masking overhead
+#     if total_valid == B * W_max:
+#         return x_batch.float(), y_signal.float(), prev_day
+
+#     # 3. GPU Masking
+#     # Convert seq_lengths to GPU tensor once for the comparison math
+#     lens_tensor = torch.as_tensor(seq_lengths, device=device, dtype=torch.long).unsqueeze(1)
+#     mask = torch.arange(W_max, device=device).expand(B, W_max) < lens_tensor
+#     mask = mask.reshape(-1) 
+            
+#     return x_batch[mask].float(), y_signal[mask].float(), prev_day
+    
 
 def _prepare_windows_and_targets_batch(
     x_batch: torch.Tensor, y_signal: torch.Tensor, seq_lengths: list,
     wd_list: list, reset_state_fn, model, prev_day=None
 ):
     """
-    Collapses padded batches and orchestrates state resets for sequential training.
+    Optimized: Collapses padded batches and orchestrates state resets.
     
     Functionality:
-    1. Triggers state resets based on the provided list of weekdays.
-    2. Uses vectorized boolean masking on the GPU to remove zero-padding.
-    3. Minimizes CPU-GPU traffic by using .as_tensor() for masking parameters.
+    1. Triggers state resets (CPU-bound) before GPU processing.
+    2. Vectorized Boolean Masking: Removes zero-padding from the collated batch.
+    3. Memory Efficiency: Uses cached arithmetic to generate the mask, 
+       reducing GPU memory fragmentation.
     """
     B = len(seq_lengths)
     if B == 0: 
         return None, None, prev_day
     
+    # x_batch shape is (B * W_max, T, F)
     W_max = x_batch.size(0) // B
     device = x_batch.device
     
-    # 1. State Management (Runs on CPU using the weekday list)
+    # 1. CPU-bound state management
     prev_day = reset_state_fn(model, wd_list, prev_day)
 
-    # Calculate total valid windows (Fast CPU sum)
     total_valid = sum(seq_lengths)
     if total_valid == 0: 
         return None, None, prev_day
         
-    # 2. Shortcut: If no padding exists, skip masking overhead
+    # 2. Shortcut: If batch is full, return immediately
     if total_valid == B * W_max:
         return x_batch.float(), y_signal.float(), prev_day
 
-    # 3. GPU Masking
-    # Convert seq_lengths to GPU tensor once for the comparison math
-    lens_tensor = torch.as_tensor(seq_lengths, device=device, dtype=torch.long).unsqueeze(1)
-    mask = torch.arange(W_max, device=device).expand(B, W_max) < lens_tensor
-    mask = mask.reshape(-1) 
+    # 3. Optimized Masking
+    # We create a (B, W_max) grid of indices and compare to lengths
+    # This specific pattern is faster for PyTorch to jit-compile
+    lens_tensor = torch.as_tensor(seq_lengths, device=device).view(B, 1)
+    
+    # torch.arange is slightly faster when kept in a local scope
+    indices = torch.arange(W_max, device=device).view(1, W_max)
+    mask = (indices < lens_tensor).reshape(-1)
             
     return x_batch[mask].float(), y_signal[mask].float(), prev_day
-    
+
     
 ########################
 
@@ -847,7 +820,7 @@ def model_training_loop(
         epoch_loss_count = epoch_samples = 0
         
         # --- TRAINING PHASE ---
-        train_start = datetime.utcnow().timestamp()
+        train_start = time.time()
 
         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False, smoothing=0):
             x_batch = x_batch.to(device, non_blocking=True)
@@ -905,8 +878,8 @@ def model_training_loop(
             loss_delta_acc += delta_loss.detach()
             epoch_loss_count += 1
 
-        train_stop = datetime.utcnow().timestamp()
-        val_start_time = datetime.utcnow().timestamp()
+        train_stop = time.time()
+        val_start_time = time.time()
 
         # --- DATA PROCESSING & VALIDATION ---
         # Moving to CPU in one bulk move at the end of the epoch
@@ -917,7 +890,7 @@ def model_training_loop(
         tr_tot_metrics = _compute_metrics(tr_tot_preds, tr_targs)
         
         val_res, val_base_res, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
-        val_stop_time = datetime.utcnow().timestamp()
+        val_stop_time = time.time()
 
         # Timing and Speeds
         train_elapsed = train_stop - train_start
@@ -988,7 +961,6 @@ def add_preds_and_split(
     - Uses Pandas .loc vectorization for instant data mapping (No tqdm needed).
     - Splits the final results into train+val and test sets.
     """
-    import time
     start_ts = time.time()
     
     # 1. Length checks

@@ -22,8 +22,8 @@ services:
 
     # Hardware Access & Resource Limits
     gpus: all
-    cpus: "7.0"          # Out of 8 WSL cores, leaves 1 core for WSL/Unison background tasks
-    mem_limit: "42g"     # Out of 48GB WSL memory, leaves 6GB for OS stability
+    cpus: "14.0"          # Out of 14 WSL cores, leaves 2 core for WSL/Unison background tasks
+    mem_limit: "48g"     # Out of 52GB WSL memory, leaves 4GB for OS stability
     shm_size: 8g         # Shared memory allocation for PyTorch dataloaders
 
     # Network Mapping
@@ -40,11 +40,12 @@ services:
     # Execution 
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
 
-    # Environment Variables
+    # Environment Variables & Secret Management
     environment:
       - MAX_WAIT=30
-      - ALPACA_KEY_live=${ALPACA_KEY_live}
-      - ALPACA_SECRET_live=${ALPACA_SECRET_live}
+
+    env_file:
+      - .env
 
     # Application Command
     command:

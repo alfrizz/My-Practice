@@ -2,11 +2,7 @@ from pathlib import Path
 from datetime import datetime
 import datetime as dt
 
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import torch.nn.functional as Funct
-
+import torch # Kept only for torch.device
 import pandas as pd
 import os
 import glob
@@ -18,12 +14,16 @@ from tqdm import tqdm
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+
 #########################################################################################################
+
 
 ticker = 'AAPL'
 init_cash = 100000
 init_df_year = 2016
-month_to_check = '2021-01'
+start_date_sim = '2016-09-01'
+end_date_sim = '2020-03-01'
+month_to_check = '2022-01'
 sel_val_rmse = '0.16005'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
@@ -44,11 +44,12 @@ models_folder = "trainings"
 log_file = Path(models_folder) / "training_diagnostics.txt"
 
 save_path  = Path("dfs")
-alpaca_csv = save_path / f"{ticker}_0_alpaca.csv"
-base_csv = save_path / f"{ticker}_1_base.csv"
-indunsc_csv = save_path / f"{ticker}_2_indunsc.csv"
-feat_all_csv = save_path / f"{ticker}_3_feat_all.csv"
-sign_featall_csv = save_path / f"{ticker}_4_sign_featall.csv"
+alpaca_parquet = save_path / f"{ticker}_0_alpaca.parquet"
+base_parquet = save_path / f"{ticker}_1_base.parquet"
+indunsc_parquet = save_path / f"{ticker}_2_indunsc.parquet"
+feat_all_parquet = save_path / f"{ticker}_3_feat_all.parquet"
+sign_featall_parquet = save_path / f"{ticker}_4_sign_featall.parquet"
+
 pred_test_pqt = save_path / f"{ticker}_5_pred_test.parquet"
 pred_trainval_pqt = save_path / f"{ticker}_5_pred_trainval.parquet"
 
@@ -99,7 +100,7 @@ hparams = {
     "USE_TRANSFORMER":       True,   # enable TransformerEncoder
     "TRANSFORMER_D_MODEL":   128,     # transformer embedding width (d_model); adapter maps features into this
     "TRANSFORMER_LAYERS":    1,      # number of encoder layers; ↑depth/complexity, ↓speed/stability
-    "TRANSFORMER_HEADS":     4,      # attention heads; must divide d_model; ↑multi-aspect focus
+    "TRANSFORMER_HEADS":     8,      # attention heads; must divide d_model; ↑multi-aspect focus
     "TRANSFORMER_FF_MULT":   1,      # FFN expansion factor (d_model * MULT); ↑internal capacity
     "DROPOUT_TRANS":         0.1,    # transformer dropout; ↑regularization
 
@@ -127,7 +128,7 @@ hparams = {
     "WEIGHT_DECAY":          2e-6,   # L2 penalty; ↑weight shrinkage, ↓overfitting
     "CLIPNORM":              2,      # max grad norm; ↑stability (prevents exploding gradients)
     
-    "ONECYCLE_MAX_LR":       7e-4,   # peak LR in 1cycle policy
+    "ONECYCLE_MAX_LR":       5e-4,   # peak LR in 1cycle policy
     "HEAD_LR_PCT":           1,      # LR multiplier for head vs backbone (0.0 to 1.0)
     "ONECYCLE_DIV_FACTOR":   10,     # initial_lr = max_lr / div_factor
     "ONECYCLE_FINAL_DIV":    100,    # end_lr = max_lr / final_div_factor
@@ -135,12 +136,12 @@ hparams = {
     "ONECYCLE_STRATEGY":     'cos',  # 'cos' or 'linear' LR annealing
 
     # ── Training Control Parameters ────────────────────────────────────
-    "TRAIN_BATCH":           16,     # sequences per train batch; ↑throughput, ↓stochasticity/GPU heat
-    "VAL_TEST_BATCH":        16,     # sequences per val batch; must be 1 for stateful LSTMs
-    "TRAIN_WORKERS":         0,      # DataLoader sub-processes; 0 = main thread (safest for laptop heat)
-    "TRAIN_PREFETCH_FACTOR": None,   # batches to pre-load; ignored if TRAIN_WORKERS = 0
+    "TRAIN_BATCH":           8,     # sequences per train batch; ↑throughput, ↓stochasticity/GPU heat
+    "VAL_TEST_BATCH":        8,     # sequences per val batch; must be 1 for stateful LSTMs
+    "TRAIN_WORKERS":         2,      # DataLoader sub-processes; 0 = main thread (safest for laptop heat)
+    "TRAIN_PREFETCH_FACTOR": 2,   # batches to pre-load; ignored if TRAIN_WORKERS = 0
+    "PIN_MEMORY":            True,  # Locks RAM for faster GPU transfer; ↓latency, ↑kernel pressure (Set False if experiencing reboots/Watchdog errors)
     
-    "PIN_MEMORY":            False,  # Locks RAM for faster GPU transfer; ↓latency, ↑kernel pressure (Set False if experiencing reboots/Watchdog errors)
     "LOOK_BACK":             60,     # sequence length; minutes of history per training example
     "MICRO_SAMPLE_K":        1,      # sample count for latency metrics; ↑diagnostics, ↓speed
 }
@@ -161,78 +162,54 @@ sess_afthour     = datetime.strptime('00:00' , '%H:%M').time()
 
 #########################################################################################################
 
-
-def load_sign_optuna_record(sig_type, optuna_folder=optuna_folder, ticker=ticker):
-    """
-    Find the Optuna JSON file named like '{ticker}_{value}_{sig_type "target" or "predicted"}.json' 
-    with the largest numeric <value> and return (value, params) from that file.
-
-    Assumes at least one matching file exists; will raise if none are found.
-    """
-    # build glob pattern for files like "AAPL_1.8870_target.json"
-    pattern = os.path.join(optuna_folder, f"{ticker}_*_{sig_type}.json")
-
-    # compile regex to extract the numeric suffix between ticker_ and _target.json
-    rx = re.compile(
-        rf'^{re.escape(ticker)}_(?P<val>-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)_{sig_type}\.json$'
-    )
-
-    # list all candidate files matching the glob pattern
-    files = glob.glob(pattern)
-
-    # keep only files that match the regex and parse their numeric suffix
-    matches = [
-        (p, float(rx.match(os.path.basename(p)).group("val"))) 
-        for p in files
-    ]
-
-    # pick the file with the largest numeric suffix (will raise if matches is empty)
-    best_file = max(matches, key=lambda t: t[1])[0]
-
-    # load the JSON record and return the stored value and params
-    with open(best_file, "r") as fp:
-        record = json.load(fp)
-
-    if sig_type == 'target':
-        record["params"]["sess_start"] = pd.to_datetime(record["params"]["sess_start"]).time()
-        return record["value"], record["params"]
-
-    if sig_type == 'predicted':
-        return record["best_value"], record["best_params"]
-
-
-#########################################################################################################
-
-# rsi_min_thresh=52; rsi_max_thresh=62; adx_thresh=44.237017018361385; atr_mult=0.013784916118372856; vwap_atr_mult=-6.9562060460364945; buy_factor=0.9592632519274703; sell_factor=0.9896706450897675; trailstop_pct=2.0060518700218872; thresh_mode=roll_median; thresh_window=259
+# min_prof_thr0.05097433784612173
+# max_down_prop0.694720761798232
+# gain_tightfact3.133710750083402
+# tau_time46.37000086515304
+# tau_dur69.2091040513691
+# thresh_choice"median_nonzero"
+# rsi_min_thresh100
+# rsi_max_thresh0
+# adx_thresh15
+# trailstop_pct1.044410522412767
+# atr_mult1
+# vwap_atr_mult-28.173758909259544
+# buy_factor4.106794878301534
+# sell_factor5.897963476949319
+# best_value2984233.033970667
 
 if ticker == 'AAPL':
+    # --- Swing Detection Parameters ---
+    min_prof_thr_tick    = 0.05097433784612173   # Minimum price move required to identify a valid swing
+    max_down_prop_tick   = 0.694720761798232    # Fraction of the move allowed for retracement before exit
+    gain_tightfact_tick  = 3.133710750083402    # Factor that tightens exit tolerance as unrealized profit grows
+    tau_time_tick        = 46.37000086515304     # Half-life constant for decaying signal strength over time
+    tau_dur_tick         = 69.2091040513691    # Constant used to boost the score based on swing duration
 
-    min_prof_thr_tick    = 0.0018291260396256649  # minimum % gain to accept a swing
-    max_down_prop_tick   = 0.004030139474703384   # base retracement threshold (fraction of move)
-    gain_tightfact_tick  = 0.025006471074875608   # tighter retracement for larger gains
-    tau_time_tick        = 5.400049943858033      # minutes half-life for temporal decay
-    tau_dur_tick         = 6.357695320055652      # minutes half-life for duration boost
+    # --- Strategy Filter Thresholds ---
+    rsi_min_thresh_tick  = 100     # Ceiling value for the RSI filter during entry conditions
+    rsi_max_thresh_tick  = 0     # Floor value for the RSI filter during exit conditions
+    adx_thresh_tick      = 15      # Threshold for minimum required trend strength
+    trailstop_pct_tick   = 1.044410522412767      # Distance used for the trailing stop-loss mechanism
+    atr_mult_tick        = 1   # Coefficient for setting volatility-based price stops
+    vwap_atr_mult_tick   = -28.173758909259544   # Coefficient for the safety offset relative to the VWAP
+    buy_factor_tick      = 4.106794878301534   # Multiplier applied to calculate the buy position weight
+    sell_factor_tick     = 5.897963476949319    # Multiplier applied to calculate the sell position weight
     
-    col_atr_tick         = "atr_21"
-    col_adx_tick         = "adx_21"
-    col_rsi_tick         = "rsi_21"
-    col_vwap_tick        = "vwap_ohlc_close_session"
+    # --- Indicator Columns ---
+    col_atr_tick         = "atr_21"               # Column label for the Average True Range indicator
+    col_adx_tick         = "adx_21"               # Column label for the Average Directional Index
+    col_rsi_tick         = "rsi_21"               # Column label for the Relative Strength Index
+    col_vwap_tick        = "vwap_ohlc_close_session" # Column label for the Volume Weighted Average Price
     
-    col_signal_tick      = "pred_signal"          # 'targ_signal' for target, 'pred_signal' for ML, eg "ema_*" for IND
-    sign_thresh_tick     = "signal_thresh"        # 'signal_thresh' for target or ML, constant or eg "ema_*" for IND
-    
-    rsi_min_thresh_tick  = 52
-    rsi_max_thresh_tick  = 62
-    adx_thresh_tick      = 44.237017018361385
-    atr_mult_tick        = 0.013784916118372856
-    vwap_atr_mult_tick   = -6.9562060460364945
-    buy_factor_tick      = 0.9592632519274703
-    sell_factor_tick     = 0.9896706450897675
-    trailstop_pct_tick   = 2.0060518700218872
+    # --- Logic Configuration ---
+    col_signal_tick      = "targ_signal"          # The primary signal column used for decision making ("targ_signal" or "pred_signal" or any indicator signal)
+    sign_thresh_tick     = "signal_thresh"        # The reference column or value for signal activation ("signal_thresh" or any indicator threshold)
 
-    thresh_mode_tick     = "roll_median"          # "median_nonzero","mean_nonzero","p90","p95","p99","median","mean","roll_mean","roll_median","roll_p90","roll_p95","numeric"
-    thresh_window_tick   = 259                    # rolling window (bars) for rolling thresh_modes
-    thresh_mode_num_tick = 0.01562252543390733    # numeric threshold for "numeric" thresh_mode
+    # --- Thresholding Logic ---
+    thresh_mode_tick     = "median_nonzero"       # Statistical method for defining the signal threshold
+    thresh_window_tick   = 0                      # Lookback period used for dynamic thresholding calculations
+    # thresh_mode_num_tick = 0.01562252543390733    # Fallback scalar for static thresholding logic
 
     strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
     signals_cols_tick    = ['close_raw', 'targ_signal', 'signal_thresh']

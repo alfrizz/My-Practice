@@ -10,13 +10,6 @@ mkdir -p /tmp
 # 1.a) Delete anything in /tmp older than a day (1440 minutes)
 find /tmp -mindepth 1 -mmin +1440 -delete || true
 
-# 1.b) Delete Jupyter checkpoint directories if /workspace exists
-if [ -d /workspace ]; then
-  find /workspace -type d -name ".ipynb_checkpoints" -prune -exec rm -rf {} + 2>/dev/null || true
-  echo "=== Removed all .ipynb_checkpoints (if any) ==="
-else
-  echo "=== /workspace not present; skipping checkpoint cleanup ==="
-fi
 
 # --- Wait for /workspace to be a host bind (not tmpfs) before starting Jupyter
 # Default MAX_WAIT is 30 seconds. Set MAX_WAIT=0 to wait indefinitely.
@@ -41,6 +34,14 @@ while true; do
   sleep $SLEEP
   ELAPSED=$((ELAPSED + SLEEP))
 done
+
+# 1.b) Delete Jupyter checkpoint directories if /workspace exists
+if [ -d /workspace ]; then
+  find /workspace -type d -name ".ipynb_checkpoints" -prune -exec rm -rf {} + 2>/dev/null || true
+  echo "=== Removed all .ipynb_checkpoints (if any) ==="
+else
+  echo "=== /workspace not present; skipping checkpoint cleanup ==="
+fi
 
 # 2) Hand off to the real NVIDIA entrypoint (preserves CLI args)
 exec /opt/nvidia/nvidia_entrypoint.sh "$@"

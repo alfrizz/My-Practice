@@ -62,10 +62,9 @@ done
 # Start Unison daily in the background
 (
   while true; do
-    # --- 1.b) OPTIMIZATION: Updated Exclusions ---
-    # Added *.dat and *.csv to prevent Unison from thrashing large data files.
-    # Model checkpoints (*.pth) are also excluded to prevent internet/sync lag.
-    sudo unison \
+    set +e 
+    # REMOVED SUDO HERE
+    unison \
       -root "$HOME" -root "$TARGET" -fat -perms 0 -batch -auto -times \
       -maxbackups 1 -confirmmerge=false -prefer newer -links false -fastcheck true \
       -silent \
@@ -84,9 +83,21 @@ done
       -ignore 'Name *.dat' \
       -ignore 'Name *.csv' \
       -ignore 'Name *.lnk' \
-      -logfile "$LOG" || true
+      -logfile "$LOG"
+    UNISON_EXIT_CODE=$?
+    set -e
+
+    if [ $UNISON_EXIT_CODE -ne 0 ]; then
+      # Check if corrupted archive is mentioned in the log
+      if tail -n 20 "$LOG" | grep -q "End_of_file exception raised in loading archive"; then
+        echo "$(date) Purging corrupted archives from $HOME/.unison/" >>"$LOG"
+        # Force removal of the archives in the CORRECT user folder
+        rm -f "$HOME/.unison/ar"* 
+	sleep 2
+        continue 
+      fi
+    fi
       
-    # 2) CORRECT TIMER: 3 hours (10800s) to avoid thrashing CPU
     sleep 10800
   done
 ) &

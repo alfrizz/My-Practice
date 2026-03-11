@@ -16,7 +16,7 @@ from typing import Optional, Dict, Tuple, List, Sequence, Union, Any
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 #######################################################################################################
@@ -331,6 +331,8 @@ def _format_perf(df, trades):
         "BUYNHOLD": buynhold_line
     }
     return df, perf
+
+
 
 
 ####################################################################################################### 
