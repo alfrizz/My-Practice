@@ -382,89 +382,6 @@ def _reset_states(
 ############################ 
 
 
-# class CustomMSELoss(nn.Module):
-#     """
-#     Combined Level and Slope (Derivative) Loss.
-
-#     Functionality:
-#     - Computes MSE or Huber loss for the primary signal levels.
-#     - Computes an additional MSE loss on the first-order differences (slopes).
-#     - Vectorized: Calculates differences across the entire batch in parallel,
-#       masking out invalid transitions between different sequences.
-#     - Includes a linear warmup for the slope penalty weight (alpha).
-#     """
-#     def __init__(
-#         self,
-#         alpha: float = 0.0,
-#         warmup_steps: int = 0,
-#         use_huber: bool = False,
-#         huber_delta: float = 1.0,
-#     ):
-#         super().__init__()
-#         self.alpha = float(alpha)
-#         self.warmup_steps = int(warmup_steps)
-#         self.use_huber = bool(use_huber)
-#         self.huber_delta = float(huber_delta)
-
-#     def _effective_alpha(self, step: Optional[int]) -> float:
-#         if self.alpha <= 0.0:
-#             return 0.0
-#         if self.warmup_steps <= 0 or step is None:
-#             return self.alpha
-#         t = min(1.0, float(step) / float(self.warmup_steps))
-#         return self.alpha * t
-
-#     def forward(
-#         self,
-#         preds: torch.Tensor,
-#         targs: torch.Tensor,
-#         seq_lengths: List[int],
-#         step: Optional[int] = None,
-#     ) -> torch.Tensor:
-#         # preds/targs shape: (N,) or (N, 1)
-#         assert preds.shape == targs.shape, "preds and targs must have identical shapes"
-
-#         # 1. Level Loss (Standard MSE or Huber)
-#         if self.use_huber:
-#             L1 = torch.nn.functional.huber_loss(preds, targs, reduction="mean", delta=self.huber_delta)
-#         else:
-#             L1 = torch.nn.functional.mse_loss(preds, targs, reduction="mean")
-
-#         # 2. Slope Penalty Check
-#         eff_alpha = self._effective_alpha(step)
-#         if eff_alpha <= 0.0:
-#             return L1
-
-#         # 3. Vectorized Slope Calculation
-#         # Compute global differences (N-1,)
-#         diff_p = preds[1:] - preds[:-1]
-#         diff_t = targs[1:] - targs[:-1]
-
-#         # Identify boundary indices where sequences end
-#         # Example: if seq_lengths = [3, 2], boundaries are at index 2 (between 2 and 3)
-#         if len(seq_lengths) > 1:
-#             device = preds.device
-#             # Compute cumulative sums to find end-of-sequence indices
-#             boundaries = torch.as_tensor(seq_lengths, device=device).cumsum(dim=0)[:-1]
-            
-#             # Create a boolean mask for valid transitions (True = same sequence)
-#             # Index 'i' in diff_p represents transition between preds[i] and preds[i+1]
-#             # Transition is invalid if 'i' is the last index of a sequence (boundary - 1)
-#             valid_mask = torch.ones(diff_p.size(0), dtype=torch.bool, device=device)
-#             valid_mask[boundaries - 1] = False
-            
-#             # Apply mask
-#             diff_p = diff_p[valid_mask]
-#             diff_t = diff_t[valid_mask]
-
-#         if diff_p.numel() == 0:
-#             return L1
-
-#         # 4. Final Aggregated Loss
-#         L2 = torch.nn.functional.mse_loss(diff_p, diff_t, reduction="mean")
-#         return L1 + eff_alpha * L2
-
-
 class CustomMSELoss(nn.Module):
     """
     Combined Level and Slope (Derivative) Loss for Time-Series.
@@ -558,29 +475,6 @@ class CustomMSELoss(nn.Module):
 #############################
 
 
-# def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
-#     """
-#     Compute RMSE, MAE, and R² on flat NumPy arrays of predictions vs. targets.
-#     """
-#     if preds.size == 0:
-#         return {"rmse": float("nan"), "mae": float("nan"), "r2": float("nan")}
-
-#     diff = preds - targs
-#     mse  = float((diff ** 2).mean())
-#     mae  = float(np.abs(diff).mean())
-#     rmse = float(np.sqrt(mse))
-
-#     # R² = 1 − RSS/TSS
-#     if preds.size < 2 or np.isclose(targs.var(), 0.0):
-#         r2 = float("nan")
-#     else:
-#         tss = float(((targs - targs.mean()) ** 2).sum())
-#         rss = float((diff ** 2).sum())
-#         r2  = float("nan") if tss == 0.0 else 1.0 - (rss / tss)
-
-#     return {"rmse": rmse, "mae": mae, "r2": r2}
-
-
 def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
     """
     Calculates standard regression performance metrics using NumPy.
@@ -624,46 +518,6 @@ def _compute_metrics(preds: np.ndarray, targs: np.ndarray) -> dict:
     
 #################### 
 
-
-# def _prepare_windows_and_targets_batch(
-#     x_batch: torch.Tensor, y_signal: torch.Tensor, seq_lengths: list,
-#     wd_list: list, reset_state_fn, model, prev_day=None
-# ):
-#     """
-#     Collapses padded batches and orchestrates state resets for sequential training.
-    
-#     Functionality:
-#     1. Triggers state resets based on the provided list of weekdays.
-#     2. Uses vectorized boolean masking on the GPU to remove zero-padding.
-#     3. Minimizes CPU-GPU traffic by using .as_tensor() for masking parameters.
-#     """
-#     B = len(seq_lengths)
-#     if B == 0: 
-#         return None, None, prev_day
-    
-#     W_max = x_batch.size(0) // B
-#     device = x_batch.device
-    
-#     # 1. State Management (Runs on CPU using the weekday list)
-#     prev_day = reset_state_fn(model, wd_list, prev_day)
-
-#     # Calculate total valid windows (Fast CPU sum)
-#     total_valid = sum(seq_lengths)
-#     if total_valid == 0: 
-#         return None, None, prev_day
-        
-#     # 2. Shortcut: If no padding exists, skip masking overhead
-#     if total_valid == B * W_max:
-#         return x_batch.float(), y_signal.float(), prev_day
-
-#     # 3. GPU Masking
-#     # Convert seq_lengths to GPU tensor once for the comparison math
-#     lens_tensor = torch.as_tensor(seq_lengths, device=device, dtype=torch.long).unsqueeze(1)
-#     mask = torch.arange(W_max, device=device).expand(B, W_max) < lens_tensor
-#     mask = mask.reshape(-1) 
-            
-#     return x_batch[mask].float(), y_signal[mask].float(), prev_day
-    
 
 def _prepare_windows_and_targets_batch(
     x_batch: torch.Tensor, y_signal: torch.Tensor, seq_lengths: list,
@@ -773,7 +627,7 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
 
 def model_training_loop(
     model: nn.Module, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.OneCycleLR,
-    scaler: torch.amp.GradScaler, train_loader, val_loader, all_features=False
+    scaler: torch.amp.GradScaler, train_loader, val_loader
 ) -> float:
     """
     Executes an optimized training loop with minimized CPU-GPU synchronization.

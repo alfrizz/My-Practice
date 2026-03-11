@@ -24,7 +24,7 @@ init_df_year = 2016
 start_date_sim = '2016-09-01'
 end_date_sim = '2020-03-01'
 month_to_check = '2022-01'
-sel_val_rmse = '0.16005'
+sel_val_rmse = '0.06590'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
