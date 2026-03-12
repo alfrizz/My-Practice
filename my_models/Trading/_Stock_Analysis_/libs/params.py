@@ -99,7 +99,7 @@ hparams = {
     # ── Transformer toggle ────────────────────────────────
     "USE_TRANSFORMER":       True,   # enable TransformerEncoder
     "TRANSFORMER_D_MODEL":   128,     # transformer embedding width (d_model); adapter maps features into this
-    "TRANSFORMER_LAYERS":    1,      # number of encoder layers; ↑depth/complexity, ↓speed/stability
+    "TRANSFORMER_LAYERS":    2,      # number of encoder layers; ↑depth/complexity, ↓speed/stability
     "TRANSFORMER_HEADS":     8,      # attention heads; must divide d_model; ↑multi-aspect focus
     "TRANSFORMER_FF_MULT":   1,      # FFN expansion factor (d_model * MULT); ↑internal capacity
     "DROPOUT_TRANS":         0.1,    # transformer dropout; ↑regularization
@@ -124,7 +124,7 @@ hparams = {
 
     # ── Optimizer & Scheduler Settings ──────────────────────────────────
     "MAX_EPOCHS":            90,     # max training epochs
-    "EARLY_STOP_PATIENCE":   9,      # epochs to wait without improvement; ↑robustness to noise
+    "EARLY_STOP_PATIENCE":   15,      # epochs to wSait without improvement; ↑robustness to noise
     "WEIGHT_DECAY":          2e-6,   # L2 penalty; ↑weight shrinkage, ↓overfitting
     "CLIPNORM":              2,      # max grad norm; ↑stability (prevents exploding gradients)
     
@@ -139,7 +139,7 @@ hparams = {
     "TRAIN_BATCH":           8,     # sequences per train batch; ↑throughput, ↓stochasticity/GPU heat
     "VAL_TEST_BATCH":        8,     # sequences per val batch; must be 1 for stateful LSTMs
     "TRAIN_WORKERS":         2,      # DataLoader sub-processes; 0 = main thread (safest for laptop heat)
-    "TRAIN_PREFETCH_FACTOR": 2,   # batches to pre-load; ignored if TRAIN_WORKERS = 0
+    "TRAIN_PREFETCH_FACTOR": 8,   # batches to pre-load; ignored if TRAIN_WORKERS = 0
     "PIN_MEMORY":            True,  # Locks RAM for faster GPU transfer; ↓latency, ↑kernel pressure (Set False if experiencing reboots/Watchdog errors)
     
     "LOOK_BACK":             60,     # sequence length; minutes of history per training example
@@ -213,6 +213,16 @@ if ticker == 'AAPL':
 
     strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
     signals_cols_tick    = ['close_raw', 'targ_signal', 'signal_thresh']
-    features_cols_tick   = ['range_pct', 'atr_pct_7', 'bb_w_50_2p0', 'ret_std_21', 'bb_w_20_3p0', 'time_in_sess', 'atr_pct_14', 'donch_w_20', 'time_premark', 'kc_w_20_20_2.0', 'atr_pct_28', 'ret_std_63', 'time_afthour', 'upper_shad', 'donch_w_55', 'dist_low_100', 'lower_shad', 'trade_count', 'dist_high_100', 'time_hour', 'volume', 'time_day_of_year', 'vol_spike_28', 'time_month', 'atr_7_RZ', 'atr_14_RZ', 'minus_di_28', 'kc_h_20_20_1.5_RZ', 'ret', 'adx_28', 'time_minute', 'minus_di_14', 'plus_di_7', 'atr_21_RZ', 'atr_28_RZ', 'sma_pct_21', 'time_week_of_year', 'minus_di_21', 'donch_h_55_RZ', 'bb_lband_50_2p0_RZ', 'kc_h_20_20_2.0_RZ', 'minus_di_7', 'plus_di_28', 'bb_lband_20_3p0_RZ', 'bb_hband_50_2p0_RZ', 'plus_di_21', 'rsi_28', 'plus_di_14', 'stoch_d_9_3_3', 'roc_21']
+    features_cols_tick   = [
+            'donch_w_20', 'atr_28_RZ', 'range_pct', 'time_premark', 'dist_low_100', 
+            'stoch_k_14_3_3', 'kc_h_20_20_2.0_RZ', 'kc_w_20_20_2.0', 'bb_w_50_2p0', 
+            'donch_h_20_RZ', 'ret_std_21', 'sma_pct_5', 'trade_count', 'atr_pct_7', 
+            'minus_di_14', 'sma_pct_21', 'time_day_of_year', 'upper_shad', 'ret', 
+            'time_in_sess', 'high_RZ', 'bb_hband_20_3p0_RZ', 'minus_di_28', 'roc_5', 
+            'time_afthour', 'stoch_d_9_3_3', 'macd_diff_12_26_9_RZ', 'atr_pct_14', 
+            'rsi_7', 'adx_21', 'time_minute', 'sma_pct_9', 'sma_9_RZ', 'donch_w_55', 
+            'rsi_21', 'minus_di_7', 'rsi_28', 'time_hour', 'rsi_14', 'cci_20', 
+            'volume', 'atr_pct_28'
+        ]
 
 

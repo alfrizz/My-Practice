@@ -22,7 +22,7 @@ services:
 
     # Hardware Access & Resource Limits
     gpus: all
-    cpus: "14.0"          # Out of 14 WSL cores, leaves 2 core for WSL/Unison background tasks
+    cpus: "14.0"         # Out of 16 WSL cores, leaves 2 core for WSL/Unison background tasks
     mem_limit: "48g"     # Out of 52GB WSL memory, leaves 4GB for OS stability
     shm_size: 8g         # Shared memory allocation for PyTorch dataloaders
 
@@ -43,6 +43,7 @@ services:
     # Environment Variables & Secret Management
     environment:
       - MAX_WAIT=30
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
     env_file:
       - .env

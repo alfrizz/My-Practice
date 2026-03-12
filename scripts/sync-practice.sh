@@ -68,7 +68,7 @@ done
       -root "$HOME" -root "$TARGET" -fat -perms 0 -batch -auto -times \
       -maxbackups 1 -confirmmerge=false -prefer newer -links false -fastcheck true \
       -silent \
-      -maxsizethreshold 1048576 \
+      -maxsizethreshold 300000 \
       -ignore 'Name .*' \
       -ignore 'Path jlenv/**' \
       -ignore 'Path snap/**' \
@@ -98,7 +98,7 @@ done
       fi
     fi
       
-    sleep 10800
+    sleep 1800
   done
 ) &
 

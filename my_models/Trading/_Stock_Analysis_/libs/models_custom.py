@@ -471,7 +471,7 @@ class CustomMSELoss(nn.Module):
         L2 = torch.nn.functional.mse_loss(diff_p, diff_t, reduction="mean")
         return L1 + (eff_alpha * L2)
 
-        
+
 #############################
 
 
@@ -566,27 +566,81 @@ def _prepare_windows_and_targets_batch(
 ########################
 
 
+# def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
+#     """
+#     Evaluates the model on a provided dataloader to compute metrics and predictions.
+
+#     Functionality:
+#     - Runs in eval mode with no_grad to minimize VRAM usage.
+#     - Accumulates predictions as GPU tensors to avoid PCIe sync bottlenecks during the loop.
+#     - Moves data to CPU in bulk at the end for final metric calculation.
+#     """
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model.to(device).eval()
+#     model.h_short = model.h_long = None
+#     prev_day = None
+    
+#     # Track results on GPU to maximize throughput
+#     val_base_preds_tensors = []
+#     val_tot_preds_tensors = []
+#     val_targs_tensors = []
+#     val_lengths = []
+
+#     # with torch.no_grad():
+#     with torch.inference_mode():
+#         # leave=False keeps the notebook clean; smoothing=0 shows true global speed
+#         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(loader, desc="eval", leave=False, smoothing=0):
+
+#             x_batch = x_batch.to(device, non_blocking=True)
+#             y_signal = y_signal.to(device, non_blocking=True)
+
+#             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
+#                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
+#             )
+#             if windows_tensor is None:
+#                 continue
+   
+#             # Forward pass only
+#             base_tensor, delta_tensor = model(windows_tensor)
+#             total_tensor = base_tensor + delta_tensor
+            
+#             # Detach and store
+#             val_base_preds_tensors.append(base_tensor.view(-1).detach())
+#             val_tot_preds_tensors.append(total_tensor.view(-1).detach())
+#             val_targs_tensors.append(targets_tensor.view(-1).detach())
+#             val_lengths.extend([L for L in seq_lengths if L > 0])
+            
+#     # Batch move to CPU
+#     val_base_preds = torch.cat(val_base_preds_tensors).cpu().numpy().astype(np.float64) if val_base_preds_tensors else np.array([], dtype=np.float64)
+#     val_tot_preds = torch.cat(val_tot_preds_tensors).cpu().numpy().astype(np.float64) if val_tot_preds_tensors else np.array([], dtype=np.float64)
+#     val_targs = torch.cat(val_targs_tensors).cpu().numpy().astype(np.float64) if val_targs_tensors else np.array([], dtype=np.float64)
+
+#     model.bl_val_mean, model.bl_val_pers = compute_baselines(val_targs, val_lengths)
+#     model.last_val_tot_preds = torch.from_numpy(val_tot_preds).float()
+#     model.last_val_targs = torch.from_numpy(val_targs).float()
+   
+#     return _compute_metrics(val_tot_preds, val_targs), _compute_metrics(val_base_preds, val_targs), val_tot_preds, val_base_preds, val_targs
+
+
 def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarray, np.ndarray]:
     """
     Evaluates the model on a provided dataloader to compute metrics and predictions.
 
     Functionality:
-    - Runs in eval mode with no_grad to minimize VRAM usage.
-    - Accumulates predictions as GPU tensors to avoid PCIe sync bottlenecks during the loop.
-    - Moves data to CPU in bulk at the end for final metric calculation.
+    - Runs in inference_mode to minimize overhead.
+    - Moves batch predictions to CPU RAM immediately to prevent GPU OOM.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
     model.h_short = model.h_long = None
     prev_day = None
     
-    # Track results on GPU to maximize throughput
+    # Track results on CPU RAM to prevent VRAM exhaustion
     val_base_preds_tensors = []
     val_tot_preds_tensors = []
     val_targs_tensors = []
     val_lengths = []
 
-    # with torch.no_grad():
     with torch.inference_mode():
         # leave=False keeps the notebook clean; smoothing=0 shows true global speed
         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(loader, desc="eval", leave=False, smoothing=0):
@@ -604,16 +658,16 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
             base_tensor, delta_tensor = model(windows_tensor)
             total_tensor = base_tensor + delta_tensor
             
-            # Detach and store
-            val_base_preds_tensors.append(base_tensor.view(-1).detach())
-            val_tot_preds_tensors.append(total_tensor.view(-1).detach())
-            val_targs_tensors.append(targets_tensor.view(-1).detach())
+            # Detach, move to CPU, and store
+            val_base_preds_tensors.append(base_tensor.view(-1).detach().cpu())
+            val_tot_preds_tensors.append(total_tensor.view(-1).detach().cpu())
+            val_targs_tensors.append(targets_tensor.view(-1).detach().cpu())
             val_lengths.extend([L for L in seq_lengths if L > 0])
             
-    # Batch move to CPU
-    val_base_preds = torch.cat(val_base_preds_tensors).cpu().numpy().astype(np.float64) if val_base_preds_tensors else np.array([], dtype=np.float64)
-    val_tot_preds = torch.cat(val_tot_preds_tensors).cpu().numpy().astype(np.float64) if val_tot_preds_tensors else np.array([], dtype=np.float64)
-    val_targs = torch.cat(val_targs_tensors).cpu().numpy().astype(np.float64) if val_targs_tensors else np.array([], dtype=np.float64)
+    # The tensors are already on CPU, just concatenate and convert to numpy
+    val_base_preds = torch.cat(val_base_preds_tensors).numpy().astype(np.float64) if val_base_preds_tensors else np.array([], dtype=np.float64)
+    val_tot_preds = torch.cat(val_tot_preds_tensors).numpy().astype(np.float64) if val_tot_preds_tensors else np.array([], dtype=np.float64)
+    val_targs = torch.cat(val_targs_tensors).numpy().astype(np.float64) if val_targs_tensors else np.array([], dtype=np.float64)
 
     model.bl_val_mean, model.bl_val_pers = compute_baselines(val_targs, val_lengths)
     model.last_val_tot_preds = torch.from_numpy(val_tot_preds).float()
@@ -621,8 +675,177 @@ def eval_on_loader(loader, model: nn.Module) -> tuple[dict, np.ndarray, np.ndarr
    
     return _compute_metrics(val_tot_preds, val_targs), _compute_metrics(val_base_preds, val_targs), val_tot_preds, val_base_preds, val_targs
 
-
+    
 ####################################################################################################### 
+
+
+# def model_training_loop(
+#     model: nn.Module, optimizer: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler.OneCycleLR,
+#     scaler: torch.amp.GradScaler, train_loader, val_loader
+# ) -> float:
+#     """
+#     Executes an optimized training loop with minimized CPU-GPU synchronization.
+
+#     Functionality:
+#     - Moves loss accumulation to the GPU to avoid per-batch .item() sync points.
+#     - Replaces dynamic optimizer patching with standard GradScaler state checks.
+#     - Ensures states (h_short, c_short) are reset correctly at epoch start.
+#     - Maintains all logging, plotting, and checkpointing logic as originally designed.
+#     """
+#     if getattr(model, "delta_head", None) is not None:
+#         torch.nn.init.zeros_(model.delta_head.bias)
+        
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model_feats = params.features_cols_tick
+#     model_hparams = params.hparams
+
+#     gc.collect()
+#     if torch.cuda.is_available(): torch.cuda.empty_cache()
+#     model.to(device)
+
+#     live_plot = plots.LiveRMSEPlot()
+#     best_val, best_state, patience = float("inf"), None, 0
+#     models_dir = Path(params.models_folder)
+
+#     MSE_base = CustomMSELoss(
+#         alpha=float(model_hparams["ALPHA_SMOOTH"]), warmup_steps=int(model_hparams["WARMUP_STEPS"]),
+#         use_huber=bool(model_hparams["USE_HUBER"]), huber_delta=float(model_hparams["HUBER_DELTA"]),
+#     )
+#     MSE_delta = CustomMSELoss(alpha=0.0, warmup_steps=0, use_huber=False)
+
+#     for epoch in range(1, model_hparams["MAX_EPOCHS"] + 1):
+#         model.train()
+#         model.h_short = model.h_long = None
+#         prev_day = None
+
+#         tr_base_preds_tensors, tr_tot_preds_tensors, tr_targs_tensors = [], [], []
+#         tr_delta_preds_tensors, tr_delta_targs_tensors, tr_lengths = [], [], []
+        
+#         # OPTIMIZATION: Accumulate loss on GPU as tensors to avoid .item() syncs in the loop
+#         loss_total_acc = torch.tensor(0.0, device=device)
+#         loss_base_acc = torch.tensor(0.0, device=device)
+#         loss_delta_acc = torch.tensor(0.0, device=device)
+#         epoch_loss_count = epoch_samples = 0
+        
+#         # --- TRAINING PHASE ---
+#         train_start = time.time()
+
+#         for x_batch, y_signal, rc, wd, ts_list, seq_lengths in tqdm(train_loader, desc=f"Epoch {epoch} ▶ Train", leave=False, smoothing=0):
+#             x_batch = x_batch.to(device, non_blocking=True)
+#             y_signal = y_signal.to(device, non_blocking=True)
+
+#             optimizer.zero_grad(set_to_none=True)
+
+#             windows_tensor, targets_tensor, prev_day = _prepare_windows_and_targets_batch(
+#                 x_batch, y_signal, seq_lengths, wd, _reset_states, model, prev_day
+#             )
+#             if windows_tensor is None: continue
+
+#             with torch.amp.autocast(device_type="cuda", enabled=torch.cuda.is_available()):
+#                 base_tensor, delta_tensor = model(windows_tensor)  
+#                 total_tensor = base_tensor + delta_tensor 
+                
+#                 base_tensor, delta_tensor, total_tensor = base_tensor.view(-1), delta_tensor.view(-1), total_tensor.view(-1)
+#                 base_loss = MSE_base(base_tensor, targets_tensor, seq_lengths)
+                
+#                 if model.use_delta and model_hparams["LAMBDA_DELTA"] > 0:
+#                     delta_target = (targets_tensor - base_tensor).detach()
+#                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
+#                     tr_delta_preds_tensors.append(delta_tensor.detach())
+#                     tr_delta_targs_tensors.append(delta_target)
+#                 else:
+#                     delta_loss = torch.tensor(0.0, device=device)
+
+#                 tr_base_preds_tensors.append(base_tensor.detach())
+#                 tr_tot_preds_tensors.append(total_tensor.detach())
+#                 tr_targs_tensors.append(targets_tensor.detach())
+                
+#                 tr_lengths += [L for L in seq_lengths if L > 0]
+#                 epoch_samples += int(targets_tensor.size(0))
+#                 total_loss = base_loss + model_hparams["LAMBDA_DELTA"] * delta_loss
+
+#             scaler.scale(total_loss).backward()
+#             scaler.unscale_(optimizer)
+
+#             params_with_grad = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
+#             if params_with_grad: 
+#                 torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
+
+#             # OPTIMIZATION: Standard GradScaler state check instead of lambda monkey-patching
+#             before_scale = scaler.get_scale()
+#             scaler.step(optimizer)
+#             scaler.update()
+            
+#             # If the scale didn't decrease, the optimizer.step was successfully called
+#             if scaler.get_scale() >= before_scale:
+#                 scheduler.step()
+  
+#             # Accumulate values on GPU (detaching to avoid graph retention)
+#             loss_total_acc += total_loss.detach()
+#             loss_base_acc += base_loss.detach()
+#             loss_delta_acc += delta_loss.detach()
+#             epoch_loss_count += 1
+
+#         train_stop = time.time()
+#         val_start_time = time.time()
+
+#         # --- DATA PROCESSING & VALIDATION ---
+#         # Moving to CPU in one bulk move at the end of the epoch
+#         tr_tot_preds = torch.cat(tr_tot_preds_tensors).cpu().numpy().astype(np.float64) if tr_tot_preds_tensors else np.array([], dtype=np.float64)
+#         tr_targs     = torch.cat(tr_targs_tensors).cpu().numpy().astype(np.float64) if tr_targs_tensors else np.array([], dtype=np.float64)
+
+#         model.bl_tr_mean, model.bl_tr_pers = compute_baselines(tr_targs, tr_lengths)
+#         tr_tot_metrics = _compute_metrics(tr_tot_preds, tr_targs)
+        
+#         val_res, val_base_res, val_tot_preds, val_base_preds, val_targs = eval_on_loader(val_loader, model)
+#         val_stop_time = time.time()
+
+#         # Timing and Speeds
+#         train_elapsed = train_stop - train_start
+#         val_elapsed = val_stop_time - val_start_time
+#         train_speed = epoch_loss_count / max(0.1, train_elapsed)
+#         val_speed = len(val_loader) / max(0.1, val_elapsed)
+        
+#         # Only pull results from GPU to CPU once per epoch
+#         avg_loss = loss_total_acc.item() / max(1, epoch_loss_count)
+#         avg_base_loss = loss_base_acc.item() / max(1, epoch_loss_count)
+#         avg_delta_loss = loss_delta_acc.item() / max(1, epoch_loss_count)
+
+#         # Logging
+#         models_core.log_epoch_summary(
+#             epoch, model, optimizer, tr_tot_metrics=tr_tot_metrics, tr_base_metrics=_compute_metrics(tr_tot_preds, tr_targs),
+#             tr_delta_metrics={"rmse":0, "mae":0, "r2":0}, val_tot_metrics=val_res, val_base_metrics=val_base_res,
+#             val_tot_preds=val_tot_preds, val_base_preds=val_base_preds, val_targs=val_targs,
+#             avg_base_loss=avg_base_loss, avg_delta_loss=avg_delta_loss, 
+#             log_file=params.log_file, hparams=model_hparams,
+#         )
+#         live_plot.update(tr_tot_metrics["rmse"], val_res["rmse"])
+
+#         best_val, improved, *_ = models_core.maybe_save_chkpt(
+#             models_dir, model, val_res["rmse"], best_val, model_feats, model_hparams,
+#             {"rmse": tr_tot_metrics["rmse"]}, {"rmse": val_res["rmse"]}, live_plot
+#         )
+
+#         # --- DETAILED SUMMARY PRINT ---
+#         print(f"Epoch {epoch:02d} | "
+#               f"TRAIN→ RMSE={tr_tot_metrics['rmse']:.5f}, R²={tr_tot_metrics['r2']:.3f}, {train_elapsed:.1f}s ({train_speed:.1f} batch/s) | "
+#               f"VALID→ RMSE={val_res['rmse']:.5f}, R²={val_res['r2']:.3f}, {val_elapsed:.1f}s ({val_speed:.1f} batch/s) | "
+#               f"loss={avg_loss:.5e} | improved={bool(improved)}")
+
+#         if improved:
+#             best_state = {k: v.cpu() for k, v in model.state_dict().items()}
+#             patience = 0
+#         else:
+#             patience += 1
+#             if patience >= model_hparams["EARLY_STOP_PATIENCE"]:
+#                 print(f"Early stopping triggered after {epoch} epochs.")
+#                 break
+
+#     if best_state is not None:
+#         model.load_state_dict(best_state)
+#         models_core.save_final_chkpt(models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_res, live_plot, suffix="_fin")
+
+#     return best_val
 
 
 def model_training_loop(
@@ -637,6 +860,7 @@ def model_training_loop(
     - Replaces dynamic optimizer patching with standard GradScaler state checks.
     - Ensures states (h_short, c_short) are reset correctly at epoch start.
     - Maintains all logging, plotting, and checkpointing logic as originally designed.
+    - Safely transfers batch predictions to CPU RAM to prevent GPU Out Of Memory (OOM) errors.
     """
     if getattr(model, "delta_head", None) is not None:
         torch.nn.init.zeros_(model.delta_head.bias)
@@ -697,14 +921,16 @@ def model_training_loop(
                 if model.use_delta and model_hparams["LAMBDA_DELTA"] > 0:
                     delta_target = (targets_tensor - base_tensor).detach()
                     delta_loss = MSE_delta(delta_tensor, delta_target, seq_lengths)
-                    tr_delta_preds_tensors.append(delta_tensor.detach())
-                    tr_delta_targs_tensors.append(delta_target)
+                    # FIX: Move immediately to CPU
+                    tr_delta_preds_tensors.append(delta_tensor.detach().cpu())
+                    tr_delta_targs_tensors.append(delta_target.cpu())
                 else:
                     delta_loss = torch.tensor(0.0, device=device)
 
-                tr_base_preds_tensors.append(base_tensor.detach())
-                tr_tot_preds_tensors.append(total_tensor.detach())
-                tr_targs_tensors.append(targets_tensor.detach())
+                # FIX: Move immediately to CPU to prevent VRAM accumulation
+                tr_base_preds_tensors.append(base_tensor.detach().cpu())
+                tr_tot_preds_tensors.append(total_tensor.detach().cpu())
+                tr_targs_tensors.append(targets_tensor.detach().cpu())
                 
                 tr_lengths += [L for L in seq_lengths if L > 0]
                 epoch_samples += int(targets_tensor.size(0))
@@ -717,16 +943,13 @@ def model_training_loop(
             if params_with_grad: 
                 torch.nn.utils.clip_grad_norm_(params_with_grad, model_hparams["CLIPNORM"])
 
-            # OPTIMIZATION: Standard GradScaler state check instead of lambda monkey-patching
             before_scale = scaler.get_scale()
             scaler.step(optimizer)
             scaler.update()
             
-            # If the scale didn't decrease, the optimizer.step was successfully called
             if scaler.get_scale() >= before_scale:
                 scheduler.step()
   
-            # Accumulate values on GPU (detaching to avoid graph retention)
             loss_total_acc += total_loss.detach()
             loss_base_acc += base_loss.detach()
             loss_delta_acc += delta_loss.detach()
@@ -736,9 +959,9 @@ def model_training_loop(
         val_start_time = time.time()
 
         # --- DATA PROCESSING & VALIDATION ---
-        # Moving to CPU in one bulk move at the end of the epoch
-        tr_tot_preds = torch.cat(tr_tot_preds_tensors).cpu().numpy().astype(np.float64) if tr_tot_preds_tensors else np.array([], dtype=np.float64)
-        tr_targs     = torch.cat(tr_targs_tensors).cpu().numpy().astype(np.float64) if tr_targs_tensors else np.array([], dtype=np.float64)
+        # FIX: Tensors are already on CPU, so we just cat and convert to numpy
+        tr_tot_preds = torch.cat(tr_tot_preds_tensors).numpy().astype(np.float64) if tr_tot_preds_tensors else np.array([], dtype=np.float64)
+        tr_targs     = torch.cat(tr_targs_tensors).numpy().astype(np.float64) if tr_targs_tensors else np.array([], dtype=np.float64)
 
         model.bl_tr_mean, model.bl_tr_pers = compute_baselines(tr_targs, tr_lengths)
         tr_tot_metrics = _compute_metrics(tr_tot_preds, tr_targs)
@@ -792,6 +1015,75 @@ def model_training_loop(
         models_core.save_final_chkpt(models_dir, best_state, best_val, model_feats, model_hparams, tr_tot_metrics, val_res, live_plot, suffix="_fin")
 
     return best_val
+
+
+######################################################################################################
+
+
+def print_model_complexity_report(model: torch.nn.Module, hparams: dict, train_loader) -> None:
+    """
+    Analyzes and prints a comprehensive summary of the model's static architecture,
+    dynamic memory load, and computational complexity based on the given hyperparameters
+    and the actual data tensors from the training loader.
+    """
+    # 1. Peek at the first batch to extract actual tensor dimensions
+    peek_batch = next(iter(train_loader))
+    x_peek = peek_batch[0]
+    
+    total_sequences = x_peek.size(0)  # Total collapsed windows (N)
+    look_back = x_peek.size(1)        # Time-steps (L)
+    features = x_peek.size(2)         # Input features (F)
+    
+    # Extract the dataset size
+    n_days = len(train_loader.dataset)
+    
+    # 2. Calculate Static Load (Parameters & Weights)
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    static_vram_mb = (total_params * 4 + trainable_params * 8) / (1024 ** 2)
+    
+    # 3. Calculate Dynamic Load (Tensor Math)
+    base_elements = total_sequences * look_back * features
+    
+    is_transformer = hparams.get("USE_TRANSFORMER", False)
+    if is_transformer:
+        heads = hparams.get("TRANSFORMER_HEADS", 1)
+        layers = hparams.get("TRANSFORMER_LAYERS", 1)
+        attention_ops = total_sequences * (look_back ** 2) * heads * layers
+    else:
+        attention_ops = 0
+
+    # 4. Calculate Final Total Complexity Score
+    dynamic_operations = base_elements + attention_ops
+    compute_score = (dynamic_operations * total_params) / 1e9 
+
+    # 5. Print the exhaustive report
+    print("=" * 65)
+    print("🧠 1. STATIC LOAD (The Engine)")
+    print(f"Total Parameters:       {total_params:,}")
+    print(f"Trainable Parameters:   {trainable_params:,}")
+    print(f"Static VRAM Footprint:  ~{static_vram_mb:.2f} MB (Weights + Adam Optimizer)")
+    print("-" * 65)
+    print("📦 2. DYNAMIC LOAD (The Payload per Step)")
+    print(f"Total Epoch Size:       {n_days:,} unique trading days")
+    print(f"Config Train Batch:     {hparams.get('TRAIN_BATCH', 'Unknown')} Days")
+    print(f"True Sequences (N):     {total_sequences:,} windows")
+    print(f"Look Back (L):          {look_back} time-steps")
+    print(f"Features (F):           {features}")
+    print(f"Input Tensor Elements:  {base_elements:,} floats per forward pass")
+    print("-" * 65)
+    print("🔥 3. ALGORITHMIC SCALING (The Speed Limit)")
+    if is_transformer:
+        print(f"Architecture:           Transformer (Quadratic Scaling O(N²))")
+        print(f"Attention Matrix (L²):  {look_back ** 2:,} ops per sequence")
+        print(f"Total Attention Load:   {attention_ops:,} relative ops per batch")
+    else:
+        print(f"Architecture:           LSTM/CNN (Linear Scaling O(N))")
+        print(f"Scaling Factor:         Tied directly to Look Back (L={look_back}).")
+    print("-" * 65)
+    print("⚡ 4. TOTAL COMPLEXITY SCORE")
+    print(f"Compute Load Metric:    {compute_score:,.2f} (Higher = Hotter/Slower)")
+    print("=" * 65)
 
     
 ######################################################################################################
@@ -866,3 +1158,4 @@ def add_preds_and_split(
 
     print(f"✨ Stamping complete in {time.time() - start_ts:.2f}s")
     return df_trainval, df_test
+
