@@ -21,10 +21,10 @@ import pyarrow.parquet as pq
 ticker = 'AAPL'
 init_cash = 100000
 init_df_year = 2016
-start_date_sim = '2016-09-01'
-end_date_sim = '2020-03-01'
+start_date_sim = '2021-09-01'
+end_date_sim = '2023-03-01'
 month_to_check = '2022-01'
-sel_val_rmse = '0.06590'
+sel_val_rmse = '0.06561'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
 bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
@@ -37,11 +37,6 @@ device = torch.device("cuda")
 
 
 #########################################################################################################
-
-
-optuna_folder = "optuna_results" 
-models_folder = "trainings" 
-log_file = Path(models_folder) / "training_diagnostics.txt"
 
 save_path  = Path("dfs")
 alpaca_parquet = save_path / f"{ticker}_0_alpaca.parquet"
@@ -162,39 +157,24 @@ sess_afthour     = datetime.strptime('00:00' , '%H:%M').time()
 
 #########################################################################################################
 
-# min_prof_thr0.05097433784612173
-# max_down_prop0.694720761798232
-# gain_tightfact3.133710750083402
-# tau_time46.37000086515304
-# tau_dur69.2091040513691
-# thresh_choice"median_nonzero"
-# rsi_min_thresh100
-# rsi_max_thresh0
-# adx_thresh15
-# trailstop_pct1.044410522412767
-# atr_mult1
-# vwap_atr_mult-28.173758909259544
-# buy_factor4.106794878301534
-# sell_factor5.897963476949319
-# best_value2984233.033970667
 
 if ticker == 'AAPL':
-    # --- Swing Detection Parameters ---
-    min_prof_thr_tick    = 0.05097433784612173   # Minimum price move required to identify a valid swing
-    max_down_prop_tick   = 0.694720761798232    # Fraction of the move allowed for retracement before exit
-    gain_tightfact_tick  = 3.133710750083402    # Factor that tightens exit tolerance as unrealized profit grows
-    tau_time_tick        = 46.37000086515304     # Half-life constant for decaying signal strength over time
-    tau_dur_tick         = 69.2091040513691    # Constant used to boost the score based on swing duration
+    # # --- Swing Detection Parameters ---
+    # min_prof_thr_tick    = 0.05097433784612173   # Minimum price move required to identify a valid swing
+    # max_down_prop_tick   = 0.694720761798232    # Fraction of the move allowed for retracement before exit
+    # gain_tightfact_tick  = 3.133710750083402    # Factor that tightens exit tolerance as unrealized profit grows
+    # tau_time_tick        = 46.37000086515304     # Half-life constant for decaying signal strength over time
+    # tau_dur_tick         = 69.2091040513691    # Constant used to boost the score based on swing duration
 
-    # --- Strategy Filter Thresholds ---
-    rsi_min_thresh_tick  = 100     # Ceiling value for the RSI filter during entry conditions
-    rsi_max_thresh_tick  = 0     # Floor value for the RSI filter during exit conditions
-    adx_thresh_tick      = 15      # Threshold for minimum required trend strength
-    trailstop_pct_tick   = 1.044410522412767      # Distance used for the trailing stop-loss mechanism
-    atr_mult_tick        = 1   # Coefficient for setting volatility-based price stops
-    vwap_atr_mult_tick   = -28.173758909259544   # Coefficient for the safety offset relative to the VWAP
-    buy_factor_tick      = 4.106794878301534   # Multiplier applied to calculate the buy position weight
-    sell_factor_tick     = 5.897963476949319    # Multiplier applied to calculate the sell position weight
+    # # --- Strategy Filter Thresholds ---
+    # rsi_min_thresh_tick  = 100     # Ceiling value for the RSI filter during entry conditions
+    # rsi_max_thresh_tick  = 0     # Floor value for the RSI filter during exit conditions
+    # adx_thresh_tick      = 15      # Threshold for minimum required trend strength
+    # trailstop_pct_tick   = 1.044410522412767      # Distance used for the trailing stop-loss mechanism
+    # atr_mult_tick        = 1   # Coefficient for setting volatility-based price stops
+    # vwap_atr_mult_tick   = -28.173758909259544   # Coefficient for the safety offset relative to the VWAP
+    # buy_factor_tick      = 4.106794878301534   # Multiplier applied to calculate the buy position weight
+    # sell_factor_tick     = 5.897963476949319    # Multiplier applied to calculate the sell position weight
     
     # --- Indicator Columns ---
     col_atr_tick         = "atr_21"               # Column label for the Average True Range indicator
@@ -203,13 +183,12 @@ if ticker == 'AAPL':
     col_vwap_tick        = "vwap_ohlc_close_session" # Column label for the Volume Weighted Average Price
     
     # --- Logic Configuration ---
-    col_signal_tick      = "targ_signal"          # The primary signal column used for decision making ("targ_signal" or "pred_signal" or any indicator signal)
-    sign_thresh_tick     = "signal_thresh"        # The reference column or value for signal activation ("signal_thresh" or any indicator threshold)
+    col_signal_tick      = "cci_20"          # The primary signal column used for decision making ("targ_signal" or "pred_signal" or any indicator signal)
+    sign_thresh_tick     = 0.0        # The reference column or value for signal activation ("signal_thresh" or any indicator threshold)
 
     # --- Thresholding Logic ---
     thresh_mode_tick     = "median_nonzero"       # Statistical method for defining the signal threshold
     thresh_window_tick   = 0                      # Lookback period used for dynamic thresholding calculations
-    # thresh_mode_num_tick = 0.01562252543390733    # Fallback scalar for static thresholding logic
 
     strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
     signals_cols_tick    = ['close_raw', 'targ_signal', 'signal_thresh']

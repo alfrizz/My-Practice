@@ -126,7 +126,7 @@ def make_save_results_callback(suffix: str):
             os.remove(state["last_csv"])
 
         csv_name = f"{params.ticker}_{best_rounded}_{suffix}.csv"
-        out_path = os.path.join(params.optuna_folder, csv_name)
+        out_path = os.path.join("optuna_results", csv_name)
         df.to_csv(out_path, index=False)
 
         state["last_best"] = best_rounded
@@ -174,7 +174,7 @@ def make_save_best_json_callback(suffix: str):
             os.remove(state["last_json"])
 
         file_name = f"{params.ticker}_{best_rounded}_{suffix}.json"
-        file_path = os.path.join(params.optuna_folder, file_name)
+        file_path = os.path.join("optuna_results", file_name)
         with open(file_path, "w") as f:
             json.dump(summary, f, indent=4)
 
@@ -406,3 +406,49 @@ def propose_ranges_from_top(
             ranges[col] = {"categorical": top_cats}
 
     return ranges
+
+
+####################################################################################################################
+
+
+def load_best_params_to_globals(results_folder: str, col_signal: str, target_globals: dict):
+    """
+    Identifies the best Optuna JSON result based on signal type and score,
+    then injects those parameters as variables into the specified global namespace.
+    """
+    # 1. Map the signal name to the filename suffix
+    mapping = {
+        "targ_signal": "target",
+        "pred_signal": "pred_ML"
+    }
+    # If it's not one of the two above, we assume it's a raw indicator ("pred_IND")
+    suffix = mapping.get(col_signal, "pred_IND")
+    
+    # 2. Find all matching JSON files
+    pattern = os.path.join(results_folder, f"*_{suffix}.json")
+    files = glob.glob(pattern)
+    
+    if not files:
+        print(f"❌ No JSON files found for suffix: {suffix}")
+        return
+
+    # 3. Identify the file with the greatest value in the name
+    # We use regex to find the float number at the start of the filename
+    def extract_score(fpath):
+        fname = os.path.basename(fpath)
+        match = re.search(r"(\d+\.?\d*)", fname)
+        return float(match.group(1)) if match else -float('inf')
+
+    best_file = max(files, key=extract_score)
+    print(f"✅ Loading best {suffix} results from: {os.path.basename(best_file)}")
+
+    # 4. Read JSON and inject into globals
+    with open(best_file, "r") as f:
+        data = json.load(f)
+        best_params = data.get("best_params", {})
+        
+        for key, value in best_params.items():
+            target_globals[key] = value
+            print(f"   ∟ {key} = {value}")
+            
+    return best_params

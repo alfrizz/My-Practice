@@ -200,7 +200,7 @@ def build_signal_per_day(
     
     # --- ADDED TQDM HERE ---
     grouped = df.groupby(df.index.normalize())
-    for day, day_df in tqdm(grouped, desc="Building Oracle Signal", leave=True):
+    for day, day_df in tqdm(grouped, desc="Building Oracle Signal", leave=False):
         if day_df.empty:
             parts.append(day_df)
             continue
@@ -313,7 +313,7 @@ def apply_thresholds_per_day(
         raise ValueError(f"Unknown thresh_mode: {thresh_mode}")
 
     parts: List[pd.DataFrame] = []
-    for day, day_df in tqdm(df.groupby(df.index.normalize()), desc="Thresh per day", leave=True):
+    for day, day_df in tqdm(df.groupby(df.index.normalize()), desc="Thresh per day", leave=False):
         out = day_df.copy()
         series = out[col_signal].to_numpy()
 

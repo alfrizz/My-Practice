@@ -986,7 +986,7 @@ def model_training_loop(
             tr_delta_metrics={"rmse":0, "mae":0, "r2":0}, val_tot_metrics=val_res, val_base_metrics=val_base_res,
             val_tot_preds=val_tot_preds, val_base_preds=val_base_preds, val_targs=val_targs,
             avg_base_loss=avg_base_loss, avg_delta_loss=avg_delta_loss, 
-            log_file=params.log_file, hparams=model_hparams,
+            log_file=Path("trainings") / "training_diagnostics.txt", hparams=model_hparams,
         )
         live_plot.update(tr_tot_metrics["rmse"], val_res["rmse"])
 
