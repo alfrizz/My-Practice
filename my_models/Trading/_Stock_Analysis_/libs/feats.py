@@ -186,15 +186,19 @@ def standard_indicators(
         new[f"ema_{w}"] = c.ewm(span=w, adjust=False).mean()
     pbar.update(2)
 
-    # 3. Momentum (RSI, ROC, MACD, Stoch)
+    # 3. Momentum (RSI, ROC, MACD, Stoch, CCI)
     for w in rsi_ws:
         new[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=c, window=w).rsi()
     for w in roc_ws:
         new[f"roc_{w}"] = c.pct_change(w)
+    for w in cci_ws:  # <--- FIXED: Added missing CCI
+        new[f"cci_{w}"] = ta.trend.CCIIndicator(high=h, low=l, close=c, window=w).cci()
+        
     for cfg in macd_cfgs:
         m = ta.trend.MACD(c, window_fast=cfg['fast'], window_slow=cfg['slow'], window_sign=cfg['signal'])
         suffix = f"{cfg['fast']}_{cfg['slow']}_{cfg['signal']}"
         new[f"macd_line_{suffix}"], new[f"macd_signal_{suffix}"], new[f"macd_diff_{suffix}"] = m.macd(), m.macd_signal(), m.macd_diff()
+    
     for cfg in stoch_cfgs:
         k, d, s = cfg['k'], cfg.get('d', 3), cfg.get('smooth', 3)
         low_k, high_k = l.rolling(k).min(), h.rolling(k).max()
@@ -225,17 +229,24 @@ def standard_indicators(
         new[f"kc_w_{suff}"] = safe_div(new[f"kc_h_{suff}"] - new[f"kc_l_{suff}"], mid)
     pbar.update(5)
 
-    # 5. Volume & Channels (OBV, MFI, CMF, Donchian)
+    # 5. Volume & Channels (OBV, MFI, CMF, Donchian, Vol Spikes)
     new["obv"] = ta.volume.OnBalanceVolumeIndicator(c, v).on_balance_volume()
+    for w in obv_roll_ws: # <--- FIXED: Added missing rolling OBV
+        new[f"obv_roll_{w}"] = new["obv"].rolling(w).mean()
+        
     for w in mfi_ws: new[f"mfi_{w}"] = ta.volume.MFIIndicator(h, l, c, v, window=w).money_flow_index()
     for w in cmf_ws: new[f"cmf_{w}"] = ta.volume.ChaikinMoneyFlowIndicator(h, l, c, v, window=w).chaikin_money_flow()
+    
+    for w in vol_ws: # <--- FIXED: Added Volume Spike (Crucial for 1m breakouts)
+        new[f"vol_spike_{w}"] = safe_div(v, v.rolling(w).mean())
+        
     for w in donch_ws:
         hi, lo = h.rolling(w).max(), l.rolling(w).min()
         new[f"donch_h_{w}"], new[f"donch_l_{w}"] = hi, lo
         new[f"donch_w_{w}"] = safe_div(hi - lo, c)
     pbar.update(3)
 
-    # 6. Specialized (VWAP, Slope, Extrema)
+    # 6. Specialized (VWAP, Slope, Extrema, PSAR)
     for w in roll_vwap_ws:
         new[f"roll_vwap_{w}"] = safe_div((c * v).rolling(w).sum(), v.rolling(w).sum())
     for w in slope_ws: new[f"slope_close_{w}"] = fast_slope(c, w)
@@ -245,6 +256,17 @@ def standard_indicators(
     v_cum = v.groupby(df.index.date).cumsum().replace(0, np.nan)
     new["vwap_ohlc_close_session"] = cv / v_cum
     
+    # <--- ADDED: VWAP Distance (The most important mean-reversion feature for 1m scalping)
+    new["vwap_dist_session"] = safe_div(c - new["vwap_ohlc_close_session"], new["vwap_ohlc_close_session"])
+
+    # <--- FIXED: Added missing PSAR
+    if psar:
+        step = psar.get("step", 0.02)
+        max_step = psar.get("max_step", 0.2)
+        psar_ind = ta.trend.PSARIndicator(h, l, c, step=step, max_step=max_step)
+        new["psar"] = psar_ind.psar()
+        new["psar_dist"] = safe_div(c - new["psar"], c) # Distance to stop-loss
+
     # Rolling Extrema for long windows
     if sma_ws:
         lw = max(sma_ws)
@@ -527,7 +549,7 @@ def flag_indicators(
     rows = []
     
     # 2. Main Diagnostic Loop
-    for feat in tqdm(numeric_cols, desc="Flagging indicators", unit="feat", leave=False):
+    for feat in tqdm(numeric_cols, desc="Flagging indicators", unit="feat", leave=True):
         # Extract slices as numpy arrays for speed
         tr_arr = tr[feat].to_numpy()
         vl_arr = vl[feat].to_numpy()
@@ -590,15 +612,15 @@ def flag_indicators(
 
     diag = pd.DataFrame(rows)
 
-    # 3. Final Reorganization
-    df_out = df.copy()
+    # 3. Final Reorganization (Memory Safe)
     drift_mask = diag["status"] == "DRIFT"
     drift_feats = diag.loc[drift_mask, "feature"].tolist()
     
-    for feat in drift_feats:
-        if feat in df_out.columns:
-            df_out[f"{feat}_DRIFT"] = df_out[feat]
-            df_out.drop(columns=[feat], inplace=True)
+    # Create a dictionary mapping old names to new names
+    rename_mapping = {feat: f"{feat}_DRIFT" for feat in drift_feats if feat in df.columns}
+    
+    # Rename all columns simultaneously in one highly optimized step
+    df_out = df.rename(columns=rename_mapping)
 
     return df_out, diag
     
@@ -636,7 +658,7 @@ def apply_rz_to_drifts(
             close_raw = pd.to_numeric(df_out["close_raw"], errors="coerce").astype("float64")
             close_raw = close_raw.replace(0, np.nan)
 
-    for feat in tqdm(drift_feats, desc="Applying RZ to DRIFTs", unit="feat", leave=False):
+    for feat in tqdm(drift_feats, desc="Applying RZ to DRIFTs", unit="feat", leave=True):
         drift_col = f"{feat}_DRIFT"
         if drift_col not in df_out.columns:
             continue
@@ -711,7 +733,7 @@ def scale_features(
     stats_rows = []
     
     # 2. Fit and Transform
-    for c in tqdm(num_cols, desc="MinMax Scaling", unit="feat", leave=False):
+    for c in tqdm(num_cols, desc="MinMax Scaling", unit="feat", leave=True):
         # Clean training slice for fitting
         tr_slice = train_df[c].replace([np.inf, -np.inf], np.nan).dropna().to_numpy()
         

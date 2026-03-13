@@ -159,22 +159,6 @@ sess_afthour     = datetime.strptime('00:00' , '%H:%M').time()
 
 
 if ticker == 'AAPL':
-    # # --- Swing Detection Parameters ---
-    # min_prof_thr_tick    = 0.05097433784612173   # Minimum price move required to identify a valid swing
-    # max_down_prop_tick   = 0.694720761798232    # Fraction of the move allowed for retracement before exit
-    # gain_tightfact_tick  = 3.133710750083402    # Factor that tightens exit tolerance as unrealized profit grows
-    # tau_time_tick        = 46.37000086515304     # Half-life constant for decaying signal strength over time
-    # tau_dur_tick         = 69.2091040513691    # Constant used to boost the score based on swing duration
-
-    # # --- Strategy Filter Thresholds ---
-    # rsi_min_thresh_tick  = 100     # Ceiling value for the RSI filter during entry conditions
-    # rsi_max_thresh_tick  = 0     # Floor value for the RSI filter during exit conditions
-    # adx_thresh_tick      = 15      # Threshold for minimum required trend strength
-    # trailstop_pct_tick   = 1.044410522412767      # Distance used for the trailing stop-loss mechanism
-    # atr_mult_tick        = 1   # Coefficient for setting volatility-based price stops
-    # vwap_atr_mult_tick   = -28.173758909259544   # Coefficient for the safety offset relative to the VWAP
-    # buy_factor_tick      = 4.106794878301534   # Multiplier applied to calculate the buy position weight
-    # sell_factor_tick     = 5.897963476949319    # Multiplier applied to calculate the sell position weight
     
     # --- Indicator Columns ---
     col_atr_tick         = "atr_21"               # Column label for the Average True Range indicator

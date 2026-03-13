@@ -1,5 +1,9 @@
 from libs import params, plots, strats 
 
+# Load Alpaca tools
+from alpaca.data.requests import StockBarsRequest
+from alpaca.data.timeframe import TimeFrame
+
 import math
 import pandas as pd
 from pandas import Timestamp
@@ -21,76 +25,184 @@ from tqdm.auto import tqdm
 #########################################################################################################
 
 
-def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1, dst_transition_dates=None):
+def fetch_bars(symbol: str, client, start: datetime, end: datetime) -> pd.DataFrame:
+    """
+    Fetches historical data in yearly chunks to provide a progress bar (tqdm).
+    Saves the final result using params.to_parquet_with_progress.
+    """
+    all_chunks = []
+    
+    # Create yearly intervals for the progress bar
+    years = range(start.year, end.year + 1)
+    pbar = tqdm(years, desc=f"🚀 Downloading {symbol}")
+
+    for year in pbar:
+        # Define the start and end for this specific chunk
+        chunk_start = max(start, datetime(year, 1, 1, tzinfo=pytz.UTC))
+        chunk_end   = min(end, datetime(year, 12, 31, 23, 59, tzinfo=pytz.UTC))
+        
+        # If the chunk start is after our overall end date, skip
+        if chunk_start > end:
+            continue
+
+        pbar.set_description(f"📡 Fetching {symbol} for {year}")
+        
+        req = StockBarsRequest(
+            symbol_or_symbols=[symbol],
+            timeframe=TimeFrame.Minute,
+            start=chunk_start,
+            end=chunk_end
+        )
+        
+        res = client.get_stock_bars(req)
+        
+        # Only append if data exists for that year (Safe based on our diagnostic test)
+        if not res.df.empty:
+            all_chunks.append(res.df)
+
+    print("\n✅ Download Complete. Consolidating data...")
+    
+    # --- SAFETY NET ADDED HERE ---
+    if not all_chunks:
+        print(f"⚠️ No data found for {symbol} in the given date range.")
+        return pd.DataFrame()
+    
+    # 1. Combine all chunks
+    df = pd.concat(all_chunks).sort_index()
+    
+    # 2. Cleanup: Extract symbol and convert timezone
+    df = df.xs(symbol, level=0)
+    df.index = df.index.tz_convert("UTC").tz_localize(None)
+    
+    return df
+
+
+# def detect_and_adjust_splits(df, forward_threshold=0.5, reverse_threshold=2, tol=0.05, vol_fact=1, dst_transition_dates=None):
+#     """
+#     Detects forward and reverse splits and adjusts price columns and volume.
+#     Minimal addition: accepts dst_transition_dates (iterable of dates) and skips
+#     candidate split events that fall on those dates to avoid DST artifacts.
+#     """
+#     df_adj = df.copy()
+#     split_events = []
+#     price_columns = ['open', 'high', 'low', 'close', 'ask', 'bid']
+#     dst_transition_dates = set(dst_transition_dates or [])
+#     print(f"Executing [detect_and_adjust_splits]...")
+
+#     for i in range(1, len(df_adj)):
+#         prev_close = df_adj.iloc[i-1]['close']
+#         curr_close = df_adj.iloc[i]['close']
+#         ratio = curr_close / prev_close
+
+#         # Detect forward split (price drop)
+#         if ratio < forward_threshold:
+#             candidate_factor = round(1.0 / ratio)
+#             if candidate_factor >= 2:
+#                 expected_ratio = 1.0 / candidate_factor
+#                 if abs(ratio - expected_ratio) < tol:
+#                     event_time = df_adj.index[i]
+#                     # skip if event falls on a DST transition date
+#                     if event_time.date() in dst_transition_dates:
+#                         print(f"Skipping forward-split candidate at {event_time} due to DST transition")
+#                         continue
+#                     print(f"Detected forward split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
+#                     split_events.append((event_time, candidate_factor, 'forward'))
+#                     df_adj.loc[:df_adj.index[i-1], price_columns] /= candidate_factor
+#                     df_adj.loc[:df_adj.index[i-1], 'volume'] *= candidate_factor * vol_fact
+
+#         # Detect reverse split (price jump)
+#         elif ratio > reverse_threshold:
+#             candidate_factor = round(ratio)
+#             if candidate_factor >= 2:
+#                 expected_ratio = candidate_factor
+#                 if abs(ratio - expected_ratio) < tol:
+#                     event_time = df_adj.index[i]
+#                     # skip if event falls on a DST transition date
+#                     if event_time.date() in dst_transition_dates:
+#                         print(f"Skipping reverse-split candidate at {event_time} due to DST transition")
+#                         continue
+#                     print(f"Detected reverse split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
+#                     split_events.append((event_time, candidate_factor, 'reverse'))
+#                     df_adj.loc[:df_adj.index[i-1], price_columns] *= candidate_factor
+#                     df_adj.loc[:df_adj.index[i-1], 'volume'] /= candidate_factor
+
+#     return df_adj, split_events
+
+
+def detect_and_adjust_splits(df: pd.DataFrame, forward_threshold=0.55, reverse_threshold=1.8, tol=0.05, vol_fact=1, dst_transition_dates=None):
     """
     Detects forward and reverse splits and adjusts price columns and volume.
-    Minimal addition: accepts dst_transition_dates (iterable of dates) and skips
-    candidate split events that fall on those dates to avoid DST artifacts.
+    Vectorized for high-performance execution on large datasets.
     """
     df_adj = df.copy()
     split_events = []
-    price_columns = ['open', 'high', 'low', 'close', 'ask', 'bid']
+    
+    # Safely select columns that actually exist in the dataframe
+    possible_price_cols = ['open', 'high', 'low', 'close', 'ask', 'bid']
+    price_columns = [c for c in possible_price_cols if c in df_adj.columns]
+    
     dst_transition_dates = set(dst_transition_dates or [])
     print(f"Executing [detect_and_adjust_splits]...")
 
-    for i in range(1, len(df_adj)):
-        prev_close = df_adj.iloc[i-1]['close']
-        curr_close = df_adj.iloc[i]['close']
-        ratio = curr_close / prev_close
+    # 1. Vectorized ratio calculation (Instantaneous across millions of rows)
+    # Using shift(1) divides today's close by yesterday's close
+    ratios = df_adj['close'] / df_adj['close'].shift(1)
 
-        # Detect forward split (price drop)
-        if ratio < forward_threshold:
+    # 2. Filter down to only the timestamps that breach our thresholds
+    # We use <= and >= to catch exact integer splits (like 0.5 for 2-for-1)
+    candidates = ratios[(ratios <= forward_threshold) | (ratios >= reverse_threshold)].dropna()
+
+    # 3. Process only the handful of anomaly candidates
+    for event_time, ratio in candidates.items():
+        if event_time.date() in dst_transition_dates:
+            print(f"Skipping split candidate at {event_time} due to DST transition")
+            continue
+
+        # --- Detect Forward Split (Price drop) ---
+        if ratio <= forward_threshold:
             candidate_factor = round(1.0 / ratio)
             if candidate_factor >= 2:
                 expected_ratio = 1.0 / candidate_factor
                 if abs(ratio - expected_ratio) < tol:
-                    event_time = df_adj.index[i]
-                    # skip if event falls on a DST transition date
-                    if event_time.date() in dst_transition_dates:
-                        print(f"Skipping forward-split candidate at {event_time} due to DST transition")
-                        continue
                     print(f"Detected forward split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
                     split_events.append((event_time, candidate_factor, 'forward'))
-                    df_adj.loc[:df_adj.index[i-1], price_columns] /= candidate_factor
-                    df_adj.loc[:df_adj.index[i-1], 'volume'] *= candidate_factor * vol_fact
+                    
+                    mask = df_adj.index < event_time
+                    df_adj.loc[mask, price_columns] /= candidate_factor
+                    if 'volume' in df_adj.columns:
+                        df_adj.loc[mask, 'volume'] *= (candidate_factor * vol_fact)
 
-        # Detect reverse split (price jump)
-        elif ratio > reverse_threshold:
+        # --- Detect Reverse Split (Price jump) ---
+        elif ratio >= reverse_threshold:
             candidate_factor = round(ratio)
             if candidate_factor >= 2:
-                expected_ratio = candidate_factor
+                expected_ratio = float(candidate_factor)
                 if abs(ratio - expected_ratio) < tol:
-                    event_time = df_adj.index[i]
-                    # skip if event falls on a DST transition date
-                    if event_time.date() in dst_transition_dates:
-                        print(f"Skipping reverse-split candidate at {event_time} due to DST transition")
-                        continue
                     print(f"Detected reverse split on {event_time} with factor {candidate_factor} (ratio: {ratio:.4f})")
                     split_events.append((event_time, candidate_factor, 'reverse'))
-                    df_adj.loc[:df_adj.index[i-1], price_columns] *= candidate_factor
-                    df_adj.loc[:df_adj.index[i-1], 'volume'] /= candidate_factor
+                    
+                    mask = df_adj.index < event_time
+                    df_adj.loc[mask, price_columns] *= candidate_factor
+                    if 'volume' in df_adj.columns:
+                        df_adj.loc[mask, 'volume'] /= candidate_factor
 
     return df_adj, split_events
 
-
+    
 #########################################################################################################
 
 
-def process_splits(ticker: str):
+def process_splits(df, ticker: str):
     """
     Load intraday Parquet data, detect & adjust corporate splits, 
     and return the adjusted DataFrame.
     """
-    print(f"[process_splits] Loading original Parquet: {params.alpaca_parquet}")
-    
-    # 1. Load from Parquet (Much faster than CSV)
-    df = pd.read_parquet(params.alpaca_parquet)
     
     # Ensure index is datetime
     if not pd.api.types.is_datetime64_any_dtype(df.index):
         df.index = pd.to_datetime(df.index)
     
-    # 2. Create ask/bid using vectorization (faster than round() in a loop)
+    # Create ask/bid using vectorization (faster than round() in a loop)
     # We use conservative spread to simulate slippage
     df['ask'] = (df['close'] * (1 + params.bidask_spread_pct/100)).round(4)
     df['bid'] = (df['close'] * (1 - params.bidask_spread_pct/100)).round(4)
@@ -340,30 +452,30 @@ def apply_thresholds_per_day(
 #########################################################################################################
 
 
-def smooth_scale_saturate(
-    series:   pd.Series,
-    window:   int,
-    beta_sat: float
-) -> pd.Series:
-    """
-    1) Smoothing: centered rolling mean of width `window`.
-    2) Proportional scale into [0,1]: divide by the global max of the smoothed series.
-    3) Soft‐saturating exponential warp:
-         h(u) = (1 - exp(-β·u)) / (1 - exp(-β))
-       • h(0)=0, h(1)=1
-       • concave: lifts the bulk (h(u)>u for u∈(0,1)), gently compresses the top end.
-    Returns a new Series in [0,1], same index as `series`.
-    """
-    # 1) smooth
-    sm = series.rolling(window=window, center=True, min_periods=1).mean()
+# def smooth_scale_saturate(
+#     series:   pd.Series,
+#     window:   int,
+#     beta_sat: float
+# ) -> pd.Series:
+#     """
+#     1) Smoothing: centered rolling mean of width `window`.
+#     2) Proportional scale into [0,1]: divide by the global max of the smoothed series.
+#     3) Soft‐saturating exponential warp:
+#          h(u) = (1 - exp(-β·u)) / (1 - exp(-β))
+#        • h(0)=0, h(1)=1
+#        • concave: lifts the bulk (h(u)>u for u∈(0,1)), gently compresses the top end.
+#     Returns a new Series in [0,1], same index as `series`.
+#     """
+#     # 1) smooth
+#     sm = series.rolling(window=window, center=True, min_periods=1).mean()
 
-    # 2) proportional scale → [0,1]
-    u = sm / sm.max()
+#     # 2) proportional scale → [0,1]
+#     u = sm / sm.max()
 
-    # 3) soft‐saturate
-    expb = np.exp(-beta_sat)
-    # denominator = 1 - e^{-β}
-    denom = 1.0 - expb
-    warped = (1.0 - np.exp(-beta_sat * u)) / denom
+#     # 3) soft‐saturate
+#     expb = np.exp(-beta_sat)
+#     # denominator = 1 - e^{-β}
+#     denom = 1.0 - expb
+#     warped = (1.0 - np.exp(-beta_sat * u)) / denom
 
-    return pd.Series(warped, index=series.index)
+#     return pd.Series(warped, index=series.index)
