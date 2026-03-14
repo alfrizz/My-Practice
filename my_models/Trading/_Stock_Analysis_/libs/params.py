@@ -27,10 +27,12 @@ month_to_check = '2022-01'
 sel_val_rmse = '0.06561'
 
 train_prop, val_prop = 0.70, 0.15 # dataset split proportions
-bidask_spread_pct = 0.02 # conservative 2 percent (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
+bidask_spread_pct_reg = 0.025 # conservative 2.5 basis points (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
+bidask_spread_pct_ext = 0.15 # conservative 15 basis points (per leg) to compensate for conservative all-in scenario (spreads, latency, queuing, partial fills, spikes)
 
 feats_min_std = 0.03
-feats_max_corr = 0.999
+feats_max_corr = 0.95 #0.999
+
 mmap_thresh_gb = 16 # use ram instead of memmap, if X_buf below this value
 
 device = torch.device("cuda") 
@@ -160,21 +162,21 @@ sess_afthour     = datetime.strptime('00:00' , '%H:%M').time()
 
 if ticker == 'AAPL':
     
-    # --- Indicator Columns ---
-    col_atr_tick         = "atr_21"               # Column label for the Average True Range indicator
-    col_adx_tick         = "adx_21"               # Column label for the Average Directional Index
-    col_rsi_tick         = "rsi_21"               # Column label for the Relative Strength Index
-    col_vwap_tick        = "vwap_ohlc_close_session" # Column label for the Volume Weighted Average Price
+    # # --- Indicator Columns ---
+    # col_atr_tick         = "atr_21"               # Column label for the Average True Range indicator
+    # col_adx_tick         = "adx_21"               # Column label for the Average Directional Index
+    # col_rsi_tick         = "rsi_21"               # Column label for the Relative Strength Index
+    # col_vwap_tick        = "vwap_ohlc_close_session" # Column label for the Volume Weighted Average Price
     
     # --- Logic Configuration ---
-    col_signal_tick      = "cci_20"          # The primary signal column used for decision making ("targ_signal" or "pred_signal" or any indicator signal)
+    col_signal_tick      = "psar_dist"          # The primary signal column used for decision making ("targ_signal" or "pred_signal" or any indicator signal)
     sign_thresh_tick     = 0.0        # The reference column or value for signal activation ("signal_thresh" or any indicator threshold)
 
-    # --- Thresholding Logic ---
-    thresh_mode_tick     = "median_nonzero"       # Statistical method for defining the signal threshold
-    thresh_window_tick   = 0                      # Lookback period used for dynamic thresholding calculations
+    # # --- Thresholding Logic ---
+    # thresh_mode_tick     = "median_nonzero"       # Statistical method for defining the signal threshold
+    # thresh_window_tick   = 0                      # Lookback period used for dynamic thresholding calculations
 
-    strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
+    # strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
     signals_cols_tick    = ['close_raw', 'targ_signal', 'signal_thresh']
     features_cols_tick   = [
             'donch_w_20', 'atr_28_RZ', 'range_pct', 'time_premark', 'dist_low_100', 

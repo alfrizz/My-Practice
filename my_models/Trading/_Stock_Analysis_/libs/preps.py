@@ -192,37 +192,76 @@ def detect_and_adjust_splits(df: pd.DataFrame, forward_threshold=0.55, reverse_t
 #########################################################################################################
 
 
+# def process_splits(df, ticker: str):
+#     """
+#     Load intraday Parquet data, detect & adjust corporate splits, 
+#     and return the adjusted DataFrame.
+#     """
+    
+#     # Ensure index is datetime
+#     if not pd.api.types.is_datetime64_any_dtype(df.index):
+#         df.index = pd.to_datetime(df.index)
+    
+#     # Create ask/bid using vectorization (faster than round() in a loop)
+#     # We use conservative spread to simulate slippage
+#     df['ask'] = (df['close'] * (1 + params.bidask_spread_pct/100)).round(4)
+#     df['bid'] = (df['close'] * (1 - params.bidask_spread_pct/100)).round(4)
+
+#     print("Plotting original data...")
+#     plots.plot_close_volume(df, title="Before Adjusting Splits: Close Price and Volume")
+
+#     # Pass empty set for transitions as requested
+#     transitions = set()
+    
+#     # Assuming detect_and_adjust_splits is defined in the same file or imported
+#     df_adjusted, split_events = detect_and_adjust_splits(df=df, dst_transition_dates=transitions)
+
+#     if split_events:
+#         print(f"Splits detected ({len(split_events)}). Plotting adjusted data...")
+#         plots.plot_close_volume(df_adjusted, title="After Adjusting Splits: Close Price and Volume")
+#     else:
+#         print("No splits detected.")
+
+#     return df_adjusted
+
+
 def process_splits(df, ticker: str):
     """
-    Load intraday Parquet data, detect & adjust corporate splits, 
-    and return the adjusted DataFrame.
+    Adjusts data for splits FIRST, then applies session-aware spreads.
+    This ensures slippage is calculated on the price relevant to the trade.
     """
-    
-    # Ensure index is datetime
+    # 1. Ensure Index Integrity
     if not pd.api.types.is_datetime64_any_dtype(df.index):
         df.index = pd.to_datetime(df.index)
     
-    # Create ask/bid using vectorization (faster than round() in a loop)
-    # We use conservative spread to simulate slippage
-    df['ask'] = (df['close'] * (1 + params.bidask_spread_pct/100)).round(4)
-    df['bid'] = (df['close'] * (1 - params.bidask_spread_pct/100)).round(4)
-
-    print("Plotting original data...")
-    plots.plot_close_volume(df, title="Before Adjusting Splits: Close Price and Volume")
-
-    # Pass empty set for transitions as requested
+    # 2. DETECT AND ADJUST SPLITS FIRST
+    # We must have clean, split-adjusted 'close' prices before calculating spreads.
     transitions = set()
+    df, split_events = detect_and_adjust_splits(
+        df=df, 
+        dst_transition_dates=transitions
+    )
+
+    # 3. Identify Sessions
+    times = df.index.time
+    is_reg_session = (times >= params.sess_start_reg) & (times <= params.sess_end)
     
-    # Assuming detect_and_adjust_splits is defined in the same file or imported
-    df_adjusted, split_events = detect_and_adjust_splits(df=df, dst_transition_dates=transitions)
+    # 4. Multi-Tiered Factors
+    ext_factor = params.bidask_spread_pct_ext / 100.0  
+    reg_factor = params.bidask_spread_pct_reg / 100.0  
+    factors = np.where(is_reg_session, reg_factor, ext_factor)
+    
+    # 5. Calculate Ask/Bid on ADJUSTED Close
+    df['ask'] = (df['close'] * (1.0 + factors)).round(4)
+    df['bid'] = (df['close'] * (1.0 - factors)).round(4)
+
+    # 6. Tick Guard
+    df['ask'] = np.where(df['ask'] <= df['bid'], df['bid'] + 0.0001, df['ask'])
 
     if split_events:
-        print(f"Splits detected ({len(split_events)}). Plotting adjusted data...")
-        plots.plot_close_volume(df_adjusted, title="After Adjusting Splits: Close Price and Volume")
-    else:
-        print("No splits detected.")
-
-    return df_adjusted
+        print(f"SUCCESS: Adjusted {len(split_events)} split events for {ticker}.")
+    
+    return df
 
 
 #########################################################################################################
