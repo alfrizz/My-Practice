@@ -40,6 +40,7 @@ device = torch.device("cuda")
 
 #########################################################################################################
 
+
 save_path  = Path("dfs")
 alpaca_parquet = save_path / f"{ticker}_0_alpaca.parquet"
 base_parquet = save_path / f"{ticker}_1_base.parquet"
@@ -143,6 +144,10 @@ hparams = {
     "MICRO_SAMPLE_K":        1,      # sample count for latency metrics; ↑diagnostics, ↓speed
 }
 
+
+######################################################################################################### 
+
+
 # Market Session	        US Market Time (ET)	             Corresponding Time in Datasheet (UTC)
 # Premarket             	~4:00 AM – 9:30 AM	             9:00 – 14:30
 # Regular Trading	        9:30 AM – 4:00 PM	             14:30 – 21:00
@@ -162,22 +167,10 @@ sess_afthour     = datetime.strptime('00:00' , '%H:%M').time()
 
 if ticker == 'AAPL':
     
-    # # --- Indicator Columns ---
-    # col_atr_tick         = "atr_21"               # Column label for the Average True Range indicator
-    # col_adx_tick         = "adx_21"               # Column label for the Average Directional Index
-    # col_rsi_tick         = "rsi_21"               # Column label for the Relative Strength Index
-    # col_vwap_tick        = "vwap_ohlc_close_session" # Column label for the Volume Weighted Average Price
-    
-    # --- Logic Configuration ---
     col_signal_tick      = "psar_dist"          # The primary signal column used for decision making ("targ_signal" or "pred_signal" or any indicator signal)
-    sign_thresh_tick     = 0.0        # The reference column or value for signal activation ("signal_thresh" or any indicator threshold)
 
-    # # --- Thresholding Logic ---
-    # thresh_mode_tick     = "median_nonzero"       # Statistical method for defining the signal threshold
-    # thresh_window_tick   = 0                      # Lookback period used for dynamic thresholding calculations
-
-    # strategy_cols_tick   = [col_atr_tick, col_adx_tick, col_rsi_tick, col_vwap_tick]
     signals_cols_tick    = ['close_raw', 'targ_signal', 'signal_thresh']
+    
     features_cols_tick   = [
             'donch_w_20', 'atr_28_RZ', 'range_pct', 'time_premark', 'dist_low_100', 
             'stoch_k_14_3_3', 'kc_h_20_20_2.0_RZ', 'kc_w_20_20_2.0', 'bb_w_50_2p0', 
