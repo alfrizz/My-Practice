@@ -266,7 +266,6 @@ def generate_actions(
         is_series = False
 
     stop_frac = trailstop_pct / 100.0 # convert to fraction
-    EPS = 1e-12
 
     actions     = np.zeros(len(df), dtype=int)
     trail_arr   = np.full(len(df), np.nan, dtype=float)
@@ -293,6 +292,8 @@ def generate_actions(
         atr_arr[i]   = peak - atr_mult * atr[i]                # ATR-based stop
         vwap_arr[i]  = vwap[i] + vwap_atr_mult * atr[i]        # VWAP+ATR entry bar
 
+        raw_dist = abs(signal[i] - sign_thr) # valid for both buy and sell
+
         # BUY conditions
         if (
             signal[i] > sign_thr and
@@ -302,8 +303,8 @@ def generate_actions(
             close[i] > vwap_arr[i] # above volume weighted price
         ):
             actions[i] = 1
-            delta_buy = (signal[i] - sign_thr) / max(sign_thr, EPS)
-            buy_weight[i] = delta_buy / (1.0 + delta_buy) * buy_factor # smoothed in the range [0,1]
+            raw_buy_weight = raw_dist * buy_factor
+            buy_weight[i] = raw_buy_weight / (1.0 + raw_buy_weight) # smoothed in the range [0,1]
 
         # SELL conditions
         elif (
@@ -316,8 +317,8 @@ def generate_actions(
              close[i] < trail_arr[i]) # stop loss hit
         ):
             actions[i] = -1
-            delta_sell = (sign_thr - signal[i]) / max(sign_thr, EPS)
-            sell_weight[i] = delta_sell / (1.0 + delta_sell) * sell_factor # smoothed in the range [0,1]
+            raw_sell_weight = raw_dist * sell_factor
+            sell_weight[i] = raw_sell_weight / (1.0 + raw_sell_weight) # smoothed in the range [0,1]
 
     df["action"]           = actions
     df["trail_stop_price"] = pd.Series(trail_arr, index=df.index)
